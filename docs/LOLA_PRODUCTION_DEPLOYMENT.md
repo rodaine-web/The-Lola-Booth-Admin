@@ -16,6 +16,7 @@
 | `LOCAL_STORAGE_ROOT` | PROVIDER_SPECIFIC | Persistent local storage path if used | If local | No | Platform volume | Backup check |
 | `EMAIL_PROVIDER` | PROVIDER_SPECIFIC | Production email provider | Yes | No | Provider choice | Email smoke |
 | `EMAIL_FROM` | PROVIDER_SPECIFIC | Branded sender address | Yes | No | Authenticated domain | Email smoke |
+| `FORM_NOTIFICATION_EMAIL` | PROVIDER_SPECIFIC | Owner inbox for public form notifications | Yes | No | Business inbox | Public form smoke |
 | `MICROSOFT_TENANT_ID` | PROVIDER_SPECIFIC | Microsoft Entra tenant ID/domain | If `EMAIL_PROVIDER=microsoft` | No | Microsoft Entra | `npm run env:check` |
 | `MICROSOFT_CLIENT_ID` | PROVIDER_SPECIFIC | Microsoft Entra application client ID | If `EMAIL_PROVIDER=microsoft` | No | Microsoft Entra | `npm run env:check` |
 | `MICROSOFT_CLIENT_SECRET` | PROVIDER_SPECIFIC | Microsoft Entra application client secret | If `EMAIL_PROVIDER=microsoft` | Yes | Microsoft Entra | `npm run env:check` |

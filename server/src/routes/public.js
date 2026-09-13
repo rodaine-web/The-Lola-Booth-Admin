@@ -7,6 +7,7 @@ import { asyncHandler } from "../utils/async-handler.js";
 import { AppError } from "../utils/errors.js";
 import { validate } from "../utils/validation.js";
 import { ingestProviderLead } from "../services/social-lead-service.js";
+import { sendPublicInquiryEmails } from "../services/public-form-email-service.js";
 import { generateInvoicePdf, generateProposalPdf } from "../services/document-service.js";
 import { getInvoice } from "../services/invoice-service.js";
 import { createPaymentSession, publicPaymentOptions } from "../services/payment-service.js";
@@ -71,6 +72,11 @@ publicRouter.post("/inquiries", (req, _res, next) => {
   res.status(201).json({
     message: "Thank you. Your inquiry was received and the LOLA team will be in touch soon.",
     inquiryStatus: result.action
+  });
+  void sendPublicInquiryEmails({
+    lead: result.lead,
+    payload: { ...req.body, referrer_url: req.body.referrer_url || req.headers.referer || null },
+    action: result.action
   });
 }));
 

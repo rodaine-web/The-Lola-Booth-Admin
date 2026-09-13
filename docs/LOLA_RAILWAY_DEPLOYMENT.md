@@ -139,6 +139,7 @@ npm run db:seed
 | `LOCAL_STORAGE_ROOT` | API, Worker | Required if local storage | Railway volume path or `storage/uploads` | No | Must be persistent in production if uploads/documents/media are used. |
 | `EMAIL_PROVIDER` | API, Worker | Optional | Default `development` | No | Use `microsoft` for Microsoft 365 / Outlook delivery. |
 | `EMAIL_FROM` | API, Worker | Optional | `LOLA Booths <hello@lolabooths.com>` | No | Display sender used by email service. |
+| `FORM_NOTIFICATION_EMAIL` | API, Worker | Optional | Business owner inbox | No | Receives internal notifications for public website form submissions. Falls back to `EMAIL_FROM` address. |
 | `MICROSOFT_TENANT_ID` | API, Worker | Required when `EMAIL_PROVIDER=microsoft` | Microsoft Entra tenant ID or tenant domain | No | Used for Graph client-credentials token acquisition. |
 | `MICROSOFT_CLIENT_ID` | API, Worker | Required when `EMAIL_PROVIDER=microsoft` | Microsoft Entra app registration | No | Application/client ID for Graph token acquisition. |
 | `MICROSOFT_CLIENT_SECRET` | API, Worker | Required when `EMAIL_PROVIDER=microsoft` | Microsoft Entra app registration secret | Yes | Do not commit. Rotate from Microsoft Entra. |
@@ -284,6 +285,7 @@ Microsoft 365 setup:
 4. Set Railway API and worker variables:
    - `EMAIL_PROVIDER=microsoft`
    - `EMAIL_FROM=LOLA Booths <hello@thelolabooth.com>`
+   - `FORM_NOTIFICATION_EMAIL=info@thelolabooth.com`
    - `MICROSOFT_TENANT_ID=<tenant-id-or-domain>`
    - `MICROSOFT_CLIENT_ID=<app-client-id>`
    - `MICROSOFT_CLIENT_SECRET=<app-client-secret>`
