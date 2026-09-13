@@ -16,7 +16,13 @@ if ((process.env.NODE_ENV || "development") === "production") {
   if (!process.env.INTEGRATION_SECRET_KEY || process.env.INTEGRATION_SECRET_KEY.length < 32 || process.env.INTEGRATION_SECRET_KEY.includes("development")) productionReadinessIssues.push("INTEGRATION_SECRET_KEY must be a unique production encryption secret.");
   if (!process.env.PUBLIC_BASE_URL?.startsWith("https://")) productionReadinessIssues.push("PUBLIC_BASE_URL must use HTTPS in production.");
   if (!process.env.CLIENT_ORIGIN?.startsWith("https://")) productionReadinessIssues.push("CLIENT_ORIGIN must use HTTPS in production.");
-  if ((process.env.EMAIL_PROVIDER || "development") === "development") productionReadinessIssues.push("EMAIL_PROVIDER must be set to an active production adapter before launch.");
+  const emailProvider = (process.env.EMAIL_PROVIDER || "development").toLowerCase();
+  if (emailProvider === "development") productionReadinessIssues.push("EMAIL_PROVIDER must be set to an active production adapter before launch.");
+  if (emailProvider === "microsoft") {
+    for (const key of ["MICROSOFT_TENANT_ID", "MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET", "MICROSOFT_SENDER_EMAIL"]) {
+      if (!process.env[key]) productionReadinessIssues.push(`${key} is required when EMAIL_PROVIDER=microsoft.`);
+    }
+  }
   if (process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_WEBHOOK_SECRET) productionReadinessIssues.push("STRIPE_WEBHOOK_SECRET is required when Stripe is configured.");
   if (process.env.PAYPAL_CLIENT_ID && !process.env.PAYPAL_WEBHOOK_ID) productionReadinessIssues.push("PAYPAL_WEBHOOK_ID is required when PayPal is configured.");
 }
@@ -36,6 +42,10 @@ export const envCatalog = [
   { key: "LOCAL_STORAGE_ROOT", class: "PROVIDER_SPECIFIC", required: false, default: "storage/uploads" },
   { key: "EMAIL_PROVIDER", class: "PROVIDER_SPECIFIC", required: false, default: "development" },
   { key: "SMS_PROVIDER", class: "PROVIDER_SPECIFIC", required: false, default: "none" },
+  { key: "MICROSOFT_TENANT_ID", class: "PROVIDER_SPECIFIC", required: (process.env.EMAIL_PROVIDER || "").toLowerCase() === "microsoft" },
+  { key: "MICROSOFT_CLIENT_ID", class: "PROVIDER_SPECIFIC", required: (process.env.EMAIL_PROVIDER || "").toLowerCase() === "microsoft" },
+  { key: "MICROSOFT_CLIENT_SECRET", class: "PROVIDER_SPECIFIC", required: (process.env.EMAIL_PROVIDER || "").toLowerCase() === "microsoft", secret: true },
+  { key: "MICROSOFT_SENDER_EMAIL", class: "PROVIDER_SPECIFIC", required: (process.env.EMAIL_PROVIDER || "").toLowerCase() === "microsoft" },
   { key: "STRIPE_SECRET_KEY", class: "PROVIDER_SPECIFIC", required: false, secret: true },
   { key: "STRIPE_PUBLISHABLE_KEY", class: "PROVIDER_SPECIFIC", required: false },
   { key: "STRIPE_WEBHOOK_SECRET", class: "PROVIDER_SPECIFIC", required: false, secret: true },
@@ -64,7 +74,7 @@ export const env = {
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 120),
   storageProvider: process.env.STORAGE_PROVIDER || "local",
   localStorageRoot: process.env.LOCAL_STORAGE_ROOT || "storage/uploads",
-  emailProvider: process.env.EMAIL_PROVIDER || "development",
+  emailProvider: (process.env.EMAIL_PROVIDER || "development").toLowerCase(),
   smsProvider: process.env.SMS_PROVIDER || "none",
   publicBaseUrl: process.env.PUBLIC_BASE_URL || process.env.CLIENT_ORIGIN || "http://localhost:5173",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
@@ -78,5 +88,9 @@ export const env = {
   linkedinApiVersion: process.env.LINKEDIN_API_VERSION || "202609",
   metaWebhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN || "",
   tiktokWebhookSecret: process.env.TIKTOK_WEBHOOK_SECRET || "",
-  emailFrom: process.env.EMAIL_FROM || "LOLA Booths <hello@lolabooths.com>"
+  emailFrom: process.env.EMAIL_FROM || "LOLA Booths <hello@lolabooths.com>",
+  microsoftTenantId: process.env.MICROSOFT_TENANT_ID || "",
+  microsoftClientId: process.env.MICROSOFT_CLIENT_ID || "",
+  microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET || "",
+  microsoftSenderEmail: process.env.MICROSOFT_SENDER_EMAIL || ""
 };

@@ -16,6 +16,10 @@
 | `LOCAL_STORAGE_ROOT` | PROVIDER_SPECIFIC | Persistent local storage path if used | If local | No | Platform volume | Backup check |
 | `EMAIL_PROVIDER` | PROVIDER_SPECIFIC | Production email provider | Yes | No | Provider choice | Email smoke |
 | `EMAIL_FROM` | PROVIDER_SPECIFIC | Branded sender address | Yes | No | Authenticated domain | Email smoke |
+| `MICROSOFT_TENANT_ID` | PROVIDER_SPECIFIC | Microsoft Entra tenant ID/domain | If `EMAIL_PROVIDER=microsoft` | No | Microsoft Entra | `npm run env:check` |
+| `MICROSOFT_CLIENT_ID` | PROVIDER_SPECIFIC | Microsoft Entra application client ID | If `EMAIL_PROVIDER=microsoft` | No | Microsoft Entra | `npm run env:check` |
+| `MICROSOFT_CLIENT_SECRET` | PROVIDER_SPECIFIC | Microsoft Entra application client secret | If `EMAIL_PROVIDER=microsoft` | Yes | Microsoft Entra | `npm run env:check` |
+| `MICROSOFT_SENDER_EMAIL` | PROVIDER_SPECIFIC | Licensed Microsoft 365 sender mailbox | If `EMAIL_PROVIDER=microsoft` | No | Microsoft 365 admin | Email smoke |
 | `SMS_PROVIDER` | PROVIDER_SPECIFIC | SMS provider, or `none` | No | No | Provider choice | Health check |
 | `STRIPE_SECRET_KEY` | PROVIDER_SPECIFIC | Stripe secret key | If Stripe enabled | Yes | Stripe dashboard | Checkout/webhook smoke |
 | `STRIPE_PUBLISHABLE_KEY` | PROVIDER_SPECIFIC | Stripe publishable key | If Stripe enabled | No | Stripe dashboard | Public invoice smoke |

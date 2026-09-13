@@ -14,6 +14,7 @@
     "env:check": "node server/src/config/env-check.js",
     "db:migrate": "node server/src/db/migrate.js",
     "db:seed": "node server/seeds/seed.js",
+    "email:test": "node server/src/scripts/email-smoke.js",
     "test": "node --test",
     "check": "npm test && npm run build"
   },

@@ -24,7 +24,7 @@ This document prepares the existing LOLA Admin backend stack for Railway and con
 - Database config: `server/src/db/pool.js` uses `new pg.Pool({ connectionString: env.databaseUrl, max: 10 })`.
 - Port behavior: `server/src/index.js` listens on `env.port`, which resolves to `Number(process.env.PORT || 4000)`.
 - Storage behavior: `STORAGE_PROVIDER=local` writes files under `LOCAL_STORAGE_ROOT`; `STORAGE_PROVIDER=s3` exists as a stub and throws because the S3-compatible adapter is not active.
-- Email behavior: `EMAIL_PROVIDER=development` returns a dev result and does not deliver externally; any non-development provider currently throws because no live adapter is active.
+- Email behavior: `EMAIL_PROVIDER=development` returns a dev result and does not deliver externally; `EMAIL_PROVIDER=microsoft` sends through Microsoft Graph when Microsoft 365 variables and tenant admin consent are configured.
 - Payment behavior: Stripe and PayPal session/webhook foundations exist and are controlled by env plus business settings. Credentials are optional for API deployment.
 
 ## Railway Project Structure
@@ -137,8 +137,12 @@ npm run db:seed
 | `INTEGRATION_SECRET_KEY` | API, Worker | Yes | Generate 32+ chars | Yes | Encrypts provider credentials. |
 | `STORAGE_PROVIDER` | API, Worker | Optional | Default `local` | No | `local` works only with durable volume/backup plan; `s3` stub is not active. |
 | `LOCAL_STORAGE_ROOT` | API, Worker | Required if local storage | Railway volume path or `storage/uploads` | No | Must be persistent in production if uploads/documents/media are used. |
-| `EMAIL_PROVIDER` | API, Worker | Optional | Default `development` | No | Development adapter does not deliver externally; no live adapter active. |
-| `EMAIL_FROM` | API, Worker | Optional | `LOLA Booths <hello@lolabooths.com>` | No | Used by email service. |
+| `EMAIL_PROVIDER` | API, Worker | Optional | Default `development` | No | Use `microsoft` for Microsoft 365 / Outlook delivery. |
+| `EMAIL_FROM` | API, Worker | Optional | `LOLA Booths <hello@lolabooths.com>` | No | Display sender used by email service. |
+| `MICROSOFT_TENANT_ID` | API, Worker | Required when `EMAIL_PROVIDER=microsoft` | Microsoft Entra tenant ID or tenant domain | No | Used for Graph client-credentials token acquisition. |
+| `MICROSOFT_CLIENT_ID` | API, Worker | Required when `EMAIL_PROVIDER=microsoft` | Microsoft Entra app registration | No | Application/client ID for Graph token acquisition. |
+| `MICROSOFT_CLIENT_SECRET` | API, Worker | Required when `EMAIL_PROVIDER=microsoft` | Microsoft Entra app registration secret | Yes | Do not commit. Rotate from Microsoft Entra. |
+| `MICROSOFT_SENDER_EMAIL` | API, Worker | Required when `EMAIL_PROVIDER=microsoft` | Microsoft 365 mailbox | No | Mailbox used in `/users/{sender}/sendMail`. |
 | `SMS_PROVIDER` | API, Worker | Optional | Default `none` | No | No active SMS adapter. |
 | `STRIPE_SECRET_KEY` | API | Optional | Stripe Dashboard | Yes | Needed only for Stripe checkout. |
 | `STRIPE_PUBLISHABLE_KEY` | API | Optional | Stripe Dashboard | No | Returned to public invoice page when enabled. |
@@ -267,9 +271,24 @@ If `STORAGE_PROVIDER=local` is used on Railway without a persistent volume, uplo
 Current production email readiness:
 
 - `EMAIL_PROVIDER=development`: not production ready; returns a dev result with `deliveredExternally: false`.
-- Any other `EMAIL_PROVIDER`: not production ready; throws because no live adapter is active.
+- `EMAIL_PROVIDER=microsoft`: production-capable after Microsoft Entra app registration, `Mail.Send` application permission, tenant admin consent, and a successful live `npm run email:test -- recipient@example.com`.
+- Other `EMAIL_PROVIDER` values: not production ready; throw because no adapter is active.
 
-Do not claim customer acknowledgements, proposal emails, invoice emails, or staff brief emails are live until a real email adapter is implemented/configured and tested.
+Do not claim customer acknowledgements, proposal emails, invoice emails, or staff brief emails are live until the Microsoft Graph adapter is configured and tested against the production mailbox.
+
+Microsoft 365 setup:
+
+1. Create or use a Microsoft Entra app registration.
+2. Add Microsoft Graph Application permission `Mail.Send`.
+3. Grant tenant admin consent.
+4. Set Railway API and worker variables:
+   - `EMAIL_PROVIDER=microsoft`
+   - `EMAIL_FROM=LOLA Booths <hello@thelolabooth.com>`
+   - `MICROSOFT_TENANT_ID=<tenant-id-or-domain>`
+   - `MICROSOFT_CLIENT_ID=<app-client-id>`
+   - `MICROSOFT_CLIENT_SECRET=<app-client-secret>`
+   - `MICROSOFT_SENDER_EMAIL=<licensed-mailbox>`
+5. Redeploy, then run `npm run email:test -- recipient@example.com` from the configured environment.
 
 ## Payments Status
 
@@ -421,7 +440,7 @@ window.LOLA_API_BASE = "https://<real-railway-api-domain>";
 - Live website inquiry POST returns `201`.
 - Smoke lead appears in Admin with source `WEBSITE`.
 - Storage is either backed by a persistent Railway volume with backup plan or blocked from production media/doc workflows.
-- Email is either intentionally disabled/dev-only or a real adapter has been implemented and tested.
+- Email is either intentionally disabled/dev-only or `EMAIL_PROVIDER=microsoft` has been configured and tested.
 - Stripe/PayPal remain disabled unless real/test credentials and webhooks are configured.
 - Optional social/payment webhook dashboards are configured only when verification readiness is acceptable.
 
@@ -429,4 +448,4 @@ window.LOLA_API_BASE = "https://<real-railway-api-domain>";
 
 The API and worker are structurally ready for Railway deployment after env vars and Railway services are created.
 
-The live marketing website cannot be connected until Railway provides the real API domain and the live website origin is known. Production is not fully ready for file/media/document durability or external email delivery until storage and email blockers are resolved.
+The live marketing website requires a healthy Railway API origin and an allow-listed public website origin. Production is not fully ready for file/media/document durability or external email delivery until storage is durable and Microsoft 365 email has passed a live smoke test.

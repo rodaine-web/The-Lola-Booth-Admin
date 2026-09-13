@@ -198,8 +198,11 @@ export async function processDueJobs({ limit = 25 } = {}) {
         await client.query("INSERT INTO automation_runs (automation_id, automation_job_id, trigger_key, entity_type, entity_id, scheduled_for, executed_at, result) VALUES ($1,$2,$3,$4,$5,$6,now(),'COMPLETED')", [job.automation_id, job.id, job.job_type, job.related_entity_type, job.related_entity_id, job.scheduled_for]);
         processed.push({ id: job.id, status: "COMPLETED" });
       } catch (error) {
-        const status = job.attempt_count + 1 >= job.max_attempts ? "FAILED" : "PENDING";
-        const nextRun = new Date(Date.now() + Math.min(60, 2 ** Number(job.attempt_count || 0)) * 60000);
+        const canRetry = error.details?.retryable !== false;
+        const status = !canRetry || job.attempt_count + 1 >= job.max_attempts ? "FAILED" : "PENDING";
+        const retryAfterSeconds = Number(error.details?.retryAfter || 0);
+        const delayMinutes = retryAfterSeconds > 0 ? Math.ceil(retryAfterSeconds / 60) : Math.min(60, 2 ** Number(job.attempt_count || 0));
+        const nextRun = new Date(Date.now() + delayMinutes * 60000);
         await client.query("UPDATE automation_jobs SET status=$1, scheduled_for=$2, last_error=$3, updated_at=now() WHERE id=$4", [status, nextRun, error.message, job.id]);
         await client.query("INSERT INTO automation_runs (automation_id, automation_job_id, trigger_key, entity_type, entity_id, scheduled_for, executed_at, result, error) VALUES ($1,$2,$3,$4,$5,$6,now(),'FAILED',$7)", [job.automation_id, job.id, job.job_type, job.related_entity_type, job.related_entity_id, job.scheduled_for, error.message]);
         processed.push({ id: job.id, status, error: error.message });

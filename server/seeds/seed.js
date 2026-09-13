@@ -370,8 +370,7 @@ async function seed() {
     const integrations = [
       ["PAYMENTS", "stripe"],
       ["PAYMENTS", "paypal"],
-      ["EMAIL", "resend"],
-      ["EMAIL", "postmark"],
+      ["EMAIL", "microsoft"],
       ["STORAGE", "s3-compatible"],
       ["CALENDAR", "google"],
       ["CALENDAR", "outlook"],
