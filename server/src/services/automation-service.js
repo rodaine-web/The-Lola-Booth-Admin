@@ -2,6 +2,10 @@ import { query, transaction } from "../db/pool.js";
 import { AppError } from "../utils/errors.js";
 import { sendEmail } from "./email-service.js";
 
+export const implementedAutomationJobTypes = ["SEND_EMAIL_TEMPLATE", "SEND_EMAIL"];
+export const futureAutomationJobTypes = ["CREATE_TASK", "ASSIGN_LEAD", "CHANGE_LEAD_STATUS", "ADD_INTERNAL_NOTE"];
+const staleProcessingMinutes = 10;
+
 export const allowedTemplateVariables = [
   "first_name", "client_name", "event_type", "event_date", "venue", "proposal_number",
   "proposal_url", "invoice_number", "invoice_url", "amount_due", "due_date",
@@ -20,6 +24,19 @@ export function validateTemplate(body = "", subject = "") {
   const unknown = variables.filter((variable) => !allowedTemplateVariables.includes(variable));
   if (unknown.length) throw new AppError(`Unknown template variable: ${unknown.join(", ")}`, 422, "UNKNOWN_TEMPLATE_VARIABLE");
   return [...new Set(variables)];
+}
+
+export function classifyAutomationJobType(jobType) {
+  if (implementedAutomationJobTypes.includes(jobType)) return "IMPLEMENTED";
+  if (futureAutomationJobTypes.includes(jobType)) return "NOT_IMPLEMENTED";
+  return "UNSAFE";
+}
+
+function unsupportedAutomationJobError(jobType) {
+  return new AppError(`Automation job type ${jobType} is not implemented and was not processed.`, 422, "AUTOMATION_ACTION_NOT_IMPLEMENTED", {
+    jobType,
+    retryable: false
+  });
 }
 
 export async function listEmailTemplates() {
@@ -159,9 +176,70 @@ async function emailTargetForEntity(client, type, id) {
   return null;
 }
 
+async function recoverStaleProcessingJobs(client) {
+  await client.query(
+    `UPDATE automation_jobs
+     SET status=CASE WHEN attempt_count >= max_attempts THEN 'FAILED' ELSE 'PENDING' END,
+         scheduled_for=CASE WHEN attempt_count >= max_attempts THEN scheduled_for ELSE now() END,
+         started_at=NULL,
+         last_error=COALESCE(last_error, 'Recovered stale processing job after worker restart.'),
+         updated_at=now()
+     WHERE status='PROCESSING'
+       AND started_at IS NOT NULL
+       AND started_at < now() - ($1::int * interval '1 minute')`,
+    [staleProcessingMinutes]
+  );
+}
+
+async function sendTemplateEmailJob(client, job) {
+  const templateKey = job.action_config?.template_key;
+  const template = templateKey ? (await client.query("SELECT * FROM email_templates WHERE template_key=$1 AND active=true AND deleted_at IS NULL", [templateKey])).rows[0] : null;
+  if (!template) throw new AppError("Active email template not found.", 422, "EMAIL_TEMPLATE_NOT_FOUND", { retryable: false });
+  const mergeData = await mergeDataForEntity(client, job.related_entity_type, job.related_entity_id, job.payload);
+  const to = await emailTargetForEntity(client, job.related_entity_type, job.related_entity_id);
+  if (!to) throw new AppError("No recipient email available.", 422, "EMAIL_RECIPIENT_NOT_FOUND", { retryable: false });
+  const subject = renderTemplate(template.subject, mergeData);
+  const body = renderTemplate(template.body, mergeData);
+  return sendAndRecordEmail(client, job, { to, subject, body });
+}
+
+async function sendPlainEmailJob(client, job) {
+  const mergeData = await mergeDataForEntity(client, job.related_entity_type, job.related_entity_id, job.payload);
+  const to = job.payload?.to || await emailTargetForEntity(client, job.related_entity_type, job.related_entity_id);
+  const subject = job.payload?.subject ? renderTemplate(job.payload.subject, mergeData) : "";
+  const body = job.payload?.body ? renderTemplate(job.payload.body, mergeData) : "";
+  if (!to) throw new AppError("No recipient email available.", 422, "EMAIL_RECIPIENT_NOT_FOUND", { retryable: false });
+  if (!subject || !body) throw new AppError("SEND_EMAIL jobs require payload.subject and payload.body.", 422, "EMAIL_CONTENT_REQUIRED", { retryable: false });
+  return sendAndRecordEmail(client, job, { to, subject, body });
+}
+
+async function sendAndRecordEmail(client, job, { to, subject, body }) {
+  const delivery = await sendEmail({ to, subject, body });
+  const communication = await client.query(
+    `INSERT INTO communications (lead_id, client_id, type, direction, subject, message_summary)
+     VALUES ($1,$2,'EMAIL','OUTBOUND',$3,$4) RETURNING *`,
+    [job.related_entity_type === "lead" ? job.related_entity_id : null, job.related_entity_type === "client" ? job.related_entity_id : null, subject, body.slice(0, 500)]
+  );
+  await client.query(
+    `INSERT INTO email_messages (communication_id, provider, provider_message_id, to_email, subject, status, body_preview, sent_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,now())`,
+    [communication.rows[0].id, delivery.provider, delivery.providerMessageId, to, subject, delivery.status, body.slice(0, 500)]
+  );
+  return delivery;
+}
+
+async function executeAutomationJob(client, job) {
+  const classification = classifyAutomationJobType(job.job_type);
+  if (classification !== "IMPLEMENTED") throw unsupportedAutomationJobError(job.job_type);
+  if (job.job_type === "SEND_EMAIL_TEMPLATE") return sendTemplateEmailJob(client, job);
+  if (job.job_type === "SEND_EMAIL") return sendPlainEmailJob(client, job);
+  throw unsupportedAutomationJobError(job.job_type);
+}
+
 export async function processDueJobs({ limit = 25 } = {}) {
   const processed = [];
   await transaction(async (client) => {
+    await recoverStaleProcessingJobs(client);
     const jobs = await client.query(
       `SELECT j.*, a.action_config, a.name AS automation_name
        FROM automation_jobs j
@@ -173,27 +251,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
     for (const job of jobs.rows) {
       await client.query("UPDATE automation_jobs SET status='PROCESSING', started_at=now(), attempt_count=attempt_count+1 WHERE id=$1", [job.id]);
       try {
-        if (job.job_type === "SEND_EMAIL_TEMPLATE" || job.job_type === "SEND_EMAIL") {
-          const templateKey = job.action_config?.template_key;
-          const template = templateKey ? (await client.query("SELECT * FROM email_templates WHERE template_key=$1 AND active=true AND deleted_at IS NULL", [templateKey])).rows[0] : null;
-          if (!template) throw new Error("Active email template not found.");
-          const mergeData = await mergeDataForEntity(client, job.related_entity_type, job.related_entity_id, job.payload);
-          const to = await emailTargetForEntity(client, job.related_entity_type, job.related_entity_id);
-          if (!to) throw new Error("No recipient email available.");
-          const subject = renderTemplate(template.subject, mergeData);
-          const body = renderTemplate(template.body, mergeData);
-          const delivery = await sendEmail({ to, subject, body });
-          const communication = await client.query(
-            `INSERT INTO communications (lead_id, client_id, type, direction, subject, message_summary)
-             VALUES ($1,$2,'EMAIL','OUTBOUND',$3,$4) RETURNING *`,
-            [job.related_entity_type === "lead" ? job.related_entity_id : null, job.related_entity_type === "client" ? job.related_entity_id : null, subject, body.slice(0, 500)]
-          );
-          await client.query(
-            `INSERT INTO email_messages (communication_id, provider, provider_message_id, to_email, subject, status, body_preview, sent_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,now())`,
-            [communication.rows[0].id, delivery.provider, delivery.providerMessageId, to, subject, delivery.status, body.slice(0, 500)]
-          );
-        }
+        await executeAutomationJob(client, job);
         await client.query("UPDATE automation_jobs SET status='COMPLETED', completed_at=now(), updated_at=now() WHERE id=$1", [job.id]);
         await client.query("INSERT INTO automation_runs (automation_id, automation_job_id, trigger_key, entity_type, entity_id, scheduled_for, executed_at, result) VALUES ($1,$2,$3,$4,$5,$6,now(),'COMPLETED')", [job.automation_id, job.id, job.job_type, job.related_entity_type, job.related_entity_id, job.scheduled_for]);
         processed.push({ id: job.id, status: "COMPLETED" });

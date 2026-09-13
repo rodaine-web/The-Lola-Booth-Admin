@@ -79,6 +79,7 @@ Worker behavior:
 - Processes due automation jobs with `processDueJobs({ limit: 25 })`.
 - Failed jobs are retried by the automation engine up to each job's `max_attempts`.
 - Gracefully closes the PostgreSQL pool on `SIGINT` and `SIGTERM`.
+- Current worker jobs send plain/template email from PostgreSQL data only. Do not mount a Railway volume or set worker `LOCAL_STORAGE_ROOT` unless a future worker job explicitly sends file attachments.
 
 ## PostgreSQL
 
@@ -135,8 +136,8 @@ npm run db:seed
 | `RATE_LIMIT_WINDOW_MS` | API | Optional | Default `900000` | No | Global and public route window. |
 | `RATE_LIMIT_MAX` | API | Optional | Default `120` | No | Global API limiter max. Public router also has hardcoded `20`. |
 | `INTEGRATION_SECRET_KEY` | API, Worker | Yes | Generate 32+ chars | Yes | Encrypts provider credentials. |
-| `STORAGE_PROVIDER` | API, Worker | Optional | Default `local` | No | `local` works only with durable volume/backup plan; `s3` stub is not active. |
-| `LOCAL_STORAGE_ROOT` | API, Worker | Required if local storage | Railway volume path or `storage/uploads` | No | Must be persistent in production if uploads/documents/media are used. |
+| `STORAGE_PROVIDER` | API | Optional | Default `local` | No | `local` works only with durable volume/backup plan; `s3` stub is not active. Current worker jobs do not need storage. |
+| `LOCAL_STORAGE_ROOT` | API | Required if local storage | Railway volume path or `storage/uploads` | No | Must be persistent in production if uploads/documents/media are used. Do not set on worker unless a future worker job sends file attachments. |
 | `EMAIL_PROVIDER` | API, Worker | Optional | Default `development` | No | Use `microsoft` for Microsoft 365 / Outlook delivery. |
 | `EMAIL_FROM` | API, Worker | Optional | `LOLA Booths <hello@lolabooths.com>` | No | Display sender used by email service. |
 | `FORM_NOTIFICATION_EMAIL` | API, Worker | Optional | Business owner inbox | No | Receives internal notifications for public website form submissions. Falls back to `EMAIL_FROM` address. |
@@ -156,7 +157,7 @@ npm run db:seed
 | `TIKTOK_WEBHOOK_SECRET` | API | Optional in code | Provider config | Yes | Loaded by env but not currently enforced in webhook route. |
 | `LINKEDIN_API_VERSION` | API | Optional | Default `202609` | No | Loaded by env for LinkedIn integration foundation. |
 
-No worker-specific env vars are present in current code beyond shared database, env, storage, email, and integration settings.
+No worker-specific env vars are present in current code beyond shared database, env, email, and integration settings.
 
 ## Live Website Connection
 
