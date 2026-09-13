@@ -1,0 +1,27 @@
+# LOLA Go-Live Checklist
+
+Final Phase 11B recommendation: **NOT READY FOR PRODUCTION** until every P0 row below is PASS or explicitly not applicable to the launch plan.
+
+| Blocker | Current State | Owner / Responsibility | Validation Method | Result | Evidence | Required Follow-Up |
+| --- | --- | --- | --- | --- | --- | --- |
+| Production secrets | Env checker exists; real production secrets not present here | Technical owner | `npm run env:check` in staging/prod, secret manager review | BLOCKED | Local dev check passes but uses dev env | Create strong production secrets, store in deployment secret manager |
+| Production URLs | URL variables documented; local env still uses localhost defaults | Technical owner | `npm run env:check`, generated proposal/invoice/delivery link review | BLOCKED | `PUBLIC_BASE_URL` and `PUBLIC_APP_URL` missing from local `.env` | Set HTTPS admin/API/public base URLs |
+| HTTPS | App has security headers; no deployed HTTPS endpoint provided | Deployment owner | Browser and curl checks against deployed domains | BLOCKED | No staging/prod URL available | Deploy behind HTTPS and verify redirects/webhooks |
+| CORS | API allow-list logic exists | Technical owner | Confirm admin and website origins only | BLOCKED | Local origin verified | Set production `CLIENT_ORIGIN` and `PUBLIC_INQUIRY_ALLOWED_ORIGINS` |
+| Email provider | Development adapter active | Owner + technical owner | Send provider-backed email to Gmail/Outlook | BLOCKED | System Health reports email DEGRADED locally | Configure Resend/Postmark or chosen provider |
+| Email domain auth | Not externally verifiable here | Owner | Provider dashboard SPF/DKIM/DMARC status | BLOCKED | No provider dashboard connected | Verify DNS in email provider dashboard |
+| Stripe | Provider code exists, credentials absent | Owner + technical owner | Stripe test checkout, webhook, duplicate webhook, refund | BLOCKED | System Health reports Stripe DISCONNECTED | Configure test keys and webhook secret; run test flow |
+| PayPal | Provider code exists, credentials absent | Owner + technical owner | PayPal sandbox order, webhook, duplicate event, refund | BLOCKED | System Health reports PayPal DISCONNECTED | Configure sandbox credentials and webhook ID |
+| Worker deployment | Worker command and heartbeat exist | Deployment owner | Run supervised worker and kill/restart test | BLOCKED | Local worker heartbeat verified | Deploy `npm run worker` under platform supervision |
+| Database backup | DR procedure documented | Deployment owner | Create backup and record timestamp/location | BLOCKED | No production backup target available | Configure encrypted scheduled backups |
+| Restore test | Restore procedure documented | Deployment owner | Restore backup into separate DB and smoke | BLOCKED | Not performed here | Perform staging restore drill |
+| Production storage | Local storage active in dev | Owner + technical owner | Upload/download/archive test against durable storage | BLOCKED | System Health reports storage DEGRADED locally | Choose durable volume or implement S3-compatible adapter |
+| Demo/test data removal | Seed is dev-known and repo is untracked | Owner + technical owner | Query production DB for demo users/test records | BLOCKED | Local seed contains demo owner credential | Do not run demo seed in production; bootstrap owner securely |
+| Owner bootstrap | Seeded local owner uses known password | Owner + technical owner | One-time bootstrap with forced password reset | BLOCKED | README documents local seed login | Create production owner without known default password |
+| QR physical-device testing | QR PDF generation passes locally | Operations owner | Print label, scan iPhone/Android/browser/manual fallback | BLOCKED | Local QR PDF smoke returns `%PDF` | Test physical label size and quiet zone |
+| Rollback | Runbook documents rollback | Deployment owner | Deploy A/B rollback drill | BLOCKED | No staging platform available | Perform app rollback test before production |
+| Golden-path smoke | Local API smoke passed | Owner + technical owner | Deployed lead/proposal/invoice/payment/operations flow | BLOCKED | Public inquiry local smoke created lead; QR PDF smoke passed | Run full staging smoke with real provider test credentials |
+
+## Final Decision
+
+**NOT READY FOR PRODUCTION.** The codebase has the required controls and proof hooks, but Phase 11B requires real deployment evidence. That evidence is not available in this local workspace.

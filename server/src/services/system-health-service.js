@@ -1,0 +1,184 @@
+import { env, productionReadinessIssues } from "../config/env.js";
+import { query } from "../db/pool.js";
+import { AppError, notFound } from "../utils/errors.js";
+import { sendEmail } from "./email-service.js";
+import { providerStatus } from "./payment-service.js";
+import { publicSitePayload } from "./website-cms-service.js";
+
+const statuses = ["DOWN", "ERROR", "MISCONFIGURED", "DISCONNECTED", "DEGRADED", "UNKNOWN", "HEALTHY"];
+
+function check(name, status, summary, details = {}) {
+  return { name, status, summary, details };
+}
+
+function overallStatus(checks) {
+  return statuses.find((status) => checks.some((item) => item.status === status)) || "UNKNOWN";
+}
+
+export async function recordWorkerHeartbeat(workerName = "automation-worker", metadata = {}) {
+  const result = await query(
+    `INSERT INTO worker_heartbeats (worker_name, status, last_heartbeat_at, metadata)
+     VALUES ($1,'HEALTHY',now(),$2)
+     ON CONFLICT (worker_name) DO UPDATE SET status='HEALTHY', last_heartbeat_at=now(), metadata=$2, updated_at=now()
+     RETURNING *`,
+    [workerName, metadata]
+  );
+  return result.rows[0];
+}
+
+export async function getSystemHealth() {
+  const checks = [];
+  try {
+    await query("SELECT 1");
+    checks.push(check("api", "HEALTHY", "API process is responding."));
+    checks.push(check("database", "HEALTHY", "PostgreSQL connection is available."));
+  } catch (error) {
+    checks.push(check("api", "DOWN", "API process cannot complete database-backed health checks.", { error: error.message }));
+    checks.push(check("database", "DOWN", "PostgreSQL connection failed.", { error: error.message }));
+  }
+
+  checks.push(...environmentChecks());
+  checks.push(...paymentChecks());
+  checks.push(await emailCheck());
+  checks.push(smsCheck());
+  checks.push(storageCheck());
+  checks.push(await websiteIntegrationCheck());
+  checks.push(await workerCheck());
+  checks.push(await jobBacklogCheck());
+  checks.push(await integrationCheck());
+  checks.push(await retentionCheck());
+
+  const status = overallStatus(checks);
+  await query("INSERT INTO system_health_snapshots (status, checks) VALUES ($1,$2)", [status, checks]).catch(() => null);
+  return { status, generatedAt: new Date().toISOString(), checks };
+}
+
+function smsCheck() {
+  if (env.smsProvider === "none") return check("sms", "DISCONNECTED", "No SMS provider is configured.");
+  return check("sms", "MISCONFIGURED", `${env.smsProvider} is selected, but no SMS adapter is active.`);
+}
+
+function storageCheck() {
+  if (env.storageProvider === "local") {
+    return check("storage", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Local file storage is active; production needs a persistent volume and backup plan or an object storage adapter.", { provider: env.storageProvider, root: env.localStorageRoot });
+  }
+  if (env.storageProvider === "s3") return check("storage", "MISCONFIGURED", "S3-compatible storage is selected but the adapter is not active yet.", { provider: env.storageProvider });
+  return check("storage", "UNKNOWN", "Storage provider is not recognized.", { provider: env.storageProvider });
+}
+
+async function websiteIntegrationCheck() {
+  try {
+    const payload = await publicSitePayload();
+    return check("website_integration", "HEALTHY", "Public website CMS payload is available.", { sections: Object.keys(payload || {}) });
+  } catch (error) {
+    return check("website_integration", "ERROR", "Public website CMS payload failed.", { error: error.message });
+  }
+}
+
+function environmentChecks() {
+  if (!productionReadinessIssues.length) return [check("environment", "HEALTHY", "Required production environment values are present.")];
+  return [check("environment", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Production environment values still need attention.", { issues: productionReadinessIssues })];
+}
+
+function paymentChecks() {
+  const providers = providerStatus();
+  return Object.values(providers).map((provider) => {
+    if (!provider.configured) return check(`payments.${provider.provider.toLowerCase()}`, "DISCONNECTED", `${provider.provider} credentials are not configured.`, provider);
+    if (!provider.webhookConfigured) return check(`payments.${provider.provider.toLowerCase()}`, "MISCONFIGURED", `${provider.provider} credentials exist but webhook verification is not configured.`, provider);
+    return check(`payments.${provider.provider.toLowerCase()}`, "HEALTHY", `${provider.provider} is configured for ${provider.mode}.`, provider);
+  });
+}
+
+async function emailCheck() {
+  if (env.emailProvider === "development") return check("email", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Email is using the development adapter and does not deliver externally.", { provider: env.emailProvider, from: env.emailFrom });
+  try {
+    await sendEmail({ to: env.emailFrom, subject: "LOLA Admin provider health check", body: "Provider adapter probe." });
+    return check("email", "HEALTHY", `${env.emailProvider} adapter accepted a probe message.`, { provider: env.emailProvider });
+  } catch (error) {
+    return check("email", "MISCONFIGURED", `${env.emailProvider} adapter is configured but not active.`, { error: error.message });
+  }
+}
+
+async function workerCheck() {
+  const result = await query("SELECT * FROM worker_heartbeats WHERE worker_name='automation-worker' LIMIT 1");
+  const heartbeat = result.rows[0];
+  if (!heartbeat) return check("worker", "UNKNOWN", "Automation worker has not reported a heartbeat.");
+  const ageSeconds = Math.round((Date.now() - new Date(heartbeat.last_heartbeat_at).getTime()) / 1000);
+  if (ageSeconds > 180) return check("worker", "DEGRADED", "Automation worker heartbeat is stale.", { lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds });
+  return check("worker", "HEALTHY", "Automation worker heartbeat is current.", { lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds });
+}
+
+async function jobBacklogCheck() {
+  const result = await query(
+    `SELECT
+      count(*) FILTER (WHERE status='PENDING')::int AS pending,
+      count(*) FILTER (WHERE status='PROCESSING')::int AS processing,
+      count(*) FILTER (WHERE status='FAILED')::int AS failed,
+      min(scheduled_for) FILTER (WHERE status='PENDING') AS oldest_pending
+     FROM automation_jobs`
+  );
+  const row = result.rows[0] || {};
+  if (Number(row.failed) > 0) return check("automation_jobs", "ERROR", "One or more automation jobs have failed.", row);
+  if (row.oldest_pending && new Date(row.oldest_pending).getTime() < Date.now() - 15 * 60000) return check("automation_jobs", "DEGRADED", "Pending automation jobs are older than expected.", row);
+  return check("automation_jobs", "HEALTHY", "Automation job backlog is within expected bounds.", row);
+}
+
+async function integrationCheck() {
+  const result = await query("SELECT provider, status, last_error, last_webhook_at FROM integration_connections ORDER BY category, provider");
+  const disconnected = result.rows.filter((row) => ["ERROR", "NEEDS_REAUTHORIZATION"].includes(row.status));
+  if (disconnected.length) return check("integrations", "ERROR", "One or more connected integrations need attention.", { connections: result.rows });
+  const pending = result.rows.filter((row) => ["DISCONNECTED", "AWAITING_APPROVAL"].includes(row.status));
+  return check("integrations", pending.length ? "DEGRADED" : "HEALTHY", pending.length ? "Optional integrations are disconnected or awaiting approval." : "Integrations do not report errors.", { connections: result.rows });
+}
+
+async function retentionCheck() {
+  const result = await query("SELECT audit_log_retention_days, notification_retention_days, offline_receipt_retention_days FROM business_settings LIMIT 1");
+  return check("retention", "HEALTHY", "Retention windows are configured.", result.rows[0] || {});
+}
+
+export async function listSystemJobs() {
+  const result = await query(
+    `SELECT j.*, a.name AS automation_name
+     FROM automation_jobs j
+     LEFT JOIN automations a ON a.id=j.automation_id
+     ORDER BY j.scheduled_for DESC
+     LIMIT 100`
+  );
+  return { data: result.rows };
+}
+
+export async function retrySystemJob(id) {
+  const result = await query(
+    `UPDATE automation_jobs
+     SET status='PENDING', scheduled_for=now(), last_error=NULL, started_at=NULL, completed_at=NULL, updated_at=now()
+     WHERE id=$1 AND status IN ('FAILED','CANCELLED')
+     RETURNING *`,
+    [id]
+  );
+  if (!result.rows[0]) throw notFound("Job");
+  return result.rows[0];
+}
+
+export async function retrySelectedSystemJobs(ids = []) {
+  if (!Array.isArray(ids) || !ids.length) throw new AppError("Select at least one failed or cancelled job.", 400, "NO_JOBS_SELECTED");
+  const result = await query(
+    `UPDATE automation_jobs
+     SET status='PENDING', scheduled_for=now(), last_error=NULL, started_at=NULL, completed_at=NULL, updated_at=now()
+     WHERE id=ANY($1::uuid[]) AND status IN ('FAILED','CANCELLED')
+     RETURNING *`,
+    [ids]
+  );
+  return { retried: result.rows.length, data: result.rows };
+}
+
+export async function cancelSystemJob(id) {
+  const result = await query(
+    `UPDATE automation_jobs
+     SET status='CANCELLED', last_error='Cancelled by admin', updated_at=now()
+     WHERE id=$1 AND status IN ('PENDING','PROCESSING')
+     RETURNING *`,
+    [id]
+  );
+  if (!result.rows[0]) throw new AppError("Only pending or processing jobs can be cancelled.", 409, "JOB_NOT_CANCELLABLE");
+  return result.rows[0];
+}
