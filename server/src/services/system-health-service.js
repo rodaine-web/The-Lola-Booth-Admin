@@ -1,7 +1,7 @@
 import { env, productionReadinessIssues } from "../config/env.js";
 import { query } from "../db/pool.js";
 import { AppError, notFound } from "../utils/errors.js";
-import { sendEmail } from "./email-service.js";
+import { getEmailProviderReadiness } from "./email-service.js";
 import { providerStatus } from "./payment-service.js";
 import { publicSitePayload } from "./website-cms-service.js";
 
@@ -92,8 +92,8 @@ function paymentChecks() {
 async function emailCheck() {
   if (env.emailProvider === "development") return check("email", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Email is using the development adapter and does not deliver externally.", { provider: env.emailProvider, from: env.emailFrom });
   try {
-    await sendEmail({ to: env.emailFrom, subject: "LOLA Admin provider health check", body: "Provider adapter probe." });
-    return check("email", "HEALTHY", `${env.emailProvider} adapter accepted a probe message.`, { provider: env.emailProvider });
+    const readiness = getEmailProviderReadiness();
+    return check("email", "HEALTHY", `${env.emailProvider} adapter is configured and active.`, readiness);
   } catch (error) {
     return check("email", "MISCONFIGURED", `${env.emailProvider} adapter is configured but not active.`, { error: error.message });
   }

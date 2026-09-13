@@ -211,6 +211,38 @@ function createProvider() {
   return null;
 }
 
+export function getEmailProviderReadiness(config = env, providerOptions = {}) {
+  if (!config.emailProvider || config.emailProvider === "development") {
+    return {
+      provider: "development",
+      active: false,
+      deliveredExternally: false,
+      from: config.emailFrom
+    };
+  }
+
+  if (config.emailProvider === "microsoft") {
+    const provider = new MicrosoftEmailProvider({
+      tenantId: config.microsoftTenantId,
+      clientId: config.microsoftClientId,
+      clientSecret: config.microsoftClientSecret,
+      senderEmail: config.microsoftSenderEmail,
+      emailFrom: config.emailFrom,
+      ...providerOptions
+    });
+    provider.validateConfig();
+    return {
+      provider: "microsoft",
+      active: true,
+      deliveredExternally: true,
+      senderEmail: config.microsoftSenderEmail,
+      from: config.emailFrom
+    };
+  }
+
+  throw new AppError(`Email provider ${config.emailProvider} is configured but no adapter is active yet.`, 500, "EMAIL_PROVIDER_UNSUPPORTED");
+}
+
 export async function sendEmail({ to, cc, bcc, subject, body, html, text, replyTo, attachments = [] }) {
   if (!env.emailProvider || env.emailProvider === "development") {
     return {

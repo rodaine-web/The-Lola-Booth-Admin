@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { MicrosoftEmailProvider, classifyMicrosoftSendFailure, isRetryableStatus } from "../server/src/services/email-service.js";
+import {
+  MicrosoftEmailProvider,
+  classifyMicrosoftSendFailure,
+  getEmailProviderReadiness,
+  isRetryableStatus
+} from "../server/src/services/email-service.js";
 
 const automationSource = await import("node:fs/promises").then((fs) => fs.readFile(new URL("../server/src/services/automation-service.js", import.meta.url), "utf8"));
 
@@ -26,6 +31,79 @@ function providerWithFetch(fetchImpl, overrides = {}) {
     ...overrides
   });
 }
+
+function microsoftReadinessConfig(overrides = {}) {
+  return {
+    emailProvider: "microsoft",
+    emailFrom: "LOLA Booths <hello@thelolabooth.com>",
+    microsoftTenantId: "tenant-id",
+    microsoftClientId: "client-id",
+    microsoftClientSecret: "client-secret",
+    microsoftSenderEmail: "hello@thelolabooth.com",
+    ...overrides
+  };
+}
+
+test("Microsoft email readiness is healthy when required config is present", () => {
+  const readiness = getEmailProviderReadiness(microsoftReadinessConfig());
+
+  assert.equal(readiness.provider, "microsoft");
+  assert.equal(readiness.active, true);
+  assert.equal(readiness.deliveredExternally, true);
+  assert.equal(readiness.senderEmail, "hello@thelolabooth.com");
+});
+
+test("Microsoft email readiness reports missing tenant id as misconfigured", () => {
+  assert.throws(
+    () => getEmailProviderReadiness(microsoftReadinessConfig({ microsoftTenantId: "" })),
+    (error) => error.code === "EMAIL_PROVIDER_MISCONFIGURED" && error.message.includes("MICROSOFT_TENANT_ID")
+  );
+});
+
+test("Microsoft email readiness reports missing client id as misconfigured", () => {
+  assert.throws(
+    () => getEmailProviderReadiness(microsoftReadinessConfig({ microsoftClientId: "" })),
+    (error) => error.code === "EMAIL_PROVIDER_MISCONFIGURED" && error.message.includes("MICROSOFT_CLIENT_ID")
+  );
+});
+
+test("Microsoft email readiness reports missing client secret as misconfigured", () => {
+  assert.throws(
+    () => getEmailProviderReadiness(microsoftReadinessConfig({ microsoftClientSecret: "" })),
+    (error) => error.code === "EMAIL_PROVIDER_MISCONFIGURED" && error.message.includes("MICROSOFT_CLIENT_SECRET")
+  );
+});
+
+test("Microsoft email readiness reports missing sender email as misconfigured", () => {
+  assert.throws(
+    () => getEmailProviderReadiness(microsoftReadinessConfig({ microsoftSenderEmail: "" })),
+    (error) => error.code === "EMAIL_PROVIDER_MISCONFIGURED" && error.message.includes("MICROSOFT_SENDER_EMAIL")
+  );
+});
+
+test("development provider readiness behavior remains non-delivering", () => {
+  const readiness = getEmailProviderReadiness({
+    emailProvider: "development",
+    emailFrom: "LOLA Booths <hello@thelolabooth.com>"
+  });
+
+  assert.equal(readiness.provider, "development");
+  assert.equal(readiness.active, false);
+  assert.equal(readiness.deliveredExternally, false);
+});
+
+test("email readiness does not send external mail", () => {
+  let fetchCalled = false;
+  const readiness = getEmailProviderReadiness(microsoftReadinessConfig(), {
+    fetchImpl: async () => {
+      fetchCalled = true;
+      throw new Error("health check should not send");
+    }
+  });
+
+  assert.equal(readiness.active, true);
+  assert.equal(fetchCalled, false);
+});
 
 test("Microsoft provider requests an app-only Graph token and caches it", async () => {
   const calls = [];
