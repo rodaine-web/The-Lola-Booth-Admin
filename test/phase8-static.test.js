@@ -65,6 +65,23 @@ test("website inquiry endpoint uses the Phase 8 ingestion pipeline with UTMs", (
   assert.doesNotMatch(publicRoutes, /leadId: lead\.id/);
 });
 
+test("website lead ingestion preserves booking relationship and venue fields", () => {
+  for (const token of [
+    "preferred_experience_id",
+    "preferredExperienceId",
+    "preferred_package_id",
+    "preferredPackageId",
+    "referral_source",
+    "referralSource",
+    "venue_address",
+    "venueAddress",
+    "event_end_time",
+    "eventEndTime"
+  ]) {
+    assert.match(socialService, new RegExp(token));
+  }
+});
+
 test("automation engine supports templates, durable jobs, retry, and safe variables", () => {
   for (const token of ["allowedTemplateVariables", "renderTemplate", "UNKNOWN_TEMPLATE_VARIABLE", "triggerAutomations", "processDueJobs", "automation_jobs", "attempt_count", "max_attempts", "cancelJobsForEntity", "sendEmail"]) {
     assert.match(automationService, new RegExp(token));

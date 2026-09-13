@@ -12,6 +12,7 @@ import { adminRouter } from "./routes/admin.js";
 import { webhookRouter } from "./routes/webhooks.js";
 import { getSetupStatus } from "./services/setup-service.js";
 import { asyncHandler } from "./utils/async-handler.js";
+import { AppError } from "./utils/errors.js";
 
 const app = express();
 
@@ -20,7 +21,7 @@ app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
     if (!origin || origin === env.clientOrigin || env.publicInquiryAllowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error("Not allowed by CORS"));
+    return callback(new AppError("Requests are not allowed from this origin.", 403, "CORS_REJECTED"));
   },
   credentials: true
 }));
