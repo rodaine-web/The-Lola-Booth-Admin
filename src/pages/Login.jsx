@@ -36,7 +36,7 @@ export default function Login() {
         <div className="brand large login-brand">
           <img className="brand-logo brand-logo-primary" src="/brand/LOLA_Primary_Dark_Transparent.png" alt="The LOLA Booth" />
           <div>
-            <strong>LOLA Admin</strong>
+            <strong>Admin Portal</strong>
             <span>Luxury event operations</span>
           </div>
         </div>

@@ -38,9 +38,9 @@ STATUS: CODE READY, RAILWAY APPLY REQUIRED
 | API health | PASS | `GET https://api.thelolabooth.com/api/health` returned HTTP 200 and `{"ok":true,"name":"LOLA Admin API"}` | No |
 | CORS allowlist | PASS | `Origin: https://admin.thelolabooth.com` returned `access-control-allow-origin: https://admin.thelolabooth.com` | No |
 | CORS wildcard rejection | PASS | `Origin: https://evil.example` returned HTTP 403 `CORS_REJECTED` | No |
-| Admin deployment | FAIL | Live HTML references old bundle `/assets/index-DkhRoX36.js` | Yes |
-| Credential fix live | FAIL | Live bundle still contains previous default login values and old sidebar strings | Yes |
-| Admin branding live | FAIL | Live bundle still contains `LOLA Admin` and `Private operations` in the sidebar | Yes |
+| Admin deployment | PASS WITH WARNING | After push, live HTML references new bundle `/assets/index-z3at7RiJ.js` | Confirm next build after final login-title cleanup |
+| Credential fix live | PASS | New live bundle has no `owner@lolabooths.com`, `owner@thelolabooth.com`, or `LolaAdmin!2026` strings | No |
+| Admin branding live | PASS WITH WARNING | New live bundle has `Admin Portal` and no `Private operations`; login/title copy was further cleaned up locally after this check | Redeploy latest cleanup |
 | Email DNS SPF | FAIL | `dig TXT thelolabooth.com` returned no SPF TXT record | Yes |
 | Email DNS DKIM | FAIL | Common `selector1` / `selector2` DKIM TXT and CNAME lookups returned no records | Yes |
 | Email DNS DMARC | FAIL | `dig TXT _dmarc.thelolabooth.com` returned no DMARC record | Yes |
@@ -60,9 +60,9 @@ STATUS: CODE READY, RAILWAY APPLY REQUIRED
 | Area | Status | Live Evidence | Blocker? |
 | --- | --- | --- | --- |
 | Migration 020 | BLOCKED | Repo migration verified; Railway apply blocked by absent production DB/CLI context | Yes |
-| Admin deployment | FAIL | Live admin serves old bundle | Yes |
+| Admin deployment | PASS WITH WARNING | Live admin updated to bundle `/assets/index-z3at7RiJ.js` after push | Redeploy final cleanup |
 | API deployment | PASS | Live health endpoint HTTP 200 | No |
-| Credential fix | FAIL | Live bundle still contains old default credentials | Yes |
+| Credential fix | PASS | New live bundle has no default owner email/password markers | No |
 | Owner login | MANUAL VERIFICATION REQUIRED | Requires authorized production session | Yes |
 | Super Admin login | MANUAL VERIFICATION REQUIRED | Requires authorized production session/account | Yes |
 | Super Admin user creation | PASS WITH WARNING | Server routes and tests pass locally; production UAT pending | Yes |
@@ -97,7 +97,7 @@ STATUS: CODE READY, RAILWAY APPLY REQUIRED
 | SPF | FAIL | No root TXT SPF record returned | Yes |
 | DKIM | FAIL | No common DKIM TXT/CNAME selectors returned | Yes |
 | DMARC | FAIL | No `_dmarc` TXT record returned | Yes |
-| Admin branding | FAIL | Live bundle still has old sidebar text | Yes |
+| Admin branding | PASS WITH WARNING | Sidebar source uses only `Admin Portal`; live bundle has no `Private operations`; final login/title cleanup pending redeploy | Redeploy final cleanup |
 
 ## Final Verdict
 
@@ -105,7 +105,7 @@ NO-GO
 
 Remaining launch blockers:
 
-- Deploy the verified source so the live admin no longer exposes the previous default credential strings.
+- Apply the final login/title branding cleanup deployment and confirm the newest live bundle.
 - Apply migration 020 to Railway PostgreSQL and verify `schema_migrations`.
 - Complete authenticated Owner/Super Admin UAT.
 - Complete controlled inbox email UAT after SPF/DKIM/DMARC/MX records are configured.

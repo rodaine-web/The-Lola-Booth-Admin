@@ -36,7 +36,7 @@ const SystemHealth = lazy(() => import("./pages/SystemHealth.jsx"));
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <main className="boot-screen">Opening LOLA Admin...</main>;
+  if (loading) return <main className="boot-screen">Opening Admin Portal...</main>;
   if (!user) return <Navigate to="/login" replace />;
   if (user.roles?.includes("ATTENDANT") && !user.roles?.some((role) => ["OWNER", "ADMIN", "EVENT_MANAGER"].includes(role)) && !location.pathname.startsWith("/my-events")) {
     return <Navigate to="/my-events" replace />;
@@ -46,7 +46,7 @@ function PrivateRoute({ children }) {
 
 export default function App() {
   return (
-    <Suspense fallback={<main className="boot-screen">Opening LOLA Admin...</main>}>
+    <Suspense fallback={<main className="boot-screen">Opening Admin Portal...</main>}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
