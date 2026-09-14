@@ -8,10 +8,11 @@ import { AppError } from "../utils/errors.js";
 import { validate } from "../utils/validation.js";
 import { ingestProviderLead } from "../services/social-lead-service.js";
 import { sendPublicInquiryEmails } from "../services/public-form-email-service.js";
-import { generateInvoicePdf, generateProposalPdf } from "../services/document-service.js";
+import { generateInvoicePdf } from "../services/document-service.js";
 import { getInvoice } from "../services/invoice-service.js";
 import { createPaymentSession, publicPaymentOptions } from "../services/payment-service.js";
-import { getProposal, proposalPreviewHtml } from "../services/proposal-service.js";
+import { getProposal, proposalPdfBuffer, proposalPreviewHtml, userDocumentFilename } from "../services/proposal-service.js";
+import { publicCreativeApproval, respondToCreativeApproval } from "../services/creative-approval-service.js";
 import { getStorageProvider } from "../services/storage-service.js";
 import { publicDelivery } from "../services/field-operations-service.js";
 import {
@@ -141,6 +142,20 @@ publicRouter.get("/delivery/:token", asyncHandler(async (req, res) => {
   res.json(await publicDelivery(req.params.token));
 }));
 
+publicRouter.get("/approvals/:token", asyncHandler(async (req, res) => {
+  res.json(await publicCreativeApproval(req.params.token));
+}));
+
+publicRouter.post("/approvals/:token/respond", asyncHandler(async (req, res) => {
+  const body = z.object({
+    action: z.enum(["approve", "request_changes"]),
+    name: z.string().trim().min(2).max(160).optional(),
+    email: z.string().trim().email().max(160).optional(),
+    notes: z.string().trim().max(3000).optional()
+  }).parse(req.body);
+  res.json(await respondToCreativeApproval(req.params.token, body));
+}));
+
 publicRouter.get("/proposals/:token", asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.token, { publicView: true });
   const status = proposal.status === "SENT" ? "VIEWED" : proposal.status;
@@ -159,8 +174,8 @@ publicRouter.get("/proposals/:token/preview", asyncHandler(async (req, res) => {
 
 publicRouter.get("/proposals/:token/pdf", asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.token, { publicView: true });
-  const buffer = await generateProposalPdf(proposal);
-  res.type("application/pdf").attachment(`${proposal.proposal_number}.pdf`).send(buffer);
+  const buffer = await proposalPdfBuffer(proposal);
+  res.type("application/pdf").attachment(userDocumentFilename("Proposal", proposal.proposal_number, "pdf")).send(buffer);
 }));
 
 publicRouter.post("/proposals/:token/accept", asyncHandler(async (req, res) => {
@@ -203,5 +218,5 @@ publicRouter.post("/invoices/:token/payment-session", asyncHandler(async (req, r
 publicRouter.get("/invoices/:token/pdf", asyncHandler(async (req, res) => {
   const invoice = await getInvoice(req.params.token, { publicView: true });
   const buffer = await generateInvoicePdf(invoice);
-  res.type("application/pdf").attachment(`${invoice.invoice_number}.pdf`).send(buffer);
+  res.type("application/pdf").attachment(`LOLA-Invoice-${String(invoice.invoice_number || "document").replace(/[^a-z0-9._-]+/gi, "-")}.pdf`).send(buffer);
 }));

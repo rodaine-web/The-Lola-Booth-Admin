@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import Layout from "./components/Layout.jsx";
 import Login from "./pages/Login.jsx";
+import SetupPassword from "./pages/SetupPassword.jsx";
 
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Leads = lazy(() => import("./pages/Leads.jsx"));
@@ -48,6 +49,7 @@ export default function App() {
     <Suspense fallback={<main className="boot-screen">Opening LOLA Admin...</main>}>
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/setup-password" element={<SetupPassword />} />
       <Route path="/proposal/:token" element={<PublicProposal />} />
       <Route path="/invoice/:token" element={<PublicInvoice />} />
       <Route path="/delivery/:token" element={<PublicDelivery />} />

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import { z } from "zod";
 import { authenticate, requirePermission } from "../middleware/auth.js";
 import { writeAudit } from "../middleware/audit.js";
@@ -12,10 +14,12 @@ import { logAutomationEvent, recordActivity } from "../services/activity-service
 import { getDashboardRangeFoundation } from "../services/dashboard-ranges-service.js";
 import {
   createProposal,
+  createUploadedProposal,
   buildProposalSnapshot,
   generateAndStoreProposal,
   getProposal,
   nextNumber,
+  proposalPdfBuffer,
   proposalPreviewHtml,
   createProposalVersion,
   sendProposal
@@ -47,15 +51,34 @@ import {
   updateIntegrationState
 } from "../services/social-lead-service.js";
 import {
+  cancelCommunication,
+  brandedEmailHtml,
+  createCommunicationDraft,
+  createEmailTemplate,
+  duplicateEmailTemplate,
+  getCommunication,
+  getEmailTemplate,
+  listCommunications,
   listAutomations,
   listEmailTemplates,
   previewEmailTemplate,
   processDueJobs,
+  retryCommunication,
+  scheduleCommunication,
+  sendCommunication,
+  setTemplateStatus,
   triggerAutomations,
   updateAutomation,
+  updateCommunicationDraft,
   updateEmailTemplate
 } from "../services/automation-service.js";
-import { sendEmail } from "../services/email-service.js";
+import {
+  createApprovalRevision,
+  createCreativeApproval,
+  getCreativeApproval,
+  listCreativeApprovals,
+  sendCreativeApprovalRequest
+} from "../services/creative-approval-service.js";
 import {
   acknowledgeAssignment,
   addEventNote,
@@ -114,6 +137,7 @@ import {
   publicSitePayload
 } from "../services/website-cms-service.js";
 import { getStorageProvider } from "../services/storage-service.js";
+import { sendEmail } from "../services/email-service.js";
 import { cancelSystemJob, getSystemHealth, listSystemJobs, retrySelectedSystemJobs, retrySystemJob } from "../services/system-health-service.js";
 
 export const adminRouter = Router();
@@ -156,6 +180,91 @@ function requireAnyPermission(...permissions) {
     if (userPermissions.includes("*") || permissions.some((permission) => userPermissions.includes(permission))) return next();
     return next(new AppError("You do not have access to this area.", 403, "FORBIDDEN"));
   };
+}
+
+function assertAssignableRoles(req, roles = []) {
+  const requested = roles.filter(Boolean).map((role) => String(role).toUpperCase());
+  if (requested.includes("ROOT")) throw new AppError("Root role assignment is not available in Admin.", 403, "ROOT_ROLE_BLOCKED");
+  const actorRoles = req.user?.roles || [];
+  const isOwner = actorRoles.includes("OWNER");
+  const isSuperAdmin = actorRoles.includes("SUPER_ADMIN");
+  if (!isOwner && requested.includes("OWNER")) throw new AppError("Only the owner can assign owner access.", 403, "OWNER_ESCALATION_BLOCKED");
+  if (!isOwner && !isSuperAdmin && requested.some((role) => ["ADMIN", "SUPER_ADMIN"].includes(role))) {
+    throw new AppError("Only owner or super admin users can assign administrative roles.", 403, "ADMIN_ESCALATION_BLOCKED");
+  }
+}
+
+async function assignRoles(client, userId, roleNames = []) {
+  const normalized = [...new Set(roleNames.filter(Boolean).map((role) => String(role).toUpperCase()))];
+  if (!normalized.length) return;
+  const roles = await client.query("SELECT id, name FROM roles WHERE name = ANY($1::text[])", [normalized]);
+  if (roles.rows.length !== normalized.length) throw new AppError("One or more roles are not configured.", 422, "ROLE_NOT_FOUND");
+  await client.query("DELETE FROM user_roles WHERE user_id=$1", [userId]);
+  for (const role of roles.rows) {
+    await client.query("INSERT INTO user_roles (user_id, role_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [userId, role.id]);
+  }
+}
+
+function createAccountToken() {
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  return { token, tokenHash };
+}
+
+function setupPasswordUrl(token) {
+  return `${process.env.PUBLIC_BASE_URL || "https://thelolabooth.com"}/setup-password?token=${token}`;
+}
+
+function nullableText(value) {
+  const text = value === null || value === undefined ? "" : String(value).trim();
+  return text || null;
+}
+
+function phoneDigits(value) {
+  return nullableText(value)?.replace(/\D/g, "") || null;
+}
+
+function mergeFill(target, source, fields) {
+  const patch = {};
+  for (const field of fields) {
+    if ((target[field] === null || target[field] === undefined || target[field] === "") && source[field]) {
+      patch[field] = source[field];
+    }
+  }
+  return patch;
+}
+
+async function linkedCounts(client, entity, id) {
+  const leadTables = [
+    ["bookings", "lead_id"],
+    ["proposals", "lead_id"],
+    ["tasks", "lead_id"],
+    ["files", "lead_id"],
+    ["communications", "lead_id"],
+    ["lead_source_events", "lead_id"],
+    ["conversion_postbacks", "lead_id"]
+  ];
+  const clientTables = [
+    ["events", "client_id"],
+    ["bookings", "client_id"],
+    ["proposals", "client_id"],
+    ["invoices", "client_id"],
+    ["payments", "client_id"],
+    ["payment_attempts", "client_id"],
+    ["refunds", "client_id"],
+    ["tasks", "client_id"],
+    ["files", "client_id"],
+    ["communications", "client_id"],
+    ["gallery_deliveries", "client_id"],
+    ["website_gallery_items", "client_id"]
+  ];
+  const tables = entity === "lead" ? leadTables : clientTables;
+  const counts = {};
+  for (const [table, column] of tables) {
+    const result = await client.query(`SELECT count(*)::int AS count FROM ${table} WHERE ${column}=$1`, [id]);
+    counts[table] = result.rows[0].count;
+  }
+  return counts;
 }
 
 function listRoute(table, searchable = [], permission = "read:admin") {
@@ -482,6 +591,96 @@ adminRouter.get("/leads/:id", requirePermission("read:sales"), asyncHandler(asyn
   });
 }));
 
+adminRouter.get("/leads/:id/duplicates", requirePermission("read:sales"), asyncHandler(async (req, res) => {
+  const lead = (await query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
+  if (!lead) throw notFound("Lead");
+  const email = nullableText(lead.normalized_email || lead.email)?.toLowerCase();
+  const phone = phoneDigits(lead.normalized_phone || lead.phone);
+  const candidates = await query(
+    `SELECT id, first_name, last_name, email, phone, event_date, event_type, status, duplicate_status,
+            duplicate_of_lead_id, created_at,
+            CASE
+              WHEN duplicate_of_lead_id=$1 OR $1=duplicate_of_lead_id THEN 'FLAGGED_DUPLICATE'
+              WHEN $2::text IS NOT NULL AND lower(COALESCE(normalized_email,email))=$2 THEN 'EMAIL_MATCH'
+              WHEN $3::text IS NOT NULL AND regexp_replace(COALESCE(normalized_phone, phone, ''), '\\D', '', 'g')=$3 THEN 'PHONE_MATCH'
+              ELSE 'POSSIBLE_MATCH'
+            END AS match_reason
+     FROM leads
+     WHERE deleted_at IS NULL
+       AND id <> $1
+       AND (
+         duplicate_of_lead_id=$1
+         OR $1=duplicate_of_lead_id
+         OR ($2::text IS NOT NULL AND lower(COALESCE(normalized_email,email))=$2)
+         OR ($3::text IS NOT NULL AND regexp_replace(COALESCE(normalized_phone, phone, ''), '\\D', '', 'g')=$3)
+       )
+     ORDER BY created_at DESC
+     LIMIT 20`,
+    [req.params.id, email, phone]
+  );
+  const withCounts = [];
+  for (const candidate of candidates.rows) {
+    withCounts.push({ ...candidate, linked_counts: await linkedCounts({ query }, "lead", candidate.id) });
+  }
+  res.json({ data: withCounts });
+}));
+
+adminRouter.post("/leads/:id/merge", requirePermission("write:sales"), validate(z.object({ sourceLeadId: uuid }), "body"), asyncHandler(async (req, res) => {
+  if (req.params.id === req.body.sourceLeadId) throw new AppError("Choose two different leads to merge.", 400, "VALIDATION_ERROR");
+  const merged = await transaction(async (client) => {
+    const target = (await client.query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.params.id])).rows[0];
+    const source = (await client.query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.body.sourceLeadId])).rows[0];
+    if (!target) throw notFound("Target lead");
+    if (!source) throw notFound("Source lead");
+
+    const before = { target, source, sourceLinkedCounts: await linkedCounts(client, "lead", source.id) };
+    const patch = mergeFill(target, source, [
+      "first_name", "last_name", "email", "phone", "company", "preferred_contact_method",
+      "event_date", "event_start_time", "event_end_time", "event_type", "guest_count",
+      "venue_name", "venue_address", "city", "state", "zip", "preferred_experience_id",
+      "preferred_package_id", "referral_source", "message", "assigned_user_id",
+      "estimated_budget", "campaign", "follow_up_date", "notes", "utm_source",
+      "utm_medium", "utm_campaign", "utm_content", "utm_term", "landing_page_url",
+      "referrer_url", "consent_status", "consent_reference", "converted_client_id",
+      "converted_event_id", "first_contacted_at", "response_time_minutes"
+    ]);
+    patch.normalized_email = target.normalized_email || source.normalized_email || nullableText(target.email || source.email)?.toLowerCase();
+    patch.normalized_phone = target.normalized_phone || source.normalized_phone || phoneDigits(target.phone || source.phone);
+    patch.source_details = { ...(source.source_details || {}), ...(target.source_details || {}) };
+    patch.raw_provider_reference = { ...(source.raw_provider_reference || {}), ...(target.raw_provider_reference || {}) };
+    patch.marketing_email_opt_in = target.marketing_email_opt_in || source.marketing_email_opt_in || false;
+    patch.updated_at = new Date();
+
+    const fields = Object.keys(patch);
+    const values = fields.map((field) => ["raw_provider_reference", "source_details"].includes(field) ? JSON.stringify(patch[field]) : patch[field]);
+    values.push(target.id);
+    const updated = await client.query(
+      `UPDATE leads SET ${fields.map((field, index) => `${field}=$${index + 1}`).join(", ")} WHERE id=$${values.length} RETURNING *`,
+      values
+    );
+
+    for (const table of ["bookings", "proposals", "tasks", "files", "communications", "lead_source_events", "conversion_postbacks"]) {
+      await client.query(`UPDATE ${table} SET lead_id=$1 WHERE lead_id=$2`, [target.id, source.id]);
+    }
+    await client.query("UPDATE activities SET entity_id=$1 WHERE entity_type='lead' AND entity_id=$2", [target.id, source.id]);
+    await client.query(
+      `UPDATE leads
+       SET duplicate_status='POSSIBLE_DUPLICATE', duplicate_of_lead_id=$1, deleted_at=now(), updated_at=now()
+       WHERE id=$2`,
+      [target.id, source.id]
+    );
+    await client.query(
+      `INSERT INTO communications (lead_id, type, direction, subject, message_summary, user_id)
+       VALUES ($1, 'NOTE', 'INTERNAL', 'Duplicate lead merged', $2, $3)`,
+      [target.id, `Merged duplicate lead ${source.first_name || ""} ${source.last_name || ""}`.trim(), req.user.id]
+    );
+    return { before, after: updated.rows[0], mergedLeadId: source.id };
+  });
+  await recordActivity({ actorUserId: req.user.id, entityType: "lead", entityId: req.params.id, action: "lead_merged", summary: "Duplicate lead merged" });
+  await writeAudit({ req, action: "lead_merged", entity: "lead", entityId: req.params.id, before: merged.before, after: { target: merged.after, mergedLeadId: merged.mergedLeadId } });
+  res.json({ lead: merged.after, mergedLeadId: merged.mergedLeadId });
+}));
+
 adminRouter.patch("/leads/:id", requirePermission("write:sales"), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Lead");
@@ -659,6 +858,83 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
       FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
   ]);
   res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows, payments: payments.rows, tasks: tasks.rows, files: files.rows, communications: communications.rows, activity: activity.rows });
+}));
+
+adminRouter.get("/clients/:id/duplicates", requirePermission("read:sales"), asyncHandler(async (req, res) => {
+  const client = (await query("SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
+  if (!client) throw notFound("Client");
+  const email = nullableText(client.email)?.toLowerCase();
+  const phone = phoneDigits(client.phone);
+  const candidates = await query(
+    `SELECT id, name, email, phone, company, client_type, created_at,
+            CASE
+              WHEN $2::text IS NOT NULL AND lower(email)=$2 THEN 'EMAIL_MATCH'
+              WHEN $3::text IS NOT NULL AND regexp_replace(COALESCE(phone, ''), '\\D', '', 'g')=$3 THEN 'PHONE_MATCH'
+              ELSE 'POSSIBLE_MATCH'
+            END AS match_reason
+     FROM clients
+     WHERE deleted_at IS NULL
+       AND id <> $1
+       AND (
+         ($2::text IS NOT NULL AND lower(email)=$2)
+         OR ($3::text IS NOT NULL AND regexp_replace(COALESCE(phone, ''), '\\D', '', 'g')=$3)
+       )
+     ORDER BY created_at DESC
+     LIMIT 20`,
+    [req.params.id, email, phone]
+  );
+  const withCounts = [];
+  for (const candidate of candidates.rows) {
+    withCounts.push({ ...candidate, linked_counts: await linkedCounts({ query }, "client", candidate.id) });
+  }
+  res.json({ data: withCounts });
+}));
+
+adminRouter.post("/clients/:id/merge", requirePermission("write:sales"), validate(z.object({ sourceClientId: uuid }), "body"), asyncHandler(async (req, res) => {
+  if (req.params.id === req.body.sourceClientId) throw new AppError("Choose two different clients to merge.", 400, "VALIDATION_ERROR");
+  const merged = await transaction(async (client) => {
+    const target = (await client.query("SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.params.id])).rows[0];
+    const source = (await client.query("SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.body.sourceClientId])).rows[0];
+    if (!target) throw notFound("Target client");
+    if (!source) throw notFound("Source client");
+
+    const before = { target, source, sourceLinkedCounts: await linkedCounts(client, "client", source.id) };
+    const patch = mergeFill(target, source, [
+      "name", "first_name", "last_name", "email", "phone", "company", "preferred_contact_method",
+      "address", "city", "state", "zip", "notes", "client_type", "referral_source",
+      "billing_address", "marketing_email_opt_in"
+    ]);
+    patch.communication_preferences = { ...(source.communication_preferences || {}), ...(target.communication_preferences || {}) };
+    patch.marketing_email_opt_in = target.marketing_email_opt_in || source.marketing_email_opt_in || false;
+    patch.updated_at = new Date();
+
+    const fields = Object.keys(patch);
+    const values = fields.map((field) => field === "communication_preferences" ? JSON.stringify(patch[field]) : patch[field]);
+    values.push(target.id);
+    await client.query("UPDATE clients SET deleted_at=now(), updated_at=now() WHERE id=$1", [source.id]);
+    const updated = await client.query(
+      `UPDATE clients SET ${fields.map((field, index) => `${field}=$${index + 1}`).join(", ")},
+          tags=(SELECT ARRAY(SELECT DISTINCT tag FROM unnest(COALESCE(clients.tags, '{}') || COALESCE($${fields.length + 2}::text[], '{}')) AS tag WHERE tag IS NOT NULL AND tag <> ''))
+       WHERE id=$${fields.length + 1}
+       RETURNING *`,
+      [...values, source.tags || []]
+    );
+
+    for (const table of ["events", "bookings", "proposals", "invoices", "payments", "payment_attempts", "refunds", "tasks", "files", "communications", "gallery_deliveries", "website_gallery_items"]) {
+      await client.query(`UPDATE ${table} SET client_id=$1 WHERE client_id=$2`, [target.id, source.id]);
+    }
+    await client.query("UPDATE leads SET converted_client_id=$1 WHERE converted_client_id=$2", [target.id, source.id]);
+    await client.query("UPDATE activities SET entity_id=$1 WHERE entity_type='client' AND entity_id=$2", [target.id, source.id]);
+    await client.query(
+      `INSERT INTO communications (client_id, type, direction, subject, message_summary, user_id)
+       VALUES ($1, 'NOTE', 'INTERNAL', 'Duplicate client merged', $2, $3)`,
+      [target.id, `Merged duplicate client ${source.name || source.email || source.id}.`, req.user.id]
+    );
+    return { before, after: updated.rows[0], mergedClientId: source.id };
+  });
+  await recordActivity({ actorUserId: req.user.id, entityType: "client", entityId: req.params.id, action: "client_merged", summary: "Duplicate client merged" });
+  await writeAudit({ req, action: "client_merged", entity: "client", entityId: req.params.id, before: merged.before, after: { target: merged.after, mergedClientId: merged.mergedClientId } });
+  res.json({ client: merged.after, mergedClientId: merged.mergedClientId });
 }));
 
 adminRouter.patch("/clients/:id", requirePermission("write:sales"), validate(clientSchema.partial()), asyncHandler(async (req, res) => {
@@ -946,6 +1222,17 @@ adminRouter.post("/proposals", requirePermission("write:sales"), validate(propos
   res.status(201).json(await createProposal(req));
 }));
 
+adminRouter.post("/proposals/upload", requireAnyPermission("proposals.upload", "write:sales"), validate(proposalSchema.extend({
+  pdf_base64: z.string().min(1),
+  filename: z.string().min(1).optional(),
+  proposal_number: z.string().optional(),
+  proposal_title: z.string().optional(),
+  proposal_date: z.string().optional(),
+  total_investment: z.coerce.number().optional().nullable()
+})), asyncHandler(async (req, res) => {
+  res.status(201).json(await createUploadedProposal(req));
+}));
+
 adminRouter.get("/proposals/:id", requirePermission("read:sales"), asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.id);
   const versions = await query("SELECT id, version_number, created_at, created_by FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC", [req.params.id]);
@@ -958,9 +1245,9 @@ adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(p
   const snapshot = await buildProposalSnapshot(merged);
   const updated = await transaction(async (client) => {
     const result = await client.query(
-      `UPDATE proposals SET lead_id=$1, client_id=$2, event_id=$3, package_id=$4, experience_id=$5, status=$6, notes=$7, total=$8, valid_through=$9, content=$10, pricing_snapshot=$11, line_items_snapshot=$12, updated_at=now()
-       WHERE id=$13 AND deleted_at IS NULL RETURNING *`,
-      [merged.lead_id || null, merged.client_id || snapshot.client.id || null, merged.event_id || null, merged.package_id || null, merged.experience_id || null, merged.status || before.status, merged.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), req.params.id]
+      `UPDATE proposals SET lead_id=$1, client_id=$2, event_id=$3, package_id=$4, experience_id=$5, status=$6, notes=$7, total=$8, valid_through=$9, content=$10, pricing_snapshot=$11, line_items_snapshot=$12, document_template_key=$13, editable_sections=$14, proposal_title=$15, proposal_date=$16, updated_at=now()
+       WHERE id=$17 AND deleted_at IS NULL RETURNING *`,
+      [merged.lead_id || null, merged.client_id || snapshot.client.id || null, merged.event_id || null, merged.package_id || null, merged.experience_id || null, merged.status || before.status, merged.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, req.params.id]
     );
     if (!result.rows[0]) throw notFound("Proposal");
     await createProposalVersion(client, result.rows[0], req.user.id);
@@ -975,9 +1262,9 @@ adminRouter.post("/proposals/:id/duplicate", requirePermission("write:sales"), a
   const duplicated = await transaction(async (client) => {
     const proposalNumber = await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
     const inserted = await client.query(
-      `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,encode(gen_random_bytes(24),'hex'),'DRAFT',$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [proposalNumber, original.lead_id, original.client_id, original.event_id, req.user.id, original.package_id, original.experience_id, original.notes, original.total, original.valid_through, JSON.stringify(original.content), JSON.stringify(original.pricing_snapshot), JSON.stringify(original.line_items_snapshot)]
+      `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, external_document_storage_key, external_document_filename, external_document_mime_type, external_document_size_bytes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,encode(gen_random_bytes(24),'hex'),'DRAFT',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+      [proposalNumber, original.lead_id, original.client_id, original.event_id, req.user.id, original.package_id, original.experience_id, original.notes, original.total, original.valid_through, JSON.stringify(original.content), JSON.stringify(original.pricing_snapshot), JSON.stringify(original.line_items_snapshot), original.document_template_key, JSON.stringify(original.editable_sections || []), original.proposal_source || "GENERATED", original.proposal_title, original.proposal_date, original.external_document_storage_key, original.external_document_filename, original.external_document_mime_type, original.external_document_size_bytes]
     );
     await createProposalVersion(client, inserted.rows[0], req.user.id);
     return inserted.rows[0];
@@ -1001,7 +1288,7 @@ adminRouter.get("/proposals/:id/pdf", requirePermission("read:sales"), asyncHand
   const proposal = await getProposal(req.params.id);
   const document = await generateAndStoreProposal(proposal, "pdf");
   await recordGeneratedFile({ req, document, entityType: "proposal", entity: proposal });
-  const buffer = await generateProposalPdf(proposal);
+  const buffer = await proposalPdfBuffer(proposal, "pdf");
   res.type("application/pdf").attachment(document.filename).send(buffer);
 }));
 
@@ -1306,7 +1593,144 @@ adminRouter.get("/equipment", ...listRoute("equipment", ["name", "category", "se
 adminRouter.get("/tasks", ...listRoute("tasks", ["title", "description"], "read:tasks"));
 adminRouter.get("/files", ...listRoute("files", ["filename", "category", "storage_provider"], "read:tasks"));
 adminRouter.get("/galleries", ...listRoute("galleries", ["gallery_name", "gallery_url", "status"], "read:tasks"));
-adminRouter.get("/users", ...listRoute("users", ["name", "email"], "read:settings"));
+adminRouter.get("/users", requireAnyPermission("view:users", "read:settings"), asyncHandler(async (req, res) => {
+  const rows = await query(
+    `SELECT u.id, u.name, u.email, u.active, u.first_name, u.last_name, u.phone, u.business_role, u.invitation_status, u.invited_at, u.disabled_at, u.created_at,
+            COALESCE(json_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL),'[]') AS roles
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id=u.id
+     LEFT JOIN roles r ON r.id=ur.role_id
+     WHERE u.deleted_at IS NULL
+     GROUP BY u.id
+     ORDER BY u.created_at DESC
+     LIMIT 150`
+  );
+  res.json({ data: rows.rows, pagination: { page: Number(req.query.page || 1), pageSize: 150, total: rows.rowCount } });
+}));
+
+adminRouter.get("/roles", requireAnyPermission("view:users", "read:settings"), asyncHandler(async (_req, res) => {
+  const rows = await query("SELECT id, name, description FROM roles ORDER BY name");
+  res.json({ data: rows.rows });
+}));
+
+adminRouter.post("/users", requireAnyPermission("create:users", "write:settings"), asyncHandler(async (req, res) => {
+  const body = z.object({
+    name: z.string().min(1),
+    email: z.string().email().transform((value) => value.toLowerCase()),
+    first_name: z.string().optional().nullable(),
+    last_name: z.string().optional().nullable(),
+    phone: z.string().optional().nullable(),
+    business_role: z.string().optional().nullable(),
+    roles: z.array(z.string()).default(["ATTENDANT"])
+  }).parse(req.body);
+  assertAssignableRoles(req, body.roles);
+  const temporaryHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12);
+  const { token, tokenHash } = createAccountToken();
+  const created = await transaction(async (client) => {
+    const user = (await client.query(
+      `INSERT INTO users (name, email, password_hash, first_name, last_name, phone, business_role, invitation_status, invited_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'INVITED',now()) RETURNING id, name, email, active, first_name, last_name, phone, business_role, invitation_status, invited_at, created_at`,
+      [body.name, body.email, temporaryHash, body.first_name || null, body.last_name || null, body.phone || null, body.business_role || null]
+    )).rows[0];
+    await assignRoles(client, user.id, body.roles);
+    await client.query(
+      `INSERT INTO user_account_tokens (user_id, token_hash, token_type, expires_at, created_by)
+       VALUES ($1,$2,'INVITATION',now() + interval '7 days',$3)`,
+      [user.id, tokenHash, req.user.id]
+    );
+    return user;
+  });
+  const setupUrl = setupPasswordUrl(token);
+  await sendEmail({
+    to: body.email,
+    subject: "Your LOLA Admin invitation",
+    body: `You have been invited to LOLA Admin. Set your password here: ${setupUrl}`,
+    html: brandedEmailHtml("You have been invited to LOLA Admin. Use the secure link below to set your password.", { firstName: body.first_name || body.name.split(" ")[0], ctaLabel: "Set Password", ctaUrl: setupUrl })
+  });
+  await writeAudit({ req, action: "user_invited", entity: "user", entityId: created.id, after: { ...created, roles: body.roles } });
+  res.status(201).json({ ...created, roles: body.roles });
+}));
+
+adminRouter.patch("/users/:id", requireAnyPermission("edit:users", "write:settings"), asyncHandler(async (req, res) => {
+  const body = z.object({
+    name: z.string().optional(),
+    first_name: z.string().optional().nullable(),
+    last_name: z.string().optional().nullable(),
+    phone: z.string().optional().nullable(),
+    business_role: z.string().optional().nullable(),
+    roles: z.array(z.string()).optional()
+  }).parse(req.body);
+  if (body.roles) assertAssignableRoles(req, body.roles);
+  const before = (await query("SELECT id, name, email, active FROM users WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
+  if (!before) throw notFound("User");
+  const updated = await transaction(async (client) => {
+    const patch = cleanPatch(body, ["name", "first_name", "last_name", "phone", "business_role"]);
+    let user = before;
+    const fields = Object.keys(patch);
+    if (fields.length) {
+      const values = fields.map((field) => patch[field]);
+      values.push(req.params.id);
+      user = (await client.query(`UPDATE users SET ${fields.map((field, index) => `${field}=$${index + 1}`).join(", ")}, updated_at=now() WHERE id=$${values.length} RETURNING id, name, email, active, first_name, last_name, phone, business_role, invitation_status, disabled_at, created_at`, values)).rows[0];
+    }
+    if (body.roles) await assignRoles(client, req.params.id, body.roles);
+    return user;
+  });
+  await writeAudit({ req, action: "user_updated", entity: "user", entityId: req.params.id, before, after: { ...updated, roles: body.roles } });
+  res.json({ ...updated, roles: body.roles });
+}));
+
+adminRouter.post("/users/:id/deactivate", requireAnyPermission("disable:users", "write:settings"), asyncHandler(async (req, res) => {
+  if (req.params.id === req.user.id) throw new AppError("You cannot deactivate your own account.", 409, "SELF_DEACTIVATION_BLOCKED");
+  const before = (await query("SELECT id, name, email, active FROM users WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
+  if (!before) throw notFound("User");
+  const after = (await query("UPDATE users SET active=false, disabled_at=now(), invitation_status='DISABLED', updated_at=now() WHERE id=$1 RETURNING id, name, email, active, disabled_at, invitation_status", [req.params.id])).rows[0];
+  await writeAudit({ req, action: "user_deactivated", entity: "user", entityId: req.params.id, before, after });
+  res.json(after);
+}));
+
+adminRouter.post("/users/:id/reactivate", requireAnyPermission("edit:users", "write:settings"), asyncHandler(async (req, res) => {
+  const before = (await query("SELECT id, name, email, active, invitation_status FROM users WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
+  if (!before) throw notFound("User");
+  const after = (await query("UPDATE users SET active=true, disabled_at=NULL, invitation_status='ACTIVE', updated_at=now() WHERE id=$1 RETURNING id, name, email, active, disabled_at, invitation_status", [req.params.id])).rows[0];
+  await writeAudit({ req, action: "user_reactivated", entity: "user", entityId: req.params.id, before, after });
+  res.json(after);
+}));
+
+adminRouter.post("/users/:id/resend-invitation", requireAnyPermission("invitations.send", "write:settings"), asyncHandler(async (req, res) => {
+  const user = (await query("SELECT id, name, email, first_name, invitation_status FROM users WHERE id=$1 AND deleted_at IS NULL AND active=true", [req.params.id])).rows[0];
+  if (!user) throw notFound("User");
+  if (user.invitation_status === "ACTIVE") throw new AppError("This user has already completed account setup.", 409, "INVITATION_ALREADY_ACCEPTED");
+  const { token, tokenHash } = createAccountToken();
+  await transaction(async (client) => {
+    await client.query("UPDATE user_account_tokens SET used_at=now() WHERE user_id=$1 AND token_type='INVITATION' AND used_at IS NULL", [user.id]);
+    await client.query(
+      `INSERT INTO user_account_tokens (user_id, token_hash, token_type, expires_at, created_by)
+       VALUES ($1,$2,'INVITATION',now() + interval '7 days',$3)`,
+      [user.id, tokenHash, req.user.id]
+    );
+    await client.query("UPDATE users SET invitation_status='INVITED', invited_at=now(), updated_at=now() WHERE id=$1", [user.id]);
+  });
+  const setupUrl = setupPasswordUrl(token);
+  await sendEmail({
+    to: user.email,
+    subject: "Your LOLA Admin invitation",
+    body: `You have been invited to LOLA Admin. Set your password here: ${setupUrl}`,
+    html: brandedEmailHtml("You have been invited to LOLA Admin. Use the secure link below to set your password.", { firstName: user.first_name || user.name.split(" ")[0], ctaLabel: "Set Password", ctaUrl: setupUrl })
+  });
+  await writeAudit({ req, action: "user_invitation_resent", entity: "user", entityId: user.id });
+  res.status(201).json({ ok: true });
+}));
+
+adminRouter.post("/users/:id/password-reset", requireAnyPermission("password_resets.send", "write:settings"), asyncHandler(async (req, res) => {
+  const user = (await query("SELECT id, name, email FROM users WHERE id=$1 AND deleted_at IS NULL AND active=true", [req.params.id])).rows[0];
+  if (!user) throw notFound("User");
+  const { token, tokenHash } = createAccountToken();
+  await query(`INSERT INTO user_account_tokens (user_id, token_hash, token_type, expires_at, created_by) VALUES ($1,$2,'PASSWORD_RESET',now() + interval '2 hours',$3)`, [user.id, tokenHash, req.user.id]);
+  const resetUrl = setupPasswordUrl(token);
+  await sendEmail({ to: user.email, subject: "Reset your LOLA Admin password", body: `Reset your password: ${resetUrl}`, html: brandedEmailHtml("A LOLA Admin password reset was requested. Use the secure link below to set a new password.", { firstName: user.name.split(" ")[0], ctaLabel: "Reset Password", ctaUrl: resetUrl }) });
+  await writeAudit({ req, action: "password_reset_sent", entity: "user", entityId: user.id });
+  res.status(201).json({ ok: true });
+}));
 adminRouter.get("/media-library", ...listRoute("media_library", ["filename", "alt_text", "storage_key"], "read:website"));
 adminRouter.get("/website-content", ...listRoute("website_content", ["content_key", "title", "seo_title"], "read:website"));
 adminRouter.get("/website-hero-slides", ...listRoute("website_hero_slides", ["headline", "caption", "cta_label"], "read:website"));
@@ -1481,58 +1905,142 @@ adminRouter.post("/integrations/failed-inbound/:id/resolve", requirePermission("
   res.json(await resolveInboundLead(req.params.id));
 }));
 
-adminRouter.get("/communications/templates", requirePermission("read:sales"), asyncHandler(async (_req, res) => {
+adminRouter.get("/communications/templates", requireAnyPermission("templates.view", "read:sales"), asyncHandler(async (_req, res) => {
   res.json(await listEmailTemplates());
 }));
 
-adminRouter.patch("/communications/templates/:id", requirePermission("write:sales"), asyncHandler(async (req, res) => {
-  res.json(await updateEmailTemplate(req.params.id, req.body));
+adminRouter.post("/communications/templates", requireAnyPermission("templates.manage", "write:sales"), asyncHandler(async (req, res) => {
+  res.status(201).json(await createEmailTemplate(req.body, req.user));
 }));
 
-adminRouter.post("/communications/templates/:id/preview", requirePermission("read:sales"), asyncHandler(async (req, res) => {
+adminRouter.get("/communications/templates/:id", requireAnyPermission("templates.view", "read:sales"), asyncHandler(async (req, res) => {
+  res.json(await getEmailTemplate(req.params.id));
+}));
+
+adminRouter.patch("/communications/templates/:id", requireAnyPermission("templates.manage", "write:sales"), asyncHandler(async (req, res) => {
+  res.json(await updateEmailTemplate(req.params.id, req.body, req.user));
+}));
+
+adminRouter.post("/communications/templates/:id/preview", requireAnyPermission("templates.view", "read:sales"), asyncHandler(async (req, res) => {
   res.json(await previewEmailTemplate(req.params.id, req.body.data || undefined));
 }));
 
-adminRouter.get("/communications/automations", requirePermission("read:sales"), asyncHandler(async (_req, res) => {
+adminRouter.post("/communications/templates/:id/duplicate", requireAnyPermission("templates.manage", "write:sales"), asyncHandler(async (req, res) => {
+  res.status(201).json(await duplicateEmailTemplate(req.params.id, req.user));
+}));
+
+adminRouter.post("/communications/templates/:id/activate", requireAnyPermission("templates.manage", "write:sales"), asyncHandler(async (req, res) => {
+  res.json(await setTemplateStatus(req.params.id, "ACTIVE", req.user));
+}));
+
+adminRouter.post("/communications/templates/:id/archive", requireAnyPermission("templates.manage", "write:sales"), asyncHandler(async (req, res) => {
+  res.json(await setTemplateStatus(req.params.id, "ARCHIVED", req.user));
+}));
+
+adminRouter.get("/communications", requireAnyPermission("communications.view", "read:sales"), asyncHandler(async (req, res) => {
+  res.json(await listCommunications(req.query));
+}));
+
+adminRouter.get("/communications/automations", requireAnyPermission("automations.view", "read:sales"), asyncHandler(async (_req, res) => {
   res.json(await listAutomations());
 }));
 
-adminRouter.patch("/communications/automations/:id", requirePermission("write:sales"), asyncHandler(async (req, res) => {
+adminRouter.patch("/communications/automations/:id", requireAnyPermission("automations.manage", "write:sales"), asyncHandler(async (req, res) => {
   res.json(await updateAutomation(req.params.id, req.body));
 }));
 
-adminRouter.post("/communications/automations/:id/test", requirePermission("write:sales"), asyncHandler(async (req, res) => {
+adminRouter.post("/communications/automations/:id/test", requireAnyPermission("automations.manage", "write:sales"), asyncHandler(async (req, res) => {
   const automation = (await query("SELECT * FROM automations WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
   if (!automation) throw notFound("Automation");
   res.status(201).json({ jobs: await triggerAutomations({ triggerKey: automation.trigger_key, entityType: req.body.entityType || "lead", entityId: req.body.entityId || null, payload: req.body.payload || automation.conditions || {} }) });
+}));
+
+adminRouter.post("/communications/drafts", requireAnyPermission("communications.send", "write:sales"), asyncHandler(async (req, res) => {
+  res.status(201).json(await createCommunicationDraft(req.body, req.user));
+}));
+
+adminRouter.get("/communications/:id", requireAnyPermission("communications.view", "read:sales"), asyncHandler(async (req, res) => {
+  res.json(await getCommunication(req.params.id));
+}));
+
+adminRouter.patch("/communications/:id", requireAnyPermission("communications.send", "write:sales"), asyncHandler(async (req, res) => {
+  res.json(await updateCommunicationDraft(req.params.id, req.body, req.user));
+}));
+
+adminRouter.post("/communications/:id/send", requireAnyPermission("communications.send", "write:sales"), asyncHandler(async (req, res) => {
+  res.json(await sendCommunication(req.params.id, req.user));
+}));
+
+adminRouter.post("/communications/:id/schedule", requireAnyPermission("communications.schedule", "write:sales"), asyncHandler(async (req, res) => {
+  const body = z.object({ scheduled_at: z.string().min(1) }).parse(req.body);
+  res.json(await scheduleCommunication(req.params.id, body.scheduled_at, req.user));
+}));
+
+adminRouter.post("/communications/:id/cancel", requireAnyPermission("communications.schedule", "write:sales"), asyncHandler(async (req, res) => {
+  res.json(await cancelCommunication(req.params.id));
+}));
+
+adminRouter.post("/communications/:id/retry", requireAnyPermission("communications.retry", "write:sales"), asyncHandler(async (req, res) => {
+  res.json(await retryCommunication(req.params.id, req.user));
 }));
 
 adminRouter.post("/communications/jobs/process", requirePermission("write:settings"), asyncHandler(async (_req, res) => {
   res.json(await processDueJobs());
 }));
 
-adminRouter.post("/communications/send", requirePermission("write:sales"), asyncHandler(async (req, res) => {
+adminRouter.post("/communications/send", requireAnyPermission("communications.compose", "communications.send", "write:sales"), asyncHandler(async (req, res) => {
   const body = z.object({
     to: z.string().email(),
-    cc: z.string().email().optional().nullable(),
+    cc: z.string().optional().nullable(),
+    bcc: z.string().optional().nullable(),
     subject: z.string().min(1),
     body: z.string().min(1),
+    cta_label: z.string().optional().nullable(),
+    cta_url: z.string().url().optional().nullable(),
     lead_id: uuid.optional().nullable(),
     client_id: uuid.optional().nullable(),
-    event_id: uuid.optional().nullable()
+    event_id: uuid.optional().nullable(),
+    proposal_id: uuid.optional().nullable(),
+    invoice_id: uuid.optional().nullable(),
+    payment_id: uuid.optional().nullable()
   }).parse(req.body);
-  const delivery = await sendEmail({ to: body.to, subject: body.subject, body: body.body });
-  const communication = await query(
-    `INSERT INTO communications (lead_id, client_id, event_id, type, direction, subject, message_summary, user_id)
-     VALUES ($1,$2,$3,'EMAIL','OUTBOUND',$4,$5,$6) RETURNING *`,
-    [body.lead_id || null, body.client_id || null, body.event_id || null, body.subject, body.body.slice(0, 500), req.user.id]
-  );
-  await query(
-    `INSERT INTO email_messages (communication_id, provider, provider_message_id, to_email, subject, status, body_preview, sent_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,now())`,
-    [communication.rows[0].id, delivery.provider, delivery.providerMessageId, body.to, body.subject, delivery.status, body.body.slice(0, 500)]
-  );
-  res.status(201).json({ communication: communication.rows[0], delivery });
+  const draft = await createCommunicationDraft({
+    recipient: body.to,
+    cc: body.cc,
+    bcc: body.bcc,
+    subject: body.subject,
+    body: body.body,
+    html: brandedEmailHtml(body.body, { ctaLabel: body.cta_label || "Let's Stay Connected", ctaUrl: body.cta_url || "" }),
+    template_key: "GENERIC",
+    lead_id: body.lead_id,
+    client_id: body.client_id,
+    event_id: body.event_id,
+    proposal_id: body.proposal_id,
+    invoice_id: body.invoice_id,
+    payment_id: body.payment_id,
+    send_mode: "SEND_NOW"
+  }, req.user);
+  res.status(201).json(await sendCommunication(draft.id, req.user));
+}));
+
+adminRouter.get("/creative-approvals", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
+  res.json(await listCreativeApprovals(req.query));
+}));
+
+adminRouter.post("/creative-approvals", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
+  res.status(201).json(await createCreativeApproval(req.body, req.user));
+}));
+
+adminRouter.get("/creative-approvals/:id", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
+  res.json(await getCreativeApproval(req.params.id));
+}));
+
+adminRouter.post("/creative-approvals/:id/revisions", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
+  res.status(201).json(await createApprovalRevision(req.params.id, req.body, req.user));
+}));
+
+adminRouter.post("/creative-approvals/:id/send", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
+  res.status(201).json(await sendCreativeApprovalRequest(req.params.id, req.user, req));
 }));
 
 adminRouter.get("/calendar", requirePermission("read:events"), asyncHandler(async (req, res) => {

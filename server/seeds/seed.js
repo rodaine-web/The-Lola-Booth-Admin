@@ -60,14 +60,23 @@ async function seed() {
       }
     }
 
-    const hash = await bcrypt.hash("LolaAdmin!2026", 12);
+    const seedOwnerEmail = process.env.SEED_OWNER_EMAIL || "";
+    const seedOwnerPassword = process.env.SEED_OWNER_PASSWORD || "";
+    if (!seedOwnerEmail || !seedOwnerPassword) {
+      throw new Error("SEED_OWNER_EMAIL and SEED_OWNER_PASSWORD are required before running seeds.");
+    }
+    if (seedOwnerPassword.length < 14) {
+      throw new Error("SEED_OWNER_PASSWORD must be at least 14 characters.");
+    }
+
+    const hash = await bcrypt.hash(seedOwnerPassword, 12);
     const owner = await upsertOne(
       client,
       `INSERT INTO users (name, email, password_hash)
-       VALUES ('LOLA Owner', 'owner@lolabooths.com', $1)
+       VALUES ('LOLA Owner', $1, $2)
        ON CONFLICT (email) DO UPDATE SET password_hash=EXCLUDED.password_hash, active=true, updated_at=now()
        RETURNING *`,
-      [hash]
+      [seedOwnerEmail.toLowerCase(), hash]
     );
     await client.query(
       `INSERT INTO user_roles (user_id, role_id)

@@ -147,7 +147,6 @@ npm run db:seed
 | `MICROSOFT_SENDER_EMAIL` | API, Worker | Required when `EMAIL_PROVIDER=microsoft` | Microsoft 365 mailbox | No | Mailbox used in `/users/{sender}/sendMail`. |
 | `SMS_PROVIDER` | API, Worker | Optional | Default `none` | No | No active SMS adapter. |
 | `STRIPE_SECRET_KEY` | API | Optional | Stripe Dashboard | Yes | Needed only for Stripe checkout. |
-| `STRIPE_PUBLISHABLE_KEY` | API | Optional | Stripe Dashboard | No | Returned to public invoice page when enabled. |
 | `STRIPE_WEBHOOK_SECRET` | API | Required if Stripe configured | Stripe webhook endpoint secret | Yes | Required for `/api/webhooks/stripe`. |
 | `PAYPAL_CLIENT_ID` | API | Optional | PayPal app | No | Needed only for PayPal checkout. |
 | `PAYPAL_CLIENT_SECRET` | API | Optional | PayPal app | Yes | Needed only for PayPal checkout. |
@@ -297,7 +296,7 @@ Microsoft 365 setup:
 
 Stripe classification:
 
-- Not configured when `STRIPE_SECRET_KEY` or `STRIPE_PUBLISHABLE_KEY` is missing.
+- Not configured when `STRIPE_SECRET_KEY` is missing.
 - Test-mode ready only when test credentials exist, `STRIPE_WEBHOOK_SECRET` is set, and business settings enable Stripe.
 - Live-mode ready only when live credentials start with `sk_live_`, `STRIPE_WEBHOOK_SECRET` is set, provider webhook is configured, and business settings enable Stripe.
 

@@ -7,7 +7,7 @@ import { query, transaction } from "../db/pool.js";
 import { AppError, notFound } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { sendEmail } from "./email-service.js";
-import { triggerAutomations } from "./automation-service.js";
+import { brandedEmailHtml, recordTemplateFallback, renderCommunicationTemplateByKey, triggerAutomations } from "./automation-service.js";
 import { createNotification, recordOfflineReceipt } from "./notification-service.js";
 import { getEventOperations, userCanAccessEvent, updateChecklistItem, transitionOperationalStatus, updateEquipmentLifecycle, addEventNote, createIncident, acknowledgeAssignment } from "./event-operations-service.js";
 
@@ -128,10 +128,18 @@ export async function sendStaffBrief(eventId, body, user) {
   const selected = body.assignment_ids?.length ? ops.staff.filter((staff) => body.assignment_ids.includes(staff.id)) : ops.staff;
   const sent = [];
   for (const staff of selected.filter((item) => item.email)) {
+    const mergeData = staffBriefMergeData(ops, staff);
+    const rendered = await renderBusinessTemplate("staff_brief_email", mergeData, {
+      relatedEntityType: "event",
+      relatedEntityId: eventId,
+      fallbackSubject: `Your LOLA Event Brief - ${ops.event.event_name}`,
+      fallbackBody: staffBriefBody(ops, staff)
+    });
     const email = await sendEmail({
       to: staff.email,
-      subject: `Your LOLA Event Brief - ${ops.event.event_name}`,
-      body: staffBriefBody(ops, staff)
+      subject: rendered.subject,
+      body: rendered.body,
+      html: rendered.html
     }).catch((err) => ({ status: "FAILED", error: err.message }));
     const row = await query(
       `INSERT INTO staff_brief_deliveries (event_id, staff_assignment_id, staff_profile_id, recipient_email, status, provider, provider_message_id, sent_at, failed_at, error, brief_snapshot, created_by)
@@ -143,6 +151,40 @@ export async function sendStaffBrief(eventId, body, user) {
   }
   await recordActivity({ actorUserId: user.id, entityType: "event", entityId: eventId, action: "staff_brief_sent", summary: `Staff brief sent to ${sent.length} recipient(s)` });
   return { sent };
+}
+
+async function renderBusinessTemplate(templateKey, mergeData, { relatedEntityType, relatedEntityId, fallbackSubject, fallbackBody }) {
+  try {
+    const rendered = await renderCommunicationTemplateByKey(templateKey, mergeData);
+    if (rendered) return rendered;
+    await recordTemplateFallback({ templateKey, reason: "Active template was not found.", relatedEntityType, relatedEntityId });
+  } catch (error) {
+    await recordTemplateFallback({ templateKey, reason: error.message, relatedEntityType, relatedEntityId, metadata: { code: error.code } });
+  }
+  return { subject: fallbackSubject, body: fallbackBody, html: brandedEmailHtml(fallbackBody) };
+}
+
+function staffBriefMergeData(ops, staff) {
+  const contact = ops.contacts.find((item) => item.role === "DAY_OF_CONTACT" || item.is_primary) || {};
+  return {
+    staff: { first_name: staff.name?.split(" ")[0] || "there", name: staff.name, email: staff.email, role: staff.assignment_role },
+    event: {
+      id: ops.event.id,
+      name: ops.event.event_name,
+      type: ops.event.event_type,
+      date: ops.event.event_date,
+      venue: ops.event.venue_name || "TBD",
+      url: `${publicBaseUrl}/my-events/${ops.event.id}`
+    },
+    production: {
+      call_time: staff.call_time || ops.event.setup_time || "TBD",
+      venue_address: [ops.event.venue_address, ops.event.city, ops.event.state].filter(Boolean).join(", ") || "TBD",
+      day_of_contact: `${contact.name || "TBD"} ${contact.phone || ""}`.trim(),
+      experience: ops.event.experience_name || "TBD",
+      equipment: ops.equipment.map((item) => item.name).join(", ") || "TBD",
+      setup_instructions: ops.event.setup_instructions || ops.event.internal_notes || "None recorded."
+    }
+  };
 }
 
 function staffBriefBody(ops, staff) {
@@ -196,10 +238,21 @@ export async function createOrSendGalleryDelivery(eventId, body, user) {
   });
   const deliveryUrl = `${publicBaseUrl}/delivery/${delivery.token}`;
   if (body.send !== false && event.client_email) {
+    const rendered = await renderBusinessTemplate("gallery_delivery_email", {
+      client: { first_name: event.client_name?.split(" ")[0] || "there", name: event.client_name, email: event.client_email },
+      event: { id: event.id, name: event.event_name, type: event.event_type, date: event.event_date, venue: event.venue_name },
+      gallery: { url: deliveryUrl }
+    }, {
+      relatedEntityType: "event",
+      relatedEntityId: eventId,
+      fallbackSubject: "Your LOLA photos are ready",
+      fallbackBody: `Hi ${event.client_name?.split(" ")[0] || "there"},\n\nYour photos from ${event.event_name} are ready.\n\nView your photos: ${deliveryUrl}\n\nThanks for having LOLA be part of your event.\n\nGood people. Better photos.\n\nLOLA Booths`
+    });
     await sendEmail({
       to: event.client_email,
-      subject: "Your LOLA photos are ready",
-      body: `Hi ${event.client_name?.split(" ")[0] || "there"},\n\nYour photos from ${event.event_name} are ready.\n\nView your photos: ${deliveryUrl}\n\nThanks for having LOLA be part of your event.\n\nGood people. Better photos.\n\nLOLA Booths`
+      subject: rendered.subject,
+      body: rendered.body,
+      html: rendered.html
     });
     await query("UPDATE gallery_deliveries SET delivered_at=COALESCE(delivered_at, now()), updated_at=now() WHERE id=$1", [delivery.id]);
     await query("UPDATE events SET gallery_status='DELIVERED', updated_at=now() WHERE id=$1", [eventId]);

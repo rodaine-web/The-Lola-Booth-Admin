@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
+import { brandedEmailHtml, recordTemplateFallback, renderCommunicationTemplateByKey } from "./automation-service.js";
 import { sendEmail } from "./email-service.js";
 
 function compact(value) {
@@ -86,12 +87,18 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
   const ownerTo = notificationRecipient();
   const name = submissionName(lead, payload);
   const label = formLabel(payload);
+  const mergeData = publicInquiryMergeData({ lead, payload, action, label, name });
+  const ownerFallback = { fallbackSubject: `New LOLA ${label} - ${name}`, fallbackBody: ownerNotificationBody({ lead, payload, action }), relatedEntityId: lead?.id || null };
+  const ownerRendered = sendEmailImpl === sendEmail
+    ? await renderPublicInquiryTemplate("public_inquiry_owner_notification", mergeData, ownerFallback)
+    : { subject: ownerFallback.fallbackSubject, body: ownerFallback.fallbackBody, html: null };
 
   const deliveries = [
     sendEmailImpl({
       to: ownerTo,
-      subject: `New LOLA ${label} - ${name}`,
-      body: ownerNotificationBody({ lead, payload, action })
+      subject: ownerRendered.subject,
+      body: ownerRendered.body,
+      html: ownerRendered.html
     }).catch((error) => {
       logger.warn({ code: error.code, details: error.details }, "Public form owner notification failed");
       return null;
@@ -99,10 +106,29 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
   ];
 
   if (lead?.email || payload?.email) {
+    const customerFallback = { fallbackSubject: "We received your LOLA inquiry", fallbackBody: customerConfirmationBody({ lead, payload }), relatedEntityId: lead?.id || null };
+    const customerTemplateKey = label === "Contact Message" ? "CONTACT_CONFIRMATION" : "BOOKING_INQUIRY_CONFIRMATION";
+    const legacyCustomerTemplateKey = "public_inquiry_customer_confirmation";
+    const customerRendered = sendEmailImpl === sendEmail
+      ? await renderPublicInquiryTemplate(customerTemplateKey, mergeData, customerFallback, {
+        firstName: lead.first_name || payload.firstName || "there",
+        kicker: label === "Contact Message" ? "Thank you for reaching out!" : "Your booking inquiry has been received!",
+        ctaLabel: label === "Contact Message" ? "Let's Make It Happen" : "View Your Inquiry",
+        ctaUrl: env.publicBaseUrl,
+        event: {
+          date: lead.event_date || payload.eventDate,
+          venue: lead.venue_name || payload.venueName || [payload.city, payload.state].filter(Boolean).join(", "),
+          type: lead.event_type || payload.eventType,
+          packageName: lead.guest_count || payload.guestCount ? `Approximately ${lead.guest_count || payload.guestCount}` : ""
+        }
+      })
+      : { subject: customerFallback.fallbackSubject, body: customerFallback.fallbackBody, html: null };
+    if (!customerRendered && legacyCustomerTemplateKey) await renderPublicInquiryTemplate("public_inquiry_customer_confirmation", mergeData, customerFallback);
     deliveries.push(sendEmailImpl({
       to: lead.email || payload.email,
-      subject: "We received your LOLA inquiry",
-      body: customerConfirmationBody({ lead, payload })
+      subject: customerRendered.subject,
+      body: customerRendered.body,
+      html: customerRendered.html
     }).catch((error) => {
       logger.warn({ code: error.code, details: error.details }, "Public form customer confirmation failed");
       return null;
@@ -110,4 +136,39 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
   }
 
   await Promise.all(deliveries);
+}
+
+async function renderPublicInquiryTemplate(templateKey, mergeData, { fallbackSubject, fallbackBody, relatedEntityId }, htmlOptions = {}) {
+  try {
+    const rendered = await renderCommunicationTemplateByKey(templateKey, mergeData);
+    if (rendered) return { ...rendered, html: brandedEmailHtml(rendered.body, htmlOptions) };
+    await recordTemplateFallback({ templateKey, reason: "Active template was not found.", relatedEntityType: "lead", relatedEntityId });
+  } catch (error) {
+    await recordTemplateFallback({ templateKey, reason: error.message, relatedEntityType: "lead", relatedEntityId, metadata: { code: error.code } });
+  }
+  return { subject: fallbackSubject, body: fallbackBody, html: htmlOptions.firstName ? brandedEmailHtml(fallbackBody, htmlOptions) : null };
+}
+
+function publicInquiryMergeData({ lead = {}, payload = {}, action, label, name }) {
+  return {
+    client: {
+      first_name: lead.first_name || payload.firstName || "there",
+      last_name: lead.last_name || payload.lastName || "",
+      name,
+      email: lead.email || payload.email || "",
+      phone: lead.phone || payload.phone || ""
+    },
+    event: {
+      date: lead.event_date || payload.eventDate || "TBD",
+      type: lead.event_type || payload.eventType || "Event",
+      guest_count: String(lead.guest_count || payload.guestCount || "")
+    },
+    request: {
+      type: label,
+      notes: lead.message || payload.message || "",
+      submitted_at: new Date().toISOString(),
+      source_page: payload.landing_page_url || payload.sourcePage || "",
+      status: action || ""
+    }
+  };
 }

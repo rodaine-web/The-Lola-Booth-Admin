@@ -136,6 +136,7 @@ async function text(path, retry = true) {
 
 export const api = {
   login: (credentials) => request("/auth/login", { method: "POST", body: JSON.stringify(credentials) }, false),
+  setupPassword: (payload) => request("/auth/setup-password", { method: "POST", body: JSON.stringify(payload) }, false),
   logout: () => request("/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) }, false),
   me: () => request("/auth/me"),
   get: (path) => request(path),

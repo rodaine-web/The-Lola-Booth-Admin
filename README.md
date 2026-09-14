@@ -13,7 +13,7 @@ Private backend/admin portal for LOLA Booths.
 
 ## Local Setup
 
-1. Copy `.env.example` to `.env` and update `DATABASE_URL` and `JWT_SECRET`.
+1. Copy `.env.example` to `.env` and update `DATABASE_URL`, `JWT_SECRET`, `SEED_OWNER_EMAIL`, and `SEED_OWNER_PASSWORD`.
 2. Create a PostgreSQL database named `lola_admin`.
 3. Install dependencies with `npm install`.
 4. Run migrations and seeds:
@@ -29,10 +29,7 @@ npm run db:seed
 npm run dev
 ```
 
-Seed login:
-
-- Email: `owner@lolabooths.com`
-- Password: `LolaAdmin!2026`
+Seed login uses the `SEED_OWNER_EMAIL` and `SEED_OWNER_PASSWORD` values from your local environment. The seed command refuses to create an owner account without explicit credentials.
 
 ## Environment Notes
 

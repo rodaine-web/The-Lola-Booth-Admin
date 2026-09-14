@@ -16,12 +16,12 @@ Final Phase 11B recommendation: **NOT READY FOR PRODUCTION** until every P0 row 
 | Database backup | DR procedure documented | Deployment owner | Create backup and record timestamp/location | BLOCKED | No production backup target available | Configure encrypted scheduled backups |
 | Restore test | Restore procedure documented | Deployment owner | Restore backup into separate DB and smoke | BLOCKED | Not performed here | Perform staging restore drill |
 | Production storage | Local storage active in dev | Owner + technical owner | Upload/download/archive test against durable storage | BLOCKED | System Health reports storage DEGRADED locally | Choose durable volume or implement S3-compatible adapter |
-| Demo/test data removal | Seed is dev-known and repo is untracked | Owner + technical owner | Query production DB for demo users/test records | BLOCKED | Local seed contains demo owner credential | Do not run demo seed in production; bootstrap owner securely |
-| Owner bootstrap | Seeded local owner uses known password | Owner + technical owner | One-time bootstrap with forced password reset | BLOCKED | README documents local seed login | Create production owner without known default password |
+| Demo/test data removal | Seed now requires explicit owner credentials; production QA records still need review | Owner + technical owner | Query production DB for demo users/test records | MANUAL VERIFICATION REQUIRED | Default seed credential removed from active source | Remove or archive only records not needed for audit evidence |
+| Owner bootstrap | Seed refuses to create owner without `SEED_OWNER_EMAIL` and `SEED_OWNER_PASSWORD` | Owner + technical owner | One-time bootstrap with unique password and optional forced rotation | PASS WITH WARNING | Active login UI ships empty fields | Verify production owner account uses a unique private password |
 | QR physical-device testing | QR PDF generation passes locally | Operations owner | Print label, scan iPhone/Android/browser/manual fallback | BLOCKED | Local QR PDF smoke returns `%PDF` | Test physical label size and quiet zone |
 | Rollback | Runbook documents rollback | Deployment owner | Deploy A/B rollback drill | BLOCKED | No staging platform available | Perform app rollback test before production |
 | Golden-path smoke | Local API smoke passed | Owner + technical owner | Deployed lead/proposal/invoice/payment/operations flow | BLOCKED | Public inquiry local smoke created lead; QR PDF smoke passed | Run full staging smoke with real provider test credentials |
 
 ## Final Decision
 
-**NOT READY FOR PRODUCTION.** The codebase has the required controls and proof hooks, but Phase 11B requires real deployment evidence. That evidence is not available in this local workspace.
+**SUPERSEDED BY PHASE 14 / FINAL CERTIFICATION.** The codebase now has live deployment evidence for public website/API basics, but provider, worker, database, backup, and authenticated admin checks still require final production verification.

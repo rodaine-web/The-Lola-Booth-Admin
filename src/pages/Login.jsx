@@ -5,8 +5,8 @@ import { api } from "../api/client.js";
 
 export default function Login() {
   const { user, login } = useAuth();
-  const [email, setEmail] = useState("owner@lolabooths.com");
-  const [password, setPassword] = useState("LolaAdmin!2026");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [setup, setSetup] = useState(null);
   const [submitting, setSubmitting] = useState(false);

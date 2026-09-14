@@ -19,9 +19,12 @@ export default function LeadDetail() {
   const [busy, setBusy] = useState(false);
   const [convertPreview, setConvertPreview] = useState(null);
   const [note, setNote] = useState("");
+  const [duplicates, setDuplicates] = useState([]);
+  const [pendingMerge, setPendingMerge] = useState(null);
 
   useEffect(() => {
     loadLead();
+    loadDuplicates();
     api.get("/addons?pageSize=100").then((result) => setAddons(result.data || [])).catch(() => setAddons([]));
   }, [id]);
 
@@ -31,6 +34,32 @@ export default function LeadDetail() {
       setLead(await api.get(`/leads/${id}`));
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function loadDuplicates() {
+    try {
+      const result = await api.get(`/leads/${id}/duplicates`);
+      setDuplicates(result.data || []);
+    } catch {
+      setDuplicates([]);
+    }
+  }
+
+  async function mergeDuplicate(sourceLeadId) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.post(`/leads/${id}/merge`, { sourceLeadId });
+      setNotice("Duplicate lead merged.");
+      setPendingMerge(null);
+      await loadLead();
+      await loadDuplicates();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -172,6 +201,9 @@ export default function LeadDetail() {
               <button className="primary-action" onClick={addNote} disabled={!note.trim()}>Add Note</button>
             </div>
           </Panel>
+          <Panel title="Possible Duplicates">
+            <DuplicateList duplicates={duplicates} busy={busy} onMerge={setPendingMerge} />
+          </Panel>
           <Panel title="Conversion Pricing">
             <p className="note-text">Add-ons selected here are priced server-side and attached to the booking during conversion.</p>
             <div className="addon-list">
@@ -227,7 +259,46 @@ export default function LeadDetail() {
           </div>
         </div>
       )}
+      {pendingMerge && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <div className="modal-heading">
+              <h2>Merge Duplicate Lead</h2>
+              <button type="button" onClick={() => setPendingMerge(null)}>Close</button>
+            </div>
+            <Panel title="Merge Review">
+              <Field label="Target" value={fullName} />
+              <Field label="Duplicate" value={`${pendingMerge.first_name} ${pendingMerge.last_name}`} />
+              <Field label="Match" value={pendingMerge.match_reason?.replaceAll("_", " ")} />
+              <Field label="Linked Records Moving" value={linkedCountLabel(pendingMerge.linked_counts)} />
+              <p className="note-text">The current lead stays active. Blank fields may be filled from the duplicate, linked records move here, and the duplicate is archived.</p>
+            </Panel>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setPendingMerge(null)}>Cancel</button>
+              <button className="primary-action" disabled={busy} onClick={() => mergeDuplicate(pendingMerge.id)}>Merge Lead</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
+  );
+}
+
+function DuplicateList({ duplicates, busy, onMerge }) {
+  if (!duplicates.length) return <div className="empty-state">No duplicate leads found.</div>;
+  return (
+    <div className="stack-list">
+      {duplicates.map((item) => (
+        <article className="compact-record" key={item.id}>
+          <div>
+            <strong>{item.first_name} {item.last_name}</strong>
+            <span>{item.email || item.phone || "No contact"} · {item.match_reason?.replaceAll("_", " ")}</span>
+            <small>{item.event_type || "Event TBD"} · {formatDate(item.event_date)} · {linkedCountLabel(item.linked_counts)}</small>
+          </div>
+          <button className="table-action" disabled={busy} onClick={() => onMerge(item.id)}>Merge</button>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -284,6 +355,11 @@ function responseLabel(lead) {
   const minutes = Math.max(0, Math.floor((Date.now() - start) / 60000));
   if (minutes < 60) return `Waiting ${minutes} min`;
   return `Waiting ${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+function linkedCountLabel(counts = {}) {
+  const total = Object.values(counts).reduce((sum, value) => sum + Number(value || 0), 0);
+  return `${total} linked record${total === 1 ? "" : "s"}`;
 }
 
 function formatTime(value) {

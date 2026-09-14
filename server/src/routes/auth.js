@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { query } from "../db/pool.js";
+import { query, transaction } from "../db/pool.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { AppError } from "../utils/errors.js";
 import { validate } from "../utils/validation.js";
@@ -18,8 +18,17 @@ const loginSchema = z.object({
   password: z.string().min(8)
 });
 
+const setupPasswordSchema = z.object({
+  token: z.string().min(32),
+  password: z.string().min(8)
+});
+
 function signAccessToken(userId) {
   return jwt.sign({}, env.jwtSecret, { subject: userId, expiresIn: env.jwtExpiresIn });
+}
+
+function accountTokenHash(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 authRouter.post("/login", validate(loginSchema), asyncHandler(async (req, res) => {
@@ -68,6 +77,31 @@ authRouter.post("/logout", asyncHandler(async (req, res) => {
     }
   }
   res.status(204).send();
+}));
+
+authRouter.post("/setup-password", validate(setupPasswordSchema), asyncHandler(async (req, res) => {
+  const tokenHash = accountTokenHash(req.body.token);
+  const tokenResult = await query(
+    `SELECT t.id, t.user_id, t.token_type, u.email, u.active
+     FROM user_account_tokens t
+     JOIN users u ON u.id=t.user_id
+     WHERE t.token_hash=$1
+       AND t.used_at IS NULL
+       AND t.expires_at > now()
+       AND u.deleted_at IS NULL`,
+    [tokenHash]
+  );
+  const accountToken = tokenResult.rows[0];
+  if (!accountToken || !accountToken.active) throw new AppError("This setup link is invalid or expired.", 400, "INVALID_SETUP_TOKEN");
+
+  const passwordHash = await bcrypt.hash(req.body.password, 12);
+  await transaction(async (client) => {
+    await client.query("UPDATE users SET password_hash=$1, invitation_status='ACTIVE', updated_at=now() WHERE id=$2", [passwordHash, accountToken.user_id]);
+    await client.query("UPDATE user_account_tokens SET used_at=now() WHERE id=$1", [accountToken.id]);
+    await client.query("UPDATE user_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL", [accountToken.user_id]);
+  });
+
+  res.json({ ok: true, email: accountToken.email });
 }));
 
 authRouter.get("/me", authenticate, asyncHandler(async (req, res) => {

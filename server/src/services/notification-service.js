@@ -1,5 +1,6 @@
 import { query, transaction } from "../db/pool.js";
 import { AppError, notFound } from "../utils/errors.js";
+import { recordTemplateFallback, renderCommunicationTemplateByKey } from "./automation-service.js";
 import { sendEmail } from "./email-service.js";
 
 const categories = ["LEADS", "SALES", "PAYMENTS", "EVENTS", "STAFF", "EQUIPMENT", "INCIDENTS", "SYSTEM"];
@@ -85,7 +86,21 @@ async function sendNotificationEmail({ users, category, severity, title, body, e
   for (const user of users.filter((item) => item.email)) {
     const prefs = await getNotificationPreferences(user.id);
     if (!preferenceAllows(prefs, category, severity, "EMAIL")) continue;
-    await sendEmail({ to: user.email, subject: email.subject || title, body: email.body || body || title }).catch(() => null);
+    let rendered = null;
+    try {
+      rendered = await renderCommunicationTemplateByKey(email.templateKey || "notification_email_default", {
+        user: { name: user.name, email: user.email },
+        request: { type: email.subject || title, notes: email.body || body || title, status: severity }
+      });
+    } catch (error) {
+      await recordTemplateFallback({ templateKey: email.templateKey || "notification_email_default", reason: error.message, relatedEntityType: "notification", metadata: { code: error.code, category, severity } });
+    }
+    await sendEmail({
+      to: user.email,
+      subject: rendered?.subject || email.subject || title,
+      body: rendered?.body || email.body || body || title,
+      html: rendered?.html || null
+    }).catch(() => null);
   }
 }
 

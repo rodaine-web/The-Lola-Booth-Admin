@@ -40,8 +40,7 @@ export default function Layout() {
         <div className="brand">
           <img className="brand-logo brand-logo-admin-stacked" src="/brand/LOLA_Primary_Dark_Transparent.png" alt="The LOLA Booth" />
           <div>
-            <strong>LOLA Admin</strong>
-            <span>Private operations</span>
+            <span>Admin Portal</span>
           </div>
         </div>
         <nav>

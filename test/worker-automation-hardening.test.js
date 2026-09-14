@@ -12,10 +12,12 @@ const workerSource = fs.readFileSync(new URL("../server/src/worker.js", import.m
 const railwayRunbook = fs.readFileSync(new URL("../docs/LOLA_RAILWAY_DEPLOYMENT.md", import.meta.url), "utf8");
 
 test("worker classifies automation job types without false success", () => {
-  assert.deepEqual(implementedAutomationJobTypes, ["SEND_EMAIL_TEMPLATE", "SEND_EMAIL"]);
-  assert.deepEqual(futureAutomationJobTypes, ["CREATE_TASK", "ASSIGN_LEAD", "CHANGE_LEAD_STATUS", "ADD_INTERNAL_NOTE"]);
+  assert.deepEqual(implementedAutomationJobTypes, ["SEND_EMAIL_TEMPLATE", "SEND_EMAIL", "CREATE_DRAFT_EMAIL", "SCHEDULE_COMMUNICATION"]);
+  assert.deepEqual(futureAutomationJobTypes, ["CREATE_TASK", "ASSIGN_LEAD", "CHANGE_LEAD_STATUS", "ADD_INTERNAL_NOTE", "CREATE_DRAFT_SMS", "SEND_SMS"]);
   assert.equal(classifyAutomationJobType("SEND_EMAIL_TEMPLATE"), "IMPLEMENTED");
   assert.equal(classifyAutomationJobType("SEND_EMAIL"), "IMPLEMENTED");
+  assert.equal(classifyAutomationJobType("CREATE_DRAFT_EMAIL"), "IMPLEMENTED");
+  assert.equal(classifyAutomationJobType("SCHEDULE_COMMUNICATION"), "IMPLEMENTED");
   assert.equal(classifyAutomationJobType("CREATE_TASK"), "NOT_IMPLEMENTED");
   assert.equal(classifyAutomationJobType("ASSIGN_LEAD"), "NOT_IMPLEMENTED");
   assert.equal(classifyAutomationJobType("CHANGE_LEAD_STATUS"), "NOT_IMPLEMENTED");
@@ -45,7 +47,7 @@ test("worker recovers stale processing jobs after restart", () => {
 
 test("current worker path is storage independent", () => {
   assert.doesNotMatch(workerSource, /storage-service|LOCAL_STORAGE_ROOT|getStorageProvider/);
-  assert.match(automationSource, /sendEmail\(\{ to, subject, body \}\)/);
+  assert.match(automationSource, /sendEmail\(\{ to, subject, body, html \}\)/);
   assert.doesNotMatch(automationSource, /attachments:\s*\[/);
   assert.match(railwayRunbook, /Do not mount a Railway volume or set worker `LOCAL_STORAGE_ROOT`/);
 });

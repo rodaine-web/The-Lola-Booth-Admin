@@ -23,7 +23,6 @@
 | `MICROSOFT_SENDER_EMAIL` | PROVIDER_SPECIFIC | Licensed Microsoft 365 sender mailbox | If `EMAIL_PROVIDER=microsoft` | No | Microsoft 365 admin | Email smoke |
 | `SMS_PROVIDER` | PROVIDER_SPECIFIC | SMS provider, or `none` | No | No | Provider choice | Health check |
 | `STRIPE_SECRET_KEY` | PROVIDER_SPECIFIC | Stripe secret key | If Stripe enabled | Yes | Stripe dashboard | Checkout/webhook smoke |
-| `STRIPE_PUBLISHABLE_KEY` | PROVIDER_SPECIFIC | Stripe publishable key | If Stripe enabled | No | Stripe dashboard | Public invoice smoke |
 | `STRIPE_WEBHOOK_SECRET` | PROVIDER_SPECIFIC | Stripe webhook signature secret | If Stripe enabled | Yes | Stripe dashboard | Webhook smoke |
 | `PAYPAL_CLIENT_ID` | PROVIDER_SPECIFIC | PayPal app client ID | If PayPal enabled | No | PayPal dashboard | Sandbox smoke |
 | `PAYPAL_CLIENT_SECRET` | PROVIDER_SPECIFIC | PayPal app secret | If PayPal enabled | Yes | PayPal dashboard | Sandbox smoke |

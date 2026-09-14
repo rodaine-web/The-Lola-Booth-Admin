@@ -12,3 +12,4 @@ pnpm-debug.log*
 *.log
 coverage
 storage/uploads
+.vercel

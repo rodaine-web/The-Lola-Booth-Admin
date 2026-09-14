@@ -10,19 +10,24 @@ const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 const cents = (value) => Math.round(Number(value || 0) * 100);
 
 export function providerStatus() {
+  const stripeConfigured = Boolean(env.stripeSecretKey);
+  const stripeWebhookConfigured = Boolean(env.stripeWebhookSecret);
+  const stripeMode = env.stripeSecretKey?.startsWith("sk_live_") ? "LIVE" : "TEST";
   return {
     stripe: {
       provider: "STRIPE",
-      configured: Boolean(env.stripeSecretKey && env.stripePublishableKey),
-      webhookConfigured: Boolean(env.stripeWebhookSecret),
-      mode: env.stripeSecretKey?.startsWith("sk_live_") ? "LIVE" : "TEST",
-      enabled: Boolean(env.stripeSecretKey && env.stripePublishableKey)
+      configured: stripeConfigured,
+      webhookConfigured: stripeWebhookConfigured,
+      mode: stripeMode,
+      readiness: stripeConfigured && stripeWebhookConfigured ? (stripeMode === "LIVE" ? "LIVE_READY" : "TEST_READY") : stripeConfigured ? "MISCONFIGURED" : "NOT_CONFIGURED",
+      enabled: stripeConfigured
     },
     paypal: {
       provider: "PAYPAL",
       configured: Boolean(env.paypalClientId && env.paypalClientSecret),
       webhookConfigured: Boolean(env.paypalWebhookId),
       mode: env.paypalEnvironment === "live" ? "LIVE" : "SANDBOX",
+      readiness: env.paypalClientId && env.paypalClientSecret && env.paypalWebhookId ? (env.paypalEnvironment === "live" ? "LIVE_READY" : "TEST_READY") : env.paypalClientId || env.paypalClientSecret ? "MISCONFIGURED" : "NOT_CONFIGURED",
       enabled: Boolean(env.paypalClientId && env.paypalClientSecret)
     }
   };
@@ -38,8 +43,8 @@ export async function publicPaymentOptions(invoice) {
     amountDue: money(invoice.amount_outstanding || invoice.balance_due),
     currency: invoice.currency || s.currency || "USD",
     providers: [
-      ...(payable && s.stripe_enabled && status.stripe.enabled ? [{ provider: "STRIPE", label: "Card / wallet checkout", publishableKey: env.stripePublishableKey }] : []),
-      ...(payable && s.paypal_enabled && status.paypal.enabled ? [{ provider: "PAYPAL", label: "PayPal checkout" }] : [])
+      ...(payable && s.stripe_enabled && status.stripe.enabled && ["TEST_READY", "LIVE_READY"].includes(status.stripe.readiness) ? [{ provider: "STRIPE", label: "Card / wallet checkout" }] : []),
+      ...(payable && s.paypal_enabled && status.paypal.enabled && ["TEST_READY", "LIVE_READY"].includes(status.paypal.readiness) ? [{ provider: "PAYPAL", label: "PayPal checkout" }] : [])
     ],
     offlinePaymentInstructions: s.offline_payment_instructions || ""
   };
@@ -52,8 +57,8 @@ export async function createPaymentSession({ token, provider, idempotencyKey }) 
   if (!["STRIPE", "PAYPAL"].includes(normalizedProvider)) throw new AppError("Unsupported payment provider.", 400, "UNSUPPORTED_PROVIDER");
   const options = await publicPaymentOptions(invoice);
   if (!options.providers.some((item) => item.provider === normalizedProvider)) throw new AppError("This payment provider is not configured.", 409, "PAYMENT_PROVIDER_UNAVAILABLE");
-  const key = idempotencyKey || `${normalizedProvider}:${invoice.id}:${cents(options.amountDue)}`;
-  const existing = await query("SELECT * FROM payment_attempts WHERE idempotency_key=$1 LIMIT 1", [key]);
+  const key = `${normalizedProvider}:${invoice.id}:${cents(options.amountDue)}:${idempotencyKey || "default"}`;
+  const existing = await query("SELECT * FROM payment_attempts WHERE idempotency_key=$1 AND invoice_id=$2 AND provider=$3 LIMIT 1", [key, invoice.id, normalizedProvider]);
   if (existing.rows[0]) return safeSession(existing.rows[0], normalizedProvider);
   if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency);
   return createPaypalOrder(invoice, key, options.currency);
@@ -131,9 +136,8 @@ export async function createRefund(req) {
 
 export async function handleStripeWebhook(rawBody, signature) {
   if (!env.stripeWebhookSecret) throw new AppError("Stripe webhook secret is not configured.", 503, "STRIPE_WEBHOOK_NOT_CONFIGURED");
-  const expected = stripeSignature(rawBody, signature, env.stripeWebhookSecret);
-  if (!signature?.includes(expected)) throw new AppError("Invalid Stripe signature.", 400, "INVALID_STRIPE_SIGNATURE");
-  const event = JSON.parse(rawBody.toString("utf8"));
+  if (!validStripeSignature(rawBody, signature, env.stripeWebhookSecret)) throw new AppError("Invalid Stripe signature.", 400, "INVALID_STRIPE_SIGNATURE");
+  const event = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody));
   return persistWebhookEvent("STRIPE", event.id, event.type, event, async () => {
     if (event.type === "checkout.session.completed" || event.type === "payment_intent.succeeded") {
       const object = event.data?.object || {};
@@ -147,6 +151,25 @@ export async function handleStripeWebhook(rawBody, signature) {
         amount: money((object.amount_total || object.amount_received || 0) / 100),
         currency: String(object.currency || "usd").toUpperCase(),
         paymentMethod: "ONLINE"
+      });
+    }
+    if (event.type === "payment_intent.payment_failed") {
+      const object = event.data?.object || {};
+      await recordProviderPaymentFailure({
+        provider: "STRIPE",
+        providerPaymentId: object.id,
+        invoiceId: object.metadata?.invoice_id,
+        failureCode: object.last_payment_error?.code || object.last_payment_error?.decline_code || "payment_failed"
+      });
+    }
+    if (event.type === "charge.refunded") {
+      const object = event.data?.object || {};
+      await recordProviderRefund({
+        provider: "STRIPE",
+        providerPaymentId: object.payment_intent,
+        providerRefundId: object.refunds?.data?.[0]?.id || object.id,
+        amount: money((object.amount_refunded || 0) / 100),
+        currency: String(object.currency || "usd").toUpperCase()
       });
     }
   });
@@ -190,6 +213,46 @@ async function recordProviderPayment(input) {
   return payment;
 }
 
+async function recordProviderPaymentFailure(input) {
+  if (!input.invoiceId && !input.providerPaymentId) return null;
+  await query(
+    `UPDATE payment_attempts
+     SET status='FAILED', provider_reference=COALESCE(provider_reference,$1), failure_code=$2, updated_at=now()
+     WHERE provider=$3 AND (
+       provider_reference=$1
+       OR provider_session_id=$1
+       OR ($4::uuid IS NOT NULL AND invoice_id=$4)
+     )`,
+    [input.providerPaymentId || null, input.failureCode || "payment_failed", input.provider, input.invoiceId || null]
+  );
+  return { status: "FAILED" };
+}
+
+async function recordProviderRefund(input) {
+  if (!input.providerPaymentId || !input.amount) return null;
+  const payment = (await query("SELECT * FROM payments WHERE provider=$1 AND provider_payment_id=$2 AND deleted_at IS NULL", [input.provider, input.providerPaymentId])).rows[0];
+  if (!payment) return null;
+  const refund = await transaction(async (client) => {
+    const inserted = await client.query(
+      `INSERT INTO refunds (payment_id, invoice_id, event_id, client_id, provider, amount, currency, reason, refund_type, status, provider_refund_id, idempotency_key)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'Stripe refund webhook',$8,'SUCCEEDED',$9,$10)
+       ON CONFLICT (provider, provider_refund_id) WHERE provider_refund_id IS NOT NULL DO UPDATE SET updated_at=now()
+       RETURNING *`,
+      [payment.id, payment.invoice_id, payment.event_id, payment.client_id, input.provider, input.amount, input.currency || payment.currency, input.amount >= Number(payment.amount) ? "FULL" : "PARTIAL", input.providerRefundId, `${input.provider}:refund:${input.providerRefundId}`]
+    );
+    await client.query(
+      `UPDATE payments SET refunded_amount=GREATEST(refunded_amount,$1::numeric),
+        status=CASE WHEN $1::numeric >= amount THEN 'REFUNDED' ELSE 'PARTIALLY_REFUNDED' END,
+        updated_at=now()
+       WHERE id=$2`,
+      [input.amount, payment.id]
+    );
+    return inserted.rows[0];
+  });
+  if (payment.invoice_id) await reconcileInvoice(payment.invoice_id, { action: "refund_completed" });
+  return refund;
+}
+
 async function createStripeCheckout(invoice, key, currency) {
   const amount = money(invoice.amount_outstanding || invoice.balance_due);
   const params = new URLSearchParams({
@@ -202,7 +265,10 @@ async function createStripeCheckout(invoice, key, currency) {
     "line_items[0][quantity]": "1",
     "metadata[invoice_id]": invoice.id,
     "metadata[client_id]": invoice.client_id || "",
-    "metadata[event_id]": invoice.event_id || ""
+    "metadata[event_id]": invoice.event_id || "",
+    "payment_intent_data[metadata][invoice_id]": invoice.id,
+    "payment_intent_data[metadata][client_id]": invoice.client_id || "",
+    "payment_intent_data[metadata][event_id]": invoice.event_id || ""
   });
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
@@ -263,11 +329,18 @@ function safeSession(row, provider) {
   return { provider, checkoutUrl: row.checkout_url, sessionId: row.provider_session_id, amount: money(row.amount), currency: row.currency };
 }
 
-function stripeSignature(rawBody, signature, secret) {
-  const timestamp = String(signature || "").split(",").find((part) => part.startsWith("t="))?.slice(2);
-  if (!timestamp) return "";
-  const headerPayload = `${timestamp}.${rawBody.toString("utf8")}`;
-  return crypto.createHmac("sha256", secret).update(headerPayload).digest("hex");
+function validStripeSignature(rawBody, signature, secret) {
+  const parts = String(signature || "").split(",");
+  const timestamp = parts.find((part) => part.startsWith("t="))?.slice(2);
+  const signatures = parts.filter((part) => part.startsWith("v1=")).map((part) => part.slice(3));
+  if (!timestamp || !signatures.length) return false;
+  const payload = Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody);
+  const expected = crypto.createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+  return signatures.some((candidate) => {
+    const candidateBuffer = Buffer.from(candidate, "hex");
+    return candidateBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(candidateBuffer, expectedBuffer);
+  });
 }
 
 async function persistWebhookEvent(provider, eventId, eventType, payload, processor) {
