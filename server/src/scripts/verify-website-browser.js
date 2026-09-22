@@ -48,7 +48,9 @@ try {
   site.packages.find(p=>p.website_key==='glam:essential').starting_price=625;
   for(const slug of ['','packages']){await page.goto('https://lola.test/'+slug);await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');assert.ok((await page.locator('[data-package-key="glam:essential"] .price').textContent()).includes('625'));}
   site.packages=site.packages.filter(p=>p.website_key!=='glam:essential');site.faqs=[];
-  await page.goto('https://lola.test/packages');await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');assert.equal(await page.locator('[data-package-key="glam:essential"]').evaluate(n=>n.hidden),true);
+  await page.goto('https://lola.test/packages');await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');assert.equal(await page.locator('[data-package-key="glam:essential"]').isVisible(),false);
+  site.experiences=site.experiences.filter(x=>!x.name.toLowerCase().includes('glam'));
+  await page.goto('https://lola.test/experiences');await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');assert.equal(await page.locator('[data-experience-key="glam"]').isVisible(),false);
   await page.goto('https://lola.test/faq');await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');assert.equal(await page.locator('[data-cms-faqs] details').count(),0);
   offline=true;
   for(const slug of ['','packages']){await page.goto('https://lola.test/'+slug);await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='fallback');assert.ok((await page.locator('[data-package-key="glam:essential"] .price').textContent()).includes('599'));}

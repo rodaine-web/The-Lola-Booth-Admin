@@ -1,6 +1,6 @@
 # LOLA website → CMS content map
 
-Prepared 2026-09-22. Source: public website repository revision 36a6c20; public API captured 2026-09-22T20:16:54.483Z. This document describes locally validated changes. Production application and deployment are not yet verified.
+Prepared 2026-09-22. Source: public website repository revision 36a6c20; initial public API captured 2026-09-22 02:08 UTC; refreshed database baseline 2026-09-22T20:16:54.483Z. This document describes locally validated changes. Production application and deployment are not yet verified.
 
 ## Pricing root cause
 
@@ -10,10 +10,10 @@ The homepage has current approved prices in index.html, but app.js asynchronousl
 |---|---:|---:|---:|---|
 | A: approved Packages HTML | $599 | $899 | $1,499 | Approved custom copy |
 | B: homepage HTML before JavaScript | $599 | $899 | $1,499 | Let’s Create Together |
-| C: published API / underlying packages | $499 | $799 | $1,099 | 0.00 in API |
+| C: original audited API / underlying packages | $499 | $799 | $1,099 | 0.00 in API |
 | D: old renderer fallback | API numeric price; no separate fallback price array | Same | Same | Renderer custom text |
 
-The shared renderer now identifies each record by experience:tier. Both pages consume that record. Static HTML remains the offline fallback. API caching changes from max-age=60/stale-while-revalidate=300 to immediate revalidation; app.js also revalidates. Unversioned image assets revalidate after one hour instead of remaining immutable for a year. No service worker or stored price data was found; sessionStorage contains inquiry attribution only.
+Intervening CMS edits corrected the three Glam prices to $599 / $899 / $1,499 before this migration was applied; the old API still returns 0.00 for Custom. The shared renderer now identifies each record by experience:tier. Both pages consume that record. Static HTML remains the offline fallback. API caching changes from max-age=60/stale-while-revalidate=300 to immediate revalidation; app.js also revalidates. Unversioned image assets revalidate after one hour instead of remaining immutable for a year. No service worker or stored price data was found; sessionStorage contains inquiry attribution only.
 
 ## Integration and gaps
 
@@ -117,7 +117,7 @@ Existing published FAQs are preserved as the current content (production has 40 
 
 Final prices below are locally verified, not a claim of production deployment. Homepage intentionally features Glam only.
 
-| Package | Old homepage | Final homepage (local) | Packages page (local) | CMS (local; production before) | Status |
+| Package | Old homepage | Final homepage (local) | Packages page (local) | CMS (local; latest production) | Status |
 |---|---|---|---|---|---|
 | glam — The Essential | $599 | $599 | $599 | $599; 599.00 | Local PASS; production pending |
 | glam — The Signature | $899 | $899 | $899 | $899; 899.00 | Local PASS; production pending |
@@ -136,9 +136,9 @@ Final prices below are locally verified, not a claim of production deployment. H
 | audio — The Luxe | Not featured | Not featured | $699 | $699; not present | Local PASS; production pending |
 | audio — Custom | Not featured | Not featured | Custom | Custom; not present | Local PASS; production pending |
 
-## Import plan (isolated database simulation)
+## Import plan (reviewed production dry run)
 
-These are planned counts against a reconstructed baseline, not production migration totals.
+These are planned counts from the read-only production dry run, not applied production totals.
 
 | Area | Status | Created | Updated | Skipped | Notes |
 |---|---|---:|---:|---:|---|
@@ -149,7 +149,7 @@ These are planned counts against a reconstructed baseline, not production migrat
 | Gallery | Local validated / production pending | 10 | 0 | 0 |  |
 | Events | Local validated / production pending | 1 | 6 | 0 |  |
 | FAQs | Local validated / production pending | 0 | 0 | 40 |  |
-| Testimonials | Local validated / production pending | 0 | 0 | 0 | Preserve all existing records |
+| Testimonials | Local validated / production pending | 0 | 0 | 1 | Preserve all existing records |
 | Media | Local validated / production pending | 22 | 0 | 0 | 21 files plus one asset mapping record |
 | About | Local validated / production pending | 1 | 0 | 0 |  |
 | Careers | GAP | 0 | 0 | 0 | No approved source |
@@ -158,7 +158,7 @@ These are planned counts against a reconstructed baseline, not production migrat
 | Social | Local validated / production pending | 0 | 0 | 0 | Included in Site Settings |
 | /connect | Local validated / production pending | 1 | 0 | 0 |  |
 
-Local plan total: 64 created, 17 updated, 40 skipped. Media files: 21. Repeat simulation: all 121 records skipped, no duplicate insertion. Production applied totals: 0 so far.
+Production plan total: 64 created, 17 updated, 41 skipped. Media files: 21. Repeat local simulation: all 121 records skipped, no duplicate insertion. Production applied totals: 0 so far.
 
 ## Deployment procedure and safety
 
