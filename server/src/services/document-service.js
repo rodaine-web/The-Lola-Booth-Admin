@@ -109,7 +109,7 @@ function drawBrandPage(doc, title, subtitle, { asset = "primaryDark", label = ""
 
 export async function generateProposalPdf(proposal) {
   const chunks = [];
-  const doc = new PDFDocument({ size: "LETTER", margin: 48 });
+  const doc = new PDFDocument({ size: "LETTER", margins: { top: 48, right: 48, bottom: 20, left: 48 } });
   doc.on("data", (chunk) => chunks.push(chunk));
   const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
   drawProposalCover(doc, proposal);
@@ -155,15 +155,18 @@ function addPdfHeader(doc, meta = "") {
   const logo = logoPath("primaryDark");
   if (mono) doc.image(mono, 42, 48, { width: 82 });
   if (logo) doc.image(logo, 155, 48, { width: 168 });
-  doc.fillColor(navy).font("Helvetica").fontSize(10).text("UNFORGETTABLE MOMENTS\nBEAUTIFULLY CAPTURED", 410, 70, { width: 150, align: "center", characterSpacing: 3 });
-  if (meta) doc.fontSize(9).text(meta, 430, 124, { width: 135, align: "left", characterSpacing: 2 });
+  if (meta) {
+    doc.fillColor(navy).font("Helvetica").fontSize(9).text(meta, 410, 62, { width: 160, align: "left", characterSpacing: 2 });
+  } else {
+    doc.fillColor(navy).font("Helvetica").fontSize(10).text("UNFORGETTABLE MOMENTS\nBEAUTIFULLY CAPTURED", 410, 70, { width: 150, align: "center", characterSpacing: 3 });
+  }
   doc.moveTo(38, 154).lineTo(574, 154).strokeColor(brand.gold).stroke();
 }
 
 function addPdfFooter(doc, pageNumber) {
   doc.moveTo(38, 690).lineTo(574, 690).strokeColor(brand.gold).stroke();
   doc.fillColor(navy).font("Times-Roman").fontSize(10).text(footerText, 72, 708, { width: 468, align: "center", lineBreak: false });
-  doc.font("Helvetica").fontSize(8).text("EVENTS  |  BRAND ACTIVATIONS  |  WEDDINGS  |  CORPORATE  |  UNFORGETTABLE MOMENTS", 80, 732, { width: 452, align: "center", characterSpacing: 2, lineBreak: false });
+  doc.font("Helvetica").fontSize(6).text("EVENTS  |  BRAND ACTIVATIONS  |  WEDDINGS  |  CORPORATE  |  UNFORGETTABLE MOMENTS", 38, 732, { width: 460, align: "center", characterSpacing: 0.5, lineBreak: false });
   if (pageNumber) doc.font("Times-Italic").fontSize(10).text(`Page ${pageNumber}`, 526, 732, { lineBreak: false });
 }
 
@@ -183,52 +186,113 @@ function drawProposalCover(doc, proposal) {
   doc.fillColor(brand.charcoal).font("Helvetica").fontSize(10);
   [["PREPARED FOR:", proposal.client_name || "Client"], ["EVENT:", proposal.event_name || proposal.event_type || "Event"]].forEach(([label, value], index) => {
     doc.font("Helvetica").fontSize(10).text(label, leftX, 622 + index * 55, { characterSpacing: 5 });
-    doc.font("Times-Roman").fontSize(18).text(value, leftX, 642 + index * 55);
+    doc.font("Times-Roman").fontSize(13).text(value, leftX, 642 + index * 55, { width: 200, characterSpacing: 0 });
   });
   doc.moveTo(306, 622).lineTo(306, 704).strokeColor(brand.gold).stroke();
   [["DATE:", proposal.proposal_date || new Date().toISOString().slice(0, 10)], ["PROPOSAL NO.:", proposal.proposal_number]].forEach(([label, value], index) => {
     doc.font("Helvetica").fontSize(10).text(label, rightX, 622 + index * 55, { characterSpacing: 5 });
-    doc.font("Times-Roman").fontSize(18).text(value, rightX, 642 + index * 55);
+    doc.font("Times-Roman").fontSize(12).text(value, rightX, 642 + index * 55, { width: 190, characterSpacing: 0 });
   });
   doc.moveTo(72, 720).lineTo(540, 720).strokeColor(brand.gold).stroke();
-  doc.font("Times-Roman").fontSize(14).text(footerText.replace(/\|/g, "  -  "), 72, 742, { width: 468, align: "center", lineBreak: false });
+  doc.font("Times-Roman").fontSize(10).text(footerText.replace(/\|/g, "  -  "), 72, 742, { width: 468, align: "center", lineBreak: false });
 }
 
 function addProposalOverview(doc, proposal) {
   addPdfHeader(doc);
-  const pricing = proposal.pricing_snapshot || {};
   doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(44).text("Proposal Overview", 38, 185);
   doc.fillColor(navy).font("Helvetica").fontSize(9).text("A MODERN PHOTO EXPERIENCE FOR LIFE'S MOST MEANINGFUL MOMENTS", 40, 238, { characterSpacing: 5 });
   const cardX = 392;
-  doc.rect(cardX, 270, 170, 330).strokeColor(brand.champagne).stroke();
-  doc.font("Helvetica").fontSize(9).text("EVENT PROPOSAL FOR", cardX + 24, 306, { width: 122, align: "center", characterSpacing: 5 });
-  doc.font("Times-Roman").fontSize(22).text(proposal.client_name || "Client", cardX + 18, 338, { width: 134, align: "center" });
-  for (const [label, value, y] of [["EVENT DATE", proposal.event_date, 405], ["VENUE", proposal.venue_name, 472], ["PACKAGE", proposal.package_name || proposal.proposal_title || proposal.experience_name, 540]]) {
-    doc.moveTo(cardX + 48, y - 18).lineTo(cardX + 122, y - 18).strokeColor(brand.gold).stroke();
-    doc.font("Helvetica").fontSize(8).text(label, cardX + 18, y, { width: 134, align: "center", characterSpacing: 4 });
-    doc.font("Times-Roman").fontSize(16).text(value || "TBD", cardX + 18, y + 24, { width: 134, align: "center" });
+  const cardWidth = 170;
+  const fields = [["EVENT PROPOSAL FOR", proposal.client_name || "Client"], ["EVENT DATE", proposal.event_date], ["VENUE", proposal.venue_name], ["PACKAGE", proposal.package_name || proposal.proposal_title || proposal.experience_name]];
+  let cardY = 290;
+  for (const [index, [label, value]] of fields.entries()) {
+    if (index) {
+      doc.moveTo(cardX + 48, cardY).lineTo(cardX + 122, cardY).strokeColor(brand.gold).stroke();
+      cardY += 16;
+    }
+    doc.font("Helvetica").fontSize(8).fillColor(navy).text(label, cardX + 14, cardY, { width: 142, align: "center", characterSpacing: 1.5 });
+    cardY = doc.y + 12;
+    doc.font("Times-Roman").fontSize(index === 0 ? 18 : 14).text(String(value || "TBD"), cardX + 14, cardY, { width: 142, align: "center", characterSpacing: 0 });
+    cardY = doc.y + 20;
   }
-  doc.font("Times-Italic").fontSize(13).text("More Than a Photobooth\nA Brighter Way to Remember", cardX + 18, 635, { width: 134, align: "center", characterSpacing: 2 });
-  let y = 282;
+  doc.rect(cardX, 270, cardWidth, cardY - 270).strokeColor(brand.champagne).stroke();
   const sections = proposalSections(proposal);
-  sections.forEach((section, index) => {
-    if (y > 675) {
-      addPdfFooter(doc, doc.bufferedPageRange().count + 1);
+  let page = 2;
+  const flow = {
+    x: 38, y: 282, width: 330, bottom: 674,
+    nextPage() {
+      addPdfFooter(doc, page++);
       doc.addPage();
-      addPdfHeader(doc, `${proposal.proposal_number}\n${proposal.client_name || ""}`);
-      y = 190;
+      addPdfHeader(doc, proposal.proposal_number);
+      this.y = 190;
+      this.width = 536;
     }
-    doc.fillColor(navy).font("Helvetica").fontSize(11).text(`${String(index + 1).padStart(2, "0")}.`, 38, y, { characterSpacing: 4 });
-    doc.text(String(section.title || "").toUpperCase(), 88, y, { width: 220, characterSpacing: 5 });
-    doc.moveTo(240, y + 7).lineTo(374, y + 7).strokeColor(brand.gold).stroke();
-    doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(11).text(strip(section.body), 38, y + 25, { width: index < 4 ? 330 : 150, lineGap: 2 });
-    if (section.items?.length) {
-      doc.moveDown(0.4);
-      section.items.forEach((item) => doc.text(`- ${strip(item)}`, { width: index < 4 ? 330 : 150 }));
+  };
+  const sectionText = (section) => [strip(section.body), ...(section.items || []).map((item) => `- ${strip(item)}`)].filter(Boolean).join("\n");
+  for (const [index, section] of sections.entries()) {
+    // Keep the familiar three-column summary only when every remaining word fits.
+    const remaining = sections.slice(index);
+    const summaryY = Math.max(flow.y + 8, cardY + 18);
+    if (index === 4 && page === 2 && remaining.length <= 3) {
+      const cards = remaining.map((item, offset) => ({
+        title: `${String(index + offset + 1).padStart(2, "0")}. ${item.title.toUpperCase()}`,
+        text: sectionText(item)
+      }));
+      const fits = cards.every((card) => {
+        const titleHeight = textHeight(doc, card.title, 162, "Helvetica", 9);
+        return summaryY + titleHeight + 10 + textHeight(doc, card.text, 162, "Times-Roman", 10) <= flow.bottom;
+      });
+      if (fits) {
+        cards.forEach((card, offset) => {
+          const x = 38 + offset * 178;
+          doc.font("Helvetica").fontSize(9).fillColor(navy).text(card.title, x, summaryY, { width: 162, characterSpacing: 0 });
+          const bodyY = doc.y + 10;
+          doc.font("Times-Roman").fontSize(10).fillColor(brand.charcoal).text(card.text, x, bodyY, { width: 162, characterSpacing: 0, lineGap: 1 });
+        });
+        break;
+      }
     }
-    y = doc.y + 26;
-  });
-  addPdfFooter(doc, 2);
+    const title = `${String(index + 1).padStart(2, "0")}. ${String(section.title).toUpperCase()}`;
+    if (flow.y + textHeight(doc, title, flow.width, "Helvetica", 11) + 30 > flow.bottom) flow.nextPage();
+    drawFlowText(doc, flow, title, "Helvetica", 11, navy);
+    flow.y += 9;
+    drawFlowText(doc, flow, sectionText(section), "Times-Roman", 10, brand.charcoal);
+    flow.y += 18;
+  }
+  addPdfFooter(doc, page);
+}
+
+function textHeight(doc, text, width, font, size) {
+  return doc.font(font).fontSize(size).heightOfString(text, { width, lineGap: 1, characterSpacing: 0 });
+}
+
+// Explicitly wrap and paginate so long sections never write through a footer.
+function drawFlowText(doc, flow, text, font = "Times-Roman", size = 10, color = navy) {
+  doc.font(font).fontSize(size);
+  const lineHeight = doc.currentLineHeight(true) + 1;
+  for (const paragraph of String(text || "").split("\n")) {
+    let remaining = paragraph;
+    do {
+      if (flow.y + lineHeight > flow.bottom) flow.nextPage();
+      doc.font(font).fontSize(size).fillColor(color);
+      let end = remaining.length;
+      if (doc.widthOfString(remaining, { characterSpacing: 0 }) > flow.width) {
+        let low = 1;
+        let high = remaining.length;
+        while (low < high) {
+          const middle = Math.ceil((low + high) / 2);
+          if (doc.widthOfString(remaining.slice(0, middle), { characterSpacing: 0 }) <= flow.width) low = middle;
+          else high = middle - 1;
+        }
+        end = low;
+        const space = remaining.lastIndexOf(" ", end);
+        if (space > 0) end = space;
+      }
+      doc.text(remaining.slice(0, end), flow.x, flow.y, { width: flow.width, lineBreak: false, characterSpacing: 0 });
+      flow.y += lineHeight;
+      remaining = remaining.slice(end).replace(/^ +/, "");
+    } while (remaining.length);
+  }
 }
 
 export async function generateProposalDocx(proposal) {
@@ -262,7 +326,7 @@ export async function generateProposalDocx(proposal) {
 
 export async function generateInvoicePdf(invoice) {
   const chunks = [];
-  const doc = new PDFDocument({ size: "LETTER", margin: 48 });
+  const doc = new PDFDocument({ size: "LETTER", margins: { top: 48, right: 48, bottom: 20, left: 48 } });
   doc.on("data", (chunk) => chunks.push(chunk));
   const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
   await addInvoicePages(doc, invoice);
@@ -273,32 +337,68 @@ export async function generateInvoicePdf(invoice) {
 // Legacy static coverage marker retained for prior brand tests: asset: "primaryDark", label: "INVOICE"
 
 async function addInvoicePages(doc, invoice) {
-  const items = invoice.items || [];
-  const firstPageItems = items.slice(0, 8);
-  const secondPageItems = items.slice(8);
-  drawInvoicePage(doc, invoice, firstPageItems, 1, secondPageItems.length ? "Continued on next page ->" : "");
-  if (secondPageItems.length) {
-    doc.addPage();
-    drawInvoiceContinuation(doc, invoice, secondPageItems, 2);
-  }
-}
-
-function drawInvoicePage(doc, invoice, items, page, continued = "") {
+  let page = 1;
   doc.rect(0, 0, doc.page.width, doc.page.height).fill(brand.ivory);
   addPdfHeader(doc);
   doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(58).text("Invoice", 38, 182);
-  doc.fillColor(navy).font("Helvetica").fontSize(14).text("EVENT SERVICES", 40, 245, { characterSpacing: 8 });
-  drawInfoColumns(doc, invoice, page);
-  drawInvoiceTable(doc, items, 344, continued);
+  doc.fillColor(navy).font("Helvetica").fontSize(14).text("EVENT SERVICES", 40, 245, { characterSpacing: 6 });
+  const infoBottom = drawInfoColumns(doc, invoice, page);
+  const flow = {
+    x: 48, y: Math.max(362, infoBottom + 18), width: 288, bottom: 666,
+    nextPage() {
+      addPdfFooter(doc, page++);
+      doc.addPage();
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(brand.ivory);
+      addPdfHeader(doc, `INVOICE NO. ${invoice.invoice_number}\n${invoice.client_name || ""}`);
+      this.y = 190;
+    }
+  };
+  const tableHeader = () => {
+    doc.font("Helvetica").fontSize(9).fillColor(navy);
+    [ ["DESCRIPTION", 48, 288], ["QTY", 346, 46], ["RATE", 402, 72], ["AMOUNT", 484, 80] ].forEach(([label, x, width]) => {
+      doc.text(label, x, flow.y + 8, { width, characterSpacing: 0.5, lineBreak: false, align: x === 48 ? "left" : "right" });
+    });
+    doc.moveTo(38, flow.y + 26).lineTo(574, flow.y + 26).strokeColor(brand.champagne).stroke();
+    flow.y += 34;
+  };
+  if (flow.y > 610) flow.nextPage();
+  tableHeader();
+  for (const item of invoice.items || []) {
+    const description = String(item.label || item.description || "Service");
+    const detail = String(item.detail || item.secondary_description || "");
+    const rowHeight = textHeight(doc, description, 288, "Times-Roman", 11)
+      + (detail ? textHeight(doc, detail, 288, "Times-Italic", 9) + 4 : 0) + 18;
+    if (flow.y + Math.min(rowHeight, 400) > flow.bottom) {
+      flow.nextPage();
+      doc.font("Helvetica").fontSize(11).fillColor(navy).text("CONTINUED LINE ITEMS", 38, flow.y, { characterSpacing: 2 });
+      flow.y += 28;
+      tableHeader();
+    }
+    const top = flow.y;
+    const rowPage = page;
+    doc.font("Times-Roman").fontSize(11).fillColor(navy);
+    doc.text(String(item.quantity ?? 1), 346, top, { width: 46, align: "right", lineBreak: false, characterSpacing: 0 });
+    doc.text(money(item.unit_price), 402, top, { width: 72, align: "right", lineBreak: false });
+    doc.text(money(item.line_total ?? item.total), 484, top, { width: 80, align: "right", lineBreak: false });
+    drawFlowText(doc, flow, description, "Times-Roman", 11);
+    if (detail) { flow.y += 4; drawFlowText(doc, flow, detail, "Times-Italic", 9); }
+    flow.y = Math.max(flow.y + 12, page === rowPage ? top + 38 : 0);
+    doc.moveTo(38, flow.y - 5).lineTo(574, flow.y - 5).strokeColor(brand.champagne).stroke();
+  }
+  // Reserve a clean payment page for ordinary invoices, and continue naturally for larger ones.
+  if (page === 1 || flow.y + 300 > flow.bottom) flow.nextPage();
+  else flow.y += 22;
+  drawInvoicePayment(doc, invoice, flow);
   addPdfFooter(doc, page);
 }
 
 function drawInfoColumns(doc, invoice, page) {
   const columns = [
-    ["INVOICE INFORMATION", [["Invoice No.", invoice.invoice_number], ["Issue Date", formatDate(invoice.issue_date || invoice.created_at)], ["Due Date", formatDate(invoice.due_date)], ["Event Date", formatDate(invoice.event_date)], ["Pages", `${page} of 2`]]],
+    ["INVOICE INFORMATION", [["Invoice No.", invoice.invoice_number], ["Issue Date", formatDate(invoice.issue_date || invoice.created_at)], ["Due Date", formatDate(invoice.due_date)], ["Event Date", formatDate(invoice.event_date)], ["Page", String(page)]]],
     ["BILL TO", [["", invoice.client_name], ["", invoice.corporate_billing?.company], ["", invoice.corporate_billing?.billing_address], ["", invoice.client_email], ["", invoice.client_phone || invoice.phone]]],
     ["EVENT DETAILS", [["Event Name", invoice.event_name], ["Venue", invoice.venue_name], ["Location", invoice.location || invoice.venue_address], ["Event Type", invoice.event_type], ["Package", invoice.package_name || invoice.project_name], ["Guest Count", invoice.guest_count]]]
   ];
+  let bottom = 0;
   columns.forEach(([title, rows], index) => {
     const x = 40 + index * 188;
     doc.font("Helvetica").fontSize(9).fillColor(navy).text(title, x, 287, { width: 160, characterSpacing: 4 });
@@ -307,78 +407,44 @@ function drawInfoColumns(doc, invoice, page) {
     rows.filter(([, value]) => value).forEach(([label, value]) => {
       doc.font("Times-Roman").fontSize(11).fillColor(navy);
       if (label) {
-        doc.text(label, x, y, { width: 72 });
-        doc.text(String(value), x + 78, y, { width: 100 });
+        const valueText = String(value);
+        doc.text(label, x, y, { width: 72, lineBreak: false, characterSpacing: 0 });
+        doc.text(valueText, x + 78, y, { width: 100, characterSpacing: 0 });
+        y += Math.max(16, doc.heightOfString(valueText, { width: 100 }) + 5);
       } else {
-        doc.text(String(value), x, y, { width: 160 });
+        const valueText = String(value);
+        doc.text(valueText, x, y, { width: 160, characterSpacing: 0 });
+        y += Math.max(16, doc.heightOfString(valueText, { width: 160 }) + 5);
       }
-      y += 16;
     });
+    bottom = Math.max(bottom, y);
   });
+  return bottom;
 }
 
-function drawInvoiceTable(doc, items, startY, continued = "") {
-  const x = 38;
-  const widths = [318, 56, 94, 86];
-  let y = startY;
-  doc.rect(x, y, widths.reduce((a, b) => a + b), 26).strokeColor(brand.champagne).stroke();
-  ["DESCRIPTION", "QTY", "RATE", "AMOUNT"].forEach((head, index) => {
-    const cellX = x + widths.slice(0, index).reduce((a, b) => a + b, 0);
-    doc.font("Helvetica").fontSize(9).fillColor(navy).text(head, cellX + 10, y + 9, { width: widths[index] - 20, align: index ? "center" : "left", characterSpacing: 5 });
-  });
-  y += 26;
-  items.forEach((item) => {
-    doc.rect(x, y, widths.reduce((a, b) => a + b), 42).strokeColor(brand.champagne).stroke();
-    const description = item.label || item.description || "Service";
-    doc.font("Times-Roman").fontSize(11).fillColor(navy).text(description, x + 10, y + 8, { width: widths[0] - 20 });
-    if (item.detail || item.secondary_description) doc.font("Times-Italic").fontSize(9).text(item.detail || item.secondary_description, x + 10, y + 23, { width: widths[0] - 20 });
-    doc.font("Times-Roman").fontSize(11).text(String(item.quantity || 1), x + widths[0], y + 15, { width: widths[1], align: "center" });
-    doc.text(money(item.unit_price), x + widths[0] + widths[1], y + 15, { width: widths[2], align: "center" });
-    doc.text(money(item.line_total || item.total), x + widths[0] + widths[1] + widths[2], y + 15, { width: widths[3] - 12, align: "right" });
-    y += 42;
-  });
-  if (continued) doc.font("Times-Italic").fontSize(10).fillColor(navy).text(continued, 420, 672, { width: 140, lineBreak: false });
-}
-
-async function drawInvoiceContinuation(doc, invoice, items, page) {
-  doc.rect(0, 0, doc.page.width, doc.page.height).fill(brand.ivory);
-  addPdfHeader(doc, `INVOICE NO.     ${invoice.invoice_number}\nCLIENT          ${invoice.client_name || ""}\nEVENT           ${invoice.event_name || ""}\nPAGE            ${page} of 2`);
-  doc.fillColor(navy).font("Helvetica").fontSize(14).text("CONTINUED LINE ITEMS", 38, 190, { characterSpacing: 7 });
-  let rowY = 232;
-  doc.rect(38, rowY, 520, 26).strokeColor(brand.champagne).stroke();
-  doc.font("Helvetica").fontSize(9).fillColor(navy).text("DESCRIPTION", 50, rowY + 9, { width: 260, characterSpacing: 4, lineBreak: false });
-  doc.text("QTY", 370, rowY + 9, { width: 40, align: "center", characterSpacing: 4, lineBreak: false });
-  doc.text("RATE", 420, rowY + 9, { width: 60, align: "center", characterSpacing: 4, lineBreak: false });
-  doc.text("AMOUNT", 494, rowY + 9, { width: 60, align: "right", characterSpacing: 4, lineBreak: false });
-  rowY += 30;
-  items.forEach((item) => {
-    doc.moveTo(38, rowY + 32).lineTo(558, rowY + 32).strokeColor(brand.champagne).stroke();
-    doc.font("Times-Roman").fontSize(11).fillColor(navy).text(item.label || item.description || "Service", 50, rowY, { width: 270, lineBreak: false });
-    doc.font("Times-Italic").fontSize(9).text(item.detail || item.secondary_description || "", 50, rowY + 15, { width: 270, lineBreak: false });
-    doc.font("Times-Roman").fontSize(11).text(String(item.quantity || 1), 370, rowY + 8, { width: 40, align: "center", lineBreak: false });
-    doc.text(money(item.unit_price), 420, rowY + 8, { width: 60, align: "center", lineBreak: false });
-    doc.text(money(item.line_total || item.total), 494, rowY + 8, { width: 60, align: "right", lineBreak: false });
-    rowY += 38;
-  });
-  const y = Math.min(405, Math.max(360, rowY + 22));
-  doc.moveTo(38, y).lineTo(574, y).strokeColor(brand.gold).stroke();
-  doc.font("Helvetica").fontSize(12).fillColor(navy).text("PAYMENT INFORMATION", 38, y + 24, { characterSpacing: 6, lineBreak: false });
-  doc.font("Times-Roman").fontSize(10).text(invoice.terms || "A retainer is required to secure your date. Remaining balance is due before the event.", 38, y + 52, { width: 290, lineBreak: false });
+function drawInvoicePayment(doc, invoice, flow) {
+  flow.x = 38;
+  flow.width = 536;
+  drawFlowText(doc, flow, "PAYMENT INFORMATION", "Helvetica", 12);
+  flow.y += 18;
+  drawFlowText(doc, flow, invoice.terms || "A retainer is required to secure your date. Remaining balance is due before the event.");
+  flow.y += 22;
+  if (flow.y + 220 > flow.bottom) flow.nextPage();
+  const y = flow.y;
   const invoiceUrl = publicUrl("invoice", invoice.secure_token);
-  doc.font("Helvetica").fontSize(10).fillColor(navy).text(`SUBTOTAL     ${money(invoice.subtotal)}`, 410, y + 28, { width: 140, align: "right", lineBreak: false });
-  doc.text(`TOTAL        ${money(invoice.total)}`, 410, y + 54, { width: 140, align: "right", lineBreak: false });
-  doc.text(`PAID         ${money(invoice.amount_paid)}`, 410, y + 80, { width: 140, align: "right", lineBreak: false });
-  doc.font("Helvetica-Bold").fontSize(12).text(`BALANCE DUE  ${money(invoice.amount_outstanding || invoice.balance_due)}`, 382, y + 110, { width: 168, align: "right", lineBreak: false });
-  doc.rect(38, y + 90, 260, 56).strokeColor(brand.champagne).stroke();
-  doc.font("Helvetica").fontSize(12).text("PAY ONLINE", 52, y + 105, { width: 230, align: "center", characterSpacing: 6, lineBreak: false });
-  doc.font("Times-Roman").fontSize(7).text(invoiceUrl, 52, y + 128, { width: 230, align: "center", lineBreak: false });
-  drawQrCode(doc, invoiceUrl, 318, y + 84, 72);
-  doc.font("Helvetica").fontSize(7).fillColor(navy).text("SCAN TO PAY", 309, y + 160, { width: 92, align: "center", characterSpacing: 3, lineBreak: false });
-  doc.moveTo(38, y + 170).lineTo(574, y + 170).strokeColor(brand.gold).stroke();
-  doc.font("Helvetica").fontSize(11).text("NOTES", 38, y + 190, { characterSpacing: 6, lineBreak: false });
-  doc.font("Times-Roman").fontSize(9).text("Thank you for trusting The Lola Booth with your special event. We're always here to help.", 38, y + 214, { width: 330, lineBreak: false });
-  doc.font("Times-Italic").fontSize(26).fillColor("#a8753b").text("Thank You", 410, y + 188, { lineBreak: false });
-  addPdfFooter(doc, page);
+  const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", invoice.tax], ["TOTAL", invoice.total], ["PAID", invoice.amount_paid], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
+  rows.forEach(([label, value], index) => {
+    doc.font(index === 5 ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor(navy);
+    doc.text(label, 382, y + index * 24, { width: 95, lineBreak: false, characterSpacing: 0 });
+    doc.text(money(value), 477, y + index * 24, { width: 87, align: "right", lineBreak: false });
+  });
+  doc.rect(38, y, 250, 76).strokeColor(brand.champagne).stroke();
+  doc.font("Helvetica").fontSize(12).text("PAY ONLINE", 50, y + 14, { width: 226, align: "center", characterSpacing: 3, lineBreak: false });
+  doc.font("Times-Roman").fontSize(8).text(invoiceUrl, 50, y + 38, { width: 226, align: "center", characterSpacing: 0, link: invoiceUrl });
+  drawQrCode(doc, invoiceUrl, 80, y + 92, 84);
+  doc.font("Helvetica").fontSize(8).fillColor(navy).text("SCAN TO PAY", 72, y + 184, { width: 100, align: "center", characterSpacing: 1, lineBreak: false });
+  flow.y = y + 212;
+  drawFlowText(doc, flow, "Thank you for trusting The Lola Booth with your special event.", "Times-Italic", 11);
 }
 
 function drawTotalsBox(doc, invoice, x, y) {
@@ -394,13 +460,14 @@ function drawQrCode(doc, value, x, y, size) {
   try {
     const qr = QRCode.create(value, { errorCorrectionLevel: "M" });
     const moduleCount = qr.modules.size;
-    const cell = size / moduleCount;
+    const cell = size / (moduleCount + 8);
+    const inset = 4 * cell;
     doc.save();
     doc.rect(x - 4, y - 4, size + 8, size + 8).fill(brand.white).strokeColor(brand.champagne).stroke();
     doc.fillColor("#000000");
     for (let row = 0; row < moduleCount; row += 1) {
       for (let col = 0; col < moduleCount; col += 1) {
-        if (qr.modules.get(row, col)) doc.rect(x + col * cell, y + row * cell, Math.ceil(cell), Math.ceil(cell)).fill();
+        if (qr.modules.get(row, col)) doc.rect(x + inset + col * cell, y + inset + row * cell, cell, cell).fill();
       }
     }
     doc.restore();

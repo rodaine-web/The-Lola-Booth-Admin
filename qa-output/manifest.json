@@ -1,0 +1,28 @@
+{
+  "generatedAt": "2026-09-22T02:05:17.791Z",
+  "invoiceUrl": "https://admin.thelolabooth.com/invoice/qa-invoice-northstar-2026",
+  "proposalUrl": "https://admin.thelolabooth.com/proposal/qa-proposal-northstar-2026",
+  "files": [
+    "booking-confirmation.html",
+    "booking-confirmation.txt",
+    "contact-confirmation.html",
+    "contact-confirmation.txt",
+    "proposal-email.html",
+    "proposal-email.txt",
+    "invoice-email.html",
+    "invoice-email.txt",
+    "generic-email.html",
+    "generic-email.txt",
+    "LOLA-Proposal-Standard-QA.pdf",
+    "LOLA-Proposal-Corporate-QA.pdf",
+    "LOLA-Invoice-QA.pdf"
+  ],
+  "browserQa": "PASSED",
+  "pdfScreenshots": "GENERATED",
+  "pdfPageCounts": {
+    "LOLA-Proposal-Standard-QA.pdf": 3,
+    "LOLA-Proposal-Corporate-QA.pdf": 2,
+    "LOLA-Invoice-QA.pdf": 2
+  },
+  "invoiceQr": "PASSED"
+}

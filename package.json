@@ -16,7 +16,8 @@
     "db:seed": "node server/seeds/seed.js",
     "email:test": "node server/src/scripts/email-smoke.js",
     "test": "node --test",
-    "check": "npm test && npm run build"
+    "check": "npm test && npm run build",
+    "qa:documents": "node server/src/scripts/create-visual-qa-pack.js"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.2",
@@ -42,5 +43,11 @@
     "sanitize-html": "^2.17.7",
     "vite": "^7.1.4",
     "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.0.9",
+    "jsqr": "^1.4.0",
+    "pdfjs-dist": "^6.3.289",
+    "playwright": "^1.63.0"
   }
 }

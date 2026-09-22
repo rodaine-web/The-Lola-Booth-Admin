@@ -1,0 +1,97 @@
+{
+  "status": "PASSED",
+  "checkedAt": "2026-09-22T02:05:26.456Z",
+  "scope": "Local Chrome rendering; real inbox delivery/client compatibility requires a separate test.",
+  "results": [
+    {
+      "file": "booking-confirmation.html",
+      "layout": "desktop",
+      "viewport": 1000,
+      "documentScrollWidth": 1000,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "booking-confirmation.html",
+      "layout": "mobile",
+      "viewport": 390,
+      "documentScrollWidth": 390,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "contact-confirmation.html",
+      "layout": "desktop",
+      "viewport": 1000,
+      "documentScrollWidth": 1000,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "contact-confirmation.html",
+      "layout": "mobile",
+      "viewport": 390,
+      "documentScrollWidth": 390,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "proposal-email.html",
+      "layout": "desktop",
+      "viewport": 1000,
+      "documentScrollWidth": 1000,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "proposal-email.html",
+      "layout": "mobile",
+      "viewport": 390,
+      "documentScrollWidth": 390,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "invoice-email.html",
+      "layout": "desktop",
+      "viewport": 1000,
+      "documentScrollWidth": 1000,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "invoice-email.html",
+      "layout": "mobile",
+      "viewport": 390,
+      "documentScrollWidth": 390,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "generic-email.html",
+      "layout": "desktop",
+      "viewport": 1000,
+      "documentScrollWidth": 1000,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    },
+    {
+      "file": "generic-email.html",
+      "layout": "mobile",
+      "viewport": 390,
+      "documentScrollWidth": 390,
+      "overflow": false,
+      "heroBackgroundVisible": true,
+      "brokenImages": []
+    }
+  ]
+}

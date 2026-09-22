@@ -1,0 +1,8 @@
+{
+  "checkedAt": "2026-09-22T02:05:30.167Z",
+  "status": "PASSED",
+  "decodedUrl": "https://admin.thelolabooth.com/invoice/qa-invoice-northstar-2026",
+  "expectedUrl": "https://admin.thelolabooth.com/invoice/qa-invoice-northstar-2026",
+  "source": "screenshots/invoice-page-2.png",
+  "scope": "Decoded from a rasterized generated invoice PDF; fixture token is not a live invoice."
+}

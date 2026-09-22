@@ -314,17 +314,21 @@ function bodyToHtml(body = "") {
   return htmlEscape(body).split(/\n{2,}/).map((paragraph) => `<p style="margin:0 0 18px;line-height:1.55">${paragraph.replace(/\n/g, "<br>")}</p>`).join("");
 }
 
-function fieldCell(label, value, icon = "&#9734;") {
+function fieldCell(label, value, icon = "star", assetBase = "") {
   if (!value) return "";
-  return `<td style="width:25%;padding:18px 12px;text-align:center;border-left:1px solid #d9c6b5;color:#101a36">
-    <div style="font-size:26px;color:#a8753b;line-height:1">${icon}</div>
-    <div style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:4px;text-transform:uppercase;margin-top:12px">${htmlEscape(label)}</div>
-    <div style="font-family:Georgia,serif;font-size:16px;line-height:1.3;margin-top:8px">${htmlEscape(value)}</div>
+  return `<td class="field-cell" style="width:25%;padding:18px 12px;text-align:center;border-left:1px solid #d9c6b5;color:#101a36">
+    <div style="line-height:1">${emailIcon(icon, assetBase)}</div>
+    <div class="feature-label" style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:4px;text-transform:uppercase;margin-top:12px">${htmlEscape(label)}</div>
+    <div class="field-value" style="font-family:Georgia,serif;font-size:16px;line-height:1.3;margin-top:8px">${htmlEscape(value)}</div>
   </td>`;
 }
 
+function emailIcon(name, assetBase) {
+  return `<img alt="" width="28" height="28" src="${htmlEscape(assetBase)}/brand/icons/${name}.png" style="display:block;margin:0 auto;width:28px;height:28px;border:0">`;
+}
+
 export function brandedEmailHtml(body, options = {}) {
-  const publicBase = (process.env.PUBLIC_BASE_URL || process.env.CLIENT_ORIGIN || "https://thelolabooth.com").replace(/\/$/, "");
+  const publicBase = (options.assetBaseUrl || process.env.PUBLIC_BASE_URL || process.env.CLIENT_ORIGIN || "https://thelolabooth.com").replace(/\/$/, "");
   const logo = `${publicBase}/brand/LOLA_Primary_Dark_Transparent.png`;
   const monogram = `${publicBase}/brand/LOLA_LB_Monogram_Gold.png`;
   const darkLogo = `${publicBase}/brand/LOLA_Primary_Light_Transparent.png`;
@@ -334,40 +338,70 @@ export function brandedEmailHtml(body, options = {}) {
   const ctaUrl = options.ctaUrl || "";
   const ctaLabel = options.ctaLabel || "LET'S STAY CONNECTED";
   const event = options.event || {};
+  const cell = (label, value, icon) => fieldCell(label, value, icon, publicBase);
   const summaryCells = [
-    fieldCell("Event Date", event.date, "&#128197;"),
-    fieldCell("Venue", event.venue, "&#9906;"),
-    fieldCell("Event Type", event.type, "&#128101;"),
-    fieldCell(event.packageLabel || "Package", event.packageName || event.experienceName || event.title, "&#9734;")
+    cell("Event Date", event.date, "calendar"),
+    cell("Venue", event.venue, "pin"),
+    cell("Event Type", event.type, "users"),
+    cell(event.packageLabel || "Package", event.packageName || event.experienceName || event.title, "star")
   ].filter(Boolean).join("");
   return `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  table, td { box-sizing: border-box; }
+  img { max-width: 100%; height: auto; margin-left: auto; margin-right: auto; }
+  .copy-link { overflow-wrap: anywhere; word-break: break-word; }
+  @media only screen and (max-width: 820px) {
+    html, body { width: 100% !important; max-width: 100% !important; }
+    table { width: 100% !important; max-width: 100% !important; table-layout: fixed !important; }
+    td, div, p, a, span { white-space: normal !important; }
+    .outer-wrapper, .email-container { width: 100vw !important; max-width: 100vw !important; min-width: 0 !important; table-layout: fixed !important; }
+    .topline, .brand-row, .footer-row { width: 100% !important; }
+    .topline td, .brand-row td, .footer-row td { display: block !important; width: 100% !important; text-align: center !important; }
+    .topline td { padding: 3px 0 !important; }
+    .brand-pad, .content-pad, .closing-pad, .footer-pad { padding-left: 20px !important; padding-right: 20px !important; width: auto !important; }
+    .content-copy { font-size: 16px !important; line-height: 1.48 !important; overflow-wrap: break-word !important; }
+    .kicker { font-size: 12px !important; letter-spacing: 5px !important; line-height: 1.55 !important; overflow-wrap: anywhere !important; }
+    .brand-center { border-left: 0 !important; border-right: 0 !important; padding: 18px 0 !important; }
+    .contact-cell { padding-left: 0 !important; font-size: 14px !important; line-height: 1.7 !important; }
+    .hero-text { padding-left: 20px !important; width: 160px !important; }
+    .field-cell { display: block !important; width: auto !important; border-left: 0 !important; border-top: 1px solid #d9c6b5 !important; }
+    .field-cell div { overflow-wrap: anywhere !important; word-break: normal !important; }
+    .field-value { font-size: 15px !important; }
+    .feature-label { font-size: 9px !important; letter-spacing: 3px !important; line-height: 1.6 !important; }
+    .cta-button { display: block !important; box-sizing: border-box !important; width: 100% !important; max-width: 320px !important; letter-spacing: 3px !important; padding-left: 14px !important; padding-right: 14px !important; }
+    .closing-text { font-size: 16px !important; overflow-wrap: break-word !important; }
+    .signature { font-size: 32px !important; line-height: 1.1 !important; }
+    .signature-tagline { font-size: 11px !important; letter-spacing: 4px !important; line-height: 1.6 !important; overflow-wrap: anywhere !important; }
+    .footer-nav { font-size: 9px !important; letter-spacing: 3px !important; line-height: 1.9 !important; overflow-wrap: anywhere !important; }
+  }
+</style></head>
 <body style="margin:0;padding:0;background:#f4f0e8;color:#101a36;font-family:Georgia,'Times New Roman',serif">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f0e8"><tr><td align="center">
-    <table role="presentation" width="720" cellspacing="0" cellpadding="0" style="width:720px;max-width:100%;background:#fffdf8">
+  <table class="outer-wrapper" role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f0e8"><tr><td align="center">
+    <table class="email-container" role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:720px;background:#fffdf8">
       <tr><td style="background:#f1ede5;padding:18px 38px;font-family:Arial,sans-serif;font-size:11px;letter-spacing:4px;text-transform:uppercase;color:#090909">
-        <table role="presentation" width="100%"><tr><td>Events&nbsp;&nbsp; | &nbsp;&nbsp;Brand Activations&nbsp;&nbsp; | &nbsp;&nbsp;Weddings&nbsp;&nbsp; | &nbsp;&nbsp;Corporate</td><td align="right">Unforgettable Moments<br>Beautifully Captured</td></tr></table>
+        <table class="topline" role="presentation" width="100%"><tr><td>Events&nbsp;&nbsp; | &nbsp;&nbsp;Brand Activations&nbsp;&nbsp; | &nbsp;&nbsp;Weddings&nbsp;&nbsp; | &nbsp;&nbsp;Corporate</td><td align="right">Unforgettable Moments<br>Beautifully Captured</td></tr></table>
       </td></tr>
-      <tr><td style="padding:28px 42px 24px">
-        <table role="presentation" width="100%"><tr>
-          <td width="25%" align="center"><img src="${monogram}" alt="LB" width="108" style="width:108px;height:auto;display:block"></td>
-          <td width="42%" align="center" style="border-left:1px solid #b2864b;border-right:1px solid #b2864b"><img src="${logo}" alt="The Lola Booth" width="210" style="width:210px;height:auto;display:block;margin:auto"></td>
-          <td width="33%" style="padding-left:34px;font-size:16px;line-height:1.9;color:#101a36"><span style="color:#a8753b">&#9742;</span>&nbsp;&nbsp;(773) 240-2744<br><span style="color:#a8753b">&#9993;</span>&nbsp;&nbsp;info@thelolabooth.com<br><span style="color:#a8753b">&#9678;</span>&nbsp;&nbsp;thelolabooth.com</td>
+      <tr><td class="brand-pad" style="padding:28px 42px 24px">
+        <table class="brand-row" role="presentation" width="100%"><tr>
+          <td width="25%" align="center"><img src="${monogram}" alt="LB" width="108" style="width:108px;max-width:80%;height:auto;display:block"></td>
+          <td class="brand-center" width="42%" align="center" style="border-left:1px solid #b2864b;border-right:1px solid #b2864b"><img src="${logo}" alt="The Lola Booth" width="210" style="width:210px;max-width:82%;height:auto;display:block;margin:auto"></td>
+          <td class="contact-cell" width="33%" style="padding-left:34px;font-size:16px;line-height:1.9;color:#101a36"><span style="color:#a8753b">&#9742;</span>&nbsp;&nbsp;(773) 240-2744<br><span style="color:#a8753b">&#9993;</span>&nbsp;&nbsp;info@thelolabooth.com<br><span style="color:#a8753b">&#9678;</span>&nbsp;&nbsp;thelolabooth.com</td>
         </tr></table>
       </td></tr>
-      <tr><td><div style="height:170px;background:#15110d url('${hero}') center/cover no-repeat;color:white"><div style="padding:42px 0 0 56px;width:190px;text-align:center;font-family:Arial,sans-serif;letter-spacing:6px;text-transform:uppercase;line-height:1.9;font-size:15px">More Than<br>Photos<br><span style="letter-spacing:0">-</span><br>It's A Vibe</div></div></td></tr>
-      <tr><td style="padding:30px 42px 20px">
+      <tr><td><div class="hero-strip" style="height:170px;background-color:#15110d;background-image:linear-gradient(90deg,rgba(0,0,0,.8),rgba(0,0,0,.35)),url('${hero}');background-position:center;background-size:cover;background-repeat:no-repeat;color:white"><div class="hero-text" style="padding:42px 0 0 56px;width:190px;text-align:center;font-family:Arial,sans-serif;letter-spacing:6px;text-transform:uppercase;line-height:1.9;font-size:15px">More Than<br>Photos<br><span style="letter-spacing:0">-</span><br>It's A Vibe</div></div></td></tr>
+      <tr><td class="content-pad" style="padding:30px 42px 20px">
         <div style="font-size:32px;line-height:1.1;color:#090909">Hi ${htmlEscape(firstName)},</div>
-        ${kicker ? `<div style="font-family:Arial,sans-serif;font-size:15px;letter-spacing:7px;text-transform:uppercase;color:#a8753b;margin-top:18px">${htmlEscape(kicker)}</div>` : ""}
-        <div style="font-size:18px;line-height:1.55;margin-top:10px;color:#101a36">${bodyToHtml(body)}</div>
-        ${ctaUrl ? `<div style="text-align:center;margin:28px 0 8px"><a href="${htmlEscape(ctaUrl)}" style="display:inline-block;background:#b1844c;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;letter-spacing:6px;text-transform:uppercase;padding:17px 54px;border-radius:2px">${htmlEscape(ctaLabel)} &rarr;</a><div style="font-size:13px;margin-top:14px;color:#101a36">Or copy and paste this link into your browser:<br><span style="color:#a8753b">${htmlEscape(ctaUrl)}</span></div></div>` : ""}
+        ${kicker ? `<div class="kicker" style="font-family:Arial,sans-serif;font-size:15px;letter-spacing:7px;text-transform:uppercase;color:#a8753b;margin-top:18px">${htmlEscape(kicker)}</div>` : ""}
+        <div class="content-copy" style="font-size:18px;line-height:1.55;margin-top:10px;color:#101a36">${bodyToHtml(body)}</div>
+        ${ctaUrl ? `<div style="text-align:center;margin:28px 0 8px"><a class="cta-button" href="${htmlEscape(ctaUrl)}" style="display:inline-block;background:#b1844c;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;letter-spacing:6px;text-transform:uppercase;padding:17px 54px;border-radius:2px">${htmlEscape(ctaLabel)} &rarr;</a><div class="copy-link" style="font-size:13px;margin-top:14px;color:#101a36">Or copy and paste this link into your browser:<br><span style="color:#a8753b">${htmlEscape(ctaUrl)}</span></div></div>` : ""}
       </td></tr>
-      ${summaryCells ? `<tr><td style="padding:0 30px 22px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3efe8">${summaryCells}</table></td></tr>` : ""}
+      ${summaryCells ? `<tr><td style="padding:0 30px 22px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3efe8"><tr>${summaryCells}</tr></table></td></tr>` : ""}
       <tr><td style="padding:0 30px 26px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #b2864b;border-bottom:1px solid #b2864b"><tr>
-        ${fieldCell("Premium Experience", " ", "&#128247;")}${fieldCell("Beautiful Brandable Content", " ", "&#9825;")}${fieldCell("Instant Sharing", " ", "&#9901;")}${fieldCell("A Team That Takes Care Of You", " ", "&#128101;")}
+        ${cell("Premium Experience", " ", "camera")}${cell("Beautiful Brandable Content", " ", "heart")}${cell("Instant Sharing", " ", "share")}${cell("A Team That Takes Care Of You", " ", "users")}
       </tr></table></td></tr>
-      <tr><td style="padding:0 42px 34px;font-size:18px;line-height:1.5;color:#101a36">${options.closing || "Thank you again for reaching out. We can't wait to help you create unforgettable moments with The Lola Booth!"}<div style="font-size:38px;color:#a8753b;margin-top:22px;font-style:italic">The Lola Booth Team</div><div style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:5px;text-transform:uppercase">The Lola Booth<br>Unforgettable Moments, Beautifully Captured</div></td></tr>
-      <tr><td style="background:#050505;color:#fff;padding:30px 42px"><table role="presentation" width="100%"><tr><td><img src="${darkLogo}" alt="The Lola Booth" width="210" style="width:210px;height:auto"></td><td align="right" style="font-family:Arial,sans-serif;letter-spacing:4px;text-transform:uppercase;font-size:12px">Follow Our Journey<br><div style="font-size:20px;letter-spacing:12px;margin:14px 0 8px">◎ ♪ ▶</div><span style="font-family:Georgia,serif;letter-spacing:0;text-transform:none;font-size:16px">@thelolabooth</span></td></tr></table><div style="border-top:1px solid #b2864b;margin-top:24px;padding-top:18px;font-family:Arial,sans-serif;font-size:11px;letter-spacing:5px;text-transform:uppercase;color:#c59a5f">Events &nbsp; | &nbsp; Brand Activations &nbsp; | &nbsp; Weddings &nbsp; | &nbsp; Corporate &nbsp; | &nbsp; Unforgettable Moments</div></td></tr>
+      <tr><td class="closing-pad closing-text" style="padding:0 42px 34px;font-size:18px;line-height:1.5;color:#101a36">${options.closing || "Thank you again for reaching out. We can't wait to help you create unforgettable moments with The Lola Booth!"}<div class="signature" style="font-size:38px;color:#a8753b;margin-top:22px;font-style:italic">The Lola Booth Team</div><div class="signature-tagline" style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:5px;text-transform:uppercase">The Lola Booth<br>Unforgettable Moments, Beautifully Captured</div></td></tr>
+      <tr><td class="footer-pad" style="background:#050505;color:#fff;padding:30px 42px"><table class="footer-row" role="presentation" width="100%"><tr><td><img src="${darkLogo}" alt="The Lola Booth" width="210" style="width:210px;max-width:82%;height:auto"></td><td align="right" style="font-family:Arial,sans-serif;letter-spacing:4px;text-transform:uppercase;font-size:12px">Follow Our Journey<br><div style="font-size:11px;letter-spacing:1px;margin:14px 0 8px">Instagram &nbsp; | &nbsp; TikTok &nbsp; | &nbsp; YouTube</div><span style="font-family:Georgia,serif;letter-spacing:0;text-transform:none;font-size:16px">@thelolabooth</span></td></tr></table><div class="footer-nav" style="border-top:1px solid #b2864b;margin-top:24px;padding-top:18px;font-family:Arial,sans-serif;font-size:11px;letter-spacing:5px;text-transform:uppercase;color:#c59a5f">Events &nbsp; | &nbsp; Brand Activations &nbsp; | &nbsp; Weddings &nbsp; | &nbsp; Corporate &nbsp; | &nbsp; Unforgettable Moments</div></td></tr>
     </table>
   </td></tr></table>
 </body></html>`;

@@ -1,0 +1,11 @@
+Your LOLA invoice is ready
+
+Thank you for choosing The Lola Booth! Your invoice for the Northstar Annual Gala is now ready for review. You can view the full details, make a secure payment, or contact us if you have any questions.
+
+Invoice Summary:
+Invoice No.: INV-2026-QA-001
+Total Amount: $3,000.00
+Deposit Paid: $900.00
+Balance Due: $2,100.00
+
+VIEW YOUR INVOICE: https://admin.thelolabooth.com/invoice/qa-invoice-northstar-2026
