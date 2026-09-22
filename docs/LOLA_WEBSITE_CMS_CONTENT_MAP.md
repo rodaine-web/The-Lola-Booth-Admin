@@ -1,6 +1,6 @@
 # LOLA website → CMS content map
 
-Prepared 2026-09-22. Source: public website repository revision 36a6c20; initial public API captured 2026-09-22 02:08 UTC; refreshed database baseline 2026-09-22T20:16:54.483Z. This document describes locally validated changes. Production application and deployment are not yet verified.
+Prepared 2026-09-22. Source: public website repository revision 3d221d0; initial public API captured 2026-09-22 02:08 UTC; refreshed database baseline 2026-09-22T20:16:54.483Z. This document describes locally validated changes. Production application and deployment are not yet verified.
 
 ## Pricing root cause
 
@@ -55,10 +55,13 @@ Existing published FAQs are preserved as the current content (production has 40 
 | /about | — | about.html: section.about-gallery-strip | website_content | page.about (new) | CREATE | Preserve layout; copy slots and page SEO |
 | /about | Let’s Make It Official. | about.html: section.cta | website_content | page.about (new) | CREATE | Preserve layout; copy slots and page SEO |
 | /about | SEO / header / footer / links | about.html | page.about + business_settings | Existing settings; new page record | MERGE | 115 copy slots; 10 referenced media assets; SVG icons KEEP |
-| /availability | Your event starts here. | availability.html: section.page-hero.book-hero | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
-| /availability | Tell us what you’re planning. | availability.html: section.section.book-section | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
-| /availability | Let’s Make It Official. | availability.html: section.cta | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
-| /availability | SEO / header / footer / links | availability.html | page.availability + business_settings | Existing settings; new page record | MERGE | 63 copy slots; 2 referenced media assets; SVG icons KEEP |
+| /availability | Your event starts here. | availability.html: section.booking-hero | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
+| /availability | Tell us what you’re planning.; Your Details; Your Event; Choose Your LOLA Experience; Anything Else We Should Know? | availability.html: section.booking-main | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
+| /availability | From request to confirmed.; Request submitted; Availability reviewed; Proposal and next steps; 30% down payment; Booking confirmed | availability.html: section.booking-steps | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
+| /availability | Your date is held when the booking is confirmed. | availability.html: section.deposit-band | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
+| /availability | Still choosing an experience?; Need pricing details?; Have a question first? | availability.html: section.booking-help | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
+| /availability | Not ready to book yet? | availability.html: section.cta | website_content | page.availability (new) | CREATE | Preserve layout; copy slots and page SEO |
+| /availability | SEO / header / footer / links | availability.html | page.availability + business_settings | Existing settings; new page record | MERGE | 103 copy slots; 2 referenced media assets; SVG icons KEEP |
 | /connect | — | connect.html: section.card | website_content | page.connect (new) | CREATE | Preserve layout; copy slots and page SEO |
 | /connect | SEO / header / footer / links | connect.html | page.connect + business_settings | Existing settings; new page record | MERGE | 13 copy slots; 2 referenced media assets; SVG icons KEEP |
 | /contact | Tell us what you’re planning. | contact.html: section.contact-hero | website_content | page.contact (new) | CREATE | Preserve layout; copy slots and page SEO |

@@ -5,10 +5,11 @@ import { load } from 'cheerio';
 import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(process.argv[2] || '/private/tmp/lola-website-cms');
+const sourceRef = process.argv[3] || 'HEAD';
 const output = path.resolve('server/import-data/live-website.json');
 const existing = await fs.readFile(output,'utf8').then(JSON.parse).catch(()=>null);
 const before = existing?.baseline || JSON.parse(await fs.readFile('audit-output/website-cms/before/public-site.json', 'utf8'));
-const manifest = { version: 1, pricingBefore: existing?.pricingBefore || before.packages, baselineCapturedAt: existing?.baselineCapturedAt || JSON.parse(await fs.readFile('audit-output/website-cms/before/http-evidence.json','utf8')).checkedAt, source: 'https://thelolabooth.com', sourceRevision: execFileSync('git',['-C',root,'rev-parse','--short','HEAD'],{encoding:'utf8'}).trim(), sourceApprovedAt: execFileSync('git',['-C',root,'show','-s','--format=%cI','HEAD'],{encoding:'utf8'}).trim(), pages: [], packages: [], experiences: [], hero: [], events: [], gallery: [], faqs: before.faqs, testimonials: before.testimonials, media: [], settings: {}, baseline: before };
+const manifest = { version: 1, pricingBefore: existing?.pricingBefore || before.packages, baselineCapturedAt: existing?.baselineCapturedAt || JSON.parse(await fs.readFile('audit-output/website-cms/before/http-evidence.json','utf8')).checkedAt, source: 'https://thelolabooth.com', sourceRevision: execFileSync('git',['-C',root,'rev-parse','--short',sourceRef],{encoding:'utf8'}).trim(), sourceApprovedAt: execFileSync('git',['-C',root,'show','-s','--format=%cI',sourceRef],{encoding:'utf8'}).trim(), pages: [], packages: [], experiences: [], hero: [], events: [], gallery: [], faqs: before.faqs, testimonials: before.testimonials, media: [], settings: {}, baseline: before };
 const assetMap = new Map();
 const homePackageDescriptions = {};
 const text = ($, e) => $(e).text().replace(/\s+/g, ' ').trim();

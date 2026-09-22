@@ -56,8 +56,8 @@
   ],
   "baselineCapturedAt": "2026-09-22T20:16:54.483Z",
   "source": "https://thelolabooth.com",
-  "sourceRevision": "36a6c20",
-  "sourceApprovedAt": "2026-09-22T15:14:10-05:00",
+  "sourceRevision": "3d221d0",
+  "sourceApprovedAt": "2026-09-22T15:26:53-05:00",
   "pages": [
     {
       "slug": "about",
@@ -875,15 +875,15 @@
       "title": "Book Now | The LOLA Booth",
       "seo": {
         "viewport": "width=device-width,initial-scale=1",
-        "description": "Check availability and request a custom quote from The LOLA Booth for weddings, parties, corporate events, and private celebrations.",
+        "description": "Check availability and request a personalized quote from The LOLA Booth for weddings, birthdays, corporate events, brand activations, showers, graduations, and private celebrations.",
         "og:title": "Book Now | The LOLA Booth",
-        "og:description": "Check availability and request a custom quote from The LOLA Booth for weddings, parties, corporate events, and private celebrations.",
+        "og:description": "Start your LOLA booking request. Tell us your date, venue, guest count, preferred experience, and event details.",
         "og:url": "https://thelolabooth.com/availability",
         "og:type": "website",
         "og:image": "https://thelolabooth.com/assets/hero-3.jpg",
         "twitter:card": "summary_large_image",
         "twitter:title": "Book Now | The LOLA Booth",
-        "twitter:description": "Check availability and request a custom quote from The LOLA Booth for weddings, parties, corporate events, and private celebrations.",
+        "twitter:description": "Start your LOLA booking request. Tell us your date, venue, guest count, preferred experience, and event details.",
         "twitter:image": "https://thelolabooth.com/assets/hero-3.jpg",
         "canonical": "https://thelolabooth.com/availability"
       },
@@ -898,29 +898,117 @@
         },
         {
           "tag": "h2",
-          "text": "Let’s Make It Official."
+          "text": "Your Details"
+        },
+        {
+          "tag": "h2",
+          "text": "Your Event"
+        },
+        {
+          "tag": "h2",
+          "text": "Choose Your LOLA Experience"
+        },
+        {
+          "tag": "h2",
+          "text": "Anything Else We Should Know?"
+        },
+        {
+          "tag": "h2",
+          "text": "From request to confirmed."
+        },
+        {
+          "tag": "h3",
+          "text": "Request submitted"
+        },
+        {
+          "tag": "h3",
+          "text": "Availability reviewed"
+        },
+        {
+          "tag": "h3",
+          "text": "Proposal and next steps"
+        },
+        {
+          "tag": "h3",
+          "text": "30% down payment"
+        },
+        {
+          "tag": "h3",
+          "text": "Booking confirmed"
+        },
+        {
+          "tag": "h2",
+          "text": "Your date is held when the booking is confirmed."
+        },
+        {
+          "tag": "h3",
+          "text": "Still choosing an experience?"
+        },
+        {
+          "tag": "h3",
+          "text": "Need pricing details?"
+        },
+        {
+          "tag": "h3",
+          "text": "Have a question first?"
+        },
+        {
+          "tag": "h2",
+          "text": "Not ready to book yet?"
         }
       ],
       "sections": [
         {
           "index": 0,
-          "selector": "section.page-hero.book-hero",
+          "selector": "section.booking-hero",
           "headings": [
             "Your event starts here."
           ]
         },
         {
           "index": 1,
-          "selector": "section.section.book-section",
+          "selector": "section.booking-main",
           "headings": [
-            "Tell us what you’re planning."
+            "Tell us what you’re planning.",
+            "Your Details",
+            "Your Event",
+            "Choose Your LOLA Experience",
+            "Anything Else We Should Know?"
           ]
         },
         {
           "index": 2,
+          "selector": "section.booking-steps",
+          "headings": [
+            "From request to confirmed.",
+            "Request submitted",
+            "Availability reviewed",
+            "Proposal and next steps",
+            "30% down payment",
+            "Booking confirmed"
+          ]
+        },
+        {
+          "index": 3,
+          "selector": "section.deposit-band",
+          "headings": [
+            "Your date is held when the booking is confirmed."
+          ]
+        },
+        {
+          "index": 4,
+          "selector": "section.booking-help",
+          "headings": [
+            "Still choosing an experience?",
+            "Need pricing details?",
+            "Have a question first?"
+          ]
+        },
+        {
+          "index": 5,
           "selector": "section.cta",
           "headings": [
-            "Let’s Make It Official."
+            "Not ready to book yet?"
           ]
         }
       ],
@@ -996,19 +1084,19 @@
           "html": "Your event starts here."
         },
         "availability.019": {
-          "html": "Every celebration is different, so we create a personalised quote around your date, venue, guest count, and the LOLA experience you want. Tell us a little about your event and we’ll take it from there."
+          "html": "Every celebration is different, so we build your quote around the date, venue, guest count, experience, and details that matter to your event."
         },
         "availability.020": {
-          "html": "LET’S CHAT"
+          "html": "Let’s Get Started"
         },
         "availability.021": {
           "html": "Tell us what you’re planning."
         },
         "availability.022": {
-          "html": "Use the form to share the essentials. We’ll review your details, confirm date availability, recommend the best fit, and come back with next steps."
+          "html": "Use the form to share the essentials. We’ll review the date, logistics, and experience options, then come back with availability and next steps."
         },
         "availability.023": {
-          "html": "Your date is not reserved until your booking is confirmed. If you already know what you want, include it below; if not, choose “Not sure yet” and we’ll help."
+          "html": "Submitting this form is a booking request, not a confirmed reservation. Your date is secured only after the required booking documents and 30% down payment are completed."
         },
         "availability.024": {
           "html": "info@thelolabooth.com",
@@ -1019,143 +1107,270 @@
           "href": "tel:+17732402744"
         },
         "availability.026": {
-          "html": "<strong>Service area</strong><br><span class=\"muted\">Available by inquiry</span>"
+          "html": "Ask us a question instead →",
+          "href": "contact.html"
         },
         "availability.027": {
-          "html": "We’ll use these details to review availability and prepare a personalised quote. Your date is not reserved until your booking is confirmed."
+          "html": "Compare Experiences",
+          "href": "experiences.html"
         },
         "availability.028": {
-          "html": "READY WHEN YOU ARE"
+          "html": "View Packages",
+          "href": "packages.html"
         },
         "availability.029": {
-          "html": "Let’s Make It Official."
+          "html": "Read FAQs",
+          "href": "faq.html"
         },
         "availability.030": {
-          "html": "Check your date, tell us what you’re planning, and let’s create something unforgettable together."
+          "html": "01"
         },
         "availability.031": {
-          "html": "Book Now →",
-          "href": "availability.html"
+          "html": "Your Details"
         },
         "availability.032": {
-          "html": "Premium photo booth experiences for weddings, celebrations, corporate events, and brands."
+          "html": "Who should we contact about the event?"
         },
         "availability.033": {
-          "html": "Experiences"
+          "html": "02"
         },
         "availability.034": {
-          "html": "Glam Booth",
-          "href": "experiences.html"
+          "html": "Your Event"
         },
         "availability.035": {
-          "html": "360 Booth",
-          "href": "experiences.html"
+          "html": "Give us the details we need to check availability and logistics."
         },
         "availability.036": {
-          "html": "Vogue Booth",
-          "href": "experiences.html"
+          "html": "03"
         },
         "availability.037": {
-          "html": "Audio Guestbook",
-          "href": "experiences.html"
+          "html": "Choose Your LOLA Experience"
         },
         "availability.038": {
-          "html": "Digital Booth",
-          "href": "experiences.html"
+          "html": "If you are not sure which option fits your event, choose “Not sure yet” and we’ll recommend one."
         },
         "availability.039": {
-          "html": "Add-ons"
+          "html": "See Experiences →",
+          "href": "experiences.html"
         },
         "availability.040": {
-          "html": "Extra Hour",
+          "html": "Compare Packages →",
           "href": "packages.html"
         },
         "availability.041": {
-          "html": "Premium Backdrop",
-          "href": "packages.html"
+          "html": "04"
         },
         "availability.042": {
-          "html": "Additional Prints",
-          "href": "packages.html"
+          "html": "Anything Else We Should Know?"
         },
         "availability.043": {
-          "html": "Guestbook",
-          "href": "packages.html"
+          "html": "Tell us about the feel of the event, special requests, branding needs, or anything unusual."
         },
         "availability.044": {
+          "html": "\n        We’ll use these details to review availability and prepare a personalized quote. Your date is not reserved until your booking is confirmed.\n      "
+        },
+        "availability.045": {
+          "html": "What Happens Next"
+        },
+        "availability.046": {
+          "html": "From request to confirmed."
+        },
+        "availability.047": {
+          "html": "We keep the booking process clear so you always know what happens next."
+        },
+        "availability.048": {
+          "html": "Request submitted"
+        },
+        "availability.049": {
+          "html": "You send the event details through this form."
+        },
+        "availability.050": {
+          "html": "Availability reviewed"
+        },
+        "availability.051": {
+          "html": "We check the date, equipment, staffing, venue needs, and requested experience."
+        },
+        "availability.052": {
+          "html": "Proposal and next steps"
+        },
+        "availability.053": {
+          "html": "You receive the appropriate package, proposal, or custom recommendation."
+        },
+        "availability.054": {
+          "html": "30% down payment"
+        },
+        "availability.055": {
+          "html": "The required down payment and booking documents move the event into confirmation."
+        },
+        "availability.056": {
+          "html": "Booking confirmed"
+        },
+        "availability.057": {
+          "html": "Once confirmed, we move into creative approvals, logistics, and event preparation."
+        },
+        "availability.058": {
+          "html": "Securing Your Date"
+        },
+        "availability.059": {
+          "html": "Your date is held when the booking is confirmed."
+        },
+        "availability.060": {
+          "html": "Submitting a request does not reserve the date. After availability is confirmed, the required booking documents and 30% down payment secure the event in the LOLA calendar."
+        },
+        "availability.061": {
+          "html": "Still choosing an experience?"
+        },
+        "availability.062": {
+          "html": "Compare The Glam, 360 Booth, Vogue, and Audio Guest Book before submitting."
+        },
+        "availability.063": {
+          "html": "Explore Experiences →",
+          "href": "experiences.html"
+        },
+        "availability.064": {
+          "html": "Need pricing details?"
+        },
+        "availability.065": {
+          "html": "Review starting prices, package lengths, included features, and add-ons."
+        },
+        "availability.066": {
+          "html": "View Packages →",
+          "href": "packages.html"
+        },
+        "availability.067": {
+          "html": "Have a question first?"
+        },
+        "availability.068": {
+          "html": "Check common questions about setup, deposits, printing, travel, customization, and more."
+        },
+        "availability.069": {
+          "html": "Browse FAQs →",
+          "href": "faq.html"
+        },
+        "availability.070": {
+          "html": "NEED HELP FIRST?"
+        },
+        "availability.071": {
+          "html": "Not ready to book yet?"
+        },
+        "availability.072": {
+          "html": "Send us a question and we’ll help you figure out the right experience before you submit a booking request."
+        },
+        "availability.073": {
+          "html": "Contact Us →",
+          "href": "contact.html"
+        },
+        "availability.074": {
+          "html": "Premium photo booth experiences for weddings, celebrations, corporate events, and brands."
+        },
+        "availability.075": {
+          "html": "Experiences"
+        },
+        "availability.076": {
+          "html": "The Glam",
+          "href": "experiences.html#glam"
+        },
+        "availability.077": {
+          "html": "The 360 Booth",
+          "href": "experiences.html#360"
+        },
+        "availability.078": {
+          "html": "The Vogue",
+          "href": "experiences.html#vogue"
+        },
+        "availability.079": {
+          "html": "The Audio Guest Book",
+          "href": "experiences.html#audio"
+        },
+        "availability.080": {
+          "html": "Add-ons"
+        },
+        "availability.081": {
+          "html": "Additional Hours",
+          "href": "packages.html"
+        },
+        "availability.082": {
+          "html": "Premium Backdrops",
+          "href": "packages.html"
+        },
+        "availability.083": {
+          "html": "On-site Printing",
+          "href": "packages.html"
+        },
+        "availability.084": {
           "html": "Custom Signage",
           "href": "packages.html"
         },
-        "availability.045": {
+        "availability.085": {
           "html": "Branding",
           "href": "packages.html"
         },
-        "availability.046": {
+        "availability.086": {
           "html": "Events"
         },
-        "availability.047": {
+        "availability.087": {
           "html": "Weddings",
-          "href": "events.html"
+          "href": "events.html#weddings"
         },
-        "availability.048": {
+        "availability.088": {
           "html": "Birthdays",
-          "href": "events.html"
+          "href": "events.html#birthdays"
         },
-        "availability.049": {
+        "availability.089": {
           "html": "Corporate Events",
-          "href": "events.html"
+          "href": "events.html#corporate"
         },
-        "availability.050": {
+        "availability.090": {
           "html": "Showers",
-          "href": "events.html"
+          "href": "events.html#showers"
         },
-        "availability.051": {
+        "availability.091": {
           "html": "Graduations",
-          "href": "events.html"
+          "href": "events.html#graduations"
         },
-        "availability.052": {
+        "availability.092": {
           "html": "Private Events",
-          "href": "events.html"
+          "href": "events.html#private-events"
         },
-        "availability.053": {
+        "availability.093": {
           "html": "Company"
         },
-        "availability.054": {
+        "availability.094": {
           "html": "About LOLA",
           "href": "about.html"
         },
-        "availability.055": {
+        "availability.095": {
           "html": "Gallery",
           "href": "gallery.html"
         },
-        "availability.056": {
+        "availability.096": {
           "html": "FAQ",
           "href": "faq.html"
         },
-        "availability.057": {
+        "availability.097": {
           "html": "Contact",
           "href": "contact.html"
         },
-        "availability.058": {
+        "availability.098": {
           "html": "Get in touch"
         },
-        "availability.059": {
+        "availability.099": {
           "html": "Book Now",
           "href": "availability.html"
         },
-        "availability.060": {
+        "availability.100": {
           "html": "info@thelolabooth.com",
           "href": "mailto:info@thelolabooth.com"
         },
-        "availability.061": {
+        "availability.101": {
           "html": "(773) 240-2744",
           "href": "tel:+17732402744"
         },
-        "availability.062": {
+        "availability.102": {
           "html": "Privacy",
           "href": "privacy.html"
         },
-        "availability.063": {
+        "availability.103": {
           "html": "Terms",
           "href": "terms.html"
         }
@@ -1238,43 +1453,71 @@
           "href": "tel:+17732402744"
         },
         {
-          "text": "Book Now →",
-          "href": "availability.html"
+          "text": "Ask us a question instead →",
+          "href": "contact.html"
         },
         {
-          "text": "Glam Booth",
+          "text": "Compare Experiences",
           "href": "experiences.html"
         },
         {
-          "text": "360 Booth",
-          "href": "experiences.html"
-        },
-        {
-          "text": "Vogue Booth",
-          "href": "experiences.html"
-        },
-        {
-          "text": "Audio Guestbook",
-          "href": "experiences.html"
-        },
-        {
-          "text": "Digital Booth",
-          "href": "experiences.html"
-        },
-        {
-          "text": "Extra Hour",
+          "text": "View Packages",
           "href": "packages.html"
         },
         {
-          "text": "Premium Backdrop",
+          "text": "Read FAQs",
+          "href": "faq.html"
+        },
+        {
+          "text": "See Experiences →",
+          "href": "experiences.html"
+        },
+        {
+          "text": "Compare Packages →",
           "href": "packages.html"
         },
         {
-          "text": "Additional Prints",
+          "text": "Explore Experiences →",
+          "href": "experiences.html"
+        },
+        {
+          "text": "View Packages →",
           "href": "packages.html"
         },
         {
-          "text": "Guestbook",
+          "text": "Browse FAQs →",
+          "href": "faq.html"
+        },
+        {
+          "text": "Contact Us →",
+          "href": "contact.html"
+        },
+        {
+          "text": "The Glam",
+          "href": "experiences.html#glam"
+        },
+        {
+          "text": "The 360 Booth",
+          "href": "experiences.html#360"
+        },
+        {
+          "text": "The Vogue",
+          "href": "experiences.html#vogue"
+        },
+        {
+          "text": "The Audio Guest Book",
+          "href": "experiences.html#audio"
+        },
+        {
+          "text": "Additional Hours",
+          "href": "packages.html"
+        },
+        {
+          "text": "Premium Backdrops",
+          "href": "packages.html"
+        },
+        {
+          "text": "On-site Printing",
           "href": "packages.html"
         },
         {
@@ -1287,27 +1530,27 @@
         },
         {
           "text": "Weddings",
-          "href": "events.html"
+          "href": "events.html#weddings"
         },
         {
           "text": "Birthdays",
-          "href": "events.html"
+          "href": "events.html#birthdays"
         },
         {
           "text": "Corporate Events",
-          "href": "events.html"
+          "href": "events.html#corporate"
         },
         {
           "text": "Showers",
-          "href": "events.html"
+          "href": "events.html#showers"
         },
         {
           "text": "Graduations",
-          "href": "events.html"
+          "href": "events.html#graduations"
         },
         {
           "text": "Private Events",
-          "href": "events.html"
+          "href": "events.html#private-events"
         },
         {
           "text": "About LOLA",
