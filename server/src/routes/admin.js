@@ -1743,7 +1743,14 @@ const packageSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional().nullable(),
   short_description: z.string().optional().nullable(),
-  starting_price: money,
+  starting_price: money.nullable(),
+  website_key: z.string().regex(/^[a-z0-9-]+:[a-z0-9-]+$/).optional().nullable(),
+  experience_id: uuid.optional().nullable(),
+  pricing_mode: z.enum(["STARTING", "CUSTOM"]).optional(),
+  website_features: z.array(z.string()).optional(),
+  website_custom_heading: z.string().optional().nullable(),
+  website_home_description: z.string().optional().nullable(),
+  website_status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).optional(),
   currency: z.string().default("USD"),
   active: z.boolean().default(true),
   featured: z.boolean().default(false),
@@ -1759,19 +1766,19 @@ const packageSchema = z.object({
   website_image_media_id: uuid.optional().nullable(),
   website_display_order: z.coerce.number().int().optional(),
   website_featured: z.boolean().optional()
-}).passthrough();
+}).strip();
 
-async function enforceMostPopular(client, id, mostPopular) {
+async function enforceMostPopular(client, id, mostPopular, experienceId) {
   if (mostPopular) {
-    await client.query("UPDATE packages SET most_popular=false WHERE id <> $1 AND deleted_at IS NULL", [id]);
+    await client.query("UPDATE packages SET most_popular=false WHERE id <> $1 AND experience_id IS NOT DISTINCT FROM $2::uuid AND deleted_at IS NULL", [id, experienceId || null]);
   }
 }
 
 adminRouter.post("/packages", requirePermission("write:content"), validate(packageSchema), asyncHandler(async (req, res) => {
   const inserted = await transaction(async (client) => {
-    if (req.body.most_popular) await client.query("UPDATE packages SET most_popular=false WHERE deleted_at IS NULL");
+    if (req.body.most_popular) await client.query("UPDATE packages SET most_popular=false WHERE experience_id IS NOT DISTINCT FROM $1::uuid AND deleted_at IS NULL", [req.body.experience_id || null]);
     const fields = Object.keys(req.body);
-    const values = Object.values(req.body);
+    const values = Object.entries(req.body).map(([key, value]) => key === "website_features" ? JSON.stringify(value) : value);
     const result = await client.query(`INSERT INTO packages (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values);
     return result.rows[0];
   });
@@ -1783,10 +1790,10 @@ adminRouter.patch("/packages/:id", requirePermission("write:content"), validate(
   const before = await query("SELECT * FROM packages WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Package");
   const updated = await transaction(async (client) => {
-    const fields = Object.keys(cleanPatch(req.body, ["name", "description", "short_description", "starting_price", "currency", "active", "featured", "most_popular", "display_order", "duration", "included_hours", "default_deposit", "proposal_description", "website_description", "show_on_website", "website_short_description", "website_image_media_id", "website_display_order", "website_featured"]));
+    const fields = Object.keys(cleanPatch(req.body, ["name", "description", "short_description", "starting_price", "currency", "active", "featured", "most_popular", "display_order", "duration", "included_hours", "default_deposit", "proposal_description", "website_description", "show_on_website", "website_short_description", "website_image_media_id", "website_display_order", "website_featured", "website_key", "experience_id", "pricing_mode", "website_features", "website_custom_heading", "website_home_description", "website_status"]));
     if (!fields.length) throw new AppError("No supported fields to update.", 400, "NO_FIELDS");
-    if (req.body.most_popular) await enforceMostPopular(client, req.params.id, true);
-    const values = fields.map((field) => req.body[field]);
+    if (req.body.most_popular) await enforceMostPopular(client, req.params.id, true, req.body.experience_id ?? before.rows[0].experience_id);
+    const values = fields.map((field) => field === "website_features" ? JSON.stringify(req.body[field]) : req.body[field]);
     values.push(req.params.id);
     const result = await client.query(`UPDATE packages SET ${fields.map((field, i) => `${field}=$${i + 1}`).join(", ")}, updated_at=now() WHERE id=$${values.length} AND deleted_at IS NULL RETURNING *`, values);
     return (await client.query("SELECT * FROM packages WHERE id=$1", [req.params.id])).rows[0];

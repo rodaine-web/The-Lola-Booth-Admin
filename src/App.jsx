@@ -80,7 +80,7 @@ export default function App() {
         <Route path="website/homepage" element={<WebsiteCms section="homepage" />} />
         <Route path="website/hero-slides" element={<WebsiteCms section="hero" />} />
         <Route path="website/gallery" element={<WebsiteCms section="gallery" />} />
-        <Route path="website/packages" element={<ResourcePage title="Website Packages" endpoint="/packages" phase="Website CMS" columns={["name", "starting_price", "most_popular", "show_on_website", "website_featured"]} fields={packageFields} />} />
+        <Route path="website/packages" element={<ResourcePage title="Website Packages" endpoint="/packages" phase="Website CMS" columns={["name", "website_key", "starting_price", "pricing_mode", "website_status", "most_popular"]} fields={packageFields} />} />
         <Route path="website/experiences" element={<ResourcePage title="Website Experiences" endpoint="/experiences" phase="Website CMS" columns={["name", "website_name", "show_on_website", "website_featured", "active"]} fields={experienceFields} />} />
         <Route path="website/events" element={<WebsiteCms section="events" />} />
         <Route path="website/testimonials" element={<WebsiteCms section="testimonials" />} />
@@ -115,6 +115,7 @@ const eventFields = [
 ];
 
 const packageFields = [
+  ["experience_id", "Experience", "relationship", { resource: "experiences" }], ["website_key", "Website identity (for example glam:essential)"], ["pricing_mode", "Pricing mode", "select", { options: ["STARTING", "CUSTOM"] }], ["website_status", "Website publish status", "select", { options: ["DRAFT", "PUBLISHED", "ARCHIVED"] }], ["website_features", "Website features (one per line)", "lines"], ["website_custom_heading", "Custom package heading"], ["website_home_description", "Homepage description", "textarea"],
   ["name", "Name"], ["description", "Description", "textarea"], ["short_description", "Short description"], ["starting_price", "Starting price", "number"], ["currency", "Currency"], ["active", "Active", "checkbox"], ["featured", "Featured", "checkbox"], ["most_popular", "Most popular", "checkbox"], ["display_order", "Display order", "number"], ["duration", "Duration", "number"], ["included_hours", "Included hours", "number"], ["default_deposit", "Default deposit", "number"], ["proposal_description", "Proposal description", "textarea"], ["website_description", "Website description", "textarea"], ["show_on_website", "Show on website", "checkbox"], ["website_short_description", "Website short description", "textarea"], ["website_image_media_id", "Website image media ID"], ["website_display_order", "Website display order", "number"], ["website_featured", "Website featured", "checkbox"]
 ];
 

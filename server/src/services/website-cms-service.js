@@ -1,4 +1,5 @@
 import path from "node:path";
+import { projectWebsitePackage } from "./website-pricing.js";
 import { query, transaction } from "../db/pool.js";
 import { getStorageProvider } from "./storage-service.js";
 import { AppError, notFound } from "../utils/errors.js";
@@ -283,13 +284,13 @@ export async function publicSitePayload({ preview = false } = {}) {
         AND (h.publish_start IS NULL OR h.publish_start <= now())
         AND (h.publish_end IS NULL OR h.publish_end >= now())
       ORDER BY h.display_order, h.created_at`),
-    query("SELECT id, name, short_description, website_short_description, website_description, starting_price, currency, most_popular, website_featured, website_display_order FROM packages WHERE deleted_at IS NULL AND active=true AND show_on_website=true ORDER BY website_display_order, display_order, starting_price"),
-    query("SELECT id, name, website_name, description, website_short_description, website_long_description, features, base_price, default_duration, website_featured, display_order, cover_image_media_id FROM experiences WHERE deleted_at IS NULL AND active=true AND show_on_website=true ORDER BY display_order, name"),
+    query(`SELECT p.id, p.name, p.short_description, p.website_short_description, p.website_description, p.starting_price, p.currency, p.most_popular, p.website_featured, p.website_display_order, p.website_key, p.experience_id, p.pricing_mode, p.website_features, p.website_custom_heading, p.website_home_description, p.updated_at, e.slug AS experience_slug FROM packages p LEFT JOIN experiences e ON e.id=p.experience_id WHERE p.deleted_at IS NULL AND p.active=true AND p.show_on_website=true AND ${preview ? "p.website_status <> 'ARCHIVED'" : "p.website_status='PUBLISHED'"} ORDER BY e.display_order, p.website_display_order, p.display_order, p.id`),
+    query("SELECT id, slug, name, website_name, description, website_short_description, website_long_description, features, base_price, default_duration, website_featured, display_order, cover_image_media_id FROM experiences WHERE deleted_at IS NULL AND active=true AND show_on_website=true ORDER BY display_order, name"),
     query(`SELECT id, name, slug, short_description, long_description, image_media_id, display_order, seo_title, meta_description FROM website_event_types WHERE deleted_at IS NULL AND show_on_website=true AND ${statusFilter} ORDER BY display_order, name`),
     query(`SELECT g.id, g.title, g.caption, COALESCE(g.alt_text, m.alt_text) AS alt_text, g.category, g.tags, g.display_order, g.is_featured, m.id AS media_id, m.width, m.height, m.thumbnail_key
       FROM website_gallery_items g
       JOIN media_library m ON m.id=g.media_id
-      WHERE g.deleted_at IS NULL AND g.status='PUBLISHED' AND m.visibility='PUBLIC' AND m.permission_state='APPROVED'
+      WHERE g.deleted_at IS NULL AND ${preview ? "g.status <> 'ARCHIVED'" : "g.status='PUBLISHED'"} AND m.deleted_at IS NULL AND m.visibility='PUBLIC' AND m.permission_state='APPROVED'
       ORDER BY g.is_featured DESC, g.display_order, g.published_at DESC`),
     query(`SELECT id, COALESCE(client_display_name, client_name) AS client_display_name, event_type, quote, rating, is_featured, display_order, client_photo_media_id
       FROM testimonials WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY is_featured DESC, display_order, created_at DESC`),
@@ -300,7 +301,7 @@ export async function publicSitePayload({ preview = false } = {}) {
     settings: settings.rows[0] || {},
     content: Object.fromEntries(content.rows.map((row) => [row.content_key, row])),
     heroSlides: hero.rows.length ? hero.rows.map(projectHero) : [fallbackHeroSlide()],
-    packages: packages.rows.map((row) => ({ ...row, display_price: settings.rows[0]?.show_starting_price === false ? "Request Pricing" : row.starting_price })),
+    packages: packages.rows.map((row) => projectWebsitePackage(row, { showStartingPrice: settings.rows[0]?.show_starting_price !== false })),
     experiences: experiences.rows.map(projectExperience),
     eventTypes: eventTypes.rows.map(withMediaUrl),
     gallery: gallery.rows.map(projectGalleryItem),

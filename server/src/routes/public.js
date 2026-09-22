@@ -82,7 +82,7 @@ publicRouter.post("/inquiries", (req, _res, next) => {
 }));
 
 function cachePublicContent(res) {
-  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+  res.set("Cache-Control", "public, max-age=0, must-revalidate");
 }
 
 publicRouter.get("/site", asyncHandler(async (_req, res) => {

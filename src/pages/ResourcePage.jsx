@@ -23,13 +23,14 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
 
   function openCreate() {
     setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? false : ""])));
+    if (endpoint === "/packages") setForm(current => ({ ...current, pricing_mode: "STARTING", website_status: "DRAFT", currency: "USD", active: true }));
     setEditing({ mode: "create" });
     setError("");
     setNotice("");
   }
 
   function openEdit(row) {
-    setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(row[name]) : row[name] ?? ""])));
+    setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(row[name]) : type === "lines" ? (row[name] || []).join("\n") : row[name] ?? ""])));
     setEditing({ mode: "edit", id: row.id });
     setError("");
     setNotice("");
@@ -40,6 +41,8 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     setError("");
     setNotice("");
     const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value === "" ? null : value]));
+    for (const [name, , type] of fields) if (type === "lines") payload[name] = String(form[name] || "").split("\n").map(value => value.trim()).filter(Boolean);
+    if (endpoint === "/packages" && payload.pricing_mode === "CUSTOM") payload.starting_price = null;
     try {
       if (editing.mode === "edit") {
         await api.patch(`${endpoint}/${editing.id}`, payload);
@@ -87,8 +90,10 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
               {fields.map(([name, label, type = "text", config = {}]) => (
                 <label key={name} className={type === "textarea" ? "wide" : ""}>
                   {label}
-                  {type === "textarea" ? (
+                  {type === "textarea" || type === "lines" ? (
                     <textarea value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                  ) : type === "select" ? (
+                    <select value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
                   ) : type === "checkbox" ? (
                     <input type="checkbox" checked={Boolean(form[name])} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.checked }))} />
                   ) : type === "relationship" ? (

@@ -13,3 +13,6 @@ pnpm-debug.log*
 coverage
 storage/uploads
 .vercel
+
+# Local website audit captures and screenshots (reports are in docs/).
+audit-output/

@@ -1,0 +1,65 @@
+// Destructive only within a newly created, explicitly named local test database.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import pg from 'pg';
+import assert from 'node:assert/strict';
+import { importWebsiteContent } from '../services/website-content-import.js';
+import { LocalStorageProvider } from '../services/storage-service.js';
+const root=process.env.LOLA_WEBSITE_ROOT||'/private/tmp/lola-website-cms';
+const db=new pg.Client({host:'/private/tmp',port:55439,database:'postgres'});
+await db.connect();
+const name=`lola_cms_verify_${Date.now()}`;
+await db.query(`CREATE DATABASE ${name}`);
+const client=new pg.Client({host:'/private/tmp',port:55439,database:name});await client.connect();
+try{
+  for(const file of (await fs.readdir('server/migrations')).filter(x=>/^0(0\d|1[0-5]|21)_.*\.sql$/.test(x)).sort())await client.query(await fs.readFile(`server/migrations/${file}`,'utf8'));
+  const manifest=JSON.parse(await fs.readFile('server/import-data/live-website.json','utf8'));
+  async function insert(table,source){
+    const cols=(await client.query('SELECT column_name,data_type FROM information_schema.columns WHERE table_name=$1',[table])).rows;
+    source={...source,created_at:'2026-09-01T00:00:00Z',updated_at:'2026-09-01T00:00:00Z'};
+    const entries=Object.entries(source).filter(([k])=>cols.some(c=>c.column_name===k));
+    await client.query(`INSERT INTO ${table} (${entries.map(([k])=>k).join(',')}) VALUES (${entries.map((_,i)=>`$${i+1}`).join(',')})`,entries.map(([k,v])=>cols.find(c=>c.column_name===k).data_type==='jsonb'?JSON.stringify(v):v));
+  }
+  for(const e of manifest.baseline.experiences)await insert('experiences',{...e,slug:e.slug||e.name.toLowerCase().replaceAll(' ','-')});
+  for(const p of manifest.baseline.packages)await insert('packages',p);
+  for(const f of manifest.faqs)await insert('faqs',{...f,status:'PUBLISHED'});
+  await client.query('DELETE FROM business_settings');await insert('business_settings',manifest.baseline.settings);
+  const opts={storage:new LocalStorageProvider('/private/tmp/lola-cms-verify-media'),readAsset:a=>fs.readFile(path.join(root,a.path))};
+  await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+  const first=await importWebsiteContent(client,manifest,{...opts,dryRun:true});await client.query('ROLLBACK');
+  await fs.mkdir('audit-output/website-cms/local',{recursive:true});await fs.writeFile('audit-output/website-cms/local/dry-run.json',JSON.stringify(first,null,2));
+  assert.equal(first.filter(x=>x.action==='CONFLICT').length,0,JSON.stringify(first.filter(x=>x.action==='CONFLICT')));
+  assert.equal((await client.query('SELECT count(*) FROM website_import_state')).rows[0].count,'0');
+  await client.query('BEGIN');const applied=await importWebsiteContent(client,manifest,{...opts,dryRun:false});await client.query('COMMIT');
+  await client.query('BEGIN READ ONLY');const second=await importWebsiteContent(client,manifest,opts);await client.query('ROLLBACK');
+  assert.ok(second.every(x=>x.action==='SKIP'),JSON.stringify(second.filter(x=>x.action!=='SKIP')));
+  await client.query("UPDATE packages SET starting_price=650 WHERE website_key='glam:essential'");
+  await client.query('BEGIN READ ONLY');const edited=await importWebsiteContent(client,manifest,opts);await client.query('ROLLBACK');
+  assert.ok(edited.some(x=>x.action==='CONFLICT'&&x.key==='glam:essential'));
+  await client.query("UPDATE packages SET starting_price=599 WHERE website_key='glam:essential'");
+  process.env.DATABASE_URL=`postgresql://localhost:55439/${name}?host=/private/tmp`;
+  const {env}=await import('../config/env.js');env.databaseUrl=process.env.DATABASE_URL;
+  const {publicSitePayload}=await import('../services/website-cms-service.js');
+  const payload=await publicSitePayload();
+  assert.equal(payload.packages.length,16);
+  assert.equal(payload.experiences.length,4);
+  assert.equal(payload.packages.filter(p=>p.pricing_mode==='CUSTOM'&&p.starting_price===null).length,4);
+  await client.query("UPDATE packages SET website_status='DRAFT' WHERE website_key='glam:essential'");
+  assert.equal((await publicSitePayload()).packages.length,15);
+  assert.equal((await publicSitePayload({preview:true})).packages.length,16);
+  await fs.writeFile('audit-output/website-cms/local/public-site.json',JSON.stringify(payload,null,2));
+  const cms=await import('../services/website-cms-service.js');
+  const user=(await client.query("INSERT INTO users(name,email,password_hash) VALUES ('Local QA','cms-qa@example.invalid','disabled') RETURNING id")).rows[0];
+  const req={user,body:{}};
+  const faq=payload.faqs[0];
+  await cms.updateCmsRecord({...req,body:{answer:'QA updated answer'}},'faqs',faq.id);
+  assert.equal((await publicSitePayload()).faqs.find(f=>f.id===faq.id).answer,'QA updated answer');
+  await cms.unpublishCmsRecord(req,'faqs',faq.id);
+  assert.ok(!(await publicSitePayload()).faqs.some(f=>f.id===faq.id));
+  assert.ok((await publicSitePayload({preview:true})).faqs.some(f=>f.id===faq.id));
+  await cms.publishCmsRecord(req,'faqs',faq.id);
+  await cms.reorderCmsRecords(req,'faqs',payload.faqs.map(f=>f.id).reverse());
+  assert.equal((await publicSitePayload()).faqs[0].id,payload.faqs.at(-1).id);
+  const {pool}=await import('../db/pool.js');await pool.end();
+  console.log(JSON.stringify({database:name,first:first.reduce((s,x)=>(s[x.action]=(s[x.action]||0)+1,s),{}),second:second.reduce((s,x)=>(s[x.action]=(s[x.action]||0)+1,s),{}),manualEditProtected:true,publicationFiltering:true},null,2));
+}finally{await client.end();await db.query(`DROP DATABASE ${name}`);await db.end();}

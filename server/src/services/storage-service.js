@@ -19,6 +19,14 @@ export class LocalStorageProvider {
   async get(storageKey) {
     return fs.readFile(path.join(this.root, storageKey));
   }
+
+  async putAt({ buffer, storageKey }) {
+    if (!/^website-import\/[a-f0-9]{64}\/[a-zA-Z0-9_.-]+$/.test(storageKey)) throw new Error("Invalid content-addressed media key.");
+    const target = path.join(this.root, storageKey);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, buffer);
+    return { storageProvider: "LOCAL", storageKey };
+  }
 }
 
 export class S3CompatibleStorageProvider {
