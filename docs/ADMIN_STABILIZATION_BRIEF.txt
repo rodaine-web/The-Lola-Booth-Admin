@@ -1,0 +1,1951 @@
+LOLA ADMIN — PRODUCT STABILIZATION + OPERATIONS DASHBOARD REDESIGN
+
+IMPORTANT PRODUCT DECISION
+
+LOLA Admin is NOT production-ready.
+
+DO NOT deploy this Admin/API/worker to production during this sprint.
+
+DO NOT create a staging environment yet.
+
+We will continue developing and testing locally/current development environment until
+the Admin reaches an acceptable product-quality baseline.
+
+Only AFTER this sprint is completed, thoroughly tested, visually approved, and the
+business workflows work end-to-end will we create an isolated staging environment.
+
+The public website v1 remains separate/frozen for now unless specifically required for
+local/API contract testing.
+
+PAYMENTS ARE OUT OF SCOPE.
+
+Do NOT:
+- enable Stripe
+- execute payments
+- test live payments
+- change payment-provider architecture
+- enable SMS
+- deploy incomplete Admin changes to production
+
+==================================================
+CURRENT AUDIT BASELINE
+==================================================
+
+Use the September 24 Admin audit as the defect baseline.
+
+Known results:
+
+- 159 automated tests passed
+- production client build passed
+- 16 disposable DB integration groups passed
+- all migrations through 023 are present/applied in audited environment
+- core CRM/document/access-control foundation exists
+
+BUT the Admin is NOT operationally ready.
+
+Confirmed major problems include:
+
+1. Communications module is broken.
+2. Date-only values shift backward by one day.
+3. Currency/decimal formatting is inconsistent.
+4. Raw IDs appear throughout the UI.
+5. Proposal/invoice legacy records have inconsistent identifiers/data.
+6. CMS source-of-truth migration is incomplete.
+7. Equipment UI is incomplete.
+8. Staff UI is incomplete.
+9. Files UI is incomplete.
+10. Client Galleries UI is incomplete.
+11. Dashboard/Analytics use contaminated QA/seed data and inconsistent formatting.
+12. Integration cards disagree with actual system health.
+13. Settings contain inconsistent business information.
+14. Some controls visually exist but do nothing.
+15. Navigation has excessive/redundant complexity.
+16. Mobile Dashboard is too long.
+17. Live Operations board overflows horizontally.
+18. Audit Log is too technical/raw.
+19. Calendar selectors expose raw IDs.
+20. Tasks expose raw user IDs.
+21. Proposal and invoice records require data consistency work.
+
+We are fixing PRODUCT QUALITY, not increasing feature count.
+
+==================================================
+PHASE 1 — DEFECT REPRODUCTION FIRST
+==================================================
+
+Before fixing:
+
+create automated/integration/browser regression cases reproducing each confirmed defect
+where practical.
+
+Do not simply alter code until the visible problem disappears.
+
+At minimum reproduce:
+
+- Communications SQL failure
+- date-only December 16 → December 15 bug
+- unformatted currencies
+- excessive decimal precision
+- raw IDs in selectors
+- blank proposal numbers
+- inconsistent invoice balance/list-detail behavior
+- inactive/one-option fake filters
+- integration health mismatch
+- current Dashboard formatting issues
+
+Return:
+
+DEFECT
+REPRODUCED?
+ROOT CAUSE
+TEST ADDED?
+FIX STATUS
+
+==================================================
+PHASE 2 — COMMUNICATIONS P0 FIX
+==================================================
+
+CURRENT LIVE DEFECT:
+
+Communications remains stuck at:
+
+Loading communications…
+
+Backend list service fails with PostgreSQL:
+
+42702 ambiguous deleted_at
+
+Audit found joins where `deleted_at` is not table-qualified.
+
+Fix the underlying SQL.
+
+Inspect:
+
+listCommunications
+status filters
+joins
+deleted_at filters
+sorting
+pagination
+search
+
+Fully qualify ambiguous columns.
+
+Do not merely catch/suppress the SQL error.
+
+==================================================
+PHASE 3 — COMMUNICATIONS ERROR UX
+==================================================
+
+Current UI returns the loading branch before displaying the caught error.
+
+Fix state handling.
+
+Every data screen should distinguish:
+
+LOADING
+SUCCESS
+EMPTY
+ERROR
+
+Error state should provide:
+
+- understandable message
+- retry control
+- request ID if available
+- no stack traces
+
+Do not leave users staring at indefinite loading text.
+
+==================================================
+PHASE 4 — COMPLETE COMMUNICATIONS UAT
+==================================================
+
+After fixing list query, verify:
+
+Communications list
+Templates
+Automations
+Compose Email
+Draft
+Preview
+Send via development/test provider only
+Schedule
+Cancel scheduled
+Retry failed
+Communication detail
+Related Lead
+Related Client
+Related Event
+Related Proposal
+Related Invoice
+
+Payment email sending is not part of this sprint.
+
+==================================================
+PHASE 5 — DATE-ONLY CORRECTNESS
+==================================================
+
+P0 BUSINESS DATA DEFECT:
+
+A date stored as:
+
+2027-12-16
+
+currently renders as:
+
+December 15
+
+in some Admin views.
+
+Fix date-only handling system-wide.
+
+IMPORTANT:
+
+DATE-ONLY VALUES ARE NOT UTC TIMESTAMPS.
+
+Examples:
+
+event date
+due date
+proposal date
+invoice date
+birth/event calendar date where applicable
+
+Do not convert YYYY-MM-DD into a Date object that shifts through timezone conversion.
+
+Create shared helpers for:
+
+DATE ONLY
+DATE + TIME IN BUSINESS TIMEZONE
+TIMESTAMP
+
+Audit all existing date helpers.
+
+==================================================
+PHASE 6 — DATE REGRESSION TESTS
+==================================================
+
+Test date-only rendering in representative timezone offsets.
+
+A stored:
+
+2027-12-16
+
+must display:
+
+December 16, 2027
+
+regardless of browser timezone.
+
+Do not change actual timestamp semantics for:
+
+created_at
+updated_at
+sent_at
+paid_at
+audit timestamps
+
+==================================================
+PHASE 7 — SHARED DISPLAY FORMATTERS
+==================================================
+
+Create one reusable formatting layer for Admin.
+
+Use consistently for:
+
+currency
+money
+percentages
+dates
+date/time
+statuses
+booleans
+counts
+identifiers
+
+Examples of unacceptable output:
+
+$2,877.6
+999.2000000000000000
+true
+false
+null
+raw UUID
+
+Expected:
+
+$2,877.60
+$999.20
+
+and business-readable labels.
+
+==================================================
+PHASE 8 — STATUS DESIGN SYSTEM
+==================================================
+
+Create a restrained Admin status system using:
+
+GREEN
+YELLOW / AMBER
+RED
+NEUTRAL / GRAY
+BLUE where informational status is required
+
+Use semantic meaning consistently.
+
+GREEN:
+healthy
+complete
+paid
+ready
+available
+successful
+
+YELLOW / AMBER:
+warning
+attention required
+partial
+pending
+due soon
+not yet ready
+
+RED:
+failed
+overdue
+blocked
+incident
+unhealthy
+conflict
+
+GRAY:
+disabled
+inactive
+draft
+not configured
+not applicable
+
+Do NOT use red/yellow/green decoratively.
+
+Do not turn LOLA into a rainbow dashboard.
+
+Preserve LOLA:
+
+ivory
+charcoal
+champagne
+gold
+
+as the core interface palette.
+
+Status colors are accents for operational meaning.
+
+==================================================
+PHASE 9 — ACCESSIBLE STATUS COLORS
+==================================================
+
+Never communicate status by color alone.
+
+Use:
+
+icon
+label
+color
+
+Example:
+
+● Ready
+▲ Needs attention
+● Blocked
+
+Ensure sufficient contrast.
+
+==================================================
+PHASE 10 — DASHBOARD REDESIGN
+==================================================
+
+The Dashboard currently contains useful data but visually behaves too much like
+a group of plain cards.
+
+Redesign it as a premium operations dashboard.
+
+Do NOT create an overly colorful SaaS template.
+
+Desired feeling:
+
+LOLA brand
++
+executive business dashboard
++
+live operations command center
+
+==================================================
+PHASE 11 — DASHBOARD STRUCTURE
+==================================================
+
+Recommended hierarchy:
+
+TOP
+
+Date range:
+Today
+This Week
+Month to Date
+Year to Date
+
+Then:
+
+EXECUTIVE KPIs
+
+Revenue
+Leads
+Bookings
+Events
+Outstanding
+Conversion
+
+Then:
+
+SALES + REVENUE VISUALS
+
+Then:
+
+EVENT OPERATIONS / READINESS
+
+Then:
+
+ATTENTION REQUIRED
+
+Then:
+
+RECENT ACTIVITY / TASKS
+
+Avoid making mobile users scroll through dozens of equally weighted cards.
+
+==================================================
+PHASE 12 — KPI CARDS
+==================================================
+
+Improve KPI cards.
+
+Each card should contain:
+
+primary number
+clear label
+optional comparison/change
+compact trend visualization where useful
+click-through action
+status accent only where semantically appropriate
+
+Example:
+
+BOOKED REVENUE
+$18,450
+↑ 12% vs prior period
+
+Do not invent comparisons unless backend data supports them.
+
+==================================================
+PHASE 13 — INTERACTIVE REVENUE GRAPH
+==================================================
+
+Create an interactive revenue chart.
+
+Possible series where actual data supports them:
+
+Booked Revenue
+Collected Revenue
+Outstanding Revenue
+
+Respect selected Dashboard date range.
+
+Click/interaction should navigate to the corresponding filtered financial records
+where meaningful.
+
+PAYMENT EXECUTION remains out of scope.
+
+==================================================
+PHASE 14 — SALES PIPELINE VISUAL
+==================================================
+
+Create an interactive lead/proposal funnel.
+
+Example stages based on actual current lifecycle:
+
+New Inquiry
+Contacted
+Qualified
+Proposal
+Booked
+
+Use actual lifecycle values.
+
+Do not invent stages merely for design.
+
+Clicking a stage should open Leads filtered to that stage.
+
+==================================================
+PHASE 15 — LEAD SOURCE GRAPH
+==================================================
+
+Create visual source breakdown:
+
+Website
+Referral
+Instagram
+TikTok
+LinkedIn
+Other
+
+Only include sources present in actual data/config.
+
+Click source:
+→ filtered Leads.
+
+==================================================
+PHASE 16 — EVENT READINESS VISUAL
+==================================================
+
+Create an Event Readiness / Operations widget.
+
+Use green/yellow/red.
+
+Examples:
+
+READY
+NEEDS ATTENTION
+BLOCKED
+
+Possible readiness inputs already present in the system:
+
+staff assigned
+equipment assigned
+creative approved
+run sheet ready
+event details complete
+incident status
+
+Use existing readiness scoring architecture.
+
+Do not invent fake checks.
+
+==================================================
+PHASE 17 — ATTENTION REQUIRED PANEL
+==================================================
+
+Replace confusing alerts such as:
+
+null needs proposal follow-up
+
+with human-readable records.
+
+Examples:
+
+Proposal follow-up overdue
+Invoice missing line items
+Event missing staff
+Equipment conflict
+Creative approval pending
+Task overdue
+
+Each alert must:
+
+identify entity
+show reason
+show severity
+be clickable
+take user directly to corrective workflow
+
+==================================================
+PHASE 18 — DASHBOARD CHART INTERACTION
+==================================================
+
+Charts are not decorative.
+
+Where meaningful:
+
+click data point
+click segment
+click bar
+click legend category
+
+→ navigate to filtered record list.
+
+Do not create fake controls.
+
+==================================================
+PHASE 19 — DASHBOARD RESPONSIVE DESIGN
+==================================================
+
+Fix excessively long mobile Dashboard.
+
+At 390px:
+
+- KPI hierarchy compact
+- charts fit width
+- no horizontal scrolling
+- lower-priority content collapsible where appropriate
+- attention items remain prominent
+- tables convert appropriately
+
+Test:
+
+1440
+820
+390
+
+==================================================
+PHASE 20 — ANALYTICS CONSISTENCY
+==================================================
+
+Dashboard and Analytics must share the same metric definitions.
+
+Do not calculate:
+
+Average Booking Value
+
+differently between two screens.
+
+Create or reuse shared backend aggregation services.
+
+==================================================
+PHASE 21 — ANALYTICS FORMATTING
+==================================================
+
+Fix output such as:
+
+999.2000000000000000
+
+All monetary outputs:
+
+2 decimal maximum for display.
+
+Charts/tooltips must use the same formatter.
+
+==================================================
+PHASE 22 — QA / SEED DATA CONTAMINATION
+==================================================
+
+Do NOT blindly delete records.
+
+Identify:
+
+production-like business records
+QA records
+seed/demo records
+legacy fixtures
+
+Add a safe classification strategy where needed.
+
+Dashboard metrics should not be silently contaminated by obvious test fixtures.
+
+Document how development/test data is excluded.
+
+==================================================
+PHASE 23 — LEADS
+==================================================
+
+Fix:
+
+date-only bug
+status/search/filter behavior
+human-readable package/experience relationships
+duplicate-candidate UX
+conversion flow
+
+Verify:
+
+Inquiry
+→ Lead
+→ Client
+→ Event
+
+==================================================
+PHASE 24 — CLIENTS
+==================================================
+
+Improve Client management.
+
+Verify:
+
+search
+filter
+sort
+edit
+relationship history
+events
+proposals
+invoices
+communications
+duplicate handling
+
+Remove non-functional generic controls.
+
+==================================================
+PHASE 25 — PROPOSALS
+==================================================
+
+Production-style audit found:
+
+5/6 proposal records without proposal numbers
+blank relationships
+disabled sorting
+
+Do not fabricate numbers onto legitimate immutable documents without analysis.
+
+Classify existing development/seed/legacy data.
+
+For newly created proposals:
+
+proposal number MUST exist.
+
+Fix list relationships.
+
+Implement real useful sorting or remove fake control.
+
+Verify full development journey:
+
+standard proposal
+bespoke proposal
+uploaded proposal
+preview
+PDF
+public-link generation
+acceptance
+versions
+email preparation
+
+No external email needs to be sent during local-only UAT unless using development provider.
+
+==================================================
+PHASE 26 — INVOICES
+==================================================
+
+Audit found:
+
+4/5 records with null amount_outstanding
+4/5 missing line items
+list/detail calculations differ
+
+Create ONE authoritative invoice balance calculation.
+
+Do not keep:
+
+list calculation
+detail calculation
+PDF calculation
+
+as separate inconsistent logic.
+
+==================================================
+PHASE 27 — LEGACY INVOICE DATA
+==================================================
+
+Classify incomplete invoice records before altering them.
+
+Do NOT invent financial line items.
+
+For development/seed records:
+
+clean or clearly label as test data where safe.
+
+For legitimate historical records:
+
+preserve originals and document incomplete historical state.
+
+==================================================
+PHASE 28 — INVOICE CONSISTENCY
+==================================================
+
+For a newly created invoice verify:
+
+line items
+subtotal
+discount
+tax
+total
+paid
+outstanding
+
+match exactly across:
+
+Invoice list
+Invoice detail
+Invoice preview
+Invoice PDF
+public invoice payload
+
+Payment execution is excluded.
+
+==================================================
+PHASE 29 — CALENDAR
+==================================================
+
+Replace selectors exposing:
+
+Experience ID
+Package ID
+Staff ID
+Equipment ID
+
+with searchable human-readable controls.
+
+Store IDs internally.
+
+Show:
+
+name
+label
+asset code
+staff name
+
+where appropriate.
+
+==================================================
+PHASE 30 — CALENDAR DATE/TIME
+==================================================
+
+Verify:
+
+month
+week
+day
+
+around business timezone boundaries.
+
+Test event overlap logic.
+
+==================================================
+PHASE 31 — USERS SECTION — COMPLETE IT
+==================================================
+
+The audit calls Users one of the stronger foundations, but it is not product-certified.
+
+Make it operationally complete.
+
+Verify UI for:
+
+User list
+Create User
+View
+Edit
+Role
+Privileges
+Activate
+Deactivate
+Reactivate
+Resend Invitation
+Password Reset
+Invitation state
+Session invalidation where appropriate
+
+==================================================
+PHASE 32 — USER CREATION
+==================================================
+
+Super Admin / authorized role must be able to create users.
+
+Fields:
+
+First Name
+Last Name
+Email
+Phone
+Role
+Business Role if applicable
+Privileges
+Status
+
+Never use shared default passwords.
+
+Use one-time setup/invitation flow.
+
+==================================================
+PHASE 33 — ROLE UX
+==================================================
+
+Do not present raw privilege names as an unreadable wall.
+
+Group privileges visually:
+
+CRM
+Events
+Documents
+Finance
+Communications
+Website
+Operations
+Reporting
+Administration
+
+Provide:
+
+Select all within group
+Clear group
+
+where safe.
+
+Show descriptions for privileges.
+
+==================================================
+PHASE 34 — ROLE SAFETY
+==================================================
+
+Prevent escalation.
+
+ROOT rules remain strict.
+
+Super Admin cannot grant authority above policy.
+
+Server enforces this.
+
+Frontend hiding is insufficient.
+
+==================================================
+PHASE 35 — EQUIPMENT MODULE
+==================================================
+
+Current top-level screen is list-only.
+
+Complete operational lifecycle:
+
+Create equipment
+Edit
+Status
+Asset code
+Category
+Availability
+Assignment
+Conflict detection
+Checkout
+Return
+Maintenance/out-of-service
+History
+
+Use QR capability already present where appropriate.
+
+==================================================
+PHASE 36 — EQUIPMENT STATUS VISUALS
+==================================================
+
+Use operational status colors:
+
+GREEN:
+Available / Ready
+
+YELLOW:
+Reserved / Needs check
+
+RED:
+Conflict / Out of service
+
+GRAY:
+Archived
+
+Color + label + icon.
+
+==================================================
+PHASE 37 — STAFF MODULE
+==================================================
+
+Remove:
+
+"Phase 2 scheduling UI"
+
+from the finished product experience.
+
+Complete:
+
+Create staff
+Edit
+Contact information
+Status
+Availability
+Event assignment
+Acknowledgment
+Decline
+Conflict handling
+Assigned events
+
+==================================================
+PHASE 38 — TASKS
+==================================================
+
+Replace raw user ID assignment field.
+
+Use searchable human-readable user selector.
+
+Show:
+
+task
+related entity
+owner
+due date/time
+priority
+status
+
+Implement:
+
+complete
+reopen
+overdue
+filter
+search
+
+where backend supports it.
+
+==================================================
+PHASE 39 — FILES
+==================================================
+
+Current screen saying:
+
+Metadata model ready
+
+is not a product feature.
+
+Complete or intentionally hide the module until complete.
+
+If completing:
+
+upload
+view
+download
+relationships
+file type
+owner
+created
+visibility
+archive
+authorization
+
+Fix bad filenames such as:
+
+null.pdf
+
+==================================================
+PHASE 40 — CLIENT GALLERIES
+==================================================
+
+Current module is not operational.
+
+Either:
+
+A. complete it
+
+or
+
+B. hide it from primary navigation until complete
+
+Do not leave placeholder pages in daily operations navigation.
+
+If completing:
+
+Create gallery
+select/add media
+customer delivery
+secure link
+expiration
+revoke
+status
+view history
+
+==================================================
+PHASE 41 — LIVE OPERATIONS BOARD
+==================================================
+
+Fix horizontal overflow.
+
+Do not require excessive horizontal scrolling on normal desktop widths.
+
+Consider:
+
+responsive stage widths
+compact cards
+stage counts
+collapsible details
+focused event drawer
+
+Preserve 7-stage operational lifecycle if still valid.
+
+==================================================
+PHASE 42 — OPERATIONS STATUS COLORS
+==================================================
+
+Use:
+
+GREEN — Ready / completed
+YELLOW — Attention / pending
+RED — blocked / incident
+GRAY — not started / unavailable
+
+Use consistent semantics throughout:
+
+Dashboard
+Events
+Live Ops
+Equipment
+Staff
+Tasks
+
+==================================================
+PHASE 43 — INTEGRATIONS
+==================================================
+
+Current Integrations page is misleading.
+
+Email card says disconnected/development while System Health correctly detects Microsoft.
+
+Integration UI must derive from real backend provider status.
+
+For each integration distinguish:
+
+CONNECTED
+READY
+PENDING APPROVAL
+NOT CONFIGURED
+DISABLED
+ERROR
+
+Do not label intentional unconfigured integrations as generic failures.
+
+==================================================
+PHASE 44 — SYSTEM HEALTH
+==================================================
+
+Make health evidence-based.
+
+Current storage status says MISCONFIGURED generically for local storage.
+
+Do not conclude mounted persistent volume is absent merely because provider = LOCAL.
+
+Health should test actual application requirements where possible:
+
+path exists
+readable
+writable
+
+Infrastructure durability can be a warning requiring environment verification.
+
+==================================================
+PHASE 45 — SETTINGS
+==================================================
+
+Audit current settings.
+
+Canonical public email should be:
+
+info@thelolabooth.com
+
+unless explicitly overridden by approved business configuration.
+
+Current audit observed:
+
+hello@lolabooths.com
+
+in settings.
+
+Reconcile business profile.
+
+Group settings into understandable sections:
+
+Business
+Brand
+Documents
+Email
+Operations
+Website
+Integrations
+System
+
+Replace technical field names with human-readable labels.
+
+==================================================
+PHASE 46 — SETTINGS FIELD TYPES
+==================================================
+
+Use correct controls:
+
+boolean → toggle
+enum → select
+time → time control
+number → numeric
+email → email
+URL → URL
+long text → textarea
+
+Do not expose raw config unnecessarily.
+
+==================================================
+PHASE 47 — AUDIT LOG
+==================================================
+
+Improve from raw technical log to usable operational history.
+
+Show:
+
+Actor
+Action
+Entity
+Target label
+Date
+Exact time
+Summary
+
+Use readable labels instead of UUIDs when possible.
+
+Allow filters:
+
+actor
+action
+entity
+date range
+
+Keep raw technical metadata accessible in detail if useful.
+
+==================================================
+PHASE 48 — REMOVE FAKE CONTROLS
+==================================================
+
+Audit every generic:
+
+sort
+status
+filter
+action
+
+control.
+
+If it has one option or no handler:
+
+IMPLEMENT IT
+or
+REMOVE IT
+
+No fake controls.
+
+==================================================
+PHASE 49 — NAVIGATION INFORMATION ARCHITECTURE
+==================================================
+
+35 sidebar destinations is too much.
+
+Do a complete navigation audit.
+
+Group logically.
+
+Potential structure:
+
+DASHBOARD
+
+SALES
+- Leads
+- Clients
+- Proposals
+- Invoices
+
+EVENTS
+- Events
+- Calendar
+- Tasks
+
+OPERATIONS
+- Live Operations
+- Staff
+- Equipment
+- Galleries
+- Files
+
+COMMUNICATIONS
+- Inbox/History
+- Compose
+- Templates
+- Automations
+
+WEBSITE
+- Overview / Connection
+- Homepage
+- Experiences
+- Packages
+- Event Types
+- Gallery
+- Testimonials
+- FAQ
+- Media
+- SEO
+
+REPORTING
+- Analytics
+
+SYSTEM
+- Users
+- Integrations
+- Health
+- Audit Log
+- Settings
+
+Do not blindly use this exact hierarchy.
+
+First inventory actual unique modules and eliminate redundancy.
+
+==================================================
+PHASE 50 — REDUNDANT FINANCE/INVOICE AREAS
+==================================================
+
+User previously reported too many areas that feel like Invoice.
+
+Audit:
+
+Invoices
+Payments
+Receipts
+Reconciliation
+Billing-related views
+
+For each return:
+
+PAGE
+PURPOSE
+UNIQUE FUNCTION?
+DUPLICATES
+ACTION
+
+Use:
+
+KEEP
+MERGE
+NEST
+HIDE
+REMOVE FROM NAV
+
+Payment functionality itself remains deferred.
+
+==================================================
+PHASE 51 — CMS ADMIN UX
+==================================================
+
+We are NOT doing the website production migration here.
+
+But improve Admin CMS usability enough that later staging CMS testing can happen.
+
+Current issues:
+
+904 page items
+21 image mappings
+25 website_content records
+many drafts
+giant generic slot-table UX
+
+Do not publish these to the production website.
+
+Improve CMS Admin organization around:
+
+Page
+Section
+Item
+
+rather than hundreds of anonymous rows.
+
+==================================================
+PHASE 52 — CMS PAGE ITEMS UX
+==================================================
+
+Initial state should be:
+
+Loading…
+
+not misleading empty state.
+
+After loaded:
+
+group by page
+group by section
+search
+filter published/draft
+sort
+clear item labels
+
+Avoid giant undifferentiated record table.
+
+==================================================
+PHASE 53 — WEBSITE IMAGES CMS UX
+==================================================
+
+Provide visual thumbnails.
+
+Do not primarily show mapping UUIDs.
+
+User should see:
+
+current image
+page
+section
+item
+replacement selector/upload
+status
+
+Keep canonical static image fallback architecture intact until later website v1.1 staging.
+
+==================================================
+PHASE 54 — PACKAGES CMS UX
+==================================================
+
+Distinguish:
+
+catalog/internal availability
+public website eligibility
+published status
+most popular
+
+Do not label "Most Popular" as:
+
+Active / Inactive
+
+Use:
+
+Yes / No
+
+or proper visual toggle.
+
+Format prices correctly.
+
+==================================================
+PHASE 55 — EXPERIENCES CMS UX
+==================================================
+
+Do not require users to type media IDs.
+
+Use Media Library picker.
+
+Clearly display:
+
+published
+website visibility
+sort order
+image
+packages
+
+==================================================
+PHASE 56 — EVENT TYPES CMS UX
+==================================================
+
+Detect duplicate sort orders.
+
+Provide straightforward reorder UI.
+
+Do not confuse Event Types CMS with booked Events.
+
+==================================================
+PHASE 57 — TESTIMONIALS CMS
+==================================================
+
+Improve record form:
+
+display name
+company/event
+quote
+image
+order
+published
+
+Do not automatically publish existing unknown/draft testimonial text.
+
+==================================================
+PHASE 58 — FAQ UX
+==================================================
+
+Improve:
+
+search
+category grouping
+order
+publish state
+bulk clarity
+
+Do not break currently working FAQ lifecycle.
+
+==================================================
+PHASE 59 — MEDIA LIBRARY
+==================================================
+
+Improve:
+
+thumbnail grid/list option
+upload
+replace
+usage
+visibility
+permissions
+archive
+
+Test private-media denial.
+
+==================================================
+PHASE 60 — RESPONSIVE PRODUCT PASS
+==================================================
+
+Test every major module at:
+
+1440
+820
+390
+
+Focus especially:
+
+Dashboard
+Live Ops
+Users
+Proposal editor
+Invoice detail
+Communications
+Equipment
+Staff
+CMS screens
+Settings
+
+No accidental horizontal page scroll.
+
+Tables may use intentional responsive patterns where unavoidable.
+
+==================================================
+PHASE 61 — CONSISTENT LOADING / EMPTY / ERROR
+==================================================
+
+Create shared UI patterns.
+
+Every major list/detail should have:
+
+Loading skeleton/state
+Empty state
+Error state
+Retry where appropriate
+
+Do not show:
+
+Loading forever
+blank panel
+generic Something went wrong
+
+without useful context.
+
+==================================================
+PHASE 62 — DEVELOPMENT-ONLY TESTING
+==================================================
+
+We are intentionally NOT creating staging yet.
+
+Use:
+
+local development
+disposable PostgreSQL test DB
+development email provider / controlled fixtures
+mocked external integrations where necessary
+
+DO NOT:
+
+send real external mail
+execute payments
+edit live business records
+publish website CMS migration
+alter production database
+
+==================================================
+PHASE 63 — CORE BUSINESS JOURNEY E2E
+==================================================
+
+Run this locally/disposable DB:
+
+Public-style inquiry fixture
+→ Lead
+→ assign
+→ Client
+→ Event
+→ standard proposal
+→ preview
+→ mark/send using development provider
+→ public proposal
+→ accept
+→ draft invoice
+→ invoice detail
+→ preview
+→ PDF
+→ communication record
+
+Payment stops here.
+
+At every transition verify:
+
+DB
+UI
+relationship
+audit
+permissions
+formatting
+error handling
+
+==================================================
+PHASE 64 — BESPOKE PROPOSAL JOURNEY
+==================================================
+
+Verify separately:
+
+Create bespoke corporate proposal
+custom sections
+custom services
+pricing
+preview
+PDF
+versioning
+
+==================================================
+PHASE 65 — UPLOADED PROPOSAL JOURNEY
+==================================================
+
+Verify:
+
+upload external PDF
+metadata
+storage
+public view
+download
+versioning
+acceptance where supported
+
+==================================================
+PHASE 66 — EVENT OPERATIONS E2E
+==================================================
+
+Using synthetic event:
+
+assign staff
+assign equipment
+detect conflicts
+creative readiness
+tasks
+staff acknowledgment
+equipment checkout
+event status progression
+incident
+return equipment
+run sheet
+gallery/delivery where module completed
+
+No physical-camera certification needed yet.
+
+==================================================
+PHASE 67 — USER/RBAC E2E
+==================================================
+
+Use disposable DB.
+
+Test representative:
+
+OWNER
+SUPER_ADMIN
+ADMIN
+restricted operational role
+
+Verify every relevant UI/API permission.
+
+==================================================
+PHASE 68 — DOUBLE ACTION / RETRY TESTING
+==================================================
+
+Test:
+
+double click Save
+double submit
+refresh during save
+retry failed network request
+worker restart fixture
+email job replay
+concurrent record update where relevant
+
+Prevent duplicate actions.
+
+==================================================
+PHASE 69 — AUTOMATED BUSINESS-LEVEL TESTS
+==================================================
+
+The audit explicitly found that existing tests can pass while a real list SQL query fails.
+
+Add integration tests that execute ACTUAL services/queries, not merely inspect source strings.
+
+Add regression tests for:
+
+Communications list with real schema
+legacy/null data
+date-only timezone behavior
+currency formatting
+invoice calculations
+proposal numbering
+human-readable relationship mapping
+Users CRUD
+Equipment CRUD
+Staff CRUD
+task ownership selector
+integration health mapping
+
+==================================================
+PHASE 70 — VISUAL DESIGN REVIEW
+==================================================
+
+Create QA screenshots of:
+
+Dashboard desktop/tablet/mobile
+Users
+Communications
+Leads
+Proposal detail
+Invoice detail
+Event Operations
+Live Operations
+Equipment
+Staff
+CMS overview
+Settings
+Audit Log
+
+Review visual quality.
+
+The target is:
+
+premium
+clean
+operational
+clear
+modern
+not generic SaaS
+not overly colorful
+
+==================================================
+PHASE 71 — DASHBOARD SPECIFIC VISUAL ACCEPTANCE
+==================================================
+
+Do not pass Dashboard unless it contains:
+
+- clear executive KPI hierarchy
+- at least 2 useful interactive charts
+- interactive pipeline/funnel or equivalent
+- operational readiness visualization
+- attention panel
+- semantic red/yellow/green statuses
+- useful click-throughs
+- good 390px experience
+- consistent currency/date formatting
+- no raw IDs/null labels
+
+==================================================
+PHASE 72 — NAVIGATION ACCEPTANCE
+==================================================
+
+Return before/after nav tree.
+
+Explain every:
+
+MERGED
+RENAMED
+NESTED
+HIDDEN
+REMOVED
+
+Do not lose unique functionality.
+
+==================================================
+PHASE 73 — NO STAGING YET
+==================================================
+
+At completion:
+
+DO NOT create staging automatically.
+
+Instead produce:
+
+STAGING READINESS REPORT
+
+Only if the Admin meets the agreed local/product quality gate should the report recommend
+creating staging as the NEXT step.
+
+==================================================
+PHASE 74 — PAYMENT STATUS
+==================================================
+
+Return:
+
+PAYMENTS: DEFERRED
+
+Do not treat payment as part of completion scoring.
+
+==================================================
+PHASE 75 — TESTS
+==================================================
+
+Run:
+
+npm test
+npm run build
+
+Also run:
+
+disposable DB integration suite
+browser responsive suite
+business journey E2E
+
+Report exact counts.
+
+==================================================
+PHASE 76 — FINAL REPORT
+==================================================
+
+Return:
+
+AREA | BEFORE | AFTER | STATUS | EVIDENCE | REMAINING WORK
+
+Include at minimum:
+
+Dashboard
+Communications
+Date handling
+Currency formatting
+Leads
+Clients
+Proposals
+Invoices
+Calendar
+Events
+Tasks
+Equipment
+Staff
+Files
+Client Galleries
+Live Operations
+Users
+Roles/Privileges
+Integrations
+System Health
+Audit Log
+Settings
+CMS Admin UX
+Navigation
+Responsive UI
+Business Journey E2E
+
+Use:
+
+PASS
+PASS WITH MINOR ISSUE
+PARTIAL
+FAIL
+DEFERRED
+
+==================================================
+PHASE 77 — COMPLETENESS RULE
+==================================================
+
+Do NOT call a module complete because:
+
+- a table renders
+- an endpoint exists
+- tests inspect source
+- a button appears
+- HTTP 200 returns
+
+A module is complete only when the intended user can:
+
+create/receive
+find
+view
+change
+save
+validate
+recover from error
+see related data
+respect permissions
+see audit history
+
+and where relevant:
+
+preview
+download
+send
+publish
+retry
+
+==================================================
+PHASE 78 — PRIORITY ORDER
+==================================================
+
+Execute in this order:
+
+P0
+1. Communications failure
+2. Date-only correctness
+3. Shared money/date/status formatting
+4. Invoice consistency
+5. Users operational completion
+
+P1
+6. Dashboard redesign
+7. Navigation/duplicate cleanup
+8. Leads/Clients/Proposals core journey
+9. Calendar/tasks
+10. Equipment/Staff
+
+P2
+11. Files/Galleries
+12. Integrations/Health
+13. Audit/Settings
+14. CMS Admin usability
+
+Then:
+
+FULL LOCAL NON-PAYMENT E2E
+
+Do not jump to cosmetic modules while a P0 remains failing.
+
+==================================================
+PHASE 79 — COMMITS
+==================================================
+
+Use small coherent commits.
+
+Examples:
+
+fix: repair communications query and error states
+
+fix: preserve date-only values across admin
+
+refactor: unify admin display formatting
+
+fix: reconcile invoice balance calculations
+
+fix: complete admin user management
+
+feat: redesign operations dashboard
+
+refactor: simplify admin navigation
+
+feat: complete equipment and staff management
+
+fix: align integration and health status
+
+test: add admin business journey integration coverage
+
+Do not push/deploy to production unless explicitly requested later.
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Return exactly one:
+
+ADMIN READY TO CREATE STAGING ENVIRONMENT
+
+ADMIN NEEDS ANOTHER DEVELOPMENT PASS
+
+ADMIN CORE WORKFLOWS STILL BLOCKED
+
+Also return separately:
+
+PAYMENTS: DEFERRED
+PRODUCTION DEPLOYMENT: NOT AUTHORIZED

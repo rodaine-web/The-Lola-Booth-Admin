@@ -434,33 +434,41 @@ function splitEmails(value) {
 }
 
 export async function listCommunications(filters = {}) {
-  const clauses = ["deleted_at IS NULL"];
+  const clauses = ["c.deleted_at IS NULL"];
   const values = [];
   for (const field of ["status", "channel", "client_id", "lead_id", "event_id", "proposal_id", "invoice_id"]) {
     if (filters[field]) {
       values.push(filters[field]);
-      clauses.push(`${field}=$${values.length}`);
+      clauses.push(`c.${field}=$${values.length}`);
     }
   }
+  if (filters.search) {
+    values.push(`%${String(filters.search).slice(0, 200)}%`);
+    clauses.push(`(c.recipient ILIKE $${values.length} OR c.rendered_subject ILIKE $${values.length} OR et.name ILIKE $${values.length})`);
+  }
+  const page = Math.max(1, Math.min(100000, Math.trunc(Number(filters.page)) || 1));
+  const pageSize = Math.max(1, Math.min(150, Math.trunc(Number(filters.pageSize)) || 50));
+  const sort = { recipient: "c.recipient", status: "c.status", created_at: "c.created_at", scheduled_at: "c.scheduled_at" }[filters.sort] || "COALESCE(c.scheduled_at, c.sent_at, c.occurred_at, c.created_at)";
+  const direction = filters.direction === "asc" ? "ASC" : "DESC";
+  const joined = `FROM communications c LEFT JOIN email_templates et ON et.id=c.template_id WHERE ${clauses.join(" AND ")}`;
+  const count = await query(`SELECT count(*)::int AS total ${joined}`, values);
   const result = await query(
-    `SELECT c.*, et.name AS template_name
-     FROM communications c
-     LEFT JOIN email_templates et ON et.id=c.template_id
-     WHERE ${clauses.join(" AND ")}
-     ORDER BY COALESCE(c.scheduled_at, c.sent_at, c.occurred_at, c.created_at) DESC
-     LIMIT 150`,
-    values
+    `SELECT c.*, et.name AS template_name ${joined}
+     ORDER BY ${sort} ${direction} NULLS LAST, c.id DESC
+     LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, pageSize, (page - 1) * pageSize]
   );
-  return { data: result.rows };
+  return { data: result.rows, pagination: { page, pageSize, total: count.rows[0].total } };
 }
 
 export async function getCommunication(id) {
   const result = await query(
     `SELECT c.*, et.name AS template_name, et.key AS template_key_current, cl.name AS client_name, e.event_name,
-            p.proposal_number, i.invoice_number
+            p.proposal_number, i.invoice_number, concat_ws(' ', l.first_name, l.last_name) AS lead_name
      FROM communications c
      LEFT JOIN email_templates et ON et.id=c.template_id
      LEFT JOIN clients cl ON cl.id=c.client_id
+     LEFT JOIN leads l ON l.id=c.lead_id
      LEFT JOIN events e ON e.id=c.event_id
      LEFT JOIN proposals p ON p.id=c.proposal_id
      LEFT JOIN invoices i ON i.id=c.invoice_id
@@ -476,10 +484,10 @@ export async function updateCommunicationDraft(id, input = {}, user = {}) {
     const current = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!current) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
     if (!["DRAFT", "SCHEDULED", "FAILED"].includes(current.status)) throw new AppError("Sent communications are immutable.", 409, "COMMUNICATION_IMMUTABLE");
-    const allowed = ["recipient", "subject", "rendered_subject", "rendered_body", "rendered_html", "scheduled_at", "send_mode", "status"];
+    const allowed = ["recipient", "subject", "rendered_subject", "rendered_body", "rendered_html", "scheduled_at", "send_mode"];
     const patch = Object.fromEntries(Object.entries(input).filter(([key]) => allowed.includes(key)));
     if (patch.subject && !patch.rendered_subject) patch.rendered_subject = patch.subject;
-    if (patch.rendered_body) patch.message_summary = patch.rendered_body.slice(0, 500);
+    if (patch.rendered_body !== undefined) { patch.message_summary = patch.rendered_body.slice(0, 500); patch.rendered_html = brandedEmailHtml(patch.rendered_body); }
     const fields = Object.keys(patch);
     if (!fields.length) return current;
     const values = fields.map((field) => patch[field]);
@@ -576,7 +584,7 @@ export async function createCommunicationDraft(input = {}, user = {}) {
   return result.rows[0];
 }
 
-export async function sendCommunication(id, user = {}) {
+export async function sendCommunication(id, user = {}, { workerClaim = false } = {}) {
   return transaction(async (client) => {
     const communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!communication) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
@@ -584,6 +592,7 @@ export async function sendCommunication(id, user = {}) {
       logger.warn({ communicationId: id, providerMessageId: communication.provider_message_id }, "Duplicate communication send prevented");
       return { communication, delivery: { status: communication.status, provider: communication.provider, providerMessageId: communication.provider_message_id, duplicatePrevented: true } };
     }
+    if (!["DRAFT", "SCHEDULED", "FAILED", ...(workerClaim ? ["PROCESSING"] : [])].includes(communication.status)) throw new AppError("This communication cannot be sent.", 409, "COMMUNICATION_IMMUTABLE");
     if (communication.channel === "SMS") throw new AppError("SMS provider is disabled or not configured. Message was not sent.", 422, "SMS_PROVIDER_DISABLED", { retryable: false });
     if (communication.channel !== "EMAIL") throw new AppError("Only email sending is currently enabled.", 422, "CHANNEL_NOT_IMPLEMENTED", { retryable: false });
     if (!communication.recipient) throw new AppError("Recipient is required before sending.", 422, "COMMUNICATION_RECIPIENT_REQUIRED", { retryable: false });
@@ -613,10 +622,11 @@ export async function sendCommunication(id, user = {}) {
 }
 
 export async function scheduleCommunication(id, scheduledAt, user = {}) {
+  if (!Number.isFinite(Date.parse(scheduledAt)) || Date.parse(scheduledAt) <= Date.now()) throw new AppError("Choose a future schedule time.", 422, "INVALID_SCHEDULE");
   const result = await query(
     `UPDATE communications
      SET status='SCHEDULED', send_mode='SCHEDULED', scheduled_at=$1, updated_at=now(), created_by=COALESCE(created_by,$2)
-     WHERE id=$3 AND deleted_at IS NULL RETURNING *`,
+     WHERE id=$3 AND deleted_at IS NULL AND status IN ('DRAFT','SCHEDULED','FAILED') RETURNING *`,
     [scheduledAt, user.id || null, id]
   );
   if (!result.rows[0]) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
@@ -1032,7 +1042,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
   });
   for (const communication of scheduled) {
     try {
-      const sent = await sendCommunication(communication.id, {});
+      const sent = await sendCommunication(communication.id, {}, { workerClaim: true });
       processed.push({ id: communication.id, status: sent.communication.status, type: "SCHEDULED_COMMUNICATION" });
     } catch (error) {
       await query(

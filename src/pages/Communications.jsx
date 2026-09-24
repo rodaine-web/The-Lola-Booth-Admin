@@ -1,3 +1,6 @@
+import { Link } from "react-router-dom";
+import RelationshipSelect from "../components/RelationshipSelect.jsx";
+import AsyncState from "../components/AsyncState.jsx";
 import { Archive, CheckCircle2, Clock, Copy, Edit3, Eye, Mail, Play, RefreshCw, Save, Search, Send, ToggleLeft, ToggleRight, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client.js";
@@ -34,17 +37,22 @@ export default function Communications() {
   const [activeField, setActiveField] = useState("body_template");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [requestId, setRequestId] = useState("");
   const bodyRef = useRef(null);
   const subjectRef = useRef(null);
   const textRef = useRef(null);
 
   useEffect(() => { load(); }, []);
   useEffect(() => {
-    if (templates) loadCommunications();
+    if (templates) loadCommunications().catch(err => { setError(err.message); setRequestId(err.requestId || ""); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [communicationTab]);
 
   async function load() {
+    setLoading(true);
+    setRequestId("");
     setError("");
     try {
       const [templateData, automationData] = await Promise.all([
@@ -56,6 +64,9 @@ export default function Communications() {
       await loadCommunications();
     } catch (err) {
       setError(err.message);
+      setRequestId(err.requestId || "");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -146,24 +157,19 @@ export default function Communications() {
   }
 
   async function communicationAction(action) {
-    if (!selectedCommunication) return;
-    setError("");
-    setNotice("");
+    if (!selectedCommunication || busy) return;
+    setBusy(true); setError(""); setNotice("");
     try {
-      if (["DRAFT", "SCHEDULED", "FAILED"].includes(selectedCommunication.status)) {
-        await api.patch(`/communications/${selectedCommunication.id}`, selectedCommunication);
-      }
-      const result = action === "send"
-        ? await api.post(`/communications/${selectedCommunication.id}/send`, {})
-        : action === "cancel"
-          ? await api.post(`/communications/${selectedCommunication.id}/cancel`, {})
-          : await api.post(`/communications/${selectedCommunication.id}/schedule`, { scheduled_at: selectedCommunication.scheduled_at });
+      let current = selectedCommunication;
+      if (!current.id) current = await api.post("/communications/drafts", { ...current, subject: current.rendered_subject, body: current.rendered_body, channel: "EMAIL" });
+      else if (["DRAFT", "SCHEDULED", "FAILED"].includes(current.status)) current = await api.patch(`/communications/${current.id}`, current);
+      let result = current;
+      if (action !== "save" && action !== "preview") result = await api.post(`/communications/${current.id}/${action}`, action === "schedule" ? { scheduled_at: new Date(current.scheduled_at).toISOString() } : {});
       setSelectedCommunication(result.communication || result);
-      setNotice(`Communication ${action === "send" ? "sent" : action + "d"}.`);
+      setNotice(action === "preview" ? "Preview updated." : action === "save" ? "Draft saved." : "Communication updated.");
       await loadCommunications();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
   }
 
   async function toggleAutomation(row) {
@@ -190,7 +196,7 @@ export default function Communications() {
     }
   }
 
-  if (!templates || !automations || !communications) return <main className="page"><div className="empty-state">Loading communications...</div></main>;
+  if (!templates || !automations || !communications) return <main className="page"><h1>Communications</h1><AsyncState loading={loading} error={error} requestId={requestId} onRetry={load} noun="communications" /></main>;
 
   return (
     <main className="page">
@@ -201,7 +207,7 @@ export default function Communications() {
           <button className="primary-action" onClick={processJobs}><Play size={16} />Process Due Jobs</button>
         </div>
       </div>
-      {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      {error ? <AsyncState error={error} requestId={requestId} onRetry={load} noun="communications" /> : notice && <div role="status" className="toast">{notice}</div>}
 
       <div className="segmented-control page-tabs">
         {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item}</button>)}
@@ -211,14 +217,14 @@ export default function Communications() {
         <>
           <section className="panel">
             <div className="table-heading">
-              <h2>Communication Center</h2>
+              <h2>Communication Center</h2><button onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>Compose Email</button>
               <div className="segmented-control">
                 {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => setCommunicationTab(tab)}>{tab.toLowerCase()}</button>)}
               </div>
             </div>
             <DataTable rows={communications.data || []} columns={["status", "channel", "recipient", "rendered_subject", "template_name", "scheduled_at", "sent_at", "failure_message"]} empty="No communications match this view." onEdit={openCommunication} />
           </section>
-          {selectedCommunication && <CommunicationComposer communication={selectedCommunication} setCommunication={setSelectedCommunication} onAction={communicationAction} />}
+          {selectedCommunication && <CommunicationComposer communication={selectedCommunication} setCommunication={setSelectedCommunication} onAction={communicationAction} busy={busy} />}
         </>
       )}
 
@@ -332,26 +338,25 @@ function TemplateEditor({ editor, setEditor, selectedTemplate, preview, saveTemp
   );
 }
 
-function CommunicationComposer({ communication, setCommunication, onAction }) {
-  const immutable = !["DRAFT", "SCHEDULED", "FAILED"].includes(communication.status);
+function CommunicationComposer({ communication, setCommunication, onAction, busy }) {
+  const immutable = busy || !["DRAFT", "SCHEDULED", "FAILED"].includes(communication.status);
   return (
     <section className="panel composer-panel">
       <div className="table-heading"><h2>Composer</h2><span className="status-pill">{communication.status}</span></div>
       <div className="editor-grid">
         <Field label="Channel" value={communication.channel} />
         <Field label="Template" value={communication.template_name || communication.template_key} />
-        <Field label="Client" value={communication.client_name || communication.client_id} />
-        <Field label="Event" value={communication.event_name || communication.event_id} />
-        <Field label="Proposal" value={communication.proposal_number || communication.proposal_id} />
-        <Field label="Invoice" value={communication.invoice_number || communication.invoice_id} />
+        {[["Lead","lead_id","lead_name","leads","sales/leads"],["Client","client_id","client_name","clients","sales/clients"],["Event","event_id","event_name","events","events/events"],["Proposal","proposal_id","proposal_number","proposals","sales/proposals"],["Invoice","invoice_id","invoice_number","invoices","finance/invoices"]].map(([label,key,name,resource,route])=><div key={key}><strong>{label}</strong>{communication[key]&&<Link to={`/${route}/${communication[key]}`}>{communication[name]||`Open related ${label.toLowerCase()}`}</Link>}{!immutable&&<RelationshipSelect resource={resource} value={communication[key]} placeholder={label} disabled={!!communication.id} onChange={value=>setCommunication(row=>({...row,[key]:value}))}/>}</div>)}
       </div>
       <label>Recipient<input disabled={immutable} value={communication.recipient || ""} onChange={(e) => setCommunication((row) => ({ ...row, recipient: e.target.value }))} /></label>
       <label>Subject<input disabled={immutable} value={communication.rendered_subject || communication.subject || ""} onChange={(e) => setCommunication((row) => ({ ...row, rendered_subject: e.target.value, subject: e.target.value }))} /></label>
       <label>Body<textarea disabled={immutable} rows={8} value={communication.rendered_body || ""} onChange={(e) => setCommunication((row) => ({ ...row, rendered_body: e.target.value }))} /></label>
       {communication.channel === "SMS" && <p className="muted">{(communication.rendered_body || "").length} characters</p>}
       {!immutable && <label>Schedule<input type="datetime-local" value={(communication.scheduled_at || "").slice(0, 16)} onChange={(e) => setCommunication((row) => ({ ...row, scheduled_at: e.target.value }))} /></label>}
+      {communication.rendered_html&&<iframe title="Email preview" sandbox="" srcDoc={communication.rendered_html} style={{width:"100%",height:420,border:"1px solid #ddd"}}/>}
       <div className="button-row">
-        <button disabled={immutable} onClick={() => onAction("cancel")}><XCircle size={15} />Cancel</button>
+        <button disabled={immutable} onClick={() => onAction("save")}><Save size={15}/>Save draft</button><button disabled={immutable} onClick={() => onAction("preview")}><Eye size={15}/>Preview</button>{communication.status==="FAILED"&&<button disabled={busy} onClick={()=>onAction("retry")}>Retry failed</button>}
+        <button disabled={immutable || !communication.id} onClick={() => onAction("cancel")}><XCircle size={15} />Cancel</button>
         <button disabled={immutable || !communication.scheduled_at} onClick={() => onAction("schedule")}><Clock size={15} />Schedule</button>
         <button className="primary-action" disabled={immutable} onClick={() => onAction("send")}><Send size={15} />Send Now</button>
       </div>
