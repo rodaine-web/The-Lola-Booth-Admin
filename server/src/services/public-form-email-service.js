@@ -38,6 +38,12 @@ function linesFrom(entries) {
     .join("\n");
 }
 
+export function inquiryEventDate(value) {
+  if (!value) return "TBD";
+  const date = value instanceof Date ? value : new Date(String(value).slice(0, 10) + "T12:00:00Z");
+  return Number.isNaN(date.getTime()) ? "TBD" : new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date);
+}
+
 function ownerNotificationBody({ lead = {}, payload = {}, action }) {
   return linesFrom([
     ["Form type", formLabel(payload)],
@@ -45,7 +51,7 @@ function ownerNotificationBody({ lead = {}, payload = {}, action }) {
     ["Name", submissionName(lead, payload)],
     ["Email", lead.email || payload.email],
     ["Phone", lead.phone || payload.phone],
-    ["Event date", lead.event_date || payload.eventDate],
+    ["Event date", inquiryEventDate(lead.event_date || payload.eventDate)],
     ["Event type", lead.event_type || payload.eventType],
     ["Guest count", lead.guest_count || payload.guestCount],
     ["Preferred package", lead.preferred_package_id || payload.preferredPackageId],
@@ -64,7 +70,7 @@ function ownerNotificationBody({ lead = {}, payload = {}, action }) {
 
 function customerConfirmationBody({ lead = {}, payload = {} }) {
   const details = linesFrom([
-    ["Event date", lead.event_date || payload.eventDate],
+    ["Event date", inquiryEventDate(lead.event_date || payload.eventDate)],
     ["Event type", lead.event_type || payload.eventType],
     ["Guest count", lead.guest_count || payload.guestCount],
     ["Message", lead.message || payload.message]
@@ -98,9 +104,10 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
   const label = formLabel(payload);
   const mergeData = publicInquiryMergeData({ lead, payload, action, label, name });
   const ownerFallback = { fallbackSubject: `New LOLA ${label} - ${name}`, fallbackBody: ownerNotificationBody({ lead, payload, action }), relatedEntityId: lead?.id || null };
+  const ownerOptions = { firstName: "LOLA team", kicker: `New ${label}`, closing: "Review this inquiry in the Admin portal and follow up with the customer." };
   const ownerRendered = sendEmailImpl === sendEmail
-    ? await renderPublicInquiryTemplate("public_inquiry_owner_notification", mergeData, ownerFallback)
-    : { subject: ownerFallback.fallbackSubject, body: ownerFallback.fallbackBody, html: brandedEmailHtml(ownerFallback.fallbackBody) };
+    ? await renderPublicInquiryTemplate("public_inquiry_owner_notification", mergeData, ownerFallback, ownerOptions)
+    : { subject: ownerFallback.fallbackSubject, body: ownerFallback.fallbackBody, html: brandedEmailHtml(ownerFallback.fallbackBody, ownerOptions) };
 
   const deliveries = [
     deliver({
@@ -122,16 +129,17 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
       ? await renderPublicInquiryTemplate(customerTemplateKey, mergeData, customerFallback, {
         firstName: lead.first_name || payload.firstName || "there",
         kicker: label === "Contact Message" ? "Thank you for reaching out!" : "Your booking inquiry has been received!",
-        ctaLabel: label === "Contact Message" ? "Let's Make It Happen" : "View Your Inquiry",
-        ctaUrl: env.publicBaseUrl,
+        ctaLabel: "Explore LOLA Experiences",
+        ctaUrl: `${env.publicBaseUrl}/experiences`,
         event: {
-          date: lead.event_date || payload.eventDate,
+          date: inquiryEventDate(lead.event_date || payload.eventDate),
           venue: lead.venue_name || payload.venueName || [payload.city, payload.state].filter(Boolean).join(", "),
           type: lead.event_type || payload.eventType,
+          packageLabel: "Guests",
           packageName: lead.guest_count || payload.guestCount ? `Approximately ${lead.guest_count || payload.guestCount}` : ""
         }
       })
-      : { subject: customerFallback.fallbackSubject, body: customerFallback.fallbackBody, html: brandedEmailHtml(customerFallback.fallbackBody) };
+      : { subject: customerFallback.fallbackSubject, body: customerFallback.fallbackBody, html: brandedEmailHtml(customerFallback.fallbackBody, { firstName: lead.first_name || payload.firstName || "there" }) };
     if (!customerRendered && legacyCustomerTemplateKey) await renderPublicInquiryTemplate("public_inquiry_customer_confirmation", mergeData, customerFallback);
     deliveries.push(deliver({
       to: lead.email || payload.email,
@@ -155,7 +163,7 @@ async function renderPublicInquiryTemplate(templateKey, mergeData, { fallbackSub
   } catch (error) {
     await recordTemplateFallback({ templateKey, reason: error.message, relatedEntityType: "lead", relatedEntityId, metadata: { code: error.code } });
   }
-  return { subject: fallbackSubject, body: fallbackBody, html: htmlOptions.firstName ? brandedEmailHtml(fallbackBody, htmlOptions) : null };
+  return { subject: fallbackSubject, body: fallbackBody, html: brandedEmailHtml(fallbackBody, htmlOptions) };
 }
 
 function publicInquiryMergeData({ lead = {}, payload = {}, action, label, name }) {
@@ -168,7 +176,7 @@ function publicInquiryMergeData({ lead = {}, payload = {}, action, label, name }
       phone: lead.phone || payload.phone || ""
     },
     event: {
-      date: lead.event_date || payload.eventDate || "TBD",
+      date: inquiryEventDate(lead.event_date || payload.eventDate) || "TBD",
       type: lead.event_type || payload.eventType || "Event",
       guest_count: String(lead.guest_count || payload.guestCount || "")
     },

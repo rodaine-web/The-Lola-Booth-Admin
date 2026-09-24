@@ -79,7 +79,7 @@ function unresolvedVariables(parts, data = {}) {
 }
 
 export function renderTemplate(text = "", data = {}) {
-  return String(text).replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_match, key) => {
+  return String(text).replace(/\\r\\n|\\n/g, "\n").replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_match, key) => {
     if (!allowedTemplateVariables.includes(key)) throw new AppError(`Unknown template variable: ${key}`, 422, "UNKNOWN_TEMPLATE_VARIABLE");
     const value = isNestedVariable(key) ? valueAtPath(data, key) : data[key];
     if (value === undefined || value === null) {
@@ -328,12 +328,12 @@ function emailIcon(name, assetBase) {
 }
 
 export function brandedEmailHtml(body, options = {}) {
-  const publicBase = (options.assetBaseUrl || process.env.PUBLIC_BASE_URL || process.env.CLIENT_ORIGIN || "https://thelolabooth.com").replace(/\/$/, "");
+  const publicBase = (options.assetBaseUrl || process.env.EMAIL_ASSET_BASE_URL || process.env.CLIENT_ORIGIN || "https://admin.thelolabooth.com").replace(/\/$/, "");
   const logo = `${publicBase}/brand/LOLA_Primary_Dark_Transparent.png`;
   const monogram = `${publicBase}/brand/LOLA_LB_Monogram_Gold.png`;
   const darkLogo = `${publicBase}/brand/LOLA_Primary_Light_Transparent.png`;
   const hero = options.heroUrl || `${publicBase}/brand/lola-booth-logo.jpg`;
-  const firstName = options.firstName || "{{First Name}}";
+  const firstName = options.firstName || "there";
   const kicker = options.kicker || "";
   const ctaUrl = options.ctaUrl || "";
   const ctaLabel = options.ctaLabel || "LET'S STAY CONNECTED";
@@ -393,7 +393,7 @@ export function brandedEmailHtml(body, options = {}) {
       <tr><td class="content-pad" style="padding:30px 42px 20px">
         <div style="font-size:32px;line-height:1.1;color:#090909">Hi ${htmlEscape(firstName)},</div>
         ${kicker ? `<div class="kicker" style="font-family:Arial,sans-serif;font-size:15px;letter-spacing:7px;text-transform:uppercase;color:#a8753b;margin-top:18px">${htmlEscape(kicker)}</div>` : ""}
-        <div class="content-copy" style="font-size:18px;line-height:1.55;margin-top:10px;color:#101a36">${bodyToHtml(body)}</div>
+        <div class="content-copy" style="font-size:16px;line-height:1.65;margin-top:18px;color:#101a36;overflow-wrap:anywhere">${bodyToHtml(body)}</div>
         ${ctaUrl ? `<div style="text-align:center;margin:28px 0 8px"><a class="cta-button" href="${htmlEscape(ctaUrl)}" style="display:inline-block;background:#b1844c;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;letter-spacing:6px;text-transform:uppercase;padding:17px 54px;border-radius:2px">${htmlEscape(ctaLabel)} &rarr;</a><div class="copy-link" style="font-size:13px;margin-top:14px;color:#101a36">Or copy and paste this link into your browser:<br><span style="color:#a8753b">${htmlEscape(ctaUrl)}</span></div></div>` : ""}
       </td></tr>
       ${summaryCells ? `<tr><td style="padding:0 30px 22px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3efe8"><tr>${summaryCells}</tr></table></td></tr>` : ""}
