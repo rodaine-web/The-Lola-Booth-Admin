@@ -1,3 +1,4 @@
+import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, Copy, Download, Mail, Plus, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -50,7 +51,7 @@ export default function InvoiceDetail() {
     setPayment((current) => ({ ...current, amount: "", reference_number: "", notes: "" }));
   }
 
-  if (error && !invoice) return <main className="page"><div className="empty-state">{error}</div></main>;
+  if (error && !invoice) return <main className="page"><AsyncState error={error} noun="invoice" onRetry={()=>{setError("");load();}}/></main>;
   if (!invoice) return <main className="page"><div className="empty-state">Loading invoice...</div></main>;
 
   return (
@@ -72,6 +73,7 @@ export default function InvoiceDetail() {
         </div>
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      {invoice.data_quality==='INCOMPLETE_HISTORICAL'&&<p className="toast" role="status">Historical invoice: line-item detail is missing. Original amounts are preserved; do not reconstruct charges without source records.</p>}
       <section className="detail-summary">
         <Metric label="Total" value={formatMoney(invoice.total || 0)} />
         <Metric label="Paid" value={formatMoney(invoice.amount_paid || 0)} />

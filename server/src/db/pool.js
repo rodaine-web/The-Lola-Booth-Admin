@@ -1,6 +1,9 @@
 import pg from "pg";
 import { env } from "../config/env.js";
 
+// PostgreSQL DATE is a calendar value, never a JavaScript timestamp.
+pg.types.setTypeParser(1082, value => value);
+
 export const pool = new pg.Pool({
   connectionString: env.databaseUrl,
   max: 10

@@ -1,3 +1,4 @@
+import {timestampInput} from "../utils/display.js";
 import { Link } from "react-router-dom";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import AsyncState from "../components/AsyncState.jsx";
@@ -26,6 +27,8 @@ export default function Communications() {
   const [section, setSection] = useState("Communications");
   const [templateTab, setTemplateTab] = useState("All");
   const [communicationTab, setCommunicationTab] = useState("SENT_TO_PROVIDER");
+  const [communicationSearch,setCommunicationSearch]=useState(""),[communicationSort,setCommunicationSort]=useState("created_at"),[communicationPage,setCommunicationPage]=useState(1);
+  const communicationRequest=useRef(0);
   const [templates, setTemplates] = useState(null);
   const [automations, setAutomations] = useState(null);
   const [communications, setCommunications] = useState(null);
@@ -48,7 +51,7 @@ export default function Communications() {
   useEffect(() => {
     if (templates) loadCommunications().catch(err => { setError(err.message); setRequestId(err.requestId || ""); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [communicationTab]);
+  }, [communicationTab,communicationSearch,communicationSort,communicationPage]);
 
   async function load() {
     setLoading(true);
@@ -71,8 +74,11 @@ export default function Communications() {
   }
 
   async function loadCommunications() {
-    const status = communicationTab === "ALL" ? "" : `?status=${communicationTab}`;
-    setCommunications(await api.get(`/communications${status}`));
+    const request=++communicationRequest.current;
+    const params=new URLSearchParams({page:String(communicationPage),pageSize:"50",search:communicationSearch,sort:communicationSort});
+    if(communicationTab!=="ALL")params.set("status",communicationTab);
+    const result=await api.get(`/communications?${params}`);
+    if(request===communicationRequest.current)setCommunications(result);
   }
 
   const filteredTemplates = useMemo(() => {
@@ -219,10 +225,12 @@ export default function Communications() {
             <div className="table-heading">
               <h2>Communication Center</h2><button onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>Compose Email</button>
               <div className="segmented-control">
-                {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => setCommunicationTab(tab)}>{tab.toLowerCase()}</button>)}
+                {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => {setCommunicationPage(1);setCommunicationTab(tab);}}>{tab.toLowerCase().replaceAll("_"," ")}</button>)}
               </div>
             </div>
+            <div className="toolbar"><label>Search communications<input value={communicationSearch} onChange={e=>{setCommunicationPage(1);setCommunicationSearch(e.target.value);}} placeholder="Recipient or subject"/></label><label>Sort<select value={communicationSort} onChange={e=>setCommunicationSort(e.target.value)}><option value="created_at">Newest first</option><option value="scheduled_at">Scheduled time</option><option value="recipient">Recipient</option></select></label></div>
             <DataTable rows={communications.data || []} columns={["status", "channel", "recipient", "rendered_subject", "template_name", "scheduled_at", "sent_at", "failure_message"]} empty="No communications match this view." onEdit={openCommunication} />
+            <div className="button-row"><button disabled={communicationPage<=1} onClick={()=>setCommunicationPage(p=>p-1)}>Previous page</button><span>Page {communicationPage} · {communications.pagination?.total??communications.data?.length??0} records</span><button disabled={communicationPage*50>=(communications.pagination?.total||0)} onClick={()=>setCommunicationPage(p=>p+1)}>Next page</button></div>
           </section>
           {selectedCommunication && <CommunicationComposer communication={selectedCommunication} setCommunication={setSelectedCommunication} onAction={communicationAction} busy={busy} />}
         </>
@@ -352,7 +360,7 @@ function CommunicationComposer({ communication, setCommunication, onAction, busy
       <label>Subject<input disabled={immutable} value={communication.rendered_subject || communication.subject || ""} onChange={(e) => setCommunication((row) => ({ ...row, rendered_subject: e.target.value, subject: e.target.value }))} /></label>
       <label>Body<textarea disabled={immutable} rows={8} value={communication.rendered_body || ""} onChange={(e) => setCommunication((row) => ({ ...row, rendered_body: e.target.value }))} /></label>
       {communication.channel === "SMS" && <p className="muted">{(communication.rendered_body || "").length} characters</p>}
-      {!immutable && <label>Schedule<input type="datetime-local" value={(communication.scheduled_at || "").slice(0, 16)} onChange={(e) => setCommunication((row) => ({ ...row, scheduled_at: e.target.value }))} /></label>}
+      {!immutable && <label>Schedule (your local time)<input type="datetime-local" value={timestampInput(communication.scheduled_at)} onChange={(e) => setCommunication((row) => ({ ...row, scheduled_at: e.target.value }))} /></label>}
       {communication.rendered_html&&<iframe title="Email preview" sandbox="" srcDoc={communication.rendered_html} style={{width:"100%",height:420,border:"1px solid #ddd"}}/>}
       <div className="button-row">
         <button disabled={immutable} onClick={() => onAction("save")}><Save size={15}/>Save draft</button><button disabled={immutable} onClick={() => onAction("preview")}><Eye size={15}/>Preview</button>{communication.status==="FAILED"&&<button disabled={busy} onClick={()=>onAction("retry")}>Retry failed</button>}

@@ -41,7 +41,7 @@ export default function Invoices() {
       <div className="toolbar">
         <label><span>Search</span><div className="input-icon"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Invoice, client, event" /></div></label>
         <label><span>Status</span><select aria-label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>{statuses.map((item) => <option key={item} value={item}>{item || "All statuses"}</option>)}</select></label>
-        <label><span>Sort</span><select disabled><option>Newest first</option></select></label>
+        <label><span>Sort</span><select aria-label="Sort" value={urlParams.get("sort_by")||"created_at"} onChange={e=>setUrlParams(current=>{const next=new URLSearchParams(current);next.set("sort_by",e.target.value);return next;})}><option value="created_at">Newest first</option><option value="total">Highest total</option><option value="event_date">Event date</option></select></label>
       </div>
       <DataTable rows={rows} columns={["invoice_number", "client_name", "event_name", "event_date", "proposal_number", "total", "amount_outstanding", "status", "due_date"]} getRowHref={(row) => `/finance/invoices/${row.id}`} empty="No invoices found." />
     </main>

@@ -36,6 +36,7 @@ export default function ProposalEditor() {
     sections: ["Introduction", "Event Details", "Proposed Experience", "Package Includes", "Investment Summary", "Next Steps", "Terms"].map((title, index) => section(title, index))
   });
   const [error, setError] = useState("");
+  const [saving,setSaving]=useState(false);
 
   useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
 
@@ -73,6 +74,7 @@ export default function ProposalEditor() {
 
   async function save(event) {
     event.preventDefault();
+    if(saving)return;setSaving(true);
     setError("");
     try {
       const payload = compact({ ...form, ...upload, total_investment: form.package_amount });
@@ -80,7 +82,7 @@ export default function ProposalEditor() {
       navigate(`/sales/proposals/${created.id}`);
     } catch (err) {
       setError(err.message);
-    }
+    } finally {setSaving(false);}
   }
 
   return (
@@ -183,7 +185,7 @@ export default function ProposalEditor() {
             <label className="wide">Internal notes<textarea value={form.notes || ""} onChange={(event) => setField("notes", event.target.value)} /></label>
           </div>
         </section>
-        <div className="modal-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action" disabled={!loaded}>{id ? "Save Proposal" : mode === "upload" ? "Upload Proposal" : "Create Proposal"}</button></div>
+        <div className="modal-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action" disabled={!loaded||saving}>{id ? "Save Proposal" : mode === "upload" ? "Upload Proposal" : "Create Proposal"}</button></div>
       </form>
     </main>
   );

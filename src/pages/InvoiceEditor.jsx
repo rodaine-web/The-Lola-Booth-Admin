@@ -12,6 +12,7 @@ export default function InvoiceEditor() {
   const [form, setForm] = useState({ proposal_id: params.get("proposalId") || "", client_id: params.get("clientId") || "", event_id: params.get("eventId") || "", depositOnly: false, items: [] });
   const [item, setItem] = useState({ description: "", quantity: 1, unit_price: 0, taxable: true, tax_rate: 0, discount: 0 });
   const [error, setError] = useState("");
+  const [saving,setSaving]=useState(false);
 
   useEffect(() => { if (id) api.get(`/invoices/${id}`).then(invoice => { setForm({...invoice, due_date: invoice.due_date?.slice(0,10) || "", items: invoice.items || []}); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
 
@@ -21,6 +22,7 @@ export default function InvoiceEditor() {
 
   async function save(event) {
     event.preventDefault();
+    if(saving)return;setSaving(true);
     setError("");
     try {
       const payload = compact({client_id:form.client_id,event_id:form.event_id,due_date:form.due_date,notes:form.notes,terms:form.terms,items:form.items,...(!id ? {proposal_id:form.proposal_id,depositOnly:form.depositOnly} : {})});
@@ -28,7 +30,7 @@ export default function InvoiceEditor() {
       navigate(`/finance/invoices/${created.id}`);
     } catch (err) {
       setError(err.message);
-    }
+    } finally {setSaving(false);}
   }
 
   return (
@@ -61,7 +63,7 @@ export default function InvoiceEditor() {
             <div className="line-list">{form.items.map((line, index) => <div key={`${line.description}-${index}`}><span>{line.description} · {line.quantity} x ${line.unit_price}</span><button type="button" onClick={() => setForm((current) => ({ ...current, items: current.items.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
           </section>
         )}
-        <div className="modal-actions"><Link to="/finance/invoices">Cancel</Link><button className="primary-action" disabled={!loaded}>{id ? "Save Invoice" : "Create Invoice"}</button></div>
+        <div className="modal-actions"><Link to="/finance/invoices">Cancel</Link><button className="primary-action" disabled={!loaded||saving}>{id ? "Save Invoice" : "Create Invoice"}</button></div>
       </form>
     </main>
   );

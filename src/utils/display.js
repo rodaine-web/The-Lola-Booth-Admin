@@ -21,7 +21,7 @@ export function businessToday(now=new Date()) { const parts=new Intl.DateTimeFor
 export function statusTone(status) {
  const key=String(status||'').toUpperCase();
  if(['HEALTHY','COMPLETE','COMPLETED','PAID','READY','AVAILABLE','SUCCESS','SUCCESSFUL','CONNECTED','ACTIVE','PUBLISHED','SENT_TO_PROVIDER','ACCEPTED'].includes(key))return 'success';
- if(['FAILED','ERROR','OVERDUE','BLOCKED','INCIDENT','UNHEALTHY','CONFLICT','OUT_OF_SERVICE','DOWN','ISSUE_REPORTED'].includes(key))return 'danger';
+ if(['FAILED','ERROR','OVERDUE','BLOCKED','INCIDENT','UNHEALTHY','CONFLICT','OUT_OF_SERVICE','MAINTENANCE','DOWN','ISSUE_REPORTED'].includes(key))return 'danger';
  if(['WARNING','ATTENTION','NEEDS_ATTENTION','PARTIAL','PENDING','INVITED','DUE_SOON','NOT_READY','RESERVED','NEEDS_CHECK','DEGRADED','STALE','PENDING_APPROVAL','SCHEDULED'].includes(key))return 'warning';
  if(['NEW','IN_PROGRESS','CONFIRMED','SENT','VIEWED','EN_ROUTE','ON_SITE','SETTING_UP','LIVE'].includes(key))return 'info';
  return 'neutral';
@@ -34,8 +34,10 @@ export function formatDisplay(value,field='') {
  if(/(^|_)(percent|percentage|conversion_rate|tax_rate)$/.test(field))return formatPercent(value);
  if(/(_date|valid_through)$/.test(field))return formatDateOnly(value);
  if(/(_at|scheduled_for)$/.test(field))return formatTimestamp(value);
- if(/^(status|priority|channel|direction|invitation_status|operational_status)$/.test(field))return labelize(value);
+ if(/^(status|priority|channel|direction|invitation_status|operational_status|action|entity)$/.test(field))return labelize(value);
  if(typeof value==='number')return new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(value);
  if(typeof value==='object')return 'Details available';
  return String(value);
 }
+// datetime-local inputs explicitly use the operator's browser timezone; timestamp displays use the business timezone.
+export function timestampInput(value){if(!value)return '';if(!/[zZ]|[+-]\d{2}:\d{2}$/.test(value))return String(value).slice(0,16);const date=new Date(value);if(!Number.isFinite(date.getTime()))return '';const pad=n=>String(n).padStart(2,'0');return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;}

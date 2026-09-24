@@ -107,7 +107,7 @@ export function calculateInvoiceTotals(items) {
     const discount = money(item.discount);
     const preTax = Math.max(0, quantity * unit - discount);
     const tax = item.taxable === false ? 0 : preTax * (money(item.tax_rate) / 100);
-    return { ...item, quantity, unit_price: unit, discount, tax: money(tax), line_total: money(preTax + tax) };
+    return { ...item, quantity, unit_price: unit, taxable: item.taxable !== false, tax_rate: money(item.tax_rate), discount, tax: money(tax), line_total: money(preTax + tax) };
   });
   return {
     items: normalized,

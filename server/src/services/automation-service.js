@@ -522,7 +522,7 @@ function communicationFieldsFromInput(input, rendered = {}) {
     direction: input.direction || "OUTBOUND",
     subject: input.subject ?? rendered.subject ?? "",
     body: input.body ?? rendered.body ?? "",
-    html: input.html ?? rendered.html ?? null,
+    html: input.html ?? rendered.html ?? (input.body ? brandedEmailHtml(input.body) : null),
     recipient: input.recipient || input.to || "",
     cc: splitEmails(input.cc),
     bcc: splitEmails(input.bcc),
