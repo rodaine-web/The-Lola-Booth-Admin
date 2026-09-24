@@ -90,7 +90,7 @@ test("admin API exposes event operations and attendant-only event workflows", ()
 test("frontend adds operations tab and attendant mobile experience without exposing finance", () => {
   assert.match(app, /\/my-events/);
   assert.match(app, /roles\?\.includes\("ATTENDANT"\)/);
-  assert.match(app, /!\w+\.roles\?\.some\(\(role\) => \["OWNER", "ADMIN", "EVENT_MANAGER"\]\.includes\(role\)\)/);
+  assert.match(app, /!\w+\.roles\?\.some\(\(role\) => \["OWNER", "ADMIN", "SUPER_ADMIN", "EVENT_MANAGER"\]\.includes\(role\)\)/);
   assert.match(eventDetail, /const tabs = \["Overview", "Operations"/);
   assert.match(eventDetail, /Apply Checklist Template/);
   assert.match(eventDetail, /Download Run Sheet/);

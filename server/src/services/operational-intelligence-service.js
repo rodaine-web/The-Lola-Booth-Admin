@@ -282,12 +282,12 @@ async function leadSourcePerformance([start, end]) {
     `SELECT COALESCE(referral_source, lead_source, 'Other') AS source,
       count(*)::int AS leads,
       count(*) FILTER (WHERE l.status IN ('QUALIFIED','PROPOSAL_DRAFT','PROPOSAL_SENT','WON'))::int AS qualified,
-      count(DISTINCT p.id)::int AS proposals,
+      COALESCE(sum(p.proposals),0)::int AS proposals,
       count(*) FILTER (WHERE l.status='WON')::int AS bookings,
       COALESCE(sum(b.total),0)::numeric AS booked_revenue
      FROM leads l
-     LEFT JOIN proposals p ON p.lead_id=l.id AND p.deleted_at IS NULL
-     LEFT JOIN bookings b ON b.lead_id=l.id AND b.deleted_at IS NULL
+     LEFT JOIN LATERAL (SELECT count(*) AS proposals FROM proposals WHERE lead_id=l.id AND deleted_at IS NULL) p ON true
+     LEFT JOIN LATERAL (SELECT sum(total) AS total FROM bookings WHERE lead_id=l.id AND deleted_at IS NULL) b ON true
      WHERE l.created_at >= $1 AND l.created_at < $2 AND l.deleted_at IS NULL
      GROUP BY 1 ORDER BY leads DESC`,
     [start, end]

@@ -1,4 +1,7 @@
+import { assertManagedUser, assertGrantablePermissions, assignUserPermissions } from '../services/user-access-service.js';
 import { Router } from "express";
+import { env } from "../config/env.js";
+import { proposalEditInput } from "../services/proposal-edit-input.js";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { z } from "zod";
@@ -26,6 +29,7 @@ import {
 } from "../services/proposal-service.js";
 import {
   createInvoice,
+  updateDraftInvoice,
   generateAndStoreInvoice,
   getInvoice,
   sendInvoice
@@ -134,7 +138,8 @@ import {
   updateSiteSettings,
   uploadMedia,
   websiteContentDefaults,
-  publicSitePayload
+  publicSitePayload,
+  assertCanPublish,
 } from "../services/website-cms-service.js";
 import { getStorageProvider } from "../services/storage-service.js";
 import { sendEmail } from "../services/email-service.js";
@@ -182,7 +187,7 @@ function requireAnyPermission(...permissions) {
   };
 }
 
-function assertAssignableRoles(req, roles = []) {
+async function assertAssignableRoles(req, roles = []) {
   const requested = roles.filter(Boolean).map((role) => String(role).toUpperCase());
   if (requested.includes("ROOT")) throw new AppError("Root role assignment is not available in Admin.", 403, "ROOT_ROLE_BLOCKED");
   const actorRoles = req.user?.roles || [];
@@ -191,6 +196,10 @@ function assertAssignableRoles(req, roles = []) {
   if (!isOwner && requested.includes("OWNER")) throw new AppError("Only the owner can assign owner access.", 403, "OWNER_ESCALATION_BLOCKED");
   if (!isOwner && !isSuperAdmin && requested.some((role) => ["ADMIN", "SUPER_ADMIN"].includes(role))) {
     throw new AppError("Only owner or super admin users can assign administrative roles.", 403, "ADMIN_ESCALATION_BLOCKED");
+  }
+  if (!isOwner) {
+    const permissions = await query("SELECT DISTINCT p.key FROM roles r JOIN role_permissions rp ON rp.role_id=r.id JOIN permissions p ON p.id=rp.permission_id WHERE r.name=ANY($1::text[])", [requested]);
+    assertGrantablePermissions(req.user, permissions.rows.map(p => p.key));
   }
 }
 
@@ -212,7 +221,7 @@ function createAccountToken() {
 }
 
 function setupPasswordUrl(token) {
-  return `${process.env.PUBLIC_BASE_URL || "https://thelolabooth.com"}/setup-password?token=${token}`;
+  return `${process.env.CLIENT_ORIGIN || "https://admin.thelolabooth.com"}/setup-password?token=${token}`;
 }
 
 function nullableText(value) {
@@ -283,6 +292,13 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         where.push(`status = $${params.length}`);
       }
       if (table === "leads") {
+        if (filters.funnel === 'qualified') where.push("status IN ('QUALIFIED','PROPOSAL_DRAFT','PROPOSAL_SENT','WON')");
+        if (filters.funnel === 'booked') where.push("status='WON'");
+        if (filters.source_group) { params.push(filters.source_group);where.push(`COALESCE(referral_source,lead_source,'Other')=$${params.length}`); }
+        const timeColumn=['qualified','booked'].includes(filters.funnel)?'updated_at':'created_at';
+        if(filters.from){params.push(filters.from);where.push(`${timeColumn}>=$${params.length}::timestamptz`);}
+        if(filters.to){params.push(filters.to);where.push(`${timeColumn}<$${params.length}::timestamptz`);}
+
         if (filters.source) {
           params.push(filters.source);
           where.push(`(lead_source = $${params.length} OR source_subtype = $${params.length} OR provider = $${params.length})`);
@@ -1163,7 +1179,7 @@ adminRouter.get("/pickers/packages", requirePermission("read:content"), asyncHan
 }));
 
 adminRouter.get("/pickers/experiences", requirePermission("read:content"), asyncHandler(async (req, res) => {
-  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, category AS subtitle FROM experiences WHERE deleted_at IS NULL AND active=true AND (name ILIKE $1 OR description ILIKE $1) ORDER BY display_order, name LIMIT 25");
+  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, slug AS subtitle FROM experiences WHERE deleted_at IS NULL AND active=true AND (name ILIKE $1 OR description ILIKE $1) ORDER BY display_order, name LIMIT 25");
   res.json({ data: rows });
 }));
 
@@ -1188,6 +1204,11 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
   const offset = (filters.page - 1) * pageSize;
   const params = [];
   const where = ["p.deleted_at IS NULL"];
+  const activity=filters.funnel||filters.activity;
+  const timeColumn=activity==='accepted'?'p.accepted_at':activity==='sent'?'p.sent_at':'p.created_at';
+  if(filters.from){params.push(filters.from);where.push(`${timeColumn}>=$${params.length}::timestamptz`);}
+  if(filters.to){params.push(filters.to);where.push(`${timeColumn}<$${params.length}::timestamptz`);}
+
   if (filters.status) {
     params.push(filters.status);
     where.push(`p.status=$${params.length}`);
@@ -1200,21 +1221,14 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
   const sortBy = sortMap[filters.sort_by || filters.sort] || "p.created_at";
   const direction = String(filters.sort_direction || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
   params.push(pageSize, offset);
-  const rows = await query(
-    `SELECT p.*, c.name AS client_name, e.event_name, e.event_date, pkg.name AS package_name, u.name AS owner_name
-     FROM proposals p
-     LEFT JOIN clients c ON c.id=p.client_id
-     LEFT JOIN events e ON e.id=p.event_id
-     LEFT JOIN packages pkg ON pkg.id=p.package_id
-     LEFT JOIN users u ON u.id=p.owner_user_id
-     WHERE ${where.join(" AND ")}
-     ORDER BY ${sortBy} ${direction} NULLS LAST LIMIT $${params.length - 1} OFFSET $${params.length}`,
-    params
-  );
-  const count = await query(
-    `SELECT count(*)::int AS count FROM proposals p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id LEFT JOIN packages pkg ON pkg.id=p.package_id WHERE ${where.join(" AND ")}`,
-    params.slice(0, -2)
-  );
+  const from = `FROM proposals p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id LEFT JOIN packages pkg ON pkg.id=p.package_id LEFT JOIN users u ON u.id=p.owner_user_id WHERE ${where.join(" AND ")}`;
+  const select = `SELECT p.*, c.name AS client_name, e.event_name, e.event_date, pkg.name AS package_name, u.name AS owner_name ${from}`;
+  const grouped = ["sent", "accepted"].includes(filters.funnel);
+  const resultSort = ({"c.name":"client_name","e.event_date":"event_date","pkg.name":"package_name","u.name":"owner_name"})[sortBy] || sortBy.replace("p.", "");
+  const rows = await query(grouped
+    ? `WITH filtered AS (${select}), deduped AS (SELECT DISTINCT ON (COALESCE(lead_id,id)) * FROM filtered ORDER BY COALESCE(lead_id,id),created_at DESC,id) SELECT * FROM deduped ORDER BY ${resultSort} ${direction} NULLS LAST LIMIT $${params.length-1} OFFSET $${params.length}`
+    : `${select} ORDER BY ${sortBy} ${direction} NULLS LAST LIMIT $${params.length-1} OFFSET $${params.length}`, params);
+  const count = await query(`SELECT count(${grouped ? "DISTINCT COALESCE(p.lead_id,p.id)" : "*"})::int AS count ${from}`,params.slice(0,-2));
   res.json({ data: rows.rows, pagination: { page: filters.page, pageSize, total: count.rows[0].count } });
 }));
 
@@ -1236,12 +1250,14 @@ adminRouter.post("/proposals/upload", requireAnyPermission("proposals.upload", "
 adminRouter.get("/proposals/:id", requirePermission("read:sales"), asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.id);
   const versions = await query("SELECT id, version_number, created_at, created_by FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC", [req.params.id]);
-  res.json({ ...proposal, versions: versions.rows });
+  res.json({ ...proposal, editable_input: proposalEditInput(proposal), public_url: `${env.publicBaseUrl.replace(/\/$/, "")}/proposal/${proposal.secure_token}`, versions: versions.rows });
 }));
 
 adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(proposalSchema.partial()), asyncHandler(async (req, res) => {
   const before = await getProposal(req.params.id);
-  const merged = { ...before, ...req.body };
+  if (!["DRAFT", "READY"].includes(before.status)) throw new AppError("Only draft or ready proposals can be edited. Duplicate a sent proposal to prepare a revision.", 409, "PROPOSAL_NOT_EDITABLE");
+  const merged = { ...proposalEditInput(before), ...req.body };
+  if (req.body.custom_services && !req.body.custom_line_items) merged.custom_line_items = [];
   const snapshot = await buildProposalSnapshot(merged);
   const updated = await transaction(async (client) => {
     const result = await client.query(
@@ -1319,6 +1335,9 @@ adminRouter.get("/invoices", requirePermission("read:finance"), validate(paginat
   const offset = (filters.page - 1) * pageSize;
   const params = [];
   const where = ["i.deleted_at IS NULL"];
+  if(filters.balance==='open')where.push("COALESCE(i.amount_outstanding,i.balance_due,0)>0 AND i.status NOT IN ('VOID','REFUNDED')");
+  if(filters.due==='week')where.push("i.due_date>=current_date AND i.due_date<current_date+interval '7 days' AND COALESCE(i.amount_outstanding,i.balance_due,0)>0 AND i.status NOT IN ('VOID','REFUNDED')");
+
   if (filters.status) {
     params.push(filters.status);
     where.push(`i.status=$${params.length}`);
@@ -1351,6 +1370,10 @@ adminRouter.post("/invoices", requirePermission("write:finance"), validate(invoi
 
 adminRouter.get("/invoices/:id", requirePermission("read:finance"), asyncHandler(async (req, res) => {
   res.json(await getInvoice(req.params.id));
+}));
+
+adminRouter.patch("/invoices/:id", requirePermission("write:finance"), validate(invoiceSchema), asyncHandler(async (req, res) => {
+  res.json(await updateDraftInvoice(req));
 }));
 
 adminRouter.get("/invoices/:id/pdf", requirePermission("read:finance"), asyncHandler(async (req, res) => {
@@ -1398,6 +1421,11 @@ adminRouter.get("/payments", requirePermission("read:finance"), validate(paginat
   const offset = (filters.page - 1) * pageSize;
   const params = [];
   const where = ["p.deleted_at IS NULL"];
+  const activity=filters.funnel||filters.activity;
+  const timeColumn=activity==='accepted'?'p.accepted_at':activity==='sent'?'p.sent_at':'p.created_at';
+  if(filters.from){params.push(filters.from);where.push(`${timeColumn}>=$${params.length}::timestamptz`);}
+  if(filters.to){params.push(filters.to);where.push(`${timeColumn}<$${params.length}::timestamptz`);}
+
   if (filters.status) {
     params.push(filters.status);
     where.push(`p.status=$${params.length}`);
@@ -1474,7 +1502,7 @@ adminRouter.post("/payment-schedules", requirePermission("write:finance"), async
   res.status(201).json(schedule);
 }));
 
-const cmsTypes = ["hero", "gallery", "content", "testimonials", "faqs", "eventTypes"];
+const cmsTypes = ["pageItems", "mediaMappings", "hero", "gallery", "content", "testimonials", "faqs", "eventTypes"];
 const cmsTypeSchema = z.object({ type: z.enum(cmsTypes) });
 const cmsTypeAndIdSchema = z.object({ type: z.enum(cmsTypes), id: uuid });
 const cmsRecordSchema = z.object({ id: uuid });
@@ -1491,6 +1519,13 @@ const mediaUploadSchema = z.object({
   width: z.coerce.number().int().positive().optional(),
   height: z.coerce.number().int().positive().optional()
 }).passthrough();
+
+adminRouter.get("/website/diagnostics", requirePermission("read:website"), asyncHandler(async (_req, res) => {
+  const site = await publicSitePayload();
+  const imports = await query("SELECT max(imported_at) AS last_import_at, count(*)::int AS mapped_records FROM website_import_state");
+  const counts = Object.fromEntries(["heroSlides", "experiences", "packages", "eventTypes", "gallery", "testimonials", "faqs", "pageItems", "mediaMappings"].map(key => [key, site[key].length]));
+  res.set("Cache-Control", "no-store").json({checkedAt: new Date().toISOString(), apiReachable: true, cmsReachable: true, homepageLoaded: site.pageItems.some(item => item.page_slug === "home"), counts, ...imports.rows[0]});
+}));
 
 adminRouter.get("/website/defaults", requirePermission("read:website"), (_req, res) => {
   res.json({ ...websiteContentDefaults(), galleryCategories: getGalleryCategories() });
@@ -1593,10 +1628,11 @@ adminRouter.get("/equipment", ...listRoute("equipment", ["name", "category", "se
 adminRouter.get("/tasks", ...listRoute("tasks", ["title", "description"], "read:tasks"));
 adminRouter.get("/files", ...listRoute("files", ["filename", "category", "storage_provider"], "read:tasks"));
 adminRouter.get("/galleries", ...listRoute("galleries", ["gallery_name", "gallery_url", "status"], "read:tasks"));
-adminRouter.get("/users", requireAnyPermission("view:users", "read:settings"), asyncHandler(async (req, res) => {
+adminRouter.get("/users", requirePermission("view:users"), asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT u.id, u.name, u.email, u.active, u.first_name, u.last_name, u.phone, u.business_role, u.invitation_status, u.invited_at, u.disabled_at, u.created_at,
-            COALESCE(json_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL),'[]') AS roles
+            COALESCE(json_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL),'[]') AS roles,
+            COALESCE((SELECT json_agg(p.key) FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=u.id),'[]') AS permissions
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id=u.id
      LEFT JOIN roles r ON r.id=ur.role_id
@@ -1608,12 +1644,17 @@ adminRouter.get("/users", requireAnyPermission("view:users", "read:settings"), a
   res.json({ data: rows.rows, pagination: { page: Number(req.query.page || 1), pageSize: 150, total: rows.rowCount } });
 }));
 
-adminRouter.get("/roles", requireAnyPermission("view:users", "read:settings"), asyncHandler(async (_req, res) => {
-  const rows = await query("SELECT id, name, description FROM roles ORDER BY name");
+adminRouter.get("/roles", requirePermission("view:users"), asyncHandler(async (_req, res) => {
+  const rows = await query("SELECT r.id, r.name, r.description, COALESCE((SELECT json_agg(p.key) FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=r.id),'[]') AS permissions FROM roles r WHERE r.name <> 'ROOT' ORDER BY r.name");
   res.json({ data: rows.rows });
 }));
 
-adminRouter.post("/users", requireAnyPermission("create:users", "write:settings"), asyncHandler(async (req, res) => {
+adminRouter.get("/permissions", requirePermission("view:users"), asyncHandler(async (req, res) => {
+  const result = await query("SELECT key, description FROM permissions WHERE key <> '*' ORDER BY key");
+  res.json({data: result.rows.filter(p => req.user.permissions.includes('*') || req.user.permissions.includes(p.key))});
+}));
+
+adminRouter.post("/users", requirePermission("create:users"), asyncHandler(async (req, res) => {
   const body = z.object({
     name: z.string().min(1),
     email: z.string().email().transform((value) => value.toLowerCase()),
@@ -1621,9 +1662,12 @@ adminRouter.post("/users", requireAnyPermission("create:users", "write:settings"
     last_name: z.string().optional().nullable(),
     phone: z.string().optional().nullable(),
     business_role: z.string().optional().nullable(),
-    roles: z.array(z.string()).default(["ATTENDANT"])
+    roles: z.array(z.string()).min(1).default(["ATTENDANT"]),
+    permissions: z.array(z.string()).default([])
   }).parse(req.body);
-  assertAssignableRoles(req, body.roles);
+  await assertAssignableRoles(req, body.roles);
+  if (!req.user.permissions.includes("*") && !req.user.permissions.includes("assign:roles")) throw new AppError("Role assignment is not permitted.", 403, "FORBIDDEN");
+  assertGrantablePermissions(req.user, body.permissions);
   const temporaryHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12);
   const { token, tokenHash } = createAccountToken();
   const created = await transaction(async (client) => {
@@ -1633,6 +1677,7 @@ adminRouter.post("/users", requireAnyPermission("create:users", "write:settings"
       [body.name, body.email, temporaryHash, body.first_name || null, body.last_name || null, body.phone || null, body.business_role || null]
     )).rows[0];
     await assignRoles(client, user.id, body.roles);
+    await assignUserPermissions(client, user.id, body.permissions);
     await client.query(
       `INSERT INTO user_account_tokens (user_id, token_hash, token_type, expires_at, created_by)
        VALUES ($1,$2,'INVITATION',now() + interval '7 days',$3)`,
@@ -1641,26 +1686,32 @@ adminRouter.post("/users", requireAnyPermission("create:users", "write:settings"
     return user;
   });
   const setupUrl = setupPasswordUrl(token);
-  await sendEmail({
+  const delivery = await sendEmail({
     to: body.email,
     subject: "Your LOLA Admin invitation",
     body: `You have been invited to LOLA Admin. Set your password here: ${setupUrl}`,
     html: brandedEmailHtml("You have been invited to LOLA Admin. Use the secure link below to set your password.", { firstName: body.first_name || body.name.split(" ")[0], ctaLabel: "Set Password", ctaUrl: setupUrl })
-  });
-  await writeAudit({ req, action: "user_invited", entity: "user", entityId: created.id, after: { ...created, roles: body.roles } });
-  res.status(201).json({ ...created, roles: body.roles });
+  }).then(() => ({ok:true})).catch(() => ({ok:false}));
+  await writeAudit({ req, action: "user_invited", entity: "user", entityId: created.id, after: { ...created, roles: body.roles, email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED" } });
+  res.status(201).json({ ...created, roles: body.roles, deliveryError: !delivery.ok });
 }));
 
-adminRouter.patch("/users/:id", requireAnyPermission("edit:users", "write:settings"), asyncHandler(async (req, res) => {
+adminRouter.patch("/users/:id", requirePermission("edit:users"), asyncHandler(async (req, res) => {
   const body = z.object({
     name: z.string().optional(),
     first_name: z.string().optional().nullable(),
     last_name: z.string().optional().nullable(),
     phone: z.string().optional().nullable(),
     business_role: z.string().optional().nullable(),
-    roles: z.array(z.string()).optional()
+    roles: z.array(z.string()).min(1).optional(),
+    permissions: z.array(z.string()).optional()
   }).parse(req.body);
-  if (body.roles) assertAssignableRoles(req, body.roles);
+  await assertManagedUser(req, req.params.id);
+  if (body.roles || body.permissions) {
+    if (!req.user.permissions.includes("*") && !req.user.permissions.includes("assign:roles")) throw new AppError("Role assignment is not permitted.", 403, "FORBIDDEN");
+    if (body.roles) await assertAssignableRoles(req, body.roles);
+    if (body.permissions) assertGrantablePermissions(req.user, body.permissions);
+  }
   const before = (await query("SELECT id, name, email, active FROM users WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
   if (!before) throw notFound("User");
   const updated = await transaction(async (client) => {
@@ -1673,30 +1724,35 @@ adminRouter.patch("/users/:id", requireAnyPermission("edit:users", "write:settin
       user = (await client.query(`UPDATE users SET ${fields.map((field, index) => `${field}=$${index + 1}`).join(", ")}, updated_at=now() WHERE id=$${values.length} RETURNING id, name, email, active, first_name, last_name, phone, business_role, invitation_status, disabled_at, created_at`, values)).rows[0];
     }
     if (body.roles) await assignRoles(client, req.params.id, body.roles);
+    if (body.permissions) await assignUserPermissions(client, req.params.id, body.permissions);
     return user;
   });
   await writeAudit({ req, action: "user_updated", entity: "user", entityId: req.params.id, before, after: { ...updated, roles: body.roles } });
   res.json({ ...updated, roles: body.roles });
 }));
 
-adminRouter.post("/users/:id/deactivate", requireAnyPermission("disable:users", "write:settings"), asyncHandler(async (req, res) => {
+adminRouter.post("/users/:id/deactivate", requirePermission("disable:users"), asyncHandler(async (req, res) => {
+  await assertManagedUser(req, req.params.id);
   if (req.params.id === req.user.id) throw new AppError("You cannot deactivate your own account.", 409, "SELF_DEACTIVATION_BLOCKED");
   const before = (await query("SELECT id, name, email, active FROM users WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
   if (!before) throw notFound("User");
   const after = (await query("UPDATE users SET active=false, disabled_at=now(), invitation_status='DISABLED', updated_at=now() WHERE id=$1 RETURNING id, name, email, active, disabled_at, invitation_status", [req.params.id])).rows[0];
+  await query("UPDATE user_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL", [req.params.id]);
   await writeAudit({ req, action: "user_deactivated", entity: "user", entityId: req.params.id, before, after });
   res.json(after);
 }));
 
-adminRouter.post("/users/:id/reactivate", requireAnyPermission("edit:users", "write:settings"), asyncHandler(async (req, res) => {
+adminRouter.post("/users/:id/reactivate", requirePermission("edit:users"), asyncHandler(async (req, res) => {
+  await assertManagedUser(req, req.params.id);
   const before = (await query("SELECT id, name, email, active, invitation_status FROM users WHERE id=$1 AND deleted_at IS NULL", [req.params.id])).rows[0];
   if (!before) throw notFound("User");
-  const after = (await query("UPDATE users SET active=true, disabled_at=NULL, invitation_status='ACTIVE', updated_at=now() WHERE id=$1 RETURNING id, name, email, active, disabled_at, invitation_status", [req.params.id])).rows[0];
+  const after = (await query("UPDATE users SET active=true, disabled_at=NULL, invitation_status=CASE WHEN EXISTS (SELECT 1 FROM user_account_tokens t WHERE t.user_id=users.id AND t.token_type='INVITATION' AND t.used_at IS NULL) THEN 'INVITED' ELSE 'ACTIVE' END, updated_at=now() WHERE id=$1 RETURNING id, name, email, active, disabled_at, invitation_status", [req.params.id])).rows[0];
   await writeAudit({ req, action: "user_reactivated", entity: "user", entityId: req.params.id, before, after });
   res.json(after);
 }));
 
-adminRouter.post("/users/:id/resend-invitation", requireAnyPermission("invitations.send", "write:settings"), asyncHandler(async (req, res) => {
+adminRouter.post("/users/:id/resend-invitation", requirePermission("invitations.send"), asyncHandler(async (req, res) => {
+  await assertManagedUser(req, req.params.id);
   const user = (await query("SELECT id, name, email, first_name, invitation_status FROM users WHERE id=$1 AND deleted_at IS NULL AND active=true", [req.params.id])).rows[0];
   if (!user) throw notFound("User");
   if (user.invitation_status === "ACTIVE") throw new AppError("This user has already completed account setup.", 409, "INVITATION_ALREADY_ACCEPTED");
@@ -1711,25 +1767,26 @@ adminRouter.post("/users/:id/resend-invitation", requireAnyPermission("invitatio
     await client.query("UPDATE users SET invitation_status='INVITED', invited_at=now(), updated_at=now() WHERE id=$1", [user.id]);
   });
   const setupUrl = setupPasswordUrl(token);
-  await sendEmail({
+  const delivery = await sendEmail({
     to: user.email,
     subject: "Your LOLA Admin invitation",
     body: `You have been invited to LOLA Admin. Set your password here: ${setupUrl}`,
     html: brandedEmailHtml("You have been invited to LOLA Admin. Use the secure link below to set your password.", { firstName: user.first_name || user.name.split(" ")[0], ctaLabel: "Set Password", ctaUrl: setupUrl })
-  });
-  await writeAudit({ req, action: "user_invitation_resent", entity: "user", entityId: user.id });
-  res.status(201).json({ ok: true });
+  }).then(() => ({ok:true})).catch(() => ({ok:false}));
+  await writeAudit({ req, action: delivery.ok ? "user_invitation_resent" : "user_invitation_delivery_failed", entity: "user", entityId: user.id });
+  res.status(201).json({ ok: true, deliveryError: !delivery.ok });
 }));
 
-adminRouter.post("/users/:id/password-reset", requireAnyPermission("password_resets.send", "write:settings"), asyncHandler(async (req, res) => {
+adminRouter.post("/users/:id/password-reset", requirePermission("password_resets.send"), asyncHandler(async (req, res) => {
+  await assertManagedUser(req, req.params.id);
   const user = (await query("SELECT id, name, email FROM users WHERE id=$1 AND deleted_at IS NULL AND active=true", [req.params.id])).rows[0];
   if (!user) throw notFound("User");
   const { token, tokenHash } = createAccountToken();
   await query(`INSERT INTO user_account_tokens (user_id, token_hash, token_type, expires_at, created_by) VALUES ($1,$2,'PASSWORD_RESET',now() + interval '2 hours',$3)`, [user.id, tokenHash, req.user.id]);
   const resetUrl = setupPasswordUrl(token);
-  await sendEmail({ to: user.email, subject: "Reset your LOLA Admin password", body: `Reset your password: ${resetUrl}`, html: brandedEmailHtml("A LOLA Admin password reset was requested. Use the secure link below to set a new password.", { firstName: user.name.split(" ")[0], ctaLabel: "Reset Password", ctaUrl: resetUrl }) });
-  await writeAudit({ req, action: "password_reset_sent", entity: "user", entityId: user.id });
-  res.status(201).json({ ok: true });
+  const delivery = await sendEmail({ to: user.email, subject: "Reset your LOLA Admin password", body: `Reset your password: ${resetUrl}`, html: brandedEmailHtml("A LOLA Admin password reset was requested. Use the secure link below to set a new password.", { firstName: user.name.split(" ")[0], ctaLabel: "Reset Password", ctaUrl: resetUrl }) }).then(() => ({ok:true})).catch(() => ({ok:false}));
+  await writeAudit({ req, action: delivery.ok ? "password_reset_sent" : "password_reset_delivery_failed", entity: "user", entityId: user.id });
+  res.status(201).json({ ok: true, deliveryError: !delivery.ok });
 }));
 adminRouter.get("/media-library", ...listRoute("media_library", ["filename", "alt_text", "storage_key"], "read:website"));
 adminRouter.get("/website-content", ...listRoute("website_content", ["content_key", "title", "seo_title"], "read:website"));
@@ -1775,6 +1832,8 @@ async function enforceMostPopular(client, id, mostPopular, experienceId) {
 }
 
 adminRouter.post("/packages", requirePermission("write:content"), validate(packageSchema), asyncHandler(async (req, res) => {
+  req.body.website_status ||= "DRAFT";
+  if (req.body.website_status === "PUBLISHED") assertCanPublish(req);
   const inserted = await transaction(async (client) => {
     if (req.body.most_popular) await client.query("UPDATE packages SET most_popular=false WHERE experience_id IS NOT DISTINCT FROM $1::uuid AND deleted_at IS NULL", [req.body.experience_id || null]);
     const fields = Object.keys(req.body);
@@ -1789,6 +1848,7 @@ adminRouter.post("/packages", requirePermission("write:content"), validate(packa
 adminRouter.patch("/packages/:id", requirePermission("write:content"), validate(packageSchema.partial()), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM packages WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Package");
+  if (before.rows[0].website_status === "PUBLISHED" || req.body.website_status === "PUBLISHED") assertCanPublish(req);
   const updated = await transaction(async (client) => {
     const fields = Object.keys(cleanPatch(req.body, ["name", "description", "short_description", "starting_price", "currency", "active", "featured", "most_popular", "display_order", "duration", "included_hours", "default_deposit", "proposal_description", "website_description", "show_on_website", "website_short_description", "website_image_media_id", "website_display_order", "website_featured", "website_key", "experience_id", "pricing_mode", "website_features", "website_custom_heading", "website_home_description", "website_status"]));
     if (!fields.length) throw new AppError("No supported fields to update.", 400, "NO_FIELDS");
@@ -1803,6 +1863,7 @@ adminRouter.patch("/packages/:id", requirePermission("write:content"), validate(
 }));
 
 const experienceSchema = z.object({
+  website_status: z.enum(["DRAFT","PUBLISHED","ARCHIVED"]).optional(),
   name: z.string().min(1),
   slug: z.string().min(1).optional(),
   description: z.string().optional().nullable(),
@@ -1821,11 +1882,15 @@ const experienceSchema = z.object({
   website_name: z.string().optional().nullable(),
   website_short_description: z.string().optional().nullable(),
   website_long_description: z.string().optional().nullable(),
+  website_heading: z.string().optional().nullable(),
+  website_kicker: z.string().optional().nullable(),
+  website_label: z.string().optional().nullable(),
   website_featured: z.boolean().optional(),
   cover_image_media_id: uuid.optional().nullable()
 }).passthrough();
 
 adminRouter.post("/experiences", requirePermission("write:content"), validate(experienceSchema), asyncHandler(async (req, res) => {
+  if (req.body.website_status === "PUBLISHED") assertCanPublish(req);
   const body = { ...req.body, slug: req.body.slug || req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") };
   if (Array.isArray(body.features)) body.features = JSON.stringify(body.features);
   if (Array.isArray(body.equipment_required)) body.equipment_required = JSON.stringify(body.equipment_required);
@@ -1839,10 +1904,11 @@ adminRouter.post("/experiences", requirePermission("write:content"), validate(ex
 adminRouter.patch("/experiences/:id", requirePermission("write:content"), validate(experienceSchema.partial()), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM experiences WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Experience");
+  if (before.rows[0].website_status === "PUBLISHED" || req.body.website_status === "PUBLISHED") assertCanPublish(req);
   const body = { ...req.body };
   if (Array.isArray(body.features)) body.features = JSON.stringify(body.features);
   if (Array.isArray(body.equipment_required)) body.equipment_required = JSON.stringify(body.equipment_required);
-  const updated = await updateById({ table: "experiences", id: req.params.id, body, allowed: ["name", "slug", "description", "proposal_description", "features", "active", "display_order", "default_pricing", "base_price", "default_duration", "setup_duration", "breakdown_duration", "equipment_required", "staff_required", "show_on_website", "website_name", "website_short_description", "website_long_description", "website_featured", "cover_image_media_id"] });
+  const updated = await updateById({ table: "experiences", id: req.params.id, body, allowed: ["website_heading", "website_kicker", "website_label", "website_status", "name", "slug", "description", "proposal_description", "features", "active", "display_order", "default_pricing", "base_price", "default_duration", "setup_duration", "breakdown_duration", "equipment_required", "staff_required", "show_on_website", "website_name", "website_short_description", "website_long_description", "website_featured", "cover_image_media_id"] });
   await writeAudit({ req, action: "experience_changed", entity: "experience", entityId: req.params.id, before: before.rows[0], after: updated });
   res.json(updated);
 }));

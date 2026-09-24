@@ -1,26 +1,29 @@
 import { Archive, Copy, FilePlus2, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
 const statuses = ["", "DRAFT", "READY", "SENT", "VIEWED", "ACCEPTED", "DECLINED", "EXPIRED", "CONVERTED", "ARCHIVED"];
 
 export default function Proposals() {
+  const [urlParams, setUrlParams] = useSearchParams();
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const status = urlParams.get("status") || "";
+  function setStatus(value) { setUrlParams(current => { const next = new URLSearchParams(current); if (value) next.set("status", value); else next.delete("status"); return next; }); }
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
     load();
-  }, [search, status]);
+  }, [search, status, urlParams]);
 
   async function load() {
     try {
-      const query = new URLSearchParams({ search, pageSize: "50" });
+      const query = new URLSearchParams(urlParams);
+      query.set("search", search);query.set("pageSize","50");
       if (status) query.set("status", status);
       const result = await api.get(`/proposals?${query}`);
       setRows(result.data || []);
@@ -51,10 +54,11 @@ export default function Proposals() {
         </div>
         <Link className="primary-action" to="/sales/proposals/new"><FilePlus2 size={16} />New Proposal</Link>
       </div>
+      {urlParams.has("funnel") && <p className="note-text">One matching proposal per lead, consistent with the dashboard funnel.</p>}
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <div className="toolbar">
         <label><span>Search</span><div className="input-icon"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Proposal, client, event, package" /></div></label>
-        <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}>{statuses.map((item) => <option key={item} value={item}>{item || "All statuses"}</option>)}</select></label>
+        <label><span>Status</span><select aria-label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>{statuses.map((item) => <option key={item} value={item}>{item || "All statuses"}</option>)}</select></label>
         <label><span>Sort</span><select disabled><option>Newest first</option></select></label>
       </div>
       <DataTable

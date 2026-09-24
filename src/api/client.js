@@ -17,7 +17,7 @@ export function clearTokens() {
   localStorage.removeItem("lola_refresh_token");
 }
 
-async function request(path, options = {}, retry = true) {
+async function request(path, options = {}, retry = true, responseType = "json") {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -35,17 +35,20 @@ async function request(path, options = {}, retry = true) {
     });
     if (refreshed.ok) {
       setTokens(await refreshed.json());
-      return request(path, options, false);
+      return request(path, options, false, responseType);
     }
   }
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error?.message || "Request failed");
+    const error = new Error(payload.error?.message || (response.status === 404 ? "Record not found." : response.status === 403 ? "You do not have access to this area." : "The request could not be completed."));
+    error.status = response.status; error.code = payload.error?.code; error.requestId = payload.error?.requestId;
+    if (response.status >= 500 && error.requestId) error.message += ` Reference: ${error.requestId}`;
+    throw error;
   }
 
   if (response.status === 204) return null;
-  return response.json();
+  return responseType === "blob" ? response.blob() : response.json();
 }
 
 async function download(path, filename, retry = true) {
@@ -140,6 +143,7 @@ export const api = {
   logout: () => request("/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) }, false),
   me: () => request("/auth/me"),
   get: (path) => request(path),
+  blob: (path) => request(path, {}, true, "blob"),
   post: (path, body) => request(path, { method: "POST", body: JSON.stringify(body) }),
   patch: (path, body) => request(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: (path) => request(path, { method: "DELETE" }),

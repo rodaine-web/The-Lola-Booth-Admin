@@ -1,3 +1,4 @@
+import { query } from "../db/pool.js";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import { brandedEmailHtml, recordTemplateFallback, renderCommunicationTemplateByKey } from "./automation-service.js";
@@ -84,6 +85,14 @@ function customerConfirmationBody({ lead = {}, payload = {} }) {
 }
 
 export async function sendPublicInquiryEmails({ lead, payload, action, sendEmailImpl = sendEmail }) {
+  // Persist email work before responding; the worker owns delivery and retry visibility.
+  const deliver = sendEmailImpl === sendEmail ? async message => {
+    const result = await query(
+      `INSERT INTO communications (lead_id,type,channel,direction,recipient,subject,rendered_subject,message_summary,rendered_body,rendered_html,status,send_mode,scheduled_at,trigger_key)
+       VALUES ($1,'EMAIL','EMAIL','OUTBOUND',$2,$3,$3,$4,$5,$6,'SCHEDULED','SCHEDULED',now(),'PUBLIC_FORM') RETURNING id`,
+      [lead?.id || null,message.to,message.subject,message.body.slice(0,500),message.body,message.html || brandedEmailHtml(message.body)]);
+    return result.rows[0];
+  } : sendEmailImpl;
   const ownerTo = notificationRecipient();
   const name = submissionName(lead, payload);
   const label = formLabel(payload);
@@ -91,10 +100,10 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
   const ownerFallback = { fallbackSubject: `New LOLA ${label} - ${name}`, fallbackBody: ownerNotificationBody({ lead, payload, action }), relatedEntityId: lead?.id || null };
   const ownerRendered = sendEmailImpl === sendEmail
     ? await renderPublicInquiryTemplate("public_inquiry_owner_notification", mergeData, ownerFallback)
-    : { subject: ownerFallback.fallbackSubject, body: ownerFallback.fallbackBody, html: null };
+    : { subject: ownerFallback.fallbackSubject, body: ownerFallback.fallbackBody, html: brandedEmailHtml(ownerFallback.fallbackBody) };
 
   const deliveries = [
-    sendEmailImpl({
+    deliver({
       to: ownerTo,
       subject: ownerRendered.subject,
       body: ownerRendered.body,
@@ -122,9 +131,9 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
           packageName: lead.guest_count || payload.guestCount ? `Approximately ${lead.guest_count || payload.guestCount}` : ""
         }
       })
-      : { subject: customerFallback.fallbackSubject, body: customerFallback.fallbackBody, html: null };
+      : { subject: customerFallback.fallbackSubject, body: customerFallback.fallbackBody, html: brandedEmailHtml(customerFallback.fallbackBody) };
     if (!customerRendered && legacyCustomerTemplateKey) await renderPublicInquiryTemplate("public_inquiry_customer_confirmation", mergeData, customerFallback);
-    deliveries.push(sendEmailImpl({
+    deliveries.push(deliver({
       to: lead.email || payload.email,
       subject: customerRendered.subject,
       body: customerRendered.body,

@@ -2,6 +2,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { env } from "../config/env.js";
+import { recordActivity } from "../services/activity-service.js";
 import { query } from "../db/pool.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { AppError } from "../utils/errors.js";
@@ -26,11 +27,13 @@ export const publicRouter = Router();
 publicRouter.use(rateLimit({
   windowMs: env.rateLimitWindowMs,
   limit: 20,
+  skip: req => ["GET", "HEAD", "OPTIONS"].includes(req.method),
   standardHeaders: true,
   legacyHeaders: false
 }));
 
 const inquirySchema = z.object({
+  form_id: z.string().max(80).optional(),
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
   email: z.string().trim().email().max(160).transform((value) => value.toLowerCase()),
@@ -70,14 +73,14 @@ publicRouter.post("/inquiries", (req, _res, next) => {
 }, validate(inquirySchema), asyncHandler(async (req, res) => {
   const result = await ingestProviderLead({ provider: "WEBSITE", payload: { ...req.body, referrer_url: req.body.referrer_url || req.headers.referer || null } });
 
-  res.status(201).json({
-    message: "Thank you. Your inquiry was received and the LOLA team will be in touch soon.",
-    inquiryStatus: result.action
-  });
-  void sendPublicInquiryEmails({
+  await sendPublicInquiryEmails({
     lead: result.lead,
     payload: { ...req.body, referrer_url: req.body.referrer_url || req.headers.referer || null },
     action: result.action
+  }).catch(error => req.log?.error({code:error.code,leadId:result.lead?.id}, "Inquiry persisted but email queueing failed"));
+  res.status(201).json({
+    message: "Thank you. Your inquiry was received and the LOLA team will be in touch soon.",
+    inquiryStatus: result.action
   });
 }));
 
@@ -135,6 +138,7 @@ publicRouter.get("/media/:id", asyncHandler(async (req, res) => {
   const media = await publicMedia(req.params.id);
   const buffer = await getStorageProvider().get(media.storage_key);
   res.set("Cache-Control", "public, max-age=86400");
+  res.set("Cross-Origin-Resource-Policy", "cross-origin");
   res.type(media.mime_type).send(buffer);
 }));
 
@@ -158,13 +162,12 @@ publicRouter.post("/approvals/:token/respond", asyncHandler(async (req, res) => 
 
 publicRouter.get("/proposals/:token", asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.token, { publicView: true });
-  const status = proposal.status === "SENT" ? "VIEWED" : proposal.status;
-  await query(
-    `UPDATE proposals SET status=$1, first_viewed_at=COALESCE(first_viewed_at, now()), last_viewed_at=now(), view_count=view_count+1, updated_at=now()
-     WHERE id=$2`,
-    [status, proposal.id]
+  const viewed = await query(
+    `UPDATE proposals SET status=CASE WHEN status='SENT' THEN 'VIEWED' ELSE status END, first_viewed_at=COALESCE(first_viewed_at, now()), last_viewed_at=now(), view_count=view_count+1, updated_at=now()
+     WHERE id=$1 RETURNING status`,
+    [proposal.id]
   );
-  res.json({ proposal: { ...proposal, status }, acceptanceWording: (await query("SELECT proposal_acceptance_wording FROM business_settings LIMIT 1")).rows[0]?.proposal_acceptance_wording });
+  res.json({ proposal: { ...proposal, status: viewed.rows[0].status }, acceptanceWording: (await query("SELECT proposal_acceptance_wording FROM business_settings LIMIT 1")).rows[0]?.proposal_acceptance_wording });
 }));
 
 publicRouter.get("/proposals/:token/preview", asyncHandler(async (req, res) => {
@@ -182,19 +185,22 @@ publicRouter.post("/proposals/:token/accept", asyncHandler(async (req, res) => {
   const body = z.object({ acceptedByName: z.string().trim().min(2).max(160) }).parse(req.body);
   const proposal = await getProposal(req.params.token, { publicView: true });
   if (proposal.status === "ACCEPTED") return res.json({ proposal });
+  if (!["SENT", "VIEWED"].includes(proposal.status)) throw new AppError("This proposal is not available for acceptance.", 409, "PROPOSAL_NOT_ACCEPTABLE");
   const version = await query("SELECT id FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC LIMIT 1", [proposal.id]);
   const updated = await query(
     `UPDATE proposals SET status='ACCEPTED', accepted_at=now(), accepted_by_name=$1, accepted_ip=$2, accepted_user_agent=$3, accepted_version_id=$4, updated_at=now()
-     WHERE id=$5 RETURNING *`,
+     WHERE id=$5 AND status IN ('SENT','VIEWED') AND (valid_through IS NULL OR valid_through >= current_date) RETURNING *`,
     [body.acceptedByName, req.ip, req.headers["user-agent"] || null, version.rows[0]?.id || null, proposal.id]
   );
+  if (!updated.rows[0]) throw new AppError("This proposal has already been updated. Refresh to see its current status.",409,"PROPOSAL_STATE_CHANGED");
   await recordActivity({ entityType: "proposal", entityId: proposal.id, action: "proposal_accepted", summary: `Proposal ${proposal.proposal_number} accepted by ${body.acceptedByName}` });
   res.json({ proposal: updated.rows[0] });
 }));
 
 publicRouter.post("/proposals/:token/decline", asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.token, { publicView: true });
-  const updated = await query("UPDATE proposals SET status='DECLINED', updated_at=now() WHERE id=$1 RETURNING *", [proposal.id]);
+  const updated = await query("UPDATE proposals SET status='DECLINED', updated_at=now() WHERE id=$1 AND status IN ('SENT','VIEWED') RETURNING *", [proposal.id]);
+  if (!updated.rows[0]) throw new AppError("This proposal is not available to decline.",409,"PROPOSAL_STATE_CHANGED");
   await recordActivity({ entityType: "proposal", entityId: proposal.id, action: "proposal_declined", summary: `Proposal ${proposal.proposal_number} declined` });
   res.json({ proposal: updated.rows[0] });
 }));

@@ -5,9 +5,9 @@ import { spawnSync } from "node:child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../../..");
-const outputDir = path.join(root, "qa-output");
+const outputDir = process.env.LOLA_QA_OUTPUT_DIR ? path.resolve(process.env.LOLA_QA_OUTPUT_DIR) : path.join(root, "qa-output");
 const screenshotsDir = path.join(outputDir, "screenshots");
-const localPublicBase = "../public";
+const localPublicBase = path.relative(outputDir, path.join(root, "public"));
 
 process.env.PUBLIC_BASE_URL = "https://admin.thelolabooth.com";
 process.env.CLIENT_ORIGIN = "https://admin.thelolabooth.com";

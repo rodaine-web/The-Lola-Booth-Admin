@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
+import MediaSelect from "../components/MediaSelect.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 
 export default function ResourcePage({ title, endpoint, columns, phase, rowHref, fields = [] }) {
@@ -90,7 +91,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
               {fields.map(([name, label, type = "text", config = {}]) => (
                 <label key={name} className={type === "textarea" ? "wide" : ""}>
                   {label}
-                  {type === "textarea" || type === "lines" ? (
+                  {name.endsWith("media_id") ? <MediaSelect value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "lines" ? (
                     <textarea value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
                   ) : type === "select" ? (
                     <select value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>

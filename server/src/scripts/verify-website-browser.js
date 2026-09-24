@@ -9,7 +9,7 @@ const assetById=new Map(Object.entries(payload.content['website.media'].body).ma
 const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 const report=[];
 try {
- for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+ for(const viewport of [{width:1440,height:1000},{width:820,height:1180},{width:390,height:844}]){
   const context=await browser.newContext({viewport});
   let site=structuredClone(payload),offline=false;
   await context.route('**/*',async route=>{
@@ -52,6 +52,14 @@ try {
   site.experiences=site.experiences.filter(x=>!x.name.toLowerCase().includes('glam'));
   await page.goto('https://lola.test/experiences');await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');assert.equal(await page.locator('[data-experience-key="glam"]').isVisible(),false);
   await page.goto('https://lola.test/faq');await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');assert.equal(await page.locator('[data-cms-faqs] details').count(),0);
+  delete site.content['page.home'];delete site.content['website.media'];site.pageItems=[];site.mediaMappings=[];site.heroSlides=[];
+  await page.goto('https://lola.test/');await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');
+  assert.equal(await page.locator('[data-cms-copy]:visible').count(),0);
+  assert.equal(await page.locator('[data-cms-media]:visible').count(),0);
+  assert.equal(await page.locator('.hero-media').isVisible(),false);
+  site=structuredClone(payload);
+  await page.goto('https://lola.test/');await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='connected');
+  assert.ok(await page.locator('[data-cms-copy]:visible').count()>0);assert.equal(await page.locator('.hero-media').isVisible(),true);
   offline=true;
   for(const slug of ['','packages']){await page.goto('https://lola.test/'+slug);await page.waitForFunction(()=>document.documentElement.dataset.lolaCms==='fallback');assert.ok((await page.locator('[data-package-key="glam:essential"] .price').textContent()).includes('599'));}
   await context.close();

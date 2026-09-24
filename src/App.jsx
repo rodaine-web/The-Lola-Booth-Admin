@@ -5,6 +5,8 @@ import Layout from "./components/Layout.jsx";
 import Login from "./pages/Login.jsx";
 import SetupPassword from "./pages/SetupPassword.jsx";
 
+const WebsiteDiagnostics = lazy(() => import("./pages/WebsiteDiagnostics.jsx"));
+const Users = lazy(() => import("./pages/Users.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Leads = lazy(() => import("./pages/Leads.jsx"));
 const LeadDetail = lazy(() => import("./pages/LeadDetail.jsx"));
@@ -38,7 +40,7 @@ function PrivateRoute({ children }) {
   const location = useLocation();
   if (loading) return <main className="boot-screen">Opening Admin Portal...</main>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.roles?.includes("ATTENDANT") && !user.roles?.some((role) => ["OWNER", "ADMIN", "EVENT_MANAGER"].includes(role)) && !location.pathname.startsWith("/my-events")) {
+  if (user.roles?.includes("ATTENDANT") && !user.roles?.some((role) => ["OWNER", "ADMIN", "SUPER_ADMIN", "EVENT_MANAGER"].includes(role)) && !location.pathname.startsWith("/my-events")) {
     return <Navigate to="/my-events" replace />;
   }
   return children;
@@ -65,6 +67,7 @@ export default function App() {
         <Route path="sales/clients/:id" element={<ClientDetail />} />
         <Route path="sales/proposals" element={<Proposals />} />
         <Route path="sales/communications" element={<Communications />} />
+        <Route path="sales/proposals/:id/edit" element={<ProposalEditor />} />
         <Route path="sales/proposals/new" element={<ProposalEditor />} />
         <Route path="sales/proposals/:id" element={<ProposalDetail />} />
         <Route path="events/events" element={<ResourcePage title="Events" endpoint="/events" columns={["event_number", "event_name", "event_date", "venue_name", "status"]} rowHref={(row) => `/events/events/${row.id}`} fields={eventFields} />} />
@@ -75,8 +78,12 @@ export default function App() {
         <Route path="finance/payments" element={<Payments />} />
         <Route path="finance/payments/:id" element={<PaymentDetail />} />
         <Route path="finance/invoices" element={<Invoices />} />
+        <Route path="finance/invoices/:id/edit" element={<InvoiceEditor />} />
         <Route path="finance/invoices/new" element={<InvoiceEditor />} />
         <Route path="finance/invoices/:id" element={<InvoiceDetail />} />
+        <Route path="website/page-items" element={<WebsiteCms section="pageItems" />} />
+        <Route path="website/media-mappings" element={<WebsiteCms section="mediaMappings" />} />
+        <Route path="website/connection" element={<WebsiteDiagnostics />} />
         <Route path="website/homepage" element={<WebsiteCms section="homepage" />} />
         <Route path="website/hero-slides" element={<WebsiteCms section="hero" />} />
         <Route path="website/gallery" element={<WebsiteCms section="gallery" />} />
@@ -95,7 +102,7 @@ export default function App() {
         <Route path="operations/files" element={<ResourcePage title="Files" endpoint="/files" phase="Metadata model ready" columns={["filename", "category", "storage_provider", "created_at"]} />} />
         <Route path="operations/galleries" element={<ResourcePage title="Galleries" endpoint="/galleries" phase="Manual URL records" columns={["gallery_name", "gallery_url", "delivery_date", "status"]} />} />
         <Route path="insights/analytics" element={<Analytics />} />
-        <Route path="system/users" element={<ResourcePage title="Users" endpoint="/users" columns={["name", "email", "active", "created_at"]} />} />
+        <Route path="system/users" element={<Users />} />
         <Route path="system/integrations" element={<Integrations />} />
         <Route path="system/health" element={<SystemHealth />} />
         <Route path="system/audit-log" element={<ResourcePage title="Audit Log" endpoint="/audit-logs" columns={["action", "entity", "entity_id", "created_at"]} />} />
@@ -120,7 +127,8 @@ const packageFields = [
 ];
 
 const experienceFields = [
-  ["name", "Name"], ["slug", "Slug"], ["description", "Description", "textarea"], ["proposal_description", "Proposal description", "textarea"], ["base_price", "Base price", "number"], ["default_duration", "Default duration", "number"], ["setup_duration", "Setup duration", "number"], ["breakdown_duration", "Breakdown duration", "number"], ["staff_required", "Staff required", "number"], ["active", "Active", "checkbox"], ["display_order", "Display order", "number"], ["show_on_website", "Show on website", "checkbox"], ["website_name", "Website name"], ["website_short_description", "Website short description", "textarea"], ["website_long_description", "Website long description", "textarea"], ["website_featured", "Website featured", "checkbox"], ["cover_image_media_id", "Cover image media ID"]
+  ["website_status", "Website publish status", "select", {options:["DRAFT","PUBLISHED","ARCHIVED"]}],
+  ["name", "Name"], ["slug", "Slug"], ["description", "Description", "textarea"], ["proposal_description", "Proposal description", "textarea"], ["base_price", "Base price", "number"], ["default_duration", "Default duration", "number"], ["setup_duration", "Setup duration", "number"], ["breakdown_duration", "Breakdown duration", "number"], ["staff_required", "Staff required", "number"], ["active", "Active", "checkbox"], ["display_order", "Display order", "number"], ["show_on_website", "Show on website", "checkbox"], ["website_name", "Website name"], ["website_short_description", "Website short description", "textarea"], ["website_long_description", "Website long description", "textarea"], ["website_heading", "Page heading"], ["website_label", "Page label"], ["website_kicker", "Supporting line"], ["website_featured", "Website featured", "checkbox"], ["cover_image_media_id", "Cover image media ID"]
 ];
 
 const addonFields = [

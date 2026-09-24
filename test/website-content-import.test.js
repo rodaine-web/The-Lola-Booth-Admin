@@ -36,7 +36,8 @@ test('approved experience order, Vogue asset, media checksums, FAQ and page SEO 
   assert.equal(new Set(m.media.map(x=>x.sha256)).size,m.media.length);
   assert.equal(checksum(Buffer.from('test')).length,64);
   assert.deepEqual(m.faqs,m.baseline.faqs);
-  assert.equal(m.testimonials.length,0);
+  assert.deepEqual(m.testimonials.map(t => t.client_name), ["Terry", "Jeff · Event Noire", "Didi"]);
+  assert.ok(m.testimonials.every(t => t.source_approval_note));
   for(const p of m.pages){assert.ok(p.title);assert.ok(p.seo.description);}
   assert.equal(m.settings.phone,'773-240-2744');
   assert.equal(m.settings.facebook_url,null);

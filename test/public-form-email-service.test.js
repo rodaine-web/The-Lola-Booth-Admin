@@ -9,7 +9,7 @@ const publicRoutes = fs.readFileSync(new URL("../server/src/routes/public.js", i
 test("public inquiry route sends form emails after successful persistence", () => {
   assert.match(publicRoutes, /sendPublicInquiryEmails/);
   assert.match(publicRoutes, /res\.status\(201\)\.json/);
-  assert.match(publicRoutes, /void sendPublicInquiryEmails/);
+  assert.match(publicRoutes, /await sendPublicInquiryEmails/);
 });
 
 test("FORM_NOTIFICATION_EMAIL is a server-side provider-specific setting", () => {

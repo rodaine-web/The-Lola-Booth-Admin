@@ -11,8 +11,9 @@ await db.connect();
 const name=`lola_cms_verify_${Date.now()}`;
 await db.query(`CREATE DATABASE ${name}`);
 const client=new pg.Client({host:'/private/tmp',port:55439,database:name});await client.connect();
+let pool;
 try{
-  for(const file of (await fs.readdir('server/migrations')).filter(x=>/^0(0\d|1[0-5]|21)_.*\.sql$/.test(x)).sort())await client.query(await fs.readFile(`server/migrations/${file}`,'utf8'));
+  for(const file of (await fs.readdir('server/migrations')).filter(x=>/^0(0\d|1[0-5]|21|22|23)_.*\.sql$/.test(x)).sort())await client.query(await fs.readFile(`server/migrations/${file}`,'utf8'));
   const manifest=JSON.parse(await fs.readFile('server/import-data/live-website.json','utf8'));
   async function insert(table,source){
     const cols=(await client.query('SELECT column_name,data_type FROM information_schema.columns WHERE table_name=$1',[table])).rows;
@@ -40,6 +41,7 @@ try{
   process.env.DATABASE_URL=`postgresql://localhost:55439/${name}?host=/private/tmp`;
   const {env}=await import('../config/env.js');env.databaseUrl=process.env.DATABASE_URL;
   const {publicSitePayload}=await import('../services/website-cms-service.js');
+  ({pool}=await import('../db/pool.js'));
   const payload=await publicSitePayload();
   assert.equal(payload.packages.length,16);
   assert.equal(payload.experiences.length,4);
@@ -50,7 +52,7 @@ try{
   await fs.writeFile('audit-output/website-cms/local/public-site.json',JSON.stringify(payload,null,2));
   const cms=await import('../services/website-cms-service.js');
   const user=(await client.query("INSERT INTO users(name,email,password_hash) VALUES ('Local QA','cms-qa@example.invalid','disabled') RETURNING id")).rows[0];
-  const req={user,body:{}};
+  const req={user:{...user,permissions:['*']},body:{}};
   const faq=payload.faqs[0];
   await cms.updateCmsRecord({...req,body:{answer:'QA updated answer'}},'faqs',faq.id);
   assert.equal((await publicSitePayload()).faqs.find(f=>f.id===faq.id).answer,'QA updated answer');
@@ -60,6 +62,6 @@ try{
   await cms.publishCmsRecord(req,'faqs',faq.id);
   await cms.reorderCmsRecords(req,'faqs',payload.faqs.map(f=>f.id).reverse());
   assert.equal((await publicSitePayload()).faqs[0].id,payload.faqs.at(-1).id);
-  const {pool}=await import('../db/pool.js');await pool.end();
+  ({pool}=await import('../db/pool.js'));await pool.end();pool=null;
   console.log(JSON.stringify({database:name,first:first.reduce((s,x)=>(s[x.action]=(s[x.action]||0)+1,s),{}),second:second.reduce((s,x)=>(s[x.action]=(s[x.action]||0)+1,s),{}),manualEditProtected:true,publicationFiltering:true},null,2));
-}finally{await client.end();await db.query(`DROP DATABASE ${name}`);await db.end();}
+}finally{if(pool)await pool.end();await client.end();await db.query(`DROP DATABASE ${name}`);await db.end();}

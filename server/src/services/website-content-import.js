@@ -18,7 +18,7 @@ export async function importWebsiteContent(db, manifest, { dryRun = true, storag
   const hasState = (await db.query("SELECT to_regclass('website_import_state') AS state_table")).rows[0].state_table;
   if (!hasState && !dryRun) throw new Error('Apply website migration 021 before importing content.');
   const log = [], pending = [], states = new Map((hasState ? (await db.query('SELECT * FROM website_import_state')).rows : []).map(r => [r.import_key, r]));
-  const tables = ['media_library','experiences','packages','website_content','website_event_types','website_hero_slides','website_gallery_items','faqs','testimonials','business_settings'];
+  const tables = ['media_library','experiences','packages','website_content','website_event_types','website_hero_slides','website_gallery_items','faqs','testimonials','business_settings','website_page_items','website_media_mappings'];
   const rows = {};
   for (const table of tables) rows[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
   const encode = (k, v) => ['body','snapshot','website_features','features'].includes(k) ? JSON.stringify(v) : v;
@@ -59,8 +59,8 @@ export async function importWebsiteContent(db, manifest, { dryRun = true, storag
     const old = manifest.baseline.experiences.find(r => identity(r.name) === e.key);
     const baseline = old && Object.fromEntries(['name','website_short_description','website_long_description','display_order','base_price','features','cover_image_media_id'].filter(k=>old[k] !== undefined).map(k=>[k,k==='base_price'?Number(old[k]):old[k]]));
     experienceIds[e.key] = plan('experiences',e.key,{
-      name:e.name,website_name:e.name,slug:old?.slug || `lola-${e.key}`,website_short_description:e.homeDescription,website_long_description:e.description,features:e.features,
-      base_price:Math.min(...manifest.packages.filter(p=>p.experience===e.key&&p.starting_price!=null).map(p=>p.starting_price)),display_order:e.order,cover_image_media_id:media[e.asset] || null,show_on_website:true,active:true
+      name:e.name,website_name:e.name,website_heading:e.heading||null,website_kicker:e.kicker||null,website_label:e.pageLabel||null,slug:old?.slug || `lola-${e.key}`,website_short_description:e.homeDescription,website_long_description:e.description,features:e.features,
+      base_price:Math.min(...manifest.packages.filter(p=>p.experience===e.key&&p.starting_price!=null).map(p=>p.starting_price)),display_order:e.order,cover_image_media_id:media[e.asset] || null,show_on_website:true,active:true,website_status:'PUBLISHED'
     },r=>r.id===old?.id || identity(r.name)===e.key,{baseline,area:'Experiences'});
   }
   // Retire only the two legacy website seed experiences, preserving internal use.
@@ -78,7 +78,7 @@ export async function importWebsiteContent(db, manifest, { dryRun = true, storag
     },r=>r.website_key===p.key || r.id===old?.id || (r.experience_id===experienceIds[p.experience] && r.name.toLowerCase()===p.name.toLowerCase()),{baseline,area:'Packages'});
   }
   for (const e of manifest.events) plan('website_event_types',e.key,{
-    name:e.name,slug:e.key,short_description:e.description,image_media_id:media[e.asset] || null,display_order:e.order,show_on_website:true,status:'PUBLISHED'
+    name:e.name,slug:e.key,home_description:e.homeDescription||null,home_display_order:e.homeOrder||e.order,short_description:e.description,image_media_id:media[e.asset] || null,display_order:e.order,show_on_website:true,status:'PUBLISHED'
   },r=>r.slug===e.key,{allowSeed:true,area:'Events'});
   for(const s of manifest.hero) plan('website_hero_slides',s.asset,{desktop_image_file_id:media[s.asset]||null,image_media_id:media[s.asset]||null,alt_text:s.alt,display_order:s.order,is_active:true,status:'PUBLISHED'},r=>(r.desktop_image_file_id||r.image_media_id)===media[s.asset],{area:'Hero'});
   for(const g of manifest.gallery) plan('website_gallery_items',g.asset,{media_id:media[g.asset]||null,alt_text:g.alt,category:g.category,title:g.title||null,caption:g.caption||null,tags:g.tags||[],display_order:g.order,status:'PUBLISHED'},r=>r.media_id===media[g.asset],{area:'Gallery'});
@@ -86,13 +86,22 @@ export async function importWebsiteContent(db, manifest, { dryRun = true, storag
     const desired={question:f.question,answer:f.answer,category:f.category||null,display_order:f.display_order,status:'PUBLISHED'};
     plan('faqs',f.id,desired,r=>r.id===f.id||r.question===f.question,{baseline:desired,area:'FAQs'});
   }
-  // No inferred testimonials: existing hidden or unpublished records remain untouched.
-  for(const t of rows.testimonials) log.push({area:'Testimonials',key:t.id,action:'SKIP',reason:'Preserve existing publication state and manual content.'});
+  // Import only verbatim testimonials found in the current live source.
+  for(const t of manifest.testimonials || []) {
+    const desired={client_name:t.client_name,client_display_name:t.client_display_name||t.client_name,event_type:t.event_type||null,quote:t.quote,rating:t.rating||5,display_order:t.display_order,status:t.status||'PUBLISHED'};
+    plan('testimonials',t.client_name,desired,r=>r.client_name===t.client_name,{area:'Testimonials'});
+  }
+  for(const t of rows.testimonials.filter(row=>!(manifest.testimonials||[]).some(x=>x.client_name===row.client_name)))log.push({area:'Testimonials',key:t.id,action:'SKIP',reason:'Preserve existing publication state and manual content.'});
   const content=(key,title,body,area='Homepage')=>plan('website_content',key,{content_key:key,title,body,status:'PUBLISHED'},r=>r.content_key===key,{area});
   for(const p of manifest.pages) content(`page.${p.slug}`,`${p.slug}: approved page copy and SEO`,{copy:p.copy,title:p.title,seo:p.seo},p.slug==='about'?'About':p.slug==='connect'?'/connect':'Homepage');
   content('experience.details','Experience headings and supporting copy',Object.fromEntries(manifest.experiences.map(e=>[e.key,{heading:e.heading,kicker:e.kicker,pageLabel:e.pageLabel}])),'Experiences');
   content('events.home_order','Homepage event order and copy',manifest.events.map(e=>({slug:e.key,order:e.homeOrder,description:e.homeDescription})),'Events');
   content('website.media','Approved website image mapping',Object.fromEntries(Object.entries(media).map(([key,id])=>[key,`/api/public/media/${id}`])),'Media');
+  for(const page of manifest.pages) for(const [index,[key,value]] of Object.entries(page.copy).sort(([a],[b])=>a.localeCompare(b)).entries()) {
+    plan('website_page_items',key,{page_slug:page.slug,slot_key:key,html:value.html||'',href:value.href||null,display_order:index+1,status:'PUBLISHED'},r=>r.slot_key===key,{area:'Page Items'});
+  }
+  for(const [index,key] of Object.keys(media).sort().entries()) plan('website_media_mappings',key,{asset_key:key,media_id:media[key],display_order:index+1,status:'PUBLISHED'},r=>r.asset_key===key,{area:'Website Images'});
+
   const settings=rows.business_settings[0];
   const settingBaseline=Object.fromEntries(Object.keys(manifest.settings).map(k=>[k,manifest.baseline.settings[k]??null]));
   plan('business_settings','site',manifest.settings,r=>r.id===settings?.id,{baseline:settingBaseline,area:'Site Settings'});

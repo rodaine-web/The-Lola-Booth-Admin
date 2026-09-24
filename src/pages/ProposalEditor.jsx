@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowLeft, ArrowUp, FileUp, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 
@@ -13,6 +13,8 @@ const corporateSections = [
 
 export default function ProposalEditor() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const [loaded, setLoaded] = useState(!id);
   const [params] = useSearchParams();
   const [mode, setMode] = useState("create");
   const [addon, setAddon] = useState({ addon_id: "", quantity: 1 });
@@ -34,6 +36,8 @@ export default function ProposalEditor() {
     sections: ["Introduction", "Event Details", "Proposed Experience", "Package Includes", "Investment Summary", "Next Steps", "Terms"].map((title, index) => section(title, index))
   });
   const [error, setError] = useState("");
+
+  useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
 
   useEffect(() => {
     if (form.event_id && !form.client_id) {
@@ -72,7 +76,7 @@ export default function ProposalEditor() {
     setError("");
     try {
       const payload = compact({ ...form, ...upload, total_investment: form.package_amount });
-      const created = mode === "upload" ? await api.post("/proposals/upload", payload) : await api.post("/proposals", payload);
+      const created = id ? await api.patch(`/proposals/${id}`, payload) : mode === "upload" ? await api.post("/proposals/upload", payload) : await api.post("/proposals", payload);
       navigate(`/sales/proposals/${created.id}`);
     } catch (err) {
       setError(err.message);
@@ -85,9 +89,9 @@ export default function ProposalEditor() {
       <div className="page-heading">
         <div>
           <p className="eyebrow">Proposal builder</p>
-          <h1>New Proposal</h1>
+          <h1>{id ? "Edit Proposal" : "New Proposal"}</h1>
         </div>
-        <div className="segmented">
+        <div className="segmented" hidden={Boolean(id)}>
           <button type="button" className={mode === "create" ? "active" : ""} onClick={() => setMode("create")}>Create in LOLA</button>
           <button type="button" className={mode === "upload" ? "active" : ""} onClick={() => setMode("upload")}>Upload External Proposal</button>
         </div>
@@ -179,7 +183,7 @@ export default function ProposalEditor() {
             <label className="wide">Internal notes<textarea value={form.notes || ""} onChange={(event) => setField("notes", event.target.value)} /></label>
           </div>
         </section>
-        <div className="modal-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action">{mode === "upload" ? "Upload Proposal" : "Create Proposal"}</button></div>
+        <div className="modal-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action" disabled={!loaded}>{id ? "Save Proposal" : mode === "upload" ? "Upload Proposal" : "Create Proposal"}</button></div>
       </form>
     </main>
   );

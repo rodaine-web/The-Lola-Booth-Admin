@@ -1,21 +1,25 @@
 import { Archive, ArrowDown, ArrowUp, Eye, ImagePlus, Save, Send, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import MediaSelect from "../components/MediaSelect.jsx";
 import { api } from "../api/client.js";
 
 const configs = {
+  pageItems:{type:'pageItems',title:'Page Items',eyebrow:'Website CMS',columns:['page_slug','slot_key','html','display_order','status'],fields:[['page_slug','Page'],['slot_key','Website slot'],['html','Copy (basic HTML)','textarea'],['href','Link URL'],['display_order','Display order','number']],empty:'No page items.'},
+  mediaMappings:{type:'mediaMappings',title:'Website Images',eyebrow:'Website CMS',columns:['asset_key','media_id','status'],fields:[['asset_key','Website asset key'],['media_id','Media ID'],['display_order','Display order','number']],empty:'No website images.'},
   homepage: {
     type: "content",
-    title: "Homepage",
+    title: "Page SEO",
     eyebrow: "Website CMS",
     columns: ["content_key", "title", "status", "published_at"],
     fields: [
       ["content_key", "Content key"],
       ["title", "Title"],
-      ["body", "Content JSON", "json"],
+
       ["seo_title", "SEO title"],
       ["seo_description", "Meta description", "textarea"]
     ],
-    empty: "No homepage sections yet."
+    guidance: "Edit visible page copy in Page Items. These records manage page titles and search descriptions.",
+    empty: "No page metadata yet."
   },
   hero: {
     type: "hero",
@@ -27,10 +31,6 @@ const configs = {
       ["mobile_image_media_id", "Mobile image media ID"],
       ["alt_text", "Alt text", "textarea"],
       ["caption", "Caption"],
-      ["headline", "Headline override"],
-      ["subheadline", "Subheadline override", "textarea"],
-      ["cta_label", "CTA label"],
-      ["cta_url", "CTA URL"],
       ["display_order", "Display order", "number"],
       ["focal_x", "Focal X", "number"],
       ["focal_y", "Focal Y", "number"],
@@ -89,13 +89,15 @@ const configs = {
   },
   events: {
     type: "eventTypes",
-    title: "Events",
+    title: "Event Types",
     eyebrow: "Website CMS",
     columns: ["display_order", "name", "slug", "show_on_website", "status"],
     fields: [
       ["name", "Name"],
       ["slug", "Slug"],
       ["short_description", "Short description", "textarea"],
+      ["home_description", "Homepage description", "textarea"],
+      ["home_display_order", "Homepage order", "number"],
       ["long_description", "Long description", "textarea"],
       ["image_media_id", "Image media ID"],
       ["display_order", "Display order", "number"],
@@ -172,7 +174,7 @@ function CmsEditor({ config }) {
     setError("");
     setNotice("");
     try {
-      const payload = normalizePayload(config.fields, form);
+      const payload = { ...normalizePayload(config.fields, form), status: publishNow ? "PUBLISHED" : "DRAFT" };
       const saved = editing.mode === "edit"
         ? await api.patch(`/website/${config.type}/${editing.id}`, payload)
         : await api.post(`/website/${config.type}`, payload);
@@ -405,7 +407,7 @@ function Field({ name, label, type, form, setForm }) {
   return (
     <label className={type === "textarea" || type === "json" ? "wide" : ""}>
       {label}
-      {type === "textarea" || type === "json" ? (
+      {(name.endsWith("media_id") || name === "desktop_image_file_id") ? <MediaSelect value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "json" ? (
         <textarea value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
       ) : type === "checkbox" ? (
         <input type="checkbox" checked={Boolean(form[name])} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.checked }))} />

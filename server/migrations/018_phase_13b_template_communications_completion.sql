@@ -41,7 +41,7 @@ FROM email_templates
 WHERE deleted_at IS NULL
 ON CONFLICT (template_id, version) DO NOTHING;
 
-ALTER TABLE creative_approvals ADD COLUMN IF NOT EXISTS proof_document_id UUID REFERENCES documents(id);
+ALTER TABLE creative_approvals ADD COLUMN IF NOT EXISTS proof_document_id UUID REFERENCES files(id);
 ALTER TABLE creative_approvals ADD COLUMN IF NOT EXISTS proof_url TEXT;
 ALTER TABLE creative_approvals ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE creative_approvals ADD COLUMN IF NOT EXISTS approved_version INTEGER;
@@ -52,6 +52,8 @@ ALTER TABLE creative_approvals ADD COLUMN IF NOT EXISTS approval_snapshot JSONB 
 DO $$
 BEGIN
   ALTER TABLE creative_approvals DROP CONSTRAINT IF EXISTS creative_approvals_status_check;
+  UPDATE creative_approvals SET status='PENDING_APPROVAL' WHERE status='PENDING';
+  ALTER TABLE creative_approvals ALTER COLUMN status SET DEFAULT 'DRAFT';
   ALTER TABLE creative_approvals ADD CONSTRAINT creative_approvals_status_check CHECK (status IN (
     'DRAFT', 'PENDING_APPROVAL', 'VIEWED', 'CHANGES_REQUESTED', 'APPROVED', 'SUPERSEDED', 'CANCELLED', 'EXPIRED', 'REVOKED'
   ));
@@ -61,7 +63,7 @@ CREATE TABLE IF NOT EXISTS creative_approval_revisions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   approval_id UUID NOT NULL REFERENCES creative_approvals(id) ON DELETE CASCADE,
   version INTEGER NOT NULL,
-  proof_document_id UUID REFERENCES documents(id),
+  proof_document_id UUID REFERENCES files(id),
   proof_url TEXT,
   status TEXT NOT NULL DEFAULT 'DRAFT',
   notes TEXT,

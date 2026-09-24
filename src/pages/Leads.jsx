@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
@@ -7,18 +7,24 @@ const statuses = ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_SENT", "FOLLOW_UP",
 const sources = ["", "WEBSITE", "META", "FACEBOOK", "INSTAGRAM", "TIKTOK", "LINKEDIN", "Referral", "Phone", "Manual", "Other"];
 
 export default function Leads() {
+  const [urlParams, setUrlParams] = useSearchParams();
   const [view, setView] = useState("table");
   const [leads, setLeads] = useState([]);
   const [search, setSearch] = useState("");
-  const [source, setSource] = useState("");
+  const source = urlParams.get("source") || urlParams.get("source_group") || "";
+  const [error, setError] = useState("");
+  function setSource(value) { setUrlParams(current => { const next = new URLSearchParams(current); next.delete("source_group"); if (value) next.set("source", value); else next.delete("source"); return next; }); }
   const [campaign, setCampaign] = useState("");
 
   useEffect(() => {
-    const params = new URLSearchParams({ search });
-    if (source) params.set("source", source);
+    const params = new URLSearchParams(urlParams);
+    params.set("search", search);
+    if (source && !params.has("source_group")) params.set("source", source);
     if (campaign) params.set("campaign", campaign);
-    api.get(`/leads?${params}`).then((result) => setLeads(result.data));
-  }, [search, source, campaign]);
+    let active = true;
+    api.get(`/leads?${params}`).then((result) => { if (active) { setLeads(result.data); setError(""); } }).catch(err => { if (active) setError(err.message); });
+    return () => { active = false; };
+  }, [search, source, campaign, urlParams]);
 
   const columns = useMemo(() => ["first_name", "last_name", "email", "event_date", "event_type", "lead_source", "source_subtype", "campaign", "status"], []);
 
@@ -34,12 +40,13 @@ export default function Leads() {
           <button className={view === "kanban" ? "active" : ""} onClick={() => setView("kanban")}>Kanban</button>
         </div>
       </div>
+      {error && <div className="toast error">{error}</div>}
       <div className="toolbar">
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search leads..." />
-        <select value={source} onChange={(event) => setSource(event.target.value)}>
-          {sources.map((item) => <option key={item || "all"} value={item}>{item || "All sources"}</option>)}
+        <input aria-label="Search leads" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search leads..." />
+        <select aria-label="Lead source" value={source} onChange={(event) => setSource(event.target.value)}>
+          {[...new Set([...sources, source])].map((item) => <option key={item || "all"} value={item}>{item || "All sources"}</option>)}
         </select>
-        <input value={campaign} onChange={(event) => setCampaign(event.target.value)} placeholder="Campaign..." />
+        <input aria-label="Campaign" value={campaign} onChange={(event) => setCampaign(event.target.value)} placeholder="Campaign..." />
       </div>
       {view === "table" ? <DataTable rows={leads} columns={columns} empty="No new inquiries." getRowHref={(lead) => `/sales/leads/${lead.id}`} /> : <Kanban leads={leads} />}
     </main>

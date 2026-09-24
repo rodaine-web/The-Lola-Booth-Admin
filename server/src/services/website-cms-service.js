@@ -22,6 +22,8 @@ const galleryCategories = [
 ];
 
 export const cmsTables = {
+  pageItems: {table:'website_page_items',entity:'website_page_item',search:['page_slug','slot_key','html'],sortable:['display_order','updated_at'],allowed:['page_slug','slot_key','html','href','display_order','status']},
+  mediaMappings: {table:'website_media_mappings',entity:'website_media_mapping',search:['asset_key'],sortable:['display_order','updated_at'],allowed:['asset_key','media_id','display_order','status']},
   hero: {
     table: "website_hero_slides",
     entity: "website_hero_slide",
@@ -62,7 +64,7 @@ export const cmsTables = {
     entity: "website_event_type",
     search: ["name", "slug", "short_description", "long_description"],
     sortable: ["display_order", "created_at", "updated_at", "published_at"],
-    allowed: ["name", "slug", "short_description", "long_description", "image_media_id", "display_order", "show_on_website", "seo_title", "meta_description", "status"]
+    allowed: ["name", "slug", "home_description", "home_display_order", "short_description", "long_description", "image_media_id", "display_order", "show_on_website", "seo_title", "meta_description", "status"]
   }
 };
 
@@ -170,6 +172,7 @@ export async function listCmsRecords(type, filters = {}) {
   if (!config) throw notFound("CMS type");
   const params = [];
   const where = ["deleted_at IS NULL"];
+  if (type === "content") where.push("content_key LIKE 'page.%'");
   if (filters.search) {
     params.push(`%${filters.search}%`);
     where.push(`(${config.search.map((field) => `${field}::text ILIKE $${params.length}`).join(" OR ")})`);
@@ -180,7 +183,7 @@ export async function listCmsRecords(type, filters = {}) {
   }
   const sort = config.sortable.includes(filters.sort || filters.sort_by) ? (filters.sort || filters.sort_by) : config.sortable[0];
   const direction = String(filters.sort_direction || "asc").toLowerCase() === "desc" ? "DESC" : "ASC";
-  const rows = await query(`SELECT * FROM ${config.table} WHERE ${where.join(" AND ")} ORDER BY ${sort} ${direction}, created_at DESC LIMIT 100`, params);
+  const rows = await query(`SELECT * FROM ${config.table} WHERE ${where.join(" AND ")} ORDER BY ${sort} ${direction}, created_at DESC LIMIT 2000`, params);
   return rows.rows;
 }
 
@@ -188,6 +191,8 @@ export async function createCmsRecord(req, type) {
   const config = cmsTables[type];
   if (!config) throw notFound("CMS type");
   const body = normalizeCmsBody(type, req.body, config.allowed);
+  if (type === "eventTypes" && body.name && !body.slug) body.slug = slugify(body.name);
+  if (body.status === "PUBLISHED") assertCanPublish(req);
   await assertPublishable(type, body);
   const fields = Object.keys(body).concat(["created_by", "updated_by"]);
   const values = Object.values(body).concat([req.user.id, req.user.id]);
@@ -200,6 +205,7 @@ export async function updateCmsRecord(req, type, id) {
   if (!config) throw notFound("CMS type");
   const before = await getById(config.table, id);
   const body = normalizeCmsBody(type, req.body, config.allowed);
+  if (before.status === "PUBLISHED" || body.status === "PUBLISHED") assertCanPublish(req);
   await assertPublishable(type, { ...before, ...body });
   const fields = Object.keys(body);
   if (!fields.length) throw new AppError("No supported fields to update.", 400, "NO_FIELDS");
@@ -217,9 +223,8 @@ export async function publishCmsRecord(req, type, id) {
   const config = cmsTables[type];
   if (!config) throw notFound("CMS type");
   const before = await getById(config.table, id);
-  await assertPublishable(type, before);
+  await assertPublishable(type, { ...before, status: "PUBLISHED" });
   const updated = await transaction(async (client) => {
-    if (type === "hero") await assertHeroSafety(client, id, "publish");
     const result = await client.query(`UPDATE ${config.table} SET status='PUBLISHED', published_by=$1, published_at=now(), updated_by=$1, updated_at=now() WHERE id=$2 AND deleted_at IS NULL RETURNING *`, [req.user.id, id]);
     return result.rows[0];
   });
@@ -232,7 +237,7 @@ export async function unpublishCmsRecord(req, type, id) {
   if (!config) throw notFound("CMS type");
   const before = await getById(config.table, id);
   const updated = await transaction(async (client) => {
-    if (type === "hero") await assertHeroSafety(client, id, "unpublish");
+    // An intentional empty hero collection is valid; the renderer hides it.
     const result = await client.query(`UPDATE ${config.table} SET status='DRAFT', updated_by=$1, updated_at=now() WHERE id=$2 AND deleted_at IS NULL RETURNING *`, [req.user.id, id]);
     return result.rows[0];
   });
@@ -241,6 +246,7 @@ export async function unpublishCmsRecord(req, type, id) {
 }
 
 export async function archiveCmsRecord(req, type, id) {
+  assertCanPublish(req);
   const config = cmsTables[type];
   if (!config) throw notFound("CMS type");
   const before = await getById(config.table, id);
@@ -250,6 +256,7 @@ export async function archiveCmsRecord(req, type, id) {
 }
 
 export async function reorderCmsRecords(req, type, orderedIds) {
+  assertCanPublish(req);
   const config = cmsTables[type];
   if (!config) throw notFound("CMS type");
   if (!Array.isArray(orderedIds)) throw new AppError("Order must be an array of ids.", 400, "BAD_ORDER");
@@ -273,7 +280,7 @@ export async function updateSiteSettings(req) {
 
 export async function publicSitePayload({ preview = false } = {}) {
   const statusFilter = preview ? "status <> 'ARCHIVED'" : "status='PUBLISHED'";
-  const [settings, content, hero, packages, experiences, eventTypes, gallery, testimonials, faqs] = await Promise.all([
+  const [settings, content, hero, packages, experiences, eventTypes, gallery, testimonials, faqs, pageItems, mediaMappings] = await Promise.all([
     query("SELECT business_name, business_email, contact_email, phone, website, service_area, instagram_url, tiktok_url, facebook_url, pinterest_url, copyright_text, brand_line, site_title, default_meta_description, canonical_domain, social_share_title, social_share_description, show_starting_price FROM business_settings LIMIT 1"),
     query(`SELECT content_key, title, body, seo_title, seo_description, status, updated_at, published_at FROM website_content WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY content_key`),
     query(`SELECT h.id, h.alt_text, h.caption, h.headline, h.subheadline, h.cta_label, h.cta_url, h.display_order, h.focal_x, h.focal_y, h.publish_start, h.publish_end,
@@ -285,8 +292,8 @@ export async function publicSitePayload({ preview = false } = {}) {
         AND (h.publish_end IS NULL OR h.publish_end >= now())
       ORDER BY h.display_order, h.created_at`),
     query(`SELECT p.id, p.name, p.short_description, p.website_short_description, p.website_description, p.starting_price, p.currency, p.most_popular, p.website_featured, p.website_display_order, p.website_key, p.experience_id, p.pricing_mode, p.website_features, p.website_custom_heading, p.website_home_description, p.updated_at, e.slug AS experience_slug FROM packages p LEFT JOIN experiences e ON e.id=p.experience_id WHERE p.deleted_at IS NULL AND p.active=true AND p.show_on_website=true AND ${preview ? "p.website_status <> 'ARCHIVED'" : "p.website_status='PUBLISHED'"} ORDER BY e.display_order, p.website_display_order, p.display_order, p.id`),
-    query("SELECT id, slug, name, website_name, description, website_short_description, website_long_description, features, base_price, default_duration, website_featured, display_order, cover_image_media_id FROM experiences WHERE deleted_at IS NULL AND active=true AND show_on_website=true ORDER BY display_order, name"),
-    query(`SELECT id, name, slug, short_description, long_description, image_media_id, display_order, seo_title, meta_description FROM website_event_types WHERE deleted_at IS NULL AND show_on_website=true AND ${statusFilter} ORDER BY display_order, name`),
+    query("SELECT id, slug, name, website_name, description, website_short_description, website_long_description, website_heading, website_kicker, website_label, features, base_price, default_duration, website_featured, display_order, cover_image_media_id, website_status FROM experiences WHERE deleted_at IS NULL AND active=true AND show_on_website=true AND " + (preview ? "website_status <> 'ARCHIVED'" : "website_status='PUBLISHED'") + " ORDER BY display_order, name"),
+    query(`SELECT id, name, slug, home_description, home_display_order, short_description, long_description, image_media_id, display_order, seo_title, meta_description FROM website_event_types WHERE deleted_at IS NULL AND show_on_website=true AND ${statusFilter} ORDER BY display_order, name`),
     query(`SELECT g.id, g.title, g.caption, COALESCE(g.alt_text, m.alt_text) AS alt_text, g.category, g.tags, g.display_order, g.is_featured, m.id AS media_id, m.width, m.height, m.thumbnail_key
       FROM website_gallery_items g
       JOIN media_library m ON m.id=g.media_id
@@ -294,13 +301,17 @@ export async function publicSitePayload({ preview = false } = {}) {
       ORDER BY g.is_featured DESC, g.display_order, g.published_at DESC`),
     query(`SELECT id, COALESCE(client_display_name, client_name) AS client_display_name, event_type, quote, rating, is_featured, display_order, client_photo_media_id
       FROM testimonials WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY is_featured DESC, display_order, created_at DESC`),
-    query(`SELECT id, question, answer, category, display_order FROM faqs WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order, question`)
+    query(`SELECT id, question, answer, category, display_order FROM faqs WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order, question`),
+    query(`SELECT id,page_slug,slot_key,html,href,display_order,status FROM website_page_items WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order,slot_key`),
+    query(`SELECT id,asset_key,media_id,display_order,status FROM website_media_mappings WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order,asset_key`)
   ]);
   return {
+    pageItems: pageItems.rows,
+    mediaMappings: mediaMappings.rows.map(row=>({...row,image:mediaUrl(row.media_id)})),
     defaults: websiteContentDefaults(),
     settings: settings.rows[0] || {},
     content: Object.fromEntries(content.rows.map((row) => [row.content_key, row])),
-    heroSlides: hero.rows.length ? hero.rows.map(projectHero) : [fallbackHeroSlide()],
+    heroSlides: hero.rows.map(projectHero),
     packages: packages.rows.map((row) => projectWebsitePackage(row, { showStartingPrice: settings.rows[0]?.show_starting_price !== false })),
     experiences: experiences.rows.map(projectExperience),
     eventTypes: eventTypes.rows.map(withMediaUrl),
@@ -331,7 +342,7 @@ function normalizeCmsBody(type, source, allowed) {
     if (source[field] !== undefined) body[field] = normalizeCmsValue(field, source[field]);
   }
   if (type === "hero" && body.desktop_image_file_id && !body.image_media_id) body.image_media_id = body.desktop_image_file_id;
-  if (type === "eventTypes" && body.name && !body.slug) body.slug = slugify(body.name);
+
   return body;
 }
 
@@ -345,6 +356,10 @@ function normalizeCmsValue(field, value) {
   return value;
 }
 
+export function assertCanPublish(req) {
+  if (!req.user?.permissions?.some(permission => ["*", "publish:website"].includes(permission))) throw new AppError("Publishing website changes requires publish access.", 403, "FORBIDDEN");
+}
+
 async function assertPublishable(type, row) {
   if (row.status !== "PUBLISHED") return;
   if (type === "hero") {
@@ -352,6 +367,10 @@ async function assertPublishable(type, row) {
     if (!mediaId) throw new AppError("Hero slides need an image before publishing.", 400, "HERO_IMAGE_REQUIRED");
     if (!row.alt_text) throw new AppError("Hero slides need meaningful alt text before publishing.", 400, "ALT_TEXT_REQUIRED");
     await assertMediaPublishable(mediaId, { requirePublic: false });
+  }
+  if (type === "mediaMappings") {
+    if (!row.media_id) throw new AppError("Website images need media before publishing.", 400, "MEDIA_REQUIRED");
+    await assertMediaPublishable(row.media_id, { requirePublic: true });
   }
   if (type === "gallery") {
     if (!row.media_id) throw new AppError("Gallery items need media before publishing.", 400, "GALLERY_MEDIA_REQUIRED");
@@ -365,12 +384,6 @@ async function assertMediaPublishable(id, { requirePublic }) {
   if (media.permission_state === "DO_NOT_PUBLISH") throw new AppError("This media is marked do not publish.", 403, "DO_NOT_PUBLISH");
   if (media.permission_state === "RESTRICTED") throw new AppError("This media is restricted and needs an authorized override before publishing.", 403, "RESTRICTED_MEDIA");
   if (requirePublic && media.visibility !== "PUBLIC") throw new AppError("Public gallery media must be marked PUBLIC before publishing.", 400, "MEDIA_NOT_PUBLIC");
-}
-
-async function assertHeroSafety(client, id, action) {
-  if (action === "publish") return;
-  const count = await client.query("SELECT count(*)::int AS count FROM website_hero_slides WHERE deleted_at IS NULL AND is_active=true AND status='PUBLISHED' AND id<>$1", [id]);
-  if (count.rows[0].count < 1) throw new AppError("Keep at least one active published hero slide or configure a fallback before unpublishing.", 409, "LAST_HERO_SLIDE");
 }
 
 async function getById(table, id) {
@@ -391,14 +404,18 @@ async function mediaUsage(id) {
     query("SELECT count(*)::int AS count FROM website_gallery_items WHERE deleted_at IS NULL AND media_id=$1", [id]),
     query("SELECT count(*)::int AS count FROM packages WHERE deleted_at IS NULL AND website_image_media_id=$1", [id]),
     query("SELECT count(*)::int AS count FROM experiences WHERE deleted_at IS NULL AND cover_image_media_id=$1", [id]),
-    query("SELECT count(*)::int AS count FROM testimonials WHERE deleted_at IS NULL AND client_photo_media_id=$1", [id])
+    query("SELECT count(*)::int AS count FROM testimonials WHERE deleted_at IS NULL AND client_photo_media_id=$1", [id]),
+    query("SELECT count(*)::int AS count FROM website_media_mappings WHERE deleted_at IS NULL AND media_id=$1", [id]),
+    query("SELECT count(*)::int AS count FROM website_event_types WHERE deleted_at IS NULL AND image_media_id=$1", [id])
   ]);
   return [
     ["Hero Slide", checks[0].rows[0].count],
     ["Public Gallery", checks[1].rows[0].count],
     ["Package", checks[2].rows[0].count],
     ["Experience", checks[3].rows[0].count],
-    ["Testimonial", checks[4].rows[0].count]
+    ["Testimonial", checks[4].rows[0].count],
+    ["Website Image", checks[5].rows[0].count],
+    ["Event Type", checks[6].rows[0].count]
   ].filter(([, count]) => count > 0).map(([label, count]) => ({ label, count }));
 }
 

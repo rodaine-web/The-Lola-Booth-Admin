@@ -56,8 +56,8 @@
   ],
   "baselineCapturedAt": "2026-09-22T20:16:54.483Z",
   "source": "https://thelolabooth.com",
-  "sourceRevision": "3d221d0",
-  "sourceApprovedAt": "2026-09-22T15:26:53-05:00",
+  "sourceRevision": "3707f3e",
+  "sourceApprovedAt": "2026-09-23T16:10:13-05:00",
   "pages": [
     {
       "slug": "about",
@@ -5116,18 +5116,18 @@
     {
       "slug": "home",
       "file": "index.html",
-      "title": "The LOLA Booth | Premium Photo Booth Experiences",
+      "title": "The LOLA Booth | Premium Photo Booth Experiences in Chicago",
       "seo": {
         "viewport": "width=device-width,initial-scale=1",
-        "description": "Premium photo booth experiences for modern celebrations, weddings, private events and brands.",
+        "description": "Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas.",
         "og:title": "The LOLA Booth | Premium Photo Booth Experiences",
-        "og:description": "Premium photo booth experiences for modern celebrations, weddings, private events and brands.",
+        "og:description": "Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas.",
         "og:url": "https://thelolabooth.com",
         "og:type": "website",
         "og:image": "https://thelolabooth.com/assets/hero-3.jpg",
         "twitter:card": "summary_large_image",
         "twitter:title": "The LOLA Booth | Premium Photo Booth Experiences",
-        "twitter:description": "Premium photo booth experiences for modern celebrations, weddings, private events and brands.",
+        "twitter:description": "Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas.",
         "twitter:image": "https://thelolabooth.com/assets/hero-3.jpg",
         "canonical": "https://thelolabooth.com"
       },
@@ -5138,23 +5138,27 @@
         },
         {
           "tag": "h2",
+          "text": "Good company makes good events better."
+        },
+        {
+          "tag": "h2",
           "text": "Choose Your Moment"
         },
         {
           "tag": "h3",
-          "text": "Lola Glam"
+          "text": "The Glam"
         },
         {
           "tag": "h3",
-          "text": "Lola 360"
+          "text": "The 360 Booth"
         },
         {
           "tag": "h3",
-          "text": "Lola Vogue"
+          "text": "The Vogue"
         },
         {
           "tag": "h3",
-          "text": "Lola Audio Guestbook"
+          "text": "The Audio Guest Book"
         },
         {
           "tag": "h2",
@@ -5210,7 +5214,11 @@
         },
         {
           "tag": "h2",
-          "text": "Real Moments.Happier People."
+          "text": "Make your brand part of the moment."
+        },
+        {
+          "tag": "h2",
+          "text": "Real moments.Happy people."
         },
         {
           "tag": "h2",
@@ -5232,24 +5240,31 @@
         },
         {
           "index": 2,
-          "selector": "section.section",
+          "selector": "section.brand-proof",
           "headings": [
-            "Choose Your Moment",
-            "Lola Glam",
-            "Lola 360",
-            "Lola Vogue",
-            "Lola Audio Guestbook"
+            "Good company makes good events better."
           ]
         },
         {
           "index": 3,
+          "selector": "section.section",
+          "headings": [
+            "Choose Your Moment",
+            "The Glam",
+            "The 360 Booth",
+            "The Vogue",
+            "The Audio Guest Book"
+          ]
+        },
+        {
+          "index": 4,
           "selector": "section.feature-band",
           "headings": [
             "Made for thecamera roll."
           ]
         },
         {
-          "index": 4,
+          "index": 5,
           "selector": "section.section",
           "headings": [
             "Whatever you’re celebrating,make it memorable.",
@@ -5262,7 +5277,7 @@
           ]
         },
         {
-          "index": 5,
+          "index": 6,
           "selector": "section.section.alt",
           "headings": [
             "Something for everykind of celebration.",
@@ -5273,14 +5288,21 @@
           ]
         },
         {
-          "index": 6,
-          "selector": "section.section",
+          "index": 7,
+          "selector": "section.brand-activation",
           "headings": [
-            "Real Moments.Happier People."
+            "Make your brand part of the moment."
           ]
         },
         {
-          "index": 7,
+          "index": 8,
+          "selector": "section.testimonial-section",
+          "headings": [
+            "Real moments.Happy people."
+          ]
+        },
+        {
+          "index": 9,
           "selector": "section.cta",
           "headings": [
             "Let’s Make It Official."
@@ -5296,17 +5318,13 @@
           "html": "Packages",
           "href": "packages.html"
         },
-        "home.003": {
-          "html": "Gallery",
-          "href": "gallery.html"
-        },
         "home.004": {
           "html": "About",
           "href": "about.html"
         },
-        "home.005": {
-          "html": "Events",
-          "href": "events.html"
+        "home.071": {
+          "html": "FAQ",
+          "href": "faq.html"
         },
         "home.006": {
           "html": "Contact",
@@ -5328,17 +5346,13 @@
           "html": "Packages",
           "href": "packages.html"
         },
-        "home.011": {
-          "html": "Gallery",
-          "href": "gallery.html"
-        },
-        "home.012": {
-          "html": "Events",
-          "href": "events.html"
-        },
         "home.013": {
           "html": "About",
           "href": "about.html"
+        },
+        "home.072": {
+          "html": "FAQ",
+          "href": "faq.html"
         },
         "home.014": {
           "html": "Contact",
@@ -5355,7 +5369,7 @@
           "html": "Your event.<br>Their favorite memory."
         },
         "home.018": {
-          "html": "Premium photo booth experiences for modern celebrations. Elegant, interactive, and made to be shared."
+          "html": "Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas. Elegant, interactive, and made to be shared."
         },
         "home.019": {
           "html": "Book Now →",
@@ -5367,6 +5381,24 @@
         },
         "home.021": {
           "html": "Good<br>People<br>Better<br>Photos ♡"
+        },
+        "home.073": {
+          "html": "Brands &amp; Partners"
+        },
+        "home.074": {
+          "html": "Good company makes good events better."
+        },
+        "home.075": {
+          "html": "LOLA creates polished photo and video experiences for celebrations, corporate events, launches, pop-ups, and brand activations."
+        },
+        "home.076": {
+          "html": "DAYOONAS"
+        },
+        "home.077": {
+          "html": "EVENTS"
+        },
+        "home.078": {
+          "html": "Selected brands and partners we’ve worked with."
         },
         "home.022": {
           "html": "Our Experiences"
@@ -5388,7 +5420,7 @@
           "html": "Made for the<br>camera roll."
         },
         "home.028": {
-          "html": "Photos, GIFs, videos and more — designed to be shared, saved, and relived long after the party’s over."
+          "html": "Photos, GIFs, videos and more, designed to be shared, saved, and relived long after the party is over."
         },
         "home.029": {
           "html": "Photo Strips"
@@ -5408,9 +5440,53 @@
         "home.034": {
           "html": "Whatever you’re celebrating,<br>make it memorable."
         },
-        "home.035": {
-          "html": "Explore Events →",
-          "href": "events.html"
+        "home.079": {
+          "html": "Tell us what you’re planning →",
+          "href": "availability.html"
+        },
+        "home.080": {
+          "html": "Weddings"
+        },
+        "home.081": {
+          "html": "Elegant entertainment your guests will love."
+        },
+        "home.082": {
+          "html": "Birthdays"
+        },
+        "home.083": {
+          "html": "A reason to pose, laugh and do it again."
+        },
+        "home.084": {
+          "html": "Showers"
+        },
+        "home.085": {
+          "html": "Beautiful keepsakes for life’s sweetest moments."
+        },
+        "home.086": {
+          "html": "Graduations"
+        },
+        "home.087": {
+          "html": "You earned the photo."
+        },
+        "home.088": {
+          "html": "Corporate Events"
+        },
+        "home.089": {
+          "html": "Branded experiences that create connection."
+        },
+        "home.090": {
+          "html": "Private Events"
+        },
+        "home.091": {
+          "html": "Sometimes the best reason to celebrate is everyone together."
+        },
+        "home.092": {
+          "html": "Check Your Date →",
+          "href": "availability.html"
+        },
+        "home.093": {
+          "html": "Planning Something Different?",
+          "href": "contact.html"
         },
         "home.036": {
           "html": "Packages"
@@ -5422,11 +5498,43 @@
           "html": "View all packages →",
           "href": "packages.html"
         },
-        "home.039": {
+        "home.094": {
+          "html": "Corporate &amp; Brand Activations"
+        },
+        "home.095": {
+          "html": "Make your brand part of the moment."
+        },
+        "home.096": {
+          "html": "LOLA creates photo and video experiences that can be customized around launches, conferences, employee events, sponsored activations, pop-ups and large-scale celebrations. From branded overlays and welcome screens to fully customized guest experiences, we build around the campaign, the space and the people in it."
+        },
+        "home.097": {
+          "html": "Start a Custom Project →",
+          "href": "contact.html"
+        },
+        "home.098": {
+          "html": "Explore Experiences",
+          "href": "experiences.html"
+        },
+        "home.099": {
+          "html": "Custom branded overlays and digital assets"
+        },
+        "home.100": {
+          "html": "Guest-friendly content capture and instant sharing"
+        },
+        "home.101": {
+          "html": "Multi-experience and high-volume event options"
+        },
+        "home.102": {
+          "html": "Custom creative, staffing and event-day support"
+        },
+        "home.103": {
           "html": "Kind Words"
         },
-        "home.040": {
-          "html": "Real Moments.<br>Happier People."
+        "home.104": {
+          "html": "Real moments.<br>Happy people."
+        },
+        "home.105": {
+          "html": "A few words from the people and teams we’ve had the pleasure of creating with."
         },
         "home.041": {
           "html": "Let’s Make It Official."
@@ -5439,98 +5547,59 @@
           "href": "availability.html"
         },
         "home.044": {
-          "html": "Good Events<br>Better People ♡"
+          "html": "Good people.<br>Better photos. ♡"
         },
         "home.045": {
           "html": "Premium photo booth experiences for weddings, celebrations, corporate events, and brands."
         },
-        "home.046": {
+        "home.106": {
           "html": "Experiences"
         },
-        "home.047": {
-          "html": "Glam Booth",
-          "href": "experiences.html"
+        "home.107": {
+          "html": "The Glam",
+          "href": "experiences.html#glam"
         },
-        "home.048": {
-          "html": "360 Booth",
-          "href": "experiences.html"
+        "home.108": {
+          "html": "The 360 Booth",
+          "href": "experiences.html#360"
         },
-        "home.049": {
-          "html": "Vogue Booth",
-          "href": "experiences.html"
+        "home.109": {
+          "html": "The Vogue",
+          "href": "experiences.html#vogue"
         },
-        "home.050": {
-          "html": "Audio Guestbook",
-          "href": "experiences.html"
+        "home.110": {
+          "html": "The Audio Guest Book",
+          "href": "experiences.html#audio"
         },
-        "home.051": {
-          "html": "Digital Booth",
-          "href": "experiences.html"
+        "home.111": {
+          "html": "Plan Your Event"
         },
-        "home.052": {
-          "html": "Add-ons"
-        },
-        "home.053": {
-          "html": "Extra Hour",
+        "home.112": {
+          "html": "Packages",
           "href": "packages.html"
         },
-        "home.054": {
-          "html": "Premium Backdrop",
-          "href": "packages.html"
+        "home.113": {
+          "html": "Check Availability",
+          "href": "availability.html"
         },
-        "home.055": {
-          "html": "Additional Prints",
-          "href": "packages.html"
+        "home.114": {
+          "html": "FAQ",
+          "href": "faq.html"
         },
-        "home.056": {
-          "html": "Guestbook",
-          "href": "packages.html"
+        "home.115": {
+          "html": "Contact",
+          "href": "contact.html"
         },
-        "home.057": {
-          "html": "Custom Signage",
-          "href": "packages.html"
-        },
-        "home.058": {
-          "html": "Branding",
-          "href": "packages.html"
-        },
-        "home.059": {
-          "html": "Events"
-        },
-        "home.060": {
-          "html": "Weddings",
-          "href": "events.html"
-        },
-        "home.061": {
-          "html": "Birthdays",
-          "href": "events.html"
-        },
-        "home.062": {
-          "html": "Corporate Events",
-          "href": "events.html"
-        },
-        "home.063": {
-          "html": "Showers",
-          "href": "events.html"
-        },
-        "home.064": {
-          "html": "Graduations",
-          "href": "events.html"
-        },
-        "home.065": {
-          "html": "Private Events",
-          "href": "events.html"
-        },
-        "home.066": {
+        "home.116": {
           "html": "Company"
         },
         "home.067": {
           "html": "About LOLA",
           "href": "about.html"
         },
-        "home.068": {
-          "html": "Gallery",
-          "href": "gallery.html"
+        "home.117": {
+          "html": "Corporate &amp; Brands",
+          "href": "contact.html"
         },
         "home.069": {
           "html": "FAQ",
@@ -5540,26 +5609,26 @@
           "html": "Contact",
           "href": "contact.html"
         },
-        "home.071": {
+        "home.118": {
           "html": "Get in touch"
         },
-        "home.072": {
+        "home.119": {
           "html": "Book Now",
           "href": "availability.html"
         },
-        "home.073": {
+        "home.120": {
           "html": "info@thelolabooth.com",
           "href": "mailto:info@thelolabooth.com"
         },
-        "home.074": {
+        "home.121": {
           "html": "(773) 240-2744",
           "href": "tel:+17732402744"
         },
-        "home.075": {
+        "home.122": {
           "html": "Privacy",
           "href": "privacy.html"
         },
-        "home.076": {
+        "home.123": {
           "html": "Terms",
           "href": "terms.html"
         }
@@ -5578,16 +5647,12 @@
           "href": "packages.html"
         },
         {
-          "text": "Gallery",
-          "href": "gallery.html"
-        },
-        {
           "text": "About",
           "href": "about.html"
         },
         {
-          "text": "Events",
-          "href": "events.html"
+          "text": "FAQ",
+          "href": "faq.html"
         },
         {
           "text": "Contact",
@@ -5610,16 +5675,12 @@
           "href": "packages.html"
         },
         {
-          "text": "Gallery",
-          "href": "gallery.html"
-        },
-        {
-          "text": "Events",
-          "href": "events.html"
-        },
-        {
           "text": "About",
           "href": "about.html"
+        },
+        {
+          "text": "FAQ",
+          "href": "faq.html"
         },
         {
           "text": "Contact",
@@ -5642,116 +5703,72 @@
           "href": "experiences.html"
         },
         {
-          "text": "Explore Events →",
-          "href": "events.html"
+          "text": "Tell us what you’re planning →",
+          "href": "availability.html"
         },
         {
-          "text": "WeddingsElegant entertainment your guests will love.",
-          "href": "events.html"
+          "text": "Check Your Date →",
+          "href": "availability.html"
         },
         {
-          "text": "BirthdaysA reason to pose, laugh and do it again.",
-          "href": "events.html"
-        },
-        {
-          "text": "ShowersBeautiful keepsakes for life’s sweetest moments.",
-          "href": "events.html"
-        },
-        {
-          "text": "GraduationsYou earned the photo.",
-          "href": "events.html"
-        },
-        {
-          "text": "Corporate EventsBranded experiences that create connection.",
-          "href": "events.html"
-        },
-        {
-          "text": "Private EventsSometimes the best reason to celebrate is everyone together.",
-          "href": "events.html"
+          "text": "Planning Something Different?",
+          "href": "contact.html"
         },
         {
           "text": "View all packages →",
           "href": "packages.html"
         },
         {
+          "text": "Start a Custom Project →",
+          "href": "contact.html"
+        },
+        {
+          "text": "Explore Experiences",
+          "href": "experiences.html"
+        },
+        {
           "text": "Book Now →",
           "href": "availability.html"
         },
         {
-          "text": "Glam Booth",
-          "href": "experiences.html"
+          "text": "The Glam",
+          "href": "experiences.html#glam"
         },
         {
-          "text": "360 Booth",
-          "href": "experiences.html"
+          "text": "The 360 Booth",
+          "href": "experiences.html#360"
         },
         {
-          "text": "Vogue Booth",
-          "href": "experiences.html"
+          "text": "The Vogue",
+          "href": "experiences.html#vogue"
         },
         {
-          "text": "Audio Guestbook",
-          "href": "experiences.html"
+          "text": "The Audio Guest Book",
+          "href": "experiences.html#audio"
         },
         {
-          "text": "Digital Booth",
-          "href": "experiences.html"
-        },
-        {
-          "text": "Extra Hour",
+          "text": "Packages",
           "href": "packages.html"
         },
         {
-          "text": "Premium Backdrop",
-          "href": "packages.html"
+          "text": "Check Availability",
+          "href": "availability.html"
         },
         {
-          "text": "Additional Prints",
-          "href": "packages.html"
+          "text": "FAQ",
+          "href": "faq.html"
         },
         {
-          "text": "Guestbook",
-          "href": "packages.html"
-        },
-        {
-          "text": "Custom Signage",
-          "href": "packages.html"
-        },
-        {
-          "text": "Branding",
-          "href": "packages.html"
-        },
-        {
-          "text": "Weddings",
-          "href": "events.html"
-        },
-        {
-          "text": "Birthdays",
-          "href": "events.html"
-        },
-        {
-          "text": "Corporate Events",
-          "href": "events.html"
-        },
-        {
-          "text": "Showers",
-          "href": "events.html"
-        },
-        {
-          "text": "Graduations",
-          "href": "events.html"
-        },
-        {
-          "text": "Private Events",
-          "href": "events.html"
+          "text": "Contact",
+          "href": "contact.html"
         },
         {
           "text": "About LOLA",
           "href": "about.html"
         },
         {
-          "text": "Gallery",
-          "href": "gallery.html"
+          "text": "Corporate & Brands",
+          "href": "contact.html"
         },
         {
           "text": "FAQ",
@@ -5794,6 +5811,10 @@
         "assets/LOLA_Primary_Dark_Transparent.png",
         "assets/hero-v2-2.jpg",
         "assets/hero-v2-4.jpg",
+        "assets/hue-logo-fit.jpg",
+        "assets/eventnoire-logo-fit.jpg",
+        "assets/fasha-logo-fit.jpg",
+        "assets/male-studios-logo-fit.jpg",
         "assets/glam.jpg",
         "assets/booth360.jpg",
         "assets/vogue.jpg",
@@ -6098,6 +6119,9 @@
         },
         "packages.034": {
           "html": "A vintage-inspired phone experience that captures heartfelt messages, funny stories and moments you can replay for years."
+        },
+        "packages.decorative-note": {
+          "html": "Good people<br>better keepsakes ♡"
         },
         "packages.035": {
           "html": "All prices for The Glam are your current published direction. Pricing for The 360 Booth, The Vogue and The Audio Guest Book is placeholder pricing for review and may be adjusted before launch. Final pricing may vary by venue, hours, travel, guest count, branding, staffing and custom production."
@@ -7573,8 +7597,8 @@
       ],
       "kicker": "Best for weddings, birthdays, showers, cocktail hours, corporate events and brand activations.",
       "asset": "assets/glam.jpg",
-      "name": "Lola Glam",
-      "homeDescription": "Studio-quality photos with that iconic glam look.",
+      "name": "The Glam",
+      "homeDescription": "Studio-quality portraits with that iconic polished look.",
       "order": 1
     },
     {
@@ -7594,8 +7618,8 @@
       ],
       "kicker": "Best for birthdays, graduations, weddings, galas, corporate events, festivals and high-energy celebrations.",
       "asset": "assets/booth360.jpg",
-      "name": "Lola 360",
-      "homeDescription": "Dynamic, slow-motion videos that steal the show.",
+      "name": "The 360 Booth",
+      "homeDescription": "Dynamic video moments designed to move, loop, and get shared.",
       "order": 2
     },
     {
@@ -7615,8 +7639,8 @@
       ],
       "kicker": "Best for weddings, milestone celebrations, galas, product launches, corporate activations and fashion-forward events.",
       "asset": "assets/vogue.jpg",
-      "name": "Lola Vogue",
-      "homeDescription": "Editorial-style photos for your main-character moment.",
+      "name": "The Vogue",
+      "homeDescription": "An editorial-style experience for your main-character moment.",
       "order": 3
     },
     {
@@ -7636,8 +7660,8 @@
       ],
       "kicker": "Best for weddings, showers, birthdays, memorial celebrations, private events and branded voice activations.",
       "asset": "assets/audio.jpg",
-      "name": "Lola Audio Guestbook",
-      "homeDescription": "Heartfelt and hilarious voice messages they’ll never forget.",
+      "name": "The Audio Guest Book",
+      "homeDescription": "Heartfelt and hilarious voice messages worth hearing again.",
       "order": 4
     }
   ],
@@ -7679,54 +7703,42 @@
       "name": "Weddings",
       "order": 1,
       "description": "Beautiful keepsakes, real laughter, and guest moments that live past the last dance.",
-      "asset": "assets/wedding.jpg",
-      "homeOrder": 1,
-      "homeDescription": "Elegant entertainment your guests will love."
+      "asset": "assets/wedding.jpg"
     },
     {
       "key": "birthdays",
       "name": "Birthdays",
       "order": 2,
       "description": "Big energy, repeat poses, and a reason for everyone to get in the frame.",
-      "asset": "assets/birthday.jpg",
-      "homeOrder": 2,
-      "homeDescription": "A reason to pose, laugh and do it again."
+      "asset": "assets/birthday.jpg"
     },
     {
       "key": "corporate-events",
       "name": "Corporate Events",
       "order": 3,
       "description": "Interactive guest experiences designed to look polished and feel on-brand.",
-      "asset": "assets/corporate.jpg",
-      "homeOrder": 5,
-      "homeDescription": "Branded experiences that create connection."
+      "asset": "assets/corporate.jpg"
     },
     {
       "key": "showers",
       "name": "Showers",
       "order": 4,
       "description": "Soft details, joyful people, and a beautiful way to remember everyone who showed up.",
-      "asset": "assets/shower.jpg",
-      "homeOrder": 3,
-      "homeDescription": "Beautiful keepsakes for life’s sweetest moments."
+      "asset": "assets/shower.jpg"
     },
     {
       "key": "graduations",
       "name": "Graduations",
       "order": 5,
       "description": "A milestone this big deserves more than a phone selfie.",
-      "asset": "assets/graduation.jpg",
-      "homeOrder": 4,
-      "homeDescription": "You earned the photo."
+      "asset": "assets/graduation.jpg"
     },
     {
       "key": "private-events",
       "name": "Private Events",
       "order": 6,
       "description": "Anniversaries, reunions, galas, holiday parties, and everything worth gathering for.",
-      "asset": "assets/private.jpg",
-      "homeOrder": 6,
-      "homeDescription": "Sometimes the best reason to celebrate is everyone together."
+      "asset": "assets/private.jpg"
     }
   ],
   "gallery": [
@@ -8142,7 +8154,35 @@
       "display_order": 40
     }
   ],
-  "testimonials": [],
+  "testimonials": [
+    {
+      "client_name": "Terry",
+      "client_display_name": "Terry",
+      "event_type": "Chicago Wedding · The Glam + The Vogue",
+      "quote": "The Glam gave us the beautiful portraits we wanted, and The Vogue was such a fun surprise for our guests. People kept going back all night. Looking through the photos afterward felt like reliving the wedding all over again.",
+      "rating": 5,
+      "display_order": 1,
+      "source_approval_note": "Source says client wording approval pending"
+    },
+    {
+      "client_name": "Jeff · Event Noire",
+      "client_display_name": "Jeff · Event Noire",
+      "event_type": "Culture Ball · Obama Presidential Center · The 360 Booth + The Glam",
+      "quote": "LOLA was a strong event partner for Culture Ball. The team came prepared, worked seamlessly within the event environment, and delivered both the 360 and Glam experiences in a way that felt polished, engaging, and aligned with the occasion. Our guests had a great experience, and the content gave them something memorable to take with them.",
+      "rating": 5,
+      "display_order": 2,
+      "source_approval_note": "Source says client wording approval pending"
+    },
+    {
+      "client_name": "Didi",
+      "client_display_name": "Didi",
+      "event_type": "50th Birthday Celebration · The Glam",
+      "quote": "I wanted my 50th to feel special without making everything feel too formal. The Glam was perfect. Everyone looked amazing, people had so much fun with it, and I ended up with photos of so many people I love in one place. It was one of my favorite parts of the night.",
+      "rating": 5,
+      "display_order": 3,
+      "source_approval_note": "Source says client wording approval pending"
+    }
+  ],
   "media": [
     {
       "path": "assets/LOLA_Primary_Dark_Transparent.png",
@@ -8271,6 +8311,42 @@
       "url": "https://thelolabooth.com/assets/hero-v2-4.jpg"
     },
     {
+      "path": "assets/hue-logo-fit.jpg",
+      "filename": "hue-logo-fit.jpg",
+      "sha256": "ce7634a07c4ffc404f3562f045f61fe907dd36068fd12961fca44affcf55a7de",
+      "size": 99139,
+      "mimeType": "image/jpeg",
+      "alt": "Hue Chicago logo",
+      "url": "https://thelolabooth.com/assets/hue-logo-fit.jpg"
+    },
+    {
+      "path": "assets/eventnoire-logo-fit.jpg",
+      "filename": "eventnoire-logo-fit.jpg",
+      "sha256": "87a33e7b48c62ceb688d0cf3f70de3f277890316f71f5c0947fbb72b56bd1f81",
+      "size": 8031,
+      "mimeType": "image/jpeg",
+      "alt": "Eventnoire logo",
+      "url": "https://thelolabooth.com/assets/eventnoire-logo-fit.jpg"
+    },
+    {
+      "path": "assets/fasha-logo-fit.jpg",
+      "filename": "fasha-logo-fit.jpg",
+      "sha256": "293c87c10a8de80a2fc432bdf4c94d567d057f4d47f8c6b8ff72da9ea8717465",
+      "size": 17481,
+      "mimeType": "image/jpeg",
+      "alt": "Fasha logo",
+      "url": "https://thelolabooth.com/assets/fasha-logo-fit.jpg"
+    },
+    {
+      "path": "assets/male-studios-logo-fit.jpg",
+      "filename": "male-studios-logo-fit.jpg",
+      "sha256": "106d0815cddd2296ed4516d48dbc85c5ee4a67e914d0ff489661a4bab0819c37",
+      "size": 7140,
+      "mimeType": "image/jpeg",
+      "alt": "Male Studios logo",
+      "url": "https://thelolabooth.com/assets/male-studios-logo-fit.jpg"
+    },
+    {
       "path": "assets/camera-roll-v2.jpg",
       "filename": "camera-roll-v2.jpg",
       "sha256": "97eb64a4d2a92646f565bfc65c0852775f6db18c23b93143eb0c65c5a5d7e01f",
@@ -8344,10 +8420,10 @@
     "pinterest_url": null,
     "brand_line": "Good people. Better photos.",
     "canonical_domain": "https://thelolabooth.com",
-    "site_title": "The LOLA Booth | Premium Photo Booth Experiences",
-    "default_meta_description": "Premium photo booth experiences for modern celebrations, weddings, private events and brands.",
+    "site_title": "The LOLA Booth | Premium Photo Booth Experiences in Chicago",
+    "default_meta_description": "Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas.",
     "social_share_title": "The LOLA Booth | Premium Photo Booth Experiences",
-    "social_share_description": "Premium photo booth experiences for modern celebrations, weddings, private events and brands."
+    "social_share_description": "Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas."
   },
   "baseline": {
     "defaults": {

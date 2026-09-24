@@ -42,15 +42,16 @@ for (const file of files) {
   for (const match of original.matchAll(/url\(['"]?(assets\/[^)'"\s]+)['"]?\)/g)) {const key=await asset(match[1]);if(key)page.assets.push(key);}
   // Bound text slots, not a page builder: existing markup/layout remains in source.
   const dynamic = '[data-cms-packages], [data-experience-panel] .pricing-grid, [data-cms-experiences], [data-cms-events="home"], .event-overview-card, [data-cms-gallery], [data-cms-faqs], [data-cms-testimonials], [data-site-socials], script, style, svg, select';
-  let slot=0;
-  for(const e of $('h1,h2,h3,h4,p,li,summary,figcaption,a,small,.event-meta-card strong,.event-meta-card span,.feature-label,.script-note,.hero-script,.tagline,.intro').toArray()){
+  let slot=Math.max(0,...$('[data-cms-copy]').toArray().map(e=>Number(($(e).attr('data-cms-copy')||'').split('.').pop())||0));
+  for(const e of $('h1,h2,h3,h4,p,li,summary,figcaption,a,small,.event-meta-card strong,.event-meta-card span,.feature-label,.script-note,.hero-script,.tagline,.intro,.brand-wordmark,.brand-submark,.brand-activation-points span,.meta-note-script').toArray()){
     const el=$(e);
     if(el.closest(dynamic).length || el.find('h1,h2,h3,h4,p,li,summary,figcaption,a,small,svg,img,input,button').length || !text($,e))continue;
-    const id=`${slug}.${String(++slot).padStart(3,'0')}`;
+    const id=el.attr('data-cms-copy')||`${slug}.${String(++slot).padStart(3,'0')}`;
     el.attr('data-cms-copy',id);
     page.copy[id]={html:el.html(),...(e.tagName==='a'?{href:el.attr('href')}: {})};
   }
   if(slug==='home'){
+    if ($('[data-cms-testimonials] .testimonial-card').length) manifest.testimonials=$('[data-cms-testimonials] .testimonial-card').map((i,e)=>({client_name:text($,$(e).find('.testimonial-meta strong')),client_display_name:text($,$(e).find('.testimonial-meta strong')),event_type:text($,$(e).find('.testimonial-meta span')),quote:text($,$(e).find('.testimonial-quote')).replace(/^[“\"]|[”\"]$/g,''),rating:5,display_order:i+1,source_approval_note:$(e).attr('data-testimonial-status')==='draft'?'Source says client wording approval pending':null})).get();
     $('[data-cms-packages="home"] > *').each((i,e)=>{const key=`glam:${['essential','signature','luxe','custom'][i]}`;$(e).attr('data-package-key',key);homePackageDescriptions[key]=text($,$(e).find('p.muted'));});
     $('.hero-slide').each((i,e)=>{const src=$(e).attr('style')?.match(/url\(['"]?([^)'" ]+)/)?.[1];manifest.hero.push({asset:src,alt:assetMap.get(src)?.alt||`LOLA event photograph ${i+1}`,order:i+1});});
     $('[data-cms-experiences="home"] > *').each((i,e)=>{const key=['glam','360','vogue','audio'][i];$(e).attr('data-experience-key',key);manifest.experiences.push({key,name:text($,$(e).find('h3')),homeDescription:text($,$(e).find('p')),asset:$(e).find('img').attr('src'),order:i+1});});

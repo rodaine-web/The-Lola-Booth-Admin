@@ -1,12 +1,14 @@
 import { Archive, ArrowLeft, Copy, Download, FileText, Mail, ReceiptText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+import DocumentPreview from "../components/DocumentPreview.jsx";
 import { api } from "../api/client.js";
 
 export default function ProposalDetail() {
   const { id } = useParams();
+  const { can } = useAuth();
   const [proposal, setProposal] = useState(null);
-  const [preview, setPreview] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -16,7 +18,6 @@ export default function ProposalDetail() {
     try {
       const data = await api.get(`/proposals/${id}`);
       setProposal(data);
-      setPreview(await api.text(`/proposals/${id}/preview`));
     } catch (err) {
       setError(err.message);
     }
@@ -47,7 +48,9 @@ export default function ProposalDetail() {
           <p className="lede">{proposal.event_name || "No event"} · {proposal.status} · Total ${Number(proposal.total || 0).toLocaleString()}</p>
         </div>
         <div className="detail-actions">
-          <button className="primary-action" onClick={() => action(() => api.post(`/proposals/${id}/send`, {}), "Proposal sent in development email mode.")}><Mail size={16} />Send</button>
+          {can("write:sales") && ["DRAFT", "READY"].includes(proposal.status) && proposal.proposal_source !== "UPLOADED" && <Link className="primary-action" to={`/sales/proposals/${id}/edit`}>Edit proposal</Link>}
+          {proposal.public_url && <a href={proposal.public_url} target="_blank" rel="noreferrer">Public proposal</a>}
+          <button className="primary-action" onClick={() => action(() => api.post(`/proposals/${id}/send`, {}), "Proposal submitted to the email provider.")}><Mail size={16} />Send</button>
           <button onClick={() => action(() => api.download(`/proposals/${id}/pdf`, `${proposal.proposal_number}.pdf`), "PDF generated.")}><Download size={16} />PDF</button>
           <button onClick={() => action(() => api.download(`/proposals/${id}/docx`, `${proposal.proposal_number}.docx`), "DOCX generated.")}><FileText size={16} />DOCX</button>
           <button onClick={() => action(() => api.post(`/proposals/${id}/duplicate`, {}), "Proposal duplicated.")}><Copy size={16} />Duplicate</button>
@@ -57,12 +60,13 @@ export default function ProposalDetail() {
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <section className="detail-summary">
-        <Metric label="Valid Through" value={proposal.valid_through || "Unset"} />
+        <Metric label="Valid Through" value={proposal.valid_through ? new Date(proposal.valid_through).toLocaleDateString() : "Unset"} />
         <Metric label="Sent" value={proposal.sent_at ? new Date(proposal.sent_at).toLocaleDateString() : "Not sent"} />
         <Metric label="Views" value={proposal.view_count || 0} />
         <Metric label="Accepted By" value={proposal.accepted_by_name || "Not accepted"} />
       </section>
-      <iframe className="document-preview" title="Proposal preview" srcDoc={preview} />
+      <section className="panel"><h2>Version history</h2>{proposal.versions?.length ? <ul>{proposal.versions.map(version => <li key={version.id}>Version {version.version_number} · {new Date(version.created_at).toLocaleString()}</li>)}</ul> : <p>No saved versions.</p>}</section>
+      <DocumentPreview path={`/proposals/${id}/pdf`} title="Proposal preview" />
     </main>
   );
 }

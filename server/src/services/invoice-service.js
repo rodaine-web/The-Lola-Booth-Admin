@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { env } from "../config/env.js";
 import { query, transaction } from "../db/pool.js";
-import { notFound } from "../utils/errors.js";
+import { AppError, notFound } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { writeAudit } from "./audit-service.js";
 import { brandedEmailHtml, recordTemplateFallback, renderCommunicationTemplateByKey } from "./automation-service.js";
@@ -26,7 +26,7 @@ export async function getInvoice(idOrToken, { publicView = false } = {}) {
   if (!invoice.rows[0]) throw notFound("Invoice");
   const items = await query("SELECT * FROM invoice_items WHERE invoice_id=$1 ORDER BY id", [invoice.rows[0].id]);
   const payments = await query("SELECT * FROM payments WHERE invoice_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC, created_at DESC", [invoice.rows[0].id]);
-  return { ...invoice.rows[0], items: items.rows, payments: payments.rows };
+  return { ...invoice.rows[0], public_url: publicInvoiceUrl(invoice.rows[0]), items: items.rows, payments: payments.rows };
 }
 
 export async function createInvoice(req) {
@@ -79,6 +79,24 @@ export async function createInvoice(req) {
   await recordActivity({ actorUserId: req.user.id, entityType: "invoice", entityId: invoice.id, action: "invoice_created", summary: `Invoice ${invoice.invoice_number} created` });
   await writeAudit({ req, action: "invoice_created", entity: "invoice", entityId: invoice.id, after: invoice });
   return invoice;
+}
+
+export async function updateDraftInvoice(req) {
+  const result = await transaction(async client => {
+    const locked = await client.query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.params.id]);
+    const before = locked.rows[0];
+    if (!before) throw notFound("Invoice");
+    if (before.status !== "DRAFT" || Number(before.amount_paid) > 0) throw new AppError("Only unpaid draft invoices can be edited.", 409, "INVOICE_NOT_EDITABLE");
+    const currentItems = await client.query("SELECT * FROM invoice_items WHERE invoice_id=$1", [before.id]);
+    const totals = calculateInvoiceTotals(req.body.items ?? currentItems.rows);
+    const values = [req.body.client_id === undefined ? before.client_id : req.body.client_id, req.body.event_id === undefined ? before.event_id : req.body.event_id, req.body.due_date === undefined ? before.due_date : req.body.due_date, req.body.notes === undefined ? before.notes : req.body.notes, req.body.terms === undefined ? before.terms : req.body.terms];
+    const updated = await client.query(`UPDATE invoices SET client_id=$1,event_id=$2,due_date=$3,notes=$4,terms=$5,subtotal=$6,discount=$7,tax=$8,total=$9,balance_due=$9,amount_outstanding=$9,pricing_snapshot=$10,updated_at=now() WHERE id=$11 RETURNING *`, [...values,totals.subtotal,totals.discount,totals.tax,totals.total,JSON.stringify(totals),before.id]);
+    await client.query("DELETE FROM invoice_items WHERE invoice_id=$1", [before.id]);
+    for (const item of totals.items) await client.query(`INSERT INTO invoice_items(invoice_id,label,description,quantity,unit_price,taxable,tax_rate,discount,total,line_total) VALUES($1,$2,$2,$3,$4,$5,$6,$7,$8,$8)`,[before.id,item.description,item.quantity,item.unit_price,item.taxable ?? true,item.tax_rate || 0,item.discount,item.line_total]);
+    return {before,after:updated.rows[0]};
+  });
+  await writeAudit({req,action:"invoice_updated",entity:"invoice",entityId:req.params.id,...result});
+  return getInvoice(req.params.id);
 }
 
 export function calculateInvoiceTotals(items) {

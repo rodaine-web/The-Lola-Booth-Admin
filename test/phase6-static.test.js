@@ -80,11 +80,11 @@ test("media upload validation and usage safety are implemented", () => {
   assert.match(cmsService, /MEDIA_IN_USE/);
   assert.match(cmsService, /DO_NOT_PUBLISH/);
   assert.match(cmsService, /ALT_TEXT_REQUIRED/);
-  assert.match(cmsService, /LAST_HERO_SLIDE/);
+  assert.doesNotMatch(cmsService, /LAST_HERO_SLIDE/);
 });
 
 test("frontend adds Website CMS navigation and screens", () => {
-  for (const label of ["Homepage", "Hero Slides", "Gallery", "Packages", "Experiences", "Events", "Testimonials", "FAQ", "Media Library", "SEO / Site Settings"]) {
+  for (const label of ["Page SEO", "Hero Slides", "Gallery", "Packages", "Experiences", "Event Types", "Testimonials", "FAQ", "Media Library", "SEO / Site Settings"]) {
     assert.match(layout, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   for (const route of ["website/homepage", "website/hero-slides", "website/gallery", "website/packages", "website/experiences", "website/events", "website/testimonials", "website/faq", "website/media-library", "website/site-settings"]) {

@@ -1,9 +1,12 @@
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, CircleDot, ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { Bar, BarChart, Cell, Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api/client.js";
+import { funnelHref, sourceHref, metricHref } from "../utils/dashboard-links.js";
 import DataTable from "../components/DataTable.jsx";
+
+const primaryKeys = ["new_leads", "booked_revenue", "collected_revenue", "outstanding_balance", "events_scheduled", "conversion_rate"];
 
 const ranges = [
   ["today", "Today"],
@@ -13,6 +16,7 @@ const ranges = [
 ];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const range = searchParams.get("range") || "today";
   const [data, setData] = useState(null);
@@ -48,23 +52,16 @@ export default function Dashboard() {
         {ranges.map(([key, label]) => <button key={key} className={range === key ? "active" : ""} onClick={() => setSearchParams({ range: key })}>{label}</button>)}
       </div>
 
-      {data.groups.map((group) => (
-        <section className="metric-section" key={group.title}>
-          <div className="section-heading"><h2>{group.title}</h2></div>
-          <div className="kpi-grid kpi-grid-phase7">
-            {group.metrics.map((metric) => (
-              <Link className="kpi kpi-link" key={metric.key} to={metric.href}>
-                <span>{metric.label}</span>
-                <strong>{formatMetric(metric)}</strong>
-                <small className={`comparison ${metric.comparison.direction}`}>
-                  {metric.comparison.direction === "up" ? <ArrowUpRight size={14} /> : metric.comparison.direction === "down" ? <ArrowDownRight size={14} /> : <CircleDot size={14} />}
-                  {metric.comparison.label}
-                </small>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ))}
+      <section className="kpi-grid dashboard-priority" aria-label="Key performance indicators">
+        {primaryKeys.map(key => data.groups.flatMap(group => group.metrics).find(metric => metric.key === key)).filter(Boolean).map(metric => <Kpi key={metric.key} metric={metric} range={data.sqlRange} />)}
+      </section>
+      <section className="dashboard-grid dashboard-charts-first">
+        <Panel title="Sales pipeline"><ResponsiveContainer width="100%" height={260}><BarChart data={data.funnel.stages} layout="vertical" margin={{left:15,right:25}}><CartesianGrid horizontal={false} stroke="#e8ddd0"/><XAxis type="number" allowDecimals={false}/><YAxis dataKey="label" type="category" width={115} tick={{fontSize:12}}/><Tooltip/><Bar dataKey="count" name="Records" fill="#b89b6b" radius={[0,4,4,0]} onClick={entry=>navigate(funnelHref(entry.key,data.sqlRange))}/></BarChart></ResponsiveContainer><div className="chart-links">{data.funnel.stages.map(stage=><Link key={stage.key} to={funnelHref(stage.key,data.sqlRange)}>{stage.label} <strong>{stage.count}</strong></Link>)}</div><p className="note-text">{data.funnel.attribution}</p></Panel>
+        <Panel title="Lead sources"><ResponsiveContainer width="100%" height={260}><BarChart data={data.leadSources}><CartesianGrid vertical={false} stroke="#e8ddd0"/><XAxis dataKey="source" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="leads" name="Leads" fill="#514a40" radius={[4,4,0,0]} onClick={entry=>navigate(sourceHref(entry.source,data.sqlRange))}/></BarChart></ResponsiveContainer><div className="chart-links">{data.leadSources.map(source=><Link key={source.source} to={sourceHref(source.source,data.sqlRange)}>{source.source} <strong>{source.leads}</strong></Link>)}</div>{!data.leadSources.length&&<p className="note-text">No leads in the selected period.</p>}</Panel>
+      </section>
+      <section className="dashboard-more-metrics" aria-label="Detailed metrics">
+        {data.groups.map(group => <details key={group.title} className="panel"><summary>{group.title} details</summary><div className="kpi-grid kpi-grid-phase7">{group.metrics.filter(metric => !primaryKeys.includes(metric.key)).map(metric => <Kpi key={metric.key} metric={metric} range={data.sqlRange} />)}</div></details>)}
+      </section>
 
       <section className="dashboard-grid">
         <Panel title="Revenue Trend">
@@ -81,18 +78,7 @@ export default function Dashboard() {
             </ResponsiveContainer>
           ) : <div className="empty-state">No revenue movement in this period.</div>}
         </Panel>
-        <Panel title="Sales Funnel">
-          <div className="funnel">
-            {data.funnel.stages.map((stage) => (
-              <article key={stage.key}>
-                <span>{stage.label}</span>
-                <strong>{stage.count.toLocaleString()}</strong>
-                <small>{stage.overall_conversion}% overall</small>
-              </article>
-            ))}
-          </div>
-          <p className="note-text">{data.funnel.attribution}</p>
-        </Panel>
+
       </section>
 
       <section className="dashboard-grid">
@@ -125,14 +111,18 @@ export default function Dashboard() {
         </Panel>
       </section>
 
-      <section className="panel">
-        <h2>Metric Definitions</h2>
+      <details className="panel">
+        <summary>Metric Definitions</summary>
         <div className="definition-grid">
           {Object.entries(data.metricDefinitions).map(([key, value]) => <p key={key}><strong>{key.replaceAll("_", " ")}</strong>{value}</p>)}
         </div>
-      </section>
+      </details>
     </main>
   );
+}
+
+function Kpi({metric,range}) {
+  return <Link className="kpi kpi-link" to={metricHref(metric,range)}><span>{metric.label}</span><strong>{formatMetric(metric)}</strong><small className={`comparison ${metric.comparison.direction}`}>{metric.comparison.direction === "up" ? <ArrowUpRight size={14}/> : metric.comparison.direction === "down" ? <ArrowDownRight size={14}/> : <CircleDot size={14}/>} {metric.comparison.label}</small></Link>;
 }
 
 function Panel({ title, children }) {

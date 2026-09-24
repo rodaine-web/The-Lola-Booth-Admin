@@ -2,10 +2,14 @@ import { ArrowLeft, Copy, Download, Mail, Plus, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import DocumentPreview from "../components/DocumentPreview.jsx";
 import DataTable from "../components/DataTable.jsx";
 
 export default function InvoiceDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const canEdit = user?.permissions?.some(p => ["*", "write:finance"].includes(p));
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -58,7 +62,9 @@ export default function InvoiceDetail() {
           <p className="lede">{invoice.event_name || "No event"} · {invoice.status} · Outstanding ${Number(invoice.amount_outstanding || invoice.balance_due || 0).toLocaleString()}</p>
         </div>
         <div className="detail-actions">
-          <button className="primary-action" onClick={() => action(() => api.post(`/invoices/${id}/send`, {}), "Invoice sent in development email mode.")}><Mail size={16} />Send</button>
+          {invoice.public_url && <a href={invoice.public_url} target="_blank" rel="noreferrer">Public invoice</a>}
+          {canEdit && invoice.status === "DRAFT" && Number(invoice.amount_paid || 0) === 0 && <Link className="primary-action" to={`/finance/invoices/${id}/edit`}>Edit draft</Link>}
+          <button className="primary-action" onClick={() => action(() => api.post(`/invoices/${id}/send`, {}), "Invoice submitted to the email provider.")}><Mail size={16} />Send</button>
           <button onClick={() => action(() => api.download(`/invoices/${id}/pdf`, `${invoice.invoice_number}.pdf`), "PDF generated.")}><Download size={16} />PDF</button>
           <button onClick={() => action(() => api.post(`/invoices/${id}/duplicate`, {}), "Invoice duplicated.")}><Copy size={16} />Duplicate</button>
           <button onClick={() => action(() => api.post(`/invoices/${id}/void`, {}), "Invoice voided.")}><XCircle size={16} />Void</button>
@@ -69,12 +75,13 @@ export default function InvoiceDetail() {
         <Metric label="Total" value={`$${Number(invoice.total || 0).toLocaleString()}`} />
         <Metric label="Paid" value={`$${Number(invoice.amount_paid || 0).toLocaleString()}`} />
         <Metric label="Outstanding" value={`$${Number(invoice.amount_outstanding || invoice.balance_due || 0).toLocaleString()}`} />
-        <Metric label="Due" value={invoice.due_date || "Unset"} />
+        <Metric label="Due" value={invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : "Unset"} />
       </section>
       <section className="panel">
         <h2>Line Items</h2>
         <DataTable rows={invoice.items} columns={["description", "quantity", "unit_price", "tax_rate", "discount", "line_total"]} empty="No invoice items." />
       </section>
+      <DocumentPreview path={`/invoices/${id}/pdf`} title="Invoice preview" />
       <section className="panel">
         <h2>Record Manual Payment</h2>
         <div className="inline-form">

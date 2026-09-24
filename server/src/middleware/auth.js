@@ -13,7 +13,7 @@ export async function authenticate(req, _res, next) {
     const result = await query(
       `SELECT u.id, u.name, u.email, u.active,
         COALESCE(json_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL), '[]') AS roles,
-        COALESCE(json_agg(DISTINCT p.key) FILTER (WHERE p.key IS NOT NULL), '[]') AS permissions
+        COALESCE((SELECT json_agg(grants.key) FROM (SELECT p.key FROM user_roles ur2 JOIN role_permissions rp2 ON rp2.role_id=ur2.role_id JOIN permissions p ON p.id=rp2.permission_id WHERE ur2.user_id=u.id UNION SELECT p.key FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=u.id) grants), '[]') AS permissions
        FROM users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
        LEFT JOIN roles r ON r.id = ur.role_id

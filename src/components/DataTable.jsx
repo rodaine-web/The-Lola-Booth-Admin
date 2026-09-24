@@ -19,6 +19,9 @@ export default function DataTable({ columns, rows, empty = "No records found.", 
             <tr
               key={row.id}
               className={getRowHref ? "clickable-row" : ""}
+              tabIndex={getRowHref ? 0 : undefined}
+              aria-label={getRowHref ? `Open ${String(row[columns[0]] || "record")}` : undefined}
+              onKeyDown={event => { if (getRowHref && event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); navigate(getRowHref(row)); } }}
               onClick={() => getRowHref && navigate(getRowHref(row))}
             >
               {columns.map((column) => <td key={column}>{formatValue(row[column])}</td>)}
