@@ -25,7 +25,7 @@ try {
  process.env.DATABASE_URL=`postgresql://localhost:55439/${name}?host=/private/tmp`;process.env.JWT_SECRET=crypto.randomBytes(40).toString('hex');process.env.EMAIL_PROVIDER='development';process.env.SMS_PROVIDER='none';process.env.NODE_ENV='test';process.env.PORT='0';process.env.RATE_LIMIT_MAX='1000';process.env.LOCAL_STORAGE_ROOT='/private/tmp/'+name;
  const {env}=await import('../config/env.js');env.databaseUrl=process.env.DATABASE_URL;env.port=0;env.emailProvider='development';env.jwtSecret=process.env.JWT_SECRET;
  ({server}=await import('../index.js'));({pool}=await import('../db/pool.js'));if(!server.listening)await new Promise(r=>server.once('listening',r));
- const base='http://127.0.0.1:'+server.address().port;
+ const base='http://127.0.0.1:'+server.address().port;env.clientOrigin=base;
  const token=id=>jwt.sign({},env.jwtSecret,{subject:id,expiresIn:'10m'});
  async function call(method,path,body,id=owner.id){const r=await fetch(base+'/api'+path,{method,headers:{'content-type':'application/json',...(id?{authorization:'Bearer '+token(id)}:{})},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json().catch(()=>null);return {status:r.status,data};}
  assert.equal((await call('GET','/users',null,null)).status,401);
@@ -165,5 +165,71 @@ try {
  passed.push('Form honeypot, persistence, two durable HTML email records and worker delivery');
  for(let n=0;n<25;n++)assert.equal((await call('GET','/public/site',null,null)).status,200);
  passed.push('Public content reads do not consume the form-submission quota');
+ // Product stabilization: execute real new management and reporting routes.
+ const equipment=await call('POST','/equipment',{name:'Synthetic camera kit',category:'Booth',status:'AVAILABLE'});assert.equal(equipment.status,201,JSON.stringify(equipment));assert.ok(equipment.data.asset_uid);
+ assert.equal((await call('PATCH','/equipment/'+equipment.data.id,{status:'MAINTENANCE'})).status,200);
+ assert.equal((await call('POST','/events/'+event.data.id+'/equipment',{equipmentId:equipment.data.id})).status,409);
+ assert.equal((await call('PATCH','/equipment/'+equipment.data.id,{status:'AVAILABLE'})).status,200);
+ const eqAssign=await call('POST','/events/'+event.data.id+'/equipment',{equipmentId:equipment.data.id});assert.equal(eqAssign.status,201,JSON.stringify(eqAssign));
+ const staff=await call('POST','/staff',{name:'Synthetic attendant',email:'staff@example.invalid',active:true,availability:{unavailable_dates:['2027-01-12']}});assert.equal(staff.status,201,JSON.stringify(staff));
+ assert.equal((await call('POST','/events/'+event.data.id+'/staff',{staffProfileId:staff.data.id})).status,409);
+ assert.equal((await call('PATCH','/staff/'+staff.data.id,{availability:{unavailable_dates:[]}})).status,200);
+ assert.equal((await call('POST','/events/'+event.data.id+'/staff',{staffProfileId:staff.data.id})).status,201);
+ for(const resource of ['staff','equipment']){const rid=resource==='staff'?staff.data.id:equipment.data.id;const detail=await call('GET','/'+resource+'/'+rid);assert.equal(detail.status,200,JSON.stringify(detail));assert.equal(detail.data.assignments.length,1);assert.ok(detail.data.history.length>=2);assert.equal((await call('PATCH','/'+resource+'/'+rid,{name:'Denied'},restricted.id)).status,403);}
+ passed.push('Staff/equipment real CRUD, audit history, assignment, unavailable/maintenance denial and restricted-role denial');
+ for(const action of ['checkout','onsite','return']){const result=await call('POST',`/events/${event.data.id}/equipment/${eqAssign.data.id}/${action}`,{condition_before:'GOOD',condition_after:'GOOD'});assert.equal(result.status,200,JSON.stringify(result));}
+ const assignment=(await call('GET','/staff/'+staff.data.id)).data.assignments[0];
+ assert.equal((await call('POST',`/events/${event.data.id}/staff/${assignment.id}/acknowledge`,{})).status,200);
+ for(const status of ['PREPARING','EN_ROUTE','ON_SITE','SETTING_UP','READY','LIVE','BREAKDOWN'])assert.equal((await call('POST',`/events/${event.data.id}/operations/status`,{status})).status,200);
+ assert.equal((await call('GET',`/events/${event.data.id}/operations`)).status,200);
+ const runSheet=await fetch(base+`/api/events/${event.data.id}/run-sheet.pdf`,{headers:{authorization:'Bearer '+token(owner.id)}});assert.equal(runSheet.status,200);assert.equal(Buffer.from(await runSheet.arrayBuffer()).subarray(0,4).toString(),'%PDF');
+ passed.push('Equipment checkout/on-site/return, staff acknowledgment, seven operational statuses and run-sheet PDF against real schema');
+
+ for(const resource of ['staff','equipment','users'])assert.equal((await call('GET','/pickers/'+resource)).status,200);
+ const analytics=await call('GET','/analytics?range=mtd');assert.equal(analytics.status,200,JSON.stringify(analytics));const d=(await call('GET','/dashboard?range=mtd')).data;
+ assert.equal(Number(analytics.data.summary.average_booking_value),Number(d.groups.flatMap(g=>g.metrics).find(m=>m.key==='average_booking_value').value));
+ assert.equal((await call('GET','/audit-logs?entity=equipment')).status,200);
+ assert.equal((await call('GET','/integrations/overview')).data.communications[0].status,'DISABLED');
+ passed.push('Human-readable roster/user pickers, Dashboard/Analytics metric parity, audit filters and development integration status');
+ const convertLead=await call('POST','/leads',{first_name:'Concurrent',last_name:'Fixture',email:'convert@example.invalid',phone:'5550098881',event_date:'2027-12-16',event_type:'Corporate',preferred_package_id:(await db.query('SELECT id FROM packages LIMIT 1')).rows[0].id});
+ assert.equal(convertLead.status,201,JSON.stringify(convertLead));
+ const converted=await Promise.all([call('POST','/leads/'+convertLead.data.id+'/convert',{}),call('POST','/leads/'+convertLead.data.id+'/convert',{})]);assert.deepEqual(converted.map(r=>r.status).sort(),[200,201],JSON.stringify(converted));assert.equal(converted[0].data.event.id,converted[1].data.event.id);
+ assert.equal((await db.query('SELECT count(*)::int n FROM bookings WHERE lead_id=$1',[convertLead.data.id])).rows[0].n,1);
+ passed.push('Concurrent lead conversion produces one client/event/booking and safely reuses the result');
+ const priced=await call('POST','/invoices',{client_id:customer.id,items:[{description:'Taxable fixture',quantity:3,unit_price:19.95,discount:1,tax_rate:8.25,taxable:true},{description:'Non-taxable fixture',quantity:1,unit_price:10,taxable:false}]});assert.equal(priced.status,201,JSON.stringify(priced));
+ const pricedDetail=(await call('GET','/invoices/'+priced.data.id)).data;
+ const pricedList=(await call('GET','/invoices?search='+pricedDetail.invoice_number)).data.data[0];
+ const pricedPublic=(await call('GET','/public/invoices/'+pricedDetail.secure_token,null,null)).data.invoice;
+ for(const item of [pricedDetail,pricedList,pricedPublic])for(const [key,value] of Object.entries({subtotal:69.85,discount:1,tax:4.86,total:73.71,amount_paid:0,amount_outstanding:73.71}))assert.equal(Number(item[key]),value,key);
+ const pdfResponse=await fetch(base+`/api/invoices/${priced.data.id}/pdf`,{headers:{authorization:'Bearer '+token(owner.id)}});
+ const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');const invoicePdfTask=pdfjs.getDocument({data:new Uint8Array(await pdfResponse.arrayBuffer()),useSystemFonts:true});const invoicePdfDoc=await invoicePdfTask.promise;let pdfText='';for(let n=1;n<=invoicePdfDoc.numPages;n++)pdfText+=(await (await invoicePdfDoc.getPage(n)).getTextContent()).items.map(i=>i.str).join(' ');await invoicePdfTask.destroy();assert.match(pdfText,/73\.71/);assert.match(pdfText,/69\.85/);assert.match(pdfText,/4\.86/);
+ passed.push('Tax/discount invoice totals agree across list/detail/public payload and actual PDF text');
+ const privateMedia=await call('POST','/website/media',{...mediaBody,filename:'private-qa.png',visibility:'PRIVATE',permissionState:'RESTRICTED'});assert.equal(privateMedia.status,201);
+ assert.ok([403,404].includes((await fetch(base+'/api/public/media/'+privateMedia.data.id)).status));
+ assert.equal((await fetch(base+'/api/website/media/'+privateMedia.data.id+'/file',{headers:{authorization:'Bearer '+token(restricted.id)}})).status,403);
+ passed.push('Private media denied to anonymous public requests and unauthorized Admin users');
+ const metricValue=(payload,key)=>Number(payload.groups.flatMap(g=>g.metrics).find(m=>m.key===key).value);
+ const beforeScope=(await call('GET','/dashboard?range=mtd')).data;
+ await db.query("UPDATE leads SET data_classification='QA' WHERE id=$1",[convertLead.data.id]);await db.query("UPDATE bookings SET data_classification='QA' WHERE lead_id=$1",[convertLead.data.id]);
+ const afterScope=(await call('GET','/dashboard?range=mtd')).data;assert.equal(metricValue(afterScope,'new_leads'),metricValue(beforeScope,'new_leads')-1);
+ assert.equal((await db.query('SELECT count(*)::int n FROM leads WHERE id=$1',[convertLead.data.id])).rows[0].n,1);
+ passed.push('Explicit QA classification excludes reporting activity without deleting original records');
+ const publicLead=(await db.query("SELECT * FROM leads WHERE email='inquiry@example.invalid' AND deleted_at IS NULL")).rows[0];
+ await call('PATCH','/leads/'+publicLead.id,{preferred_package_id:(await db.query('SELECT id FROM packages LIMIT 1')).rows[0].id,assigned_user_id:owner.id});
+ const journeyConvert=await call('POST','/leads/'+publicLead.id+'/convert',{});assert.equal(journeyConvert.status,201,JSON.stringify(journeyConvert));
+ const journeyProposal=await call('POST','/proposals',{lead_id:publicLead.id,client_id:journeyConvert.data.client.id,event_id:journeyConvert.data.event.id,proposal_title:'Synthetic full journey',package_amount:125,valid_through:'2027-12-20'});assert.equal(journeyProposal.status,201,JSON.stringify(journeyProposal));assert.ok(journeyProposal.data.proposal_number);
+ const journeyDetail=(await call('GET','/proposals/'+journeyProposal.data.id)).data;
+ assert.equal((await call('POST','/proposals/'+journeyProposal.data.id+'/send',{})).status,200);
+ assert.equal((await call('POST','/public/proposals/'+journeyDetail.secure_token+'/accept',{acceptedByName:'Synthetic Customer'},null)).status,200);
+ const journeyInvoice=await call('POST','/invoices',{proposal_id:journeyProposal.data.id});assert.equal(journeyInvoice.status,201,JSON.stringify(journeyInvoice));
+ const journeyInvoiceDetail=(await call('GET','/invoices/'+journeyInvoice.data.id)).data;assert.equal(journeyInvoiceDetail.client_id,journeyConvert.data.client.id);assert.equal(journeyInvoiceDetail.event_id,journeyConvert.data.event.id);assert.ok(journeyInvoiceDetail.items.length);
+ assert.ok((await db.query('SELECT id FROM communications WHERE proposal_id=$1',[journeyProposal.data.id])).rowCount>0);
+ assert.ok((await db.query('SELECT id FROM audit_logs WHERE entity_id=ANY($1::uuid[])',[[publicLead.id,journeyProposal.data.id,journeyInvoice.data.id]])).rowCount>=3);
+ passed.push('Continuous inquiry → assigned lead → client/event → numbered proposal → development send → public acceptance → related draft invoice and communication/audit records');
+ if(process.argv.includes('--visual')){
+  await db.query("UPDATE events SET event_date=current_date,status='CONFIRMED',operational_status='LIVE' WHERE id=$1",[event.data.id]);
+  const {runLocalProductBrowser}=await import('./verify-local-product-browser.js');
+  passed.push(...await runLocalProductBrowser({base,accessToken:token(owner.id),eventId:journeyConvert.data.event.id,proposalId:journeyProposal.data.id,invoiceId:journeyInvoice.data.id}));
+ }
  await fs.mkdir('audit-output/platform-hardening',{recursive:true});await fs.writeFile('audit-output/platform-hardening/local-dashboard.json',JSON.stringify((await call('GET','/dashboard?range=mtd')).data,null,2));await fs.writeFile('audit-output/platform-hardening/local-api-report.json',JSON.stringify({checkedAt:new Date().toISOString(),passed},null,2));console.log(JSON.stringify({passed},null,2));
 }finally{if(server)await new Promise(r=>server.close(r));if(pool)await pool.end();await db.end();await admin.query(`DROP DATABASE ${name}`);await admin.end();}

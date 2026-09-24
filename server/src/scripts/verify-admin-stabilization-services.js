@@ -17,6 +17,7 @@ try {
  const {listCommunications}=await import('../services/automation-service.js');
  await check('Communications unfiltered actual joined query',async()=>assert.deepEqual((await listCommunications()).data,[]));
  await check('Communications status actual joined query',async()=>assert.deepEqual((await listCommunications({status:'DRAFT'})).data,[]));
+ await check('Database DATE stays a string while timestamps retain instant type',async()=>{const result=(await pool.query("SELECT '2027-12-16'::date AS day,'2027-12-16T00:00:00Z'::timestamptz AS instant")).rows[0];assert.equal(result.day,'2027-12-16');assert.ok(result.instant instanceof Date);});
  const {getInvoice}=await import('../services/invoice-service.js');
  const customer=(await db.query("INSERT INTO clients(name) VALUES('Synthetic historical customer') RETURNING id")).rows[0];
  const legacyInvoice=(await db.query("INSERT INTO invoices(invoice_number,client_id,total,amount_paid,balance_due) VALUES('LEGACY-QA', $1,499,0,499) RETURNING id",[customer.id])).rows[0];

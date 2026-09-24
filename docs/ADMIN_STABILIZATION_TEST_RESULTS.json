@@ -1,0 +1,411 @@
+{
+  "scope": "Local disposable PostgreSQL, isolated Chrome, development email; no production changes",
+  "checkedAt": "2026-09-24T23:41:01.230Z",
+  "unit": {
+    "passed": 169,
+    "failed": 0,
+    "skipped": 0
+  },
+  "build": "PASS",
+  "integration": [
+    "Complete migration chain applies to an empty database",
+    "Unauthenticated and restricted users denied protected API actions",
+    "Super Admin create/edit and canonical privileges; ROOT/OWNER escalation denied",
+    "Deactivate/reactivate, invitation invalidation and concurrent single-use password setup",
+    "Login, refresh, logout invalidation, incorrect credentials and expired setup-token rejection",
+    "Lead/client create/view/update, event creation/calendar and all dashboard date ranges",
+    "Dashboard proposal funnel count matches its filtered list for repeated proposals on one lead",
+    "Standard/bespoke proposal PDF/public link/version/email/acceptance and uploaded-document retrieval",
+    "Draft invoice edits recalculate totals; sent documents and restricted actors cannot edit",
+    "Invoice creation/detail/PDF/not-found and experience picker execute against migrated schema",
+    "Hero/gallery/event/testimonial/FAQ/image mapping lifecycle with asset replacement and public retrieval",
+    "Experience/package publish, edit, replacement where applicable, ordering, unpublish and republish",
+    "Website editors cannot bypass publish privileges through direct record creation",
+    "CMS page-item edit/order/publish/unpublish/republish and protected diagnostics",
+    "Form honeypot, persistence, two durable HTML email records and worker delivery",
+    "Public content reads do not consume the form-submission quota",
+    "Staff/equipment real CRUD, audit history, assignment, unavailable/maintenance denial and restricted-role denial",
+    "Equipment checkout/on-site/return, staff acknowledgment, seven operational statuses and run-sheet PDF against real schema",
+    "Human-readable roster/user pickers, Dashboard/Analytics metric parity, audit filters and development integration status",
+    "Concurrent lead conversion produces one client/event/booking and safely reuses the result",
+    "Tax/discount invoice totals agree across list/detail/public payload and actual PDF text",
+    "Private media denied to anonymous public requests and unauthorized Admin users",
+    "Explicit QA classification excludes reporting activity without deleting original records",
+    "Continuous inquiry \u2192 assigned lead \u2192 client/event \u2192 numbered proposal \u2192 development send \u2192 public acceptance \u2192 related draft invoice and communication/audit records",
+    "Real local API/browser route and responsive checks: 15 major screens at 1440, 820, 390; screenshots recorded"
+  ],
+  "serviceRegressions": [
+    {
+      "defect": "Communications unfiltered actual joined query",
+      "status": "PASS"
+    },
+    {
+      "defect": "Communications status actual joined query",
+      "status": "PASS"
+    },
+    {
+      "defect": "Database DATE stays a string while timestamps retain instant type",
+      "status": "PASS"
+    },
+    {
+      "defect": "Legacy invoice read normalizes missing outstanding without inventing items",
+      "status": "PASS"
+    },
+    {
+      "defect": "Communication draft, edit, rendered preview, filters, pagination and detail",
+      "status": "PASS"
+    },
+    {
+      "defect": "Development email send is single-action under concurrency; failed retry and sent immutability",
+      "status": "PASS"
+    },
+    {
+      "defect": "Invoice SQL and detail balance agree for null, zero and void records",
+      "status": "PASS"
+    }
+  ],
+  "browserRegressions": [
+    {
+      "defect": "Communications error visible with retry",
+      "status": "PASS"
+    },
+    {
+      "defect": "Dashboard money fixed to cents",
+      "status": "PASS"
+    },
+    {
+      "defect": "Date-only remains December 16 in Chicago",
+      "status": "PASS"
+    },
+    {
+      "defect": "Analytics precise currency",
+      "status": "PASS"
+    },
+    {
+      "defect": "No one-option decorative generic filters",
+      "status": "PASS"
+    },
+    {
+      "defect": "Calendar no raw ID entry fields",
+      "status": "PASS"
+    }
+  ],
+  "responsive": [
+    {
+      "name": "dashboard",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "users",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "communications",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "leads",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "invoice",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "event",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "live",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "equipment",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "staff",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "cms",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "settings",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "audit",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "calendar",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "analytics",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "dashboard",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "users",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "communications",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "leads",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "invoice",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "event",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "live",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "equipment",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "staff",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "cms",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "settings",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "audit",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "calendar",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "analytics",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "dashboard",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "users",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "communications",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "leads",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "invoice",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "event",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "live",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "equipment",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "staff",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "cms",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "settings",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "audit",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "calendar",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "analytics",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    }
+  ],
+  "baselineServiceFailures": [
+    {
+      "defect": "Communications unfiltered actual joined query",
+      "status": "FAIL",
+      "message": "column reference \"deleted_at\" is ambiguous",
+      "code": "42702"
+    },
+    {
+      "defect": "Communications status actual joined query",
+      "status": "FAIL",
+      "message": "column reference \"deleted_at\" is ambiguous",
+      "code": "42702"
+    }
+  ],
+  "baselineBrowserFailures": [
+    {
+      "defect": "Communications error visible with retry",
+      "status": "FAIL",
+      "message": "locator.waitFor: Timeout 2000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('alert') to be visible\u001b[22m\n"
+    },
+    {
+      "defect": "Dashboard money fixed to cents",
+      "status": "FAIL",
+      "message": "The expression evaluated to a falsy value:\n\n  assert.ok((await page.locator('main').innerText()).includes('$2,877.60'))\n"
+    },
+    {
+      "defect": "Date-only remains December 16 in Chicago",
+      "status": "FAIL",
+      "message": "The input did not match the regular expression /(Dec(?:ember)? 16,? 2027|12\\/16\\/2027)/. Input:\n\n'SALES CRM\\n' +\n  '\\n' +\n  'Leads\\n' +\n  'Table\\n' +\n  'Kanban\\n' +\n  'All sources\\n' +\n  'WEBSITE\\n' +\n  'META\\n' +\n  'FACEBOOK\\n' +\n  'INSTAGRAM\\n' +\n  'TIKTOK\\n' +\n  'LINKEDIN\\n' +\n  'Referral\\n' +\n  'Phone\\n' +\n  'Manual\\n' +\n  'Other\\n' +\n  'NEW\\n' +\n  'December Customer\\n' +\n  'Wedding \u00b7 15/12/2027\\n' +\n  'CONTACTED\\n' +\n  'QUALIFIED\\n' +\n  'PROPOSAL SENT\\n' +\n  'FOLLOW UP\\n' +\n  'WON\\n' +\n  'LOST'\n"
+    },
+    {
+      "defect": "Analytics precise currency",
+      "status": "FAIL",
+      "message": "The expression evaluated to a falsy value:\n\n  assert.ok((await page.locator('main').innerText()).includes('$999.20'))\n"
+    },
+    {
+      "defect": "No one-option decorative generic filters",
+      "status": "FAIL",
+      "message": "Expected values to be strictly equal:\n\n2 !== 0\n"
+    },
+    {
+      "defect": "Calendar no raw ID entry fields",
+      "status": "FAIL",
+      "message": "Expected values to be strictly equal:\n\n4 !== 0\n"
+    }
+  ]
+}

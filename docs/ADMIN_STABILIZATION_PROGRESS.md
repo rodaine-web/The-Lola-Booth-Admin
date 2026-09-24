@@ -1,25 +1,36 @@
 # Admin product stabilization — local only
 
-Baseline: September 24 audit; branch `codex/admin-product-stabilization`.
+Branch: `codex/admin-product-stabilization`. See [final report](ADMIN_STABILIZATION_REPORT_2026_09_24.md) for scope, evidence and remaining acceptance gates.
 
-## Boundaries
+No deployment, push, staging provisioning, live database mutation, real external mail, SMS or payments. Public website V1 remains frozen. Disposable PostgreSQL and isolated browser fixtures only.
 
-No deployment, push, staging provisioning, live database mutation, real external mail, SMS or payments. Public website V1 remains frozen. Synthetic disposable PostgreSQL fixtures and development email only. Preserve unrelated existing working-tree changes.
+## Completed and verified in this pass
 
-## Consolidated work packages
+- [x] Reproduce real Communications SQL, browser error-state, date/format and invoice balance defects; preserve before/after evidence.
+- [x] Repair Communications query and recovery; implement compose, search/sort/pagination and lifecycle guards.
+- [x] Preserve DATE-only values at database and display boundaries; share money/count/status formatting.
+- [x] Reconcile zero/null invoice balance reads and normalize non-taxable invoice rates without inventing historical lines.
+- [x] Group grantable user privileges and exercise real account/invitation/session lifecycle.
+- [x] Redesign Dashboard, add real readiness, unify primary Analytics metrics and explicitly exclude classified QA records.
+- [x] Inventory and simplify navigation; intentionally hide standalone Files/Galleries.
+- [x] Add Staff/Equipment create/edit/history UI and exercise actual assignment and equipment lifecycle.
+- [x] Add named Calendar/Task selectors, real controls and responsive layout fixes.
+- [x] Improve Integrations/Health accuracy, Audit/Settings presentation and CMS grouping/thumbnails.
+- [x] Verify continuous local inquiry-to-invoice journey and selected real browser CRUD/send flows.
+- [x] Record 169 automated tests, 7 service groups, 6 browser regressions, 25 integration groups including 45 responsive checks.
+- [x] Produce module matrix, defect matrix, navigation decisions and staging readiness report.
 
-- [ ] Reproduce defects with executable service/browser cases; retain before/after evidence.
-- [ ] P0 Communications query, loading/error/retry and complete development-provider lifecycle.
-- [ ] P0 date-only vs timestamp semantics; shared money/count/status formatting.
-- [ ] P0 authoritative invoice balances and legacy classification without invented line items.
-- [ ] P0 Users lifecycle, grouped privileges, server role enforcement and UI UAT.
-- [ ] P1 Dashboard operations redesign, real chart links/readiness and consistent Analytics.
-- [ ] P1 navigation inventory and finance duplication decisions.
-- [ ] P1 complete Leads/Clients/Proposals journeys, calendar and tasks.
-- [ ] P1 equipment and staff lifecycle and event operations.
-- [ ] P2 complete or intentionally hide Files/Galleries; integration/health accuracy.
-- [ ] P2 Audit/Settings and page/section-oriented CMS usability.
-- [ ] Full local business journeys, role/retry/concurrency, responsive visual review.
-- [ ] Final area matrix, before/after navigation, exact test counts and staging readiness verdict.
+## Remaining acceptance gates — not completed
 
-Each item requires evidence beyond a rendered table or successful response. Payments excluded from scoring. No staging is created automatically even if the quality gate passes.
+- [ ] Full four-role UI/API matrix and intended-user lifecycle for every module.
+- [ ] Full failure/retry/restart/concurrent update and operational conflict/incident qualification.
+- [ ] Uploaded-proposal full version/acceptance UAT and remaining task/calendar/staff flows.
+- [ ] Historical classification review and authorized classification workflow.
+- [ ] Exact chart drilldowns, remaining CMS/media and audit-detail usability.
+- [ ] Complete editor/modal/error-state responsive review and owner visual approval.
+
+ADMIN NEEDS ANOTHER DEVELOPMENT PASS
+
+PAYMENTS: DEFERRED
+
+PRODUCTION DEPLOYMENT: NOT AUTHORIZED
