@@ -1,3 +1,4 @@
+import { normalizeInvoice } from "../../../shared/invoice-balance.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -325,6 +326,7 @@ export async function generateProposalDocx(proposal) {
 }
 
 export async function generateInvoicePdf(invoice) {
+  invoice = normalizeInvoice(invoice);
   const chunks = [];
   const doc = new PDFDocument({ size: "LETTER", margins: { top: 48, right: 48, bottom: 20, left: 48 } });
   doc.on("data", (chunk) => chunks.push(chunk));
@@ -448,7 +450,7 @@ function drawInvoicePayment(doc, invoice, flow) {
 }
 
 function drawTotalsBox(doc, invoice, x, y) {
-  const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", invoice.tax], ["TOTAL", invoice.total], ["DEPOSIT PAID", invoice.amount_paid], ["BALANCE DUE", invoice.amount_outstanding || invoice.balance_due]];
+  const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", invoice.tax], ["TOTAL", invoice.total], ["DEPOSIT PAID", invoice.amount_paid], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
   rows.forEach(([label, value], index) => {
     doc.rect(x, y + index * 31, 202, 31).strokeColor(brand.champagne).stroke();
     doc.font("Helvetica").fontSize(10).fillColor(navy).text(label, x + 12, y + index * 31 + 10, { width: 100, characterSpacing: 4 });

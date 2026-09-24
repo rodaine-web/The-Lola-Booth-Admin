@@ -1,3 +1,4 @@
+import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, CheckCircle2, Download, Mail, MapPin, Phone, Play, RefreshCw, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -197,7 +198,7 @@ function MyEventDetail({ eventId }) {
 }
 
 function Row({ label, value }) { return <div className="field-row"><span>{label}</span><strong>{value || "—"}</strong></div>; }
-function formatDate(value) { return value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "TBD"; }
+function formatDate(value) { return value ? formatDateOnly(value) : "TBD"; }
 function formatTime(value) {
   if (!value) return "TBD";
   const [hour, minute] = String(value).split(":");

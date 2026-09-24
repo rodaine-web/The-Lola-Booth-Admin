@@ -1,3 +1,4 @@
+import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, CheckCircle2, CircleDollarSign } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -217,7 +218,7 @@ export default function LeadDetail() {
                     }}
                   />
                   <span>{addon.name}</span>
-                  <strong>${Number(addon.price || 0).toLocaleString()}</strong>
+                  <strong>{formatMoney(addon.price || 0)}</strong>
                 </label>
               ))}
             </div>
@@ -331,7 +332,7 @@ function Timeline({ rows }) {
 
 function formatDate(value) {
   if (!value) return "TBD";
-  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatDateOnly(value);
 }
 
 function formatDateTime(value) {

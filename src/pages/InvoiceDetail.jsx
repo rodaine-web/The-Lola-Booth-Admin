@@ -1,3 +1,4 @@
+import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, Copy, Download, Mail, Plus, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -59,7 +60,7 @@ export default function InvoiceDetail() {
         <div>
           <p className="eyebrow">{invoice.invoice_number}</p>
           <h1>{invoice.client_name || "Invoice"}</h1>
-          <p className="lede">{invoice.event_name || "No event"} · {invoice.status} · Outstanding ${Number(invoice.amount_outstanding || invoice.balance_due || 0).toLocaleString()}</p>
+          <p className="lede">{invoice.event_name || "No event"} · {invoice.status} · Outstanding {formatMoney(invoice.amount_outstanding ?? invoice.balance_due ?? 0)}</p>
         </div>
         <div className="detail-actions">
           {invoice.public_url && <a href={invoice.public_url} target="_blank" rel="noreferrer">Public invoice</a>}
@@ -72,10 +73,10 @@ export default function InvoiceDetail() {
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <section className="detail-summary">
-        <Metric label="Total" value={`$${Number(invoice.total || 0).toLocaleString()}`} />
-        <Metric label="Paid" value={`$${Number(invoice.amount_paid || 0).toLocaleString()}`} />
-        <Metric label="Outstanding" value={`$${Number(invoice.amount_outstanding || invoice.balance_due || 0).toLocaleString()}`} />
-        <Metric label="Due" value={invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : "Unset"} />
+        <Metric label="Total" value={formatMoney(invoice.total || 0)} />
+        <Metric label="Paid" value={formatMoney(invoice.amount_paid || 0)} />
+        <Metric label="Outstanding" value={formatMoney(invoice.amount_outstanding ?? invoice.balance_due ?? 0)} />
+        <Metric label="Due" value={invoice.due_date ? formatDateOnly(invoice.due_date) : "Unset"} />
       </section>
       <section className="panel">
         <h2>Line Items</h2>

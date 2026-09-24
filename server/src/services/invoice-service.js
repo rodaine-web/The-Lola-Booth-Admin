@@ -1,3 +1,4 @@
+import { normalizeInvoice } from "../../../shared/invoice-balance.js";
 import crypto from "node:crypto";
 import { env } from "../config/env.js";
 import { query, transaction } from "../db/pool.js";
@@ -26,7 +27,7 @@ export async function getInvoice(idOrToken, { publicView = false } = {}) {
   if (!invoice.rows[0]) throw notFound("Invoice");
   const items = await query("SELECT * FROM invoice_items WHERE invoice_id=$1 ORDER BY id", [invoice.rows[0].id]);
   const payments = await query("SELECT * FROM payments WHERE invoice_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC, created_at DESC", [invoice.rows[0].id]);
-  return { ...invoice.rows[0], public_url: publicInvoiceUrl(invoice.rows[0]), items: items.rows, payments: payments.rows };
+  return normalizeInvoice({ ...invoice.rows[0], public_url: publicInvoiceUrl(invoice.rows[0]), items: items.rows, payments: payments.rows });
 }
 
 export async function createInvoice(req) {
@@ -124,7 +125,7 @@ export async function generateAndStoreInvoice(invoice) {
 
 export async function sendInvoice(req, invoice) {
   const doc = await generateAndStoreInvoice(invoice);
-  const amountDue = invoice.amount_outstanding || invoice.balance_due;
+  const amountDue = invoice.amount_outstanding ?? invoice.balance_due;
   const invoiceUrl = publicInvoiceUrl(invoice);
   const mergeData = invoiceMergeData(invoice, invoiceUrl, amountDue);
   let rendered = null;

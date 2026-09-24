@@ -1,3 +1,4 @@
+import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, CheckCircle2, ClipboardList, Download, MessageSquare, Plus, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -87,7 +88,7 @@ export default function EventDetail() {
 
       <section className="detail-summary">
         <Metric label="Payment" value={event.payment_status || "Not booked"} />
-        <Metric label="Outstanding" value={`$${Number(event.balance_due || 0).toLocaleString()}`} />
+        <Metric label="Outstanding" value={formatMoney(event.balance_due || 0)} />
         <Metric label="Experience" value={event.experience_name || "Not selected"} />
         <Metric label="Package" value={event.package_name || "Not selected"} />
         <Metric label="Operational" value={event.operational_status?.replaceAll("_", " ") || "PREPARING"} />
@@ -209,7 +210,7 @@ export default function EventDetail() {
       {tab === "Equipment" && <Panel title="Assigned Equipment"><AssignEquipment value={equipmentId} setValue={setEquipmentId} options={equipmentOptions} onSubmit={() => action(() => api.post(`/events/${id}/equipment`, { equipmentId }), "Equipment assigned.")} /><div className="button-row"><button onClick={downloadEquipmentLabels}><Download size={15} />Download QR Labels</button><Link className="inline-link" to={`/scan?eventId=${id}`}>Open Scanner</Link></div><DataTable rows={event.operations?.equipment || event.equipment} columns={["name", "category", "asset_uid", "lifecycle_status", "condition_before", "condition_after"]} empty="No equipment assigned." /></Panel>}
       {tab === "Tasks" && <Panel title="Tasks"><TaskForm users={users} task={task} setTask={setTask} onSubmit={() => action(() => api.post("/tasks", { ...task, event_id: id }), "Task created.")} /><DataTable rows={event.tasks} columns={["title", "due_date", "priority", "status"]} empty="No event tasks yet." /></Panel>}
       {tab === "Files" && <Panel title="Files"><button className="primary-action" disabled>Upload File</button><DataTable rows={event.files} columns={["filename", "category", "visibility", "created_at"]} empty="No files attached." /></Panel>}
-      {tab === "Finance" && <Panel title="Finance"><Field label="Booked Total" value={`$${Number(event.booked_total || 0).toLocaleString()}`} /><Field label="Deposit Required" value={`$${Number(event.deposit_required || 0).toLocaleString()}`} /><Field label="Paid" value={`$${Number(event.amount_paid || 0).toLocaleString()}`} /><Field label="Outstanding" value={`$${Number(event.balance_due || 0).toLocaleString()}`} /><DataTable rows={event.payments} columns={["amount", "payment_method", "payment_date", "reference_number"]} empty="No payments recorded." /></Panel>}
+      {tab === "Finance" && <Panel title="Finance"><Field label="Booked Total" value={formatMoney(event.booked_total || 0)} /><Field label="Deposit Required" value={formatMoney(event.deposit_required || 0)} /><Field label="Paid" value={formatMoney(event.amount_paid || 0)} /><Field label="Outstanding" value={formatMoney(event.balance_due || 0)} /><DataTable rows={event.payments} columns={["amount", "payment_method", "payment_date", "reference_number"]} empty="No payments recorded." /></Panel>}
       {tab === "Communications" && <Panel title="Communications"><CommunicationForm communication={communication} setCommunication={setCommunication} onSubmit={() => action(() => api.post(`/events/${id}/communications`, communication), "Communication logged.")} /><DataTable rows={event.communications} columns={["type", "direction", "subject", "message_summary", "occurred_at"]} empty="No communication logged." /></Panel>}
       {tab === "Activity" && <Panel title="Activity"><Timeline rows={[...(event.activity || []), ...(event.audit || []).map((row) => ({ ...row, summary: row.action, action: "audit_log" }))]} /></Panel>}
       {tab === "Proposals" && <Panel title="Proposals"><DataTable rows={event.proposals} columns={["proposal_number", "status", "total", "created_at"]} getRowHref={(row) => `/sales/proposals/${row.id}`} empty="No proposals linked." /></Panel>}
@@ -241,7 +242,7 @@ function Timeline({ rows }) {
   if (!rows?.length) return <div className="empty-state">No activity yet.</div>;
   return <div className="timeline">{rows.map((row) => <article key={row.id}><span>{formatDate(row.created_at)}</span><strong>{row.summary}</strong><small>{row.action?.replaceAll("_", " ")}</small></article>)}</div>;
 }
-function formatDate(value) { return value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "TBD"; }
+function formatDate(value) { return value ? formatDateOnly(value) : "TBD"; }
 function formatTime(value) {
   if (!value) return "TBD";
   const [hour, minute] = value.split(":");

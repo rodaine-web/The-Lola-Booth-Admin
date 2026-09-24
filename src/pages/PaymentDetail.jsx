@@ -1,3 +1,4 @@
+import { formatMoney } from "../utils/display.js";
 import { ArrowLeft, Download, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -42,7 +43,7 @@ export default function PaymentDetail() {
     <main className="page">
       <div className="detail-back"><Link to="/finance/payments"><ArrowLeft size={16} />Back to payments</Link></div>
       <div className="page-heading detail-heading">
-        <div><p className="eyebrow">{payment.provider}</p><h1>${Number(payment.amount || 0).toLocaleString()}</h1><p className="lede">{payment.client_name} · {payment.invoice_number} · {payment.status}</p></div>
+        <div><p className="eyebrow">{payment.provider}</p><h1>{formatMoney(payment.amount || 0)}</h1><p className="lede">{payment.client_name} · {payment.invoice_number} · {payment.status}</p></div>
         <div className="detail-actions">
           {payment.invoice_id && <Link className="primary-action" to={`/finance/invoices/${payment.invoice_id}`}>View Invoice</Link>}
           {payment.event_id && <Link className="primary-action" to={`/events/events/${payment.event_id}`}>View Event</Link>}

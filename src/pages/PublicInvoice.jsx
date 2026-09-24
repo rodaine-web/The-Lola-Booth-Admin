@@ -1,3 +1,4 @@
+import { formatMoney } from "../utils/display.js";
 import { CreditCard, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -39,7 +40,7 @@ export default function PublicInvoice() {
 
   if (error) return <main className="public-document"><div className="toast error">{error}</div></main>;
   if (!invoice) return <main className="public-document"><div className="empty-state">Loading invoice...</div></main>;
-  const amountDue = Number(invoice.amount_outstanding || invoice.balance_due || 0);
+  const amountDue = Number(invoice.amount_outstanding ?? invoice.balance_due ?? 0);
   const amountPaid = Number(invoice.amount_paid || 0);
   const paymentSucceeded = searchParams.get("payment") === "success";
 
@@ -61,7 +62,7 @@ export default function PublicInvoice() {
         </section>
       )}
       <section className="detail-summary">
-        <Metric label="Total" value={`$${Number(invoice.total || 0).toLocaleString()}`} />
+        <Metric label="Total" value={formatMoney(invoice.total || 0)} />
         <Metric label="Paid" value={`$${amountPaid.toLocaleString()}`} />
         <Metric label="Amount Due" value={`$${amountDue.toLocaleString()}`} />
         <Metric label="Status" value={invoice.status} />
@@ -69,7 +70,7 @@ export default function PublicInvoice() {
       <section className="panel"><h2>Line Items</h2><DataTable rows={invoice.items} columns={["description", "quantity", "unit_price", "line_total"]} empty="No invoice items." /></section>
       <section className="panel">
         <h2>Payment</h2>
-        <p className="note-text">Amount due: ${Number(paymentOptions?.amountDue || invoice.amount_outstanding || invoice.balance_due || 0).toLocaleString()}. Flexible payment options may be available at checkout.</p>
+        <p className="note-text">Amount due: {formatMoney(paymentOptions?.amountDue ?? invoice.amount_outstanding ?? invoice.balance_due ?? 0)}. Flexible payment options may be available at checkout.</p>
         {paymentOptions?.providers?.length ? (
           <div className="quick-actions">
             {paymentOptions.providers.map((provider) => (

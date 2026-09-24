@@ -1,3 +1,4 @@
+import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
@@ -62,7 +63,7 @@ function Kanban({ leads }) {
           {leads.filter((lead) => lead.status === status).map((lead) => (
             <Link key={lead.id} to={`/sales/leads/${lead.id}`} className="lead-card">
               <strong>{lead.first_name} {lead.last_name}</strong>
-              <span>{lead.event_type} · {new Date(lead.event_date).toLocaleDateString()}</span>
+              <span>{lead.event_type} · {formatDateOnly(lead.event_date)}</span>
               <small>{lead.email}</small>
             </Link>
           ))}

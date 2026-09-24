@@ -1,3 +1,4 @@
+import { formatMoney } from "../utils/display.js";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -76,8 +77,8 @@ export default function ClientDetail() {
       {notice && <div className="toast">{notice}</div>}
       <section className="detail-summary">
         <Metric label="Total Events" value={client.summary?.total_events || 0} />
-        <Metric label="Lifetime Value" value={`$${Number(client.summary?.lifetime_value || 0).toLocaleString()}`} />
-        <Metric label="Outstanding" value={`$${Number(client.summary?.outstanding_balance || 0).toLocaleString()}`} />
+        <Metric label="Lifetime Value" value={formatMoney(client.summary?.lifetime_value || 0)} />
+        <Metric label="Outstanding" value={formatMoney(client.summary?.outstanding_balance || 0)} />
         <Metric label="Type" value={client.client_type} />
       </section>
       <div className="tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>

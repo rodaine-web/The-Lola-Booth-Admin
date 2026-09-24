@@ -1485,3 +1485,8 @@ input,select,textarea{min-width:0}button:focus-visible,a:focus-visible,[tabindex
   #admin-navigation { display: none; width: 100%; }
   #admin-navigation.navigation-open { display: block; }
 }
+
+/* Restrained operational accents: every status includes a label and icon. */
+.semantic-status{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap;}
+.semantic-success{color:#20553c;background:#e6f1e9}.semantic-warning{color:#744b09;background:#fff1d4}.semantic-danger{color:#8b2828;background:#fbe9e7}.semantic-neutral{color:#50504b;background:#edede8}.semantic-info{color:#264f76;background:#e8eff7}
+.error-state{display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left}.error-state h2,.error-state p{margin:0}

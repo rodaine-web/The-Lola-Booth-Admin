@@ -1,3 +1,5 @@
+import { formatDisplay, labelize } from "../utils/display.js";
+import StatusBadge from "./StatusBadge.jsx";
 import { useNavigate } from "react-router-dom";
 
 export default function DataTable({ columns, rows, empty = "No records found.", getRowHref, onEdit }) {
@@ -24,7 +26,7 @@ export default function DataTable({ columns, rows, empty = "No records found.", 
               onKeyDown={event => { if (getRowHref && event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); navigate(getRowHref(row)); } }}
               onClick={() => getRowHref && navigate(getRowHref(row))}
             >
-              {columns.map((column) => <td key={column}>{formatValue(row[column])}</td>)}
+              {columns.map((column) => <td key={column}>{/(^status$|_status$)/.test(column) ? <StatusBadge status={row[column]} /> : formatDisplay(row[column],column)}</td>)}
               {onEdit && <td><button className="table-action" onClick={(event) => { event.stopPropagation(); onEdit(row); }}>Edit</button></td>}
             </tr>
           ))}
@@ -32,15 +34,4 @@ export default function DataTable({ columns, rows, empty = "No records found.", 
       </table>
     </div>
   );
-}
-
-function labelize(value) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatValue(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Active" : "Inactive";
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return new Date(value).toLocaleDateString();
-  return value;
 }

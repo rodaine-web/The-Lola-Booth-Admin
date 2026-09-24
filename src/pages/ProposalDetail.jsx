@@ -1,3 +1,4 @@
+import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { Archive, ArrowLeft, Copy, Download, FileText, Mail, ReceiptText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -45,7 +46,7 @@ export default function ProposalDetail() {
         <div>
           <p className="eyebrow">{proposal.proposal_number}</p>
           <h1>{proposal.client_name || "Proposal"}</h1>
-          <p className="lede">{proposal.event_name || "No event"} · {proposal.status} · Total ${Number(proposal.total || 0).toLocaleString()}</p>
+          <p className="lede">{proposal.event_name || "No event"} · {proposal.status} · Total {formatMoney(proposal.total || 0)}</p>
         </div>
         <div className="detail-actions">
           {can("write:sales") && ["DRAFT", "READY"].includes(proposal.status) && proposal.proposal_source !== "UPLOADED" && <Link className="primary-action" to={`/sales/proposals/${id}/edit`}>Edit proposal</Link>}
@@ -60,7 +61,7 @@ export default function ProposalDetail() {
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <section className="detail-summary">
-        <Metric label="Valid Through" value={proposal.valid_through ? new Date(proposal.valid_through).toLocaleDateString() : "Unset"} />
+        <Metric label="Valid Through" value={proposal.valid_through ? formatDateOnly(proposal.valid_through) : "Unset"} />
         <Metric label="Sent" value={proposal.sent_at ? new Date(proposal.sent_at).toLocaleDateString() : "Not sent"} />
         <Metric label="Views" value={proposal.view_count || 0} />
         <Metric label="Accepted By" value={proposal.accepted_by_name || "Not accepted"} />

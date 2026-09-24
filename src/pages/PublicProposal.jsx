@@ -1,3 +1,4 @@
+import { formatMoney } from "../utils/display.js";
 import { CheckCircle2, Download, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -50,9 +51,9 @@ export default function PublicProposal() {
         </section>
       )}
       <section className="detail-summary">
-        <Metric label="Total" value={`$${Number(pricing.total || proposal.total || 0).toLocaleString()}`} />
-        <Metric label="Deposit" value={`$${Number(pricing.deposit_amount || 0).toLocaleString()}`} />
-        <Metric label="Balance" value={`$${Number(pricing.balance || 0).toLocaleString()}`} />
+        <Metric label="Total" value={formatMoney(pricing.total || proposal.total || 0)} />
+        <Metric label="Deposit" value={formatMoney(pricing.deposit_amount || 0)} />
+        <Metric label="Balance" value={formatMoney(pricing.balance || 0)} />
         <Metric label="Status" value={proposal.status} />
       </section>
       <iframe className="document-preview" title="Proposal preview" src={`${API_URL}/public/proposals/${token}/preview`} />

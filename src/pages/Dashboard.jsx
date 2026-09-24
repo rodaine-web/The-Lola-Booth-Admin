@@ -1,3 +1,4 @@
+import { formatMoney, formatDateOnly, formatPercent, formatCount } from "../utils/display.js";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, CircleDot, ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
@@ -130,14 +131,14 @@ function Panel({ title, children }) {
 }
 
 function formatMetric(metric) {
-  if (metric.format === "money") return `$${Number(metric.value || 0).toLocaleString()}`;
-  if (metric.format === "percent") return `${Number(metric.value || 0).toFixed(1)}%`;
+  if (metric.format === "money") return formatMoney(metric.value || 0);
+  if (metric.format === "percent") return formatPercent(metric.value);
   if (metric.format === "minutes") return `${Number(metric.value || 0).toFixed(0)} min`;
-  return Number(metric.value || 0).toLocaleString();
+  return formatCount(metric.value);
 }
 
 function formatRange(range) {
-  return `${new Date(range.start).toLocaleDateString()} to ${new Date(range.end).toLocaleDateString()}`;
+  return `${formatDateOnly(range.start)} to ${formatDateOnly(range.end)}`;
 }
 
 function flattenWeekly(schedule = {}) {

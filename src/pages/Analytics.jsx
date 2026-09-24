@@ -1,3 +1,4 @@
+import { formatDisplay, formatMoney } from "../utils/display.js";
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api/client.js";
@@ -21,7 +22,7 @@ export default function Analytics() {
       </div>
       <section className="kpi-grid compact">
         {Object.entries(data.summary).map(([key, value]) => (
-          <article className="kpi" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{String(value)}</strong></article>
+          <article className="kpi" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatDisplay(value,key)}</strong></article>
         ))}
       </section>
       <section className="chart-grid">
@@ -43,7 +44,7 @@ function Chart({ title, data, x, y }) {
           <CartesianGrid stroke="#eee8df" />
           <XAxis dataKey={x} tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip />
+          <Tooltip formatter={value=>y==='revenue'?formatMoney(value):value}/>
           <Bar dataKey={y} fill="#B89B6B" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
