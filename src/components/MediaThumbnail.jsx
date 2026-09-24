@@ -1,0 +1,3 @@
+import {useEffect,useState} from 'react';
+import {api} from '../api/client.js';
+export default function MediaThumbnail({id,alt='Media preview'}){const [url,setUrl]=useState(''),[failed,setFailed]=useState(false);useEffect(()=>{let live=true,created;setUrl('');setFailed(false);if(id)api.blob(`/website/media/${id}/file`).then(blob=>{if(!blob.type.startsWith('image/'))return;created=URL.createObjectURL(blob);if(live)setUrl(created);else URL.revokeObjectURL(created);}).catch(()=>{if(live)setFailed(true);});return()=>{live=false;if(created)URL.revokeObjectURL(created);};},[id]);return url?<img className="media-thumbnail" src={url} alt={alt}/>:<span className="media-placeholder">{failed?'Preview unavailable':id?'Preview loading…':'No image selected'}</span>;}

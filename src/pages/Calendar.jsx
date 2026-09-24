@@ -1,3 +1,5 @@
+import RelationshipSelect from "../components/RelationshipSelect.jsx";
+import {businessToday,formatDateOnly} from "../utils/display.js";
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -7,7 +9,7 @@ const statusOptions = ["", "INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "RE
 
 export default function Calendar() {
   const [view, setView] = useState("month");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(businessToday());
   const [filters, setFilters] = useState({ status: "", eventType: "", venue: "", city: "", experienceId: "", packageId: "", staffId: "", equipmentId: "" });
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState("");
@@ -25,10 +27,10 @@ export default function Calendar() {
   }, {}), [payload]);
 
   function shift(amount) {
-    const current = new Date(`${date}T12:00:00`);
-    const days = view === "month" ? amount * 30 : view === "week" ? amount * 7 : amount;
-    current.setDate(current.getDate() + days);
-    setDate(current.toISOString().slice(0, 10));
+    const current = new Date(`${date}T00:00:00Z`);
+    if(view==='month'){const day=current.getUTCDate();current.setUTCDate(1);current.setUTCMonth(current.getUTCMonth()+amount);const last=new Date(Date.UTC(current.getUTCFullYear(),current.getUTCMonth()+1,0)).getUTCDate();current.setUTCDate(Math.min(day,last));}
+    else current.setUTCDate(current.getUTCDate()+(view==='week'?7:1)*amount);
+    setDate(current.toISOString().slice(0,10));
   }
 
   if (error) return <main className="page"><div className="toast error">{error}</div></main>;
@@ -42,7 +44,7 @@ export default function Calendar() {
           {payload && <p className="lede">{payload.range.startDate} to {payload.range.endDate} · {payload.timeZone}</p>}
         </div>
         <div className="calendar-controls">
-          <button onClick={() => setDate(new Date().toISOString().slice(0, 10))}>Today</button>
+          <button onClick={() => setDate(businessToday())}>Today</button>
           <button aria-label="Previous" onClick={() => shift(-1)}><ChevronLeft size={17} /></button>
           <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           <button aria-label="Next" onClick={() => shift(1)}><ChevronRight size={17} /></button>
@@ -57,10 +59,10 @@ export default function Calendar() {
         <input value={filters.eventType} onChange={(event) => setFilters((current) => ({ ...current, eventType: event.target.value }))} placeholder="Event type" />
         <input value={filters.venue} onChange={(event) => setFilters((current) => ({ ...current, venue: event.target.value }))} placeholder="Venue" />
         <input value={filters.city} onChange={(event) => setFilters((current) => ({ ...current, city: event.target.value }))} placeholder="City" />
-        <input value={filters.experienceId} onChange={(event) => setFilters((current) => ({ ...current, experienceId: event.target.value }))} placeholder="Experience ID" />
-        <input value={filters.packageId} onChange={(event) => setFilters((current) => ({ ...current, packageId: event.target.value }))} placeholder="Package ID" />
-        <input value={filters.staffId} onChange={(event) => setFilters((current) => ({ ...current, staffId: event.target.value }))} placeholder="Staff ID" />
-        <input value={filters.equipmentId} onChange={(event) => setFilters((current) => ({ ...current, equipmentId: event.target.value }))} placeholder="Equipment ID" />
+        <label>Experience<RelationshipSelect resource="experiences" value={filters.experienceId} placeholder="Experience" onChange={value=>setFilters(current=>({...current,experienceId:value||""}))}/></label>
+        <label>Package<RelationshipSelect resource="packages" value={filters.packageId} placeholder="Package" onChange={value=>setFilters(current=>({...current,packageId:value||""}))}/></label>
+        <label>Staff<RelationshipSelect resource="staff" value={filters.staffId} placeholder="Staff" onChange={value=>setFilters(current=>({...current,staffId:value||""}))}/></label>
+        <label>Equipment<RelationshipSelect resource="equipment" value={filters.equipmentId} placeholder="Equipment" onChange={value=>setFilters(current=>({...current,equipmentId:value||""}))}/></label>
         <button onClick={() => setFilters({ status: "", eventType: "", venue: "", city: "", experienceId: "", packageId: "", staffId: "", equipmentId: "" })}><RotateCcw size={15} />Clear Filters</button>
       </section>
 
@@ -69,7 +71,7 @@ export default function Calendar() {
       <div className={`calendar calendar-${view}`}>
         {Object.entries(grouped).map(([day, dayEvents]) => (
           <section key={day}>
-            <h2>{new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</h2>
+            <h2>{formatDateOnly(day,{weekday:"short",month:"short"})}</h2>
             {dayEvents.map((event) => <CalendarEvent key={event.id} event={event} />)}
           </section>
         ))}

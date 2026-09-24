@@ -1,3 +1,6 @@
+import AsyncState from "../components/AsyncState.jsx";
+import RelationshipSelect from "../components/RelationshipSelect.jsx";
+import {labelize} from "../utils/display.js";
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 
@@ -7,26 +10,28 @@ export default function Settings() {
   const [notificationPrefs, setNotificationPrefs] = useState(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [busy,setBusy]=useState(false),[revision,setRevision]=useState(0);
 
   useEffect(() => {
     api.get("/settings").then((result) => {
       setSettings(result);
-      setForm(result);
-    });
+      setForm({...result,business_email:result.business_email==='hello@lolabooths.com'?'info@thelolabooth.com':result.business_email});
+    }).catch(e=>setError(e.message));
     api.get("/notifications/preferences").then(setNotificationPrefs).catch(() => null);
-  }, []);
+  }, [revision]);
 
   async function save() {
+    if(busy)return;setBusy(true);
     setNotice("");
     setError("");
     try {
-      const updated = await api.patch("/settings", form);
+      const updated = await api.patch("/settings", Object.fromEntries(fields.filter(k=>form[k]!==null&&form[k]!==undefined).map(k=>[k,form[k]])));
       setSettings(updated);
       setForm(updated);
       setNotice("Settings saved.");
     } catch (err) {
       setError(err.message);
-    }
+    } finally {setBusy(false);}
   }
 
   async function saveNotificationPrefs(nextPrefs = notificationPrefs) {
@@ -49,9 +54,10 @@ export default function Settings() {
     setNotificationPrefs(nextPrefs);
   }
 
+  if(error&&!settings)return <main className="page"><AsyncState error={error} noun="settings" onRetry={()=>{setError("");setRevision(r=>r+1);}}/></main>;
   if (!settings) return <main className="page"><div className="empty-state">Loading settings...</div></main>;
 
-  const fields = ["business_name", "legal_business_name", "business_email", "phone", "website", "service_area", "address", "timezone", "business_week_start", "currency", "sales_tax_percent", "default_deposit_percent", "default_balance_due_days", "invoice_prefix", "proposal_prefix", "next_invoice_number", "next_proposal_number", "booking_confirmation_policy", "default_deposit_type", "default_deposit_value", "default_balance_due_days_before_event", "default_equipment_turnaround_buffer_minutes", "default_staff_travel_buffer_minutes", "setup_warning_minutes", "event_start_warning_minutes", "equipment_return_warning_hours", "delivery_default_expiration_days", "lead_assignment_mode", "lead_assignment_user_id", "auto_acknowledge_website_leads", "auto_acknowledge_social_leads", "google_review_url", "facebook_review_url", "other_review_url", "stripe_enabled", "paypal_enabled", "offline_payment_instructions", "proposal_default_validity_days", "invoice_default_due_days", "brand_line", "proposal_acceptance_wording", "proposal_default_intro", "proposal_default_next_steps", "proposal_default_terms", "invoice_default_payment_terms", "invoice_default_notes", "default_setup_buffer_minutes", "default_breakdown_buffer_minutes"];
+  const fields = ["business_name", "legal_business_name", "business_email", "phone", "website", "service_area", "address", "timezone", "business_week_start", "currency", "sales_tax_percent", "default_deposit_percent", "default_balance_due_days", "invoice_prefix", "proposal_prefix", "next_invoice_number", "next_proposal_number", "booking_confirmation_policy", "default_deposit_type", "default_deposit_value", "default_balance_due_days_before_event", "default_equipment_turnaround_buffer_minutes", "default_staff_travel_buffer_minutes", "setup_warning_minutes", "event_start_warning_minutes", "equipment_return_warning_hours", "delivery_default_expiration_days", "lead_assignment_mode", "lead_assignment_user_id", "auto_acknowledge_website_leads", "auto_acknowledge_social_leads", "google_review_url", "facebook_review_url", "other_review_url", "offline_payment_instructions", "proposal_default_validity_days", "invoice_default_due_days", "brand_line", "proposal_acceptance_wording", "proposal_default_intro", "proposal_default_next_steps", "proposal_default_terms", "invoice_default_payment_terms", "invoice_default_notes", "default_setup_buffer_minutes", "default_breakdown_buffer_minutes"];
 
   return (
     <main className="page">
@@ -60,7 +66,7 @@ export default function Settings() {
           <p className="eyebrow">Business settings</p>
           <h1>Settings</h1>
         </div>
-        <button className="primary-action" onClick={save}>Save Changes</button>
+        <button className="primary-action" onClick={save} disabled={busy}>Save Changes</button>
       </div>
       {(notice || error) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <section className="brand-settings-preview">
@@ -82,22 +88,8 @@ export default function Settings() {
           <span style={{ background: "#E8DDD0" }}>Taupe</span>
         </div>
       </section>
-      <section className="settings-grid">
-        {fields.map((field) => (
-          <label key={field}>
-            {field.replaceAll("_", " ")}
-            {["stripe_enabled", "paypal_enabled", "auto_acknowledge_website_leads", "auto_acknowledge_social_leads"].includes(field) ? (
-              <input type="checkbox" checked={Boolean(form[field])} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.checked }))} />
-            ) : field.includes("default_") && !field.includes("days") && !field.includes("percent") && !field.includes("buffer") && !field.includes("deposit_value") ? (
-              <textarea value={form[field] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))} />
-            ) : field === "offline_payment_instructions" ? (
-              <textarea value={form[field] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))} />
-            ) : (
-              <input value={form[field] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))} />
-            )}
-          </label>
-        ))}
-      </section>
+      <p className="note-text">Changes apply only when saved. The canonical public email is info@thelolabooth.com unless an approved business override is supplied.</p>
+      {['Business','Brand','Documents','Email','Operations','Website','System'].map(group=><details className="panel" open={group==='Business'} key={group}><summary>{group}</summary><div className="settings-grid">{fields.filter(field=>settingGroup(field)===group).map(field=><label key={field}>{labelize(field)}<SettingInput field={field} value={form[field]} onChange={value=>setForm(current=>({...current,[field]:value}))}/></label>)}</div></details>)}
       {notificationPrefs && (
         <section className="notification-settings panel">
           <div className="table-heading">
@@ -110,7 +102,7 @@ export default function Settings() {
           <div className="preference-toggles">
             <label className="check-row"><input type="checkbox" checked={notificationPrefs.in_app_enabled !== false} onChange={(event) => setNotificationPrefs((current) => ({ ...current, in_app_enabled: event.target.checked }))} />In-app notifications</label>
             <label className="check-row"><input type="checkbox" checked={notificationPrefs.email_enabled !== false} onChange={(event) => setNotificationPrefs((current) => ({ ...current, email_enabled: event.target.checked }))} />Email notifications</label>
-            <label className="check-row"><input type="checkbox" checked={notificationPrefs.sms_enabled === true} onChange={(event) => setNotificationPrefs((current) => ({ ...current, sms_enabled: event.target.checked }))} />SMS notifications</label>
+            <label className="check-row"><input type="checkbox" checked={notificationPrefs.sms_enabled === true} disabled />SMS notifications (deferred)</label>
             <label className="check-row disabled"><input type="checkbox" checked disabled />Critical alerts mandatory</label>
           </div>
           <div className="category-grid">
@@ -126,4 +118,16 @@ export default function Settings() {
       )}
     </main>
   );
+}
+
+function settingGroup(field){if(/brand/.test(field))return 'Brand';if(/email|acknowledge/.test(field)&&field!=='business_email')return 'Email';if(/website|review_url/.test(field))return 'Website';if(/proposal|invoice|deposit|payment|tax|currency|balance/.test(field))return 'Documents';if(/equipment|staff|warning|buffer|delivery|assignment/.test(field))return 'Operations';if(/timezone|week_start/.test(field))return 'System';return 'Business';}
+function SettingInput({field,value,onChange}){
+ const enums={lead_assignment_mode:['MANUAL','ROUND_ROBIN','SPECIFIC_USER','BY_SOURCE'],default_deposit_type:['PERCENTAGE','FIXED'],booking_confirmation_policy:['MANUAL','PROPOSAL_ACCEPTED','DEPOSIT_PAID','FULL_PAYMENT']};
+ if(field==='business_week_start')return <select value={value??1} onChange={e=>onChange(Number(e.target.value))}>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((day,i)=><option key={day} value={i}>{day}</option>)}</select>;
+ if(field==='lead_assignment_user_id')return <RelationshipSelect resource="users" value={value} placeholder="Lead owner" onChange={onChange}/>;
+ if(field.startsWith('auto_acknowledge'))return <input type="checkbox" checked={!!value} onChange={e=>onChange(e.target.checked)}/>;
+ if(enums[field])return <select value={value||''} onChange={e=>onChange(e.target.value)}><option value="">Select…</option>{[...new Set([value,...enums[field]].filter(Boolean))].map(v=><option key={v}>{v}</option>)}</select>;
+ if(/terms|notes|intro|wording|instructions|next_steps|address/.test(field))return <textarea value={value||''} onChange={e=>onChange(e.target.value)}/>;
+ const type=/email/.test(field)?'email':/url|website/.test(field)?'url':/phone/.test(field)?'tel':/days|minutes|hours|percent|number|deposit_value/.test(field)?'number':'text';
+ return <input type={type} step={type==='number'?'any':undefined} value={value??''} onChange={e=>onChange(e.target.value)}/>;
 }

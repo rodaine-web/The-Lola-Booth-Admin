@@ -1,3 +1,4 @@
+import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, CheckCircle2, CircleDollarSign } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -124,7 +125,7 @@ export default function LeadDetail() {
       .reduce((sum, addon) => sum + Number(addon.price || 0), 0);
   }, [addons, selectedAddons]);
 
-  if (error && !lead) return <main className="page"><div className="empty-state">{error}</div></main>;
+  if (error && !lead) return <main className="page"><AsyncState error={error} noun="lead" onRetry={()=>{setError("");loadLead();}}/></main>;
   if (!lead) return <main className="page"><div className="empty-state">Loading lead...</div></main>;
 
   const fullName = `${lead.first_name} ${lead.last_name}`;

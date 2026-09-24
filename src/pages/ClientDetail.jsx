@@ -1,3 +1,4 @@
+import AsyncState from "../components/AsyncState.jsx";
 import { formatMoney } from "../utils/display.js";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -57,7 +58,7 @@ export default function ClientDetail() {
     }
   }
 
-  if (error) return <main className="page"><div className="empty-state">{error}</div></main>;
+  if (error) return <main className="page"><AsyncState error={error} noun="client" onRetry={()=>{setError("");loadClient();}}/></main>;
   if (!client) return <main className="page"><div className="empty-state">Loading client...</div></main>;
 
   return (

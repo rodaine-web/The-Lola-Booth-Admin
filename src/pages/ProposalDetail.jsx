@@ -1,3 +1,4 @@
+import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { Archive, ArrowLeft, Copy, Download, FileText, Mail, ReceiptText } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -36,7 +37,7 @@ export default function ProposalDetail() {
     }
   }
 
-  if (error && !proposal) return <main className="page"><div className="empty-state">{error}</div></main>;
+  if (error && !proposal) return <main className="page"><AsyncState error={error} noun="proposal" onRetry={()=>{setError("");load();}}/></main>;
   if (!proposal) return <main className="page"><div className="empty-state">Loading proposal...</div></main>;
 
   return (

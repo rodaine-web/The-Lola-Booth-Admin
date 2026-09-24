@@ -5,7 +5,7 @@ import { api } from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import NotificationCenter from "./NotificationCenter.jsx";
 
-const sections = [
+const originalSections = [
   { label: "Dashboard", icon: Gauge, items: [{ label: "Dashboard", to: "/", permission: "read:dashboard" }] },
   { label: "Sales", icon: BriefcaseBusiness, items: [{ label: "Leads", to: "/sales/leads", permission: "read:sales" }, { label: "Clients", to: "/sales/clients", permission: "read:sales" }, { label: "Proposals", to: "/sales/proposals", permission: "read:sales" }, { label: "Communications", to: "/sales/communications", permission: "read:sales" }] },
   { label: "Events", icon: CalendarDays, items: [{ label: "Events", to: "/events/events", permission: "read:events" }, { label: "Calendar", to: "/events/calendar", permission: "read:events" }, { label: "Equipment", to: "/events/equipment", permission: "read:events" }, { label: "Staff", to: "/events/staff", permission: "read:events" }] },
@@ -16,6 +16,20 @@ const sections = [
   { label: "Insights", icon: BarChart3, items: [{ label: "Analytics", to: "/insights/analytics", permission: "read:analytics" }] },
   { label: "System", icon: Shield, items: [{ label: "Users", to: "/system/users", permission: "view:users" }, { label: "Integrations", to: "/system/integrations", permission: "read:integrations" }, { label: "Health", to: "/system/health", permission: "read:settings", icon: HeartPulse }, { label: "Audit Log", to: "/system/audit-log", permission: "read:audit" }, { label: "Settings", to: "/system/settings", permission: "read:settings" }] }
 ];
+// Routes remain stable; incomplete standalone modules and deferred payments are omitted from primary navigation.
+const items = originalSections.flatMap(section=>section.items);
+const pick = paths => paths.map(to=>items.find(item=>item.to===to)).filter(Boolean);
+const sections = [
+ {label:'Dashboard',icon:Gauge,items:pick(['/'])},
+ {label:'Sales',icon:BriefcaseBusiness,items:pick(['/sales/leads','/sales/clients','/sales/proposals','/finance/invoices','/content/addons'])},
+ {label:'Events',icon:CalendarDays,items:pick(['/events/events','/events/calendar','/operations/tasks'])},
+ {label:'Operations',icon:ClipboardList,items:pick(['/operations/live','/events/staff','/events/equipment'])},
+ {label:'Communications',icon:BriefcaseBusiness,items:pick(['/sales/communications'])},
+ {label:'Website',icon:Sparkles,items:originalSections.find(s=>s.label==='Website').items},
+ {label:'Reporting',icon:BarChart3,items:pick(['/insights/analytics'])},
+ {label:'System',icon:Shield,items:originalSections.find(s=>s.label==='System').items}
+];
+
 
 export default function Layout() {
   const { user, logout, can } = useAuth();
@@ -53,12 +67,12 @@ export default function Layout() {
             if (!visibleItems.length) return null;
             const Icon = section.icon;
             return (
-              <div className="nav-section" key={section.label}>
-                <p><Icon size={15} />{section.label}</p>
+              <details className="nav-section" key={section.label} open={section.items.some(item=>item.to===pathname || item.to!=="/"&&pathname.startsWith(item.to+"/")) || ["Sales","Events","Dashboard"].includes(section.label)}>
+                <summary><Icon size={15} />{section.label}</summary>
                 {visibleItems.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.to === "/"}>{item.label}</NavLink>
                 ))}
-              </div>
+              </details>
             );
           })}
         </nav>

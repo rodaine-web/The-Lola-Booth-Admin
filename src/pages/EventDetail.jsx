@@ -1,3 +1,4 @@
+import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, CheckCircle2, ClipboardList, Download, MessageSquare, Plus, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -63,7 +64,7 @@ export default function EventDetail() {
     await api.downloadPost("/equipment/qr-labels.pdf", { equipment_ids: event.operations?.equipment?.map((item) => item.equipment_record_id).filter(Boolean) || [] }, `lola-equipment-labels-${event.event_number || id.slice(0, 8)}.pdf`);
   }
 
-  if (error && !event) return <main className="page"><div className="empty-state">{error}</div></main>;
+  if (error && !event) return <main className="page"><AsyncState error={error} noun="event" onRetry={()=>{setError("");load();}}/></main>;
   if (!event) return <main className="page"><div className="empty-state">Loading event...</div></main>;
 
   return (

@@ -1,3 +1,5 @@
+import AuditLog from "./pages/AuditLog.jsx";
+import Roster from "./pages/Roster.jsx";
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
@@ -73,8 +75,8 @@ export default function App() {
         <Route path="events/events" element={<ResourcePage title="Events" endpoint="/events" columns={["event_number", "event_name", "event_date", "venue_name", "status"]} rowHref={(row) => `/events/events/${row.id}`} fields={eventFields} />} />
         <Route path="events/events/:id" element={<EventDetail />} />
         <Route path="events/calendar" element={<Calendar />} />
-        <Route path="events/equipment" element={<ResourcePage title="Equipment" endpoint="/equipment" columns={["name", "category", "status", "serial_number"]} />} />
-        <Route path="events/staff" element={<ResourcePage title="Staff" endpoint="/staff" phase="Phase 2 scheduling UI" columns={["name", "email", "role", "active"]} />} />
+        <Route path="events/equipment" element={<Roster kind="equipment"/>} />
+        <Route path="events/staff" element={<Roster kind="staff"/>} />
         <Route path="finance/payments" element={<Payments />} />
         <Route path="finance/payments/:id" element={<PaymentDetail />} />
         <Route path="finance/invoices" element={<Invoices />} />
@@ -98,14 +100,14 @@ export default function App() {
         <Route path="content/experiences" element={<ResourcePage title="Experiences" endpoint="/experiences" columns={["name", "base_price", "default_duration", "active"]} fields={experienceFields} />} />
         <Route path="content/addons" element={<ResourcePage title="Add-ons" endpoint="/addons" columns={["name", "price", "pricing_type", "active"]} fields={addonFields} />} />
         <Route path="operations/live" element={<LiveOperations />} />
-        <Route path="operations/tasks" element={<ResourcePage title="Tasks" endpoint="/tasks" columns={["title", "due_date", "priority", "status"]} fields={taskFields} />} />
+        <Route path="operations/tasks" element={<ResourcePage title="Tasks" endpoint="/tasks" columns={["title", "owner_name", "event_name", "client_name", "due_date", "priority", "status"]} fields={taskFields} />} />
         <Route path="operations/files" element={<ResourcePage title="Files" endpoint="/files" phase="Metadata model ready" columns={["filename", "category", "storage_provider", "created_at"]} />} />
         <Route path="operations/galleries" element={<ResourcePage title="Galleries" endpoint="/galleries" phase="Manual URL records" columns={["gallery_name", "gallery_url", "delivery_date", "status"]} />} />
         <Route path="insights/analytics" element={<Analytics />} />
         <Route path="system/users" element={<Users />} />
         <Route path="system/integrations" element={<Integrations />} />
         <Route path="system/health" element={<SystemHealth />} />
-        <Route path="system/audit-log" element={<ResourcePage title="Audit Log" endpoint="/audit-logs" columns={["action", "entity", "entity_id", "created_at"]} />} />
+        <Route path="system/audit-log" element={<AuditLog/>} />
         <Route path="system/settings" element={<Settings />} />
       </Route>
     </Routes>
@@ -136,7 +138,7 @@ const addonFields = [
 ];
 
 const taskFields = [
-  ["title", "Title"], ["description", "Description", "textarea"], ["due_date", "Due date", "date"], ["assigned_user_id", "Assigned user ID"], ["lead_id", "Lead", "relationship", { resource: "leads" }], ["client_id", "Client", "relationship", { resource: "clients" }], ["event_id", "Event", "relationship", { resource: "events" }], ["status", "Status"], ["priority", "Priority"]
+  ["title", "Title"], ["description", "Description", "textarea"], ["due_date", "Due date", "date"], ["assigned_user_id", "Owner", "relationship", { resource: "users" }], ["lead_id", "Lead", "relationship", { resource: "leads" }], ["client_id", "Client", "relationship", { resource: "clients" }], ["event_id", "Event", "relationship", { resource: "events" }], ["status", "Status", "select", { options: ["OPEN","IN_PROGRESS","DONE","CANCELLED"] }], ["priority", "Priority", "select", { options: ["LOW","NORMAL","HIGH","URGENT"] }]
 ];
 
 const paymentFields = [

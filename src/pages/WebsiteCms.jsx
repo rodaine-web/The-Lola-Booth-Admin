@@ -1,3 +1,6 @@
+import AsyncState from "../components/AsyncState.jsx";
+import MediaThumbnail from "../components/MediaThumbnail.jsx";
+import {formatDisplay} from "../utils/display.js";
 import { Archive, ArrowDown, ArrowUp, Eye, ImagePlus, Save, Send, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import MediaSelect from "../components/MediaSelect.jsx";
@@ -5,7 +8,7 @@ import { api } from "../api/client.js";
 
 const configs = {
   pageItems:{type:'pageItems',title:'Page Items',eyebrow:'Website CMS',columns:['page_slug','slot_key','html','display_order','status'],fields:[['page_slug','Page'],['slot_key','Website slot'],['html','Copy (basic HTML)','textarea'],['href','Link URL'],['display_order','Display order','number']],empty:'No page items.'},
-  mediaMappings:{type:'mediaMappings',title:'Website Images',eyebrow:'Website CMS',columns:['asset_key','media_id','status'],fields:[['asset_key','Website asset key'],['media_id','Media ID'],['display_order','Display order','number']],empty:'No website images.'},
+  mediaMappings:{type:'mediaMappings',title:'Website Images',eyebrow:'Website CMS',columns:['asset_key','media_id','display_order','status'],fields:[['asset_key','Website asset key'],['media_id','Media ID'],['display_order','Display order','number']],empty:'No website images.'},
   homepage: {
     type: "content",
     title: "Page SEO",
@@ -135,6 +138,7 @@ export default function WebsiteCms({ section }) {
 
 function CmsEditor({ config }) {
   const [rows, setRows] = useState([]);
+  const [loading,setLoading]=useState(true),[pageFilter,setPageFilter]=useState("");
   const [form, setForm] = useState({});
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
@@ -143,17 +147,18 @@ function CmsEditor({ config }) {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
+  useEffect(()=>{setEditing(null);setPageFilter("");},[config.type]);
   useEffect(() => { load(); }, [config.type, search, status]);
 
   async function load() {
-    setError("");
+    setLoading(true);setError("");
     try {
       const result = await api.get(`/website/${config.type}?search=${encodeURIComponent(search)}${status ? `&status=${status}` : ""}`);
       setRows(result.data || []);
     } catch (err) {
       setRows([]);
       setError(err.message);
-    }
+    } finally {setLoading(false);}
   }
 
   function openCreate() {
@@ -206,7 +211,7 @@ function CmsEditor({ config }) {
     if (target < 0 || target >= current.length) return;
     [current[index], current[target]] = [current[target], current[index]];
     setRows(current);
-    await api.post(`/website/${config.type}/reorder`, { orderedIds: current.map((item) => item.id) });
+    try {await api.post(`/website/${config.type}/reorder`, { orderedIds: current.map((item) => item.id) });} catch(err){setError(err.message);await load();}
   }
 
   async function previewHomepage() {
@@ -230,7 +235,10 @@ function CmsEditor({ config }) {
         <button className="primary-action" onClick={previewHomepage}><Eye size={16} />Preview</button>
       </div>
       {preview && <pre className="cms-preview">{JSON.stringify(preview, null, 2)}</pre>}
-      <CmsTable rows={rows} columns={config.columns} empty={config.empty} onEdit={openEdit} onAction={action} onMove={move} actions={["publish", "unpublish", "archive"]} />
+      <AsyncState loading={loading} error={error} noun={config.title.toLowerCase()} onRetry={load}>{!loading&&!error&&<>
+      {['pageItems','faqs'].includes(config.type)?<><label>{config.type==='pageItems'?'Page':'Category'}<select value={pageFilter} onChange={e=>setPageFilter(e.target.value)}><option value="">All groups</option>{[...new Set(rows.map(r=>r.page_slug||r.category||'General'))].map(page=><option key={page}>{page}</option>)}</select></label>{Object.entries(rows.filter(r=>!pageFilter||(r.page_slug||r.category||'General')===pageFilter).reduce((groups,row)=>{const key=config.type==='pageItems'?`${row.page_slug} · ${row.slot_key?.split('.')[0]||'Content'}`:row.category||'General';(groups[key] ||= []).push(row);return groups;},{})).map(([group,items])=><details className="panel" key={group}><summary>{group} · {items.length} items</summary><CmsTable rows={items} columns={config.columns} empty={config.empty} onEdit={openEdit} onAction={action} onMove={move} actions={['publish','unpublish','archive']}/></details>)}</>:<CmsTable rows={rows} columns={config.columns} empty={config.empty} onEdit={openEdit} onAction={action} onMove={move} actions={['publish','unpublish','archive']} />}
+      {config.type==='eventTypes'&&new Set(rows.map(r=>r.display_order)).size<rows.length&&<p role="status" className="toast">Some event types share a sort order. Use Move up/down to save a unique order.</p>}
+      </>}</AsyncState>
       {editing && (
         <CmsModal title={`${editing.mode === "edit" ? "Edit" : "New"} ${config.title.replace(/s$/, "")}`} fields={config.fields} form={form} setForm={setForm} onClose={() => setEditing(null)} onSave={save} />
       )}
@@ -295,6 +303,7 @@ function MediaLibrary() {
         </form>
       </section>
       <div className="toolbar"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search media..." /></div>
+      <div className="media-grid">{rows.slice(0,24).map(row=><article className="panel" key={row.id}><MediaThumbnail id={row.id} alt={row.alt_text||row.filename}/><strong>{row.filename}</strong><small>{row.visibility} · {row.permission_state} · Used {row.usage_count||0} times</small></article>)}</div>
       <CmsTable rows={rows} columns={["filename", "media_type", "visibility", "permission_state", "usage_count"]} empty="No media uploaded yet." actions={["archive"]} onAction={async (row, verb) => {
         if (verb === "archive") {
           await api.delete(`/website/media/${row.id}`);
@@ -366,7 +375,7 @@ function CmsTable({ rows, columns, empty, onEdit, onAction, onMove, actions = []
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
-              {columns.map((column) => <td key={column}>{formatCell(row[column])}</td>)}
+              {columns.map((column) => <td key={column}>{column.endsWith("media_id") ? <MediaThumbnail id={row[column]}/> : column === "html" ? String(row[column]||"").replace(/<[^>]*>/g,"").slice(0,180) : formatDisplay(row[column],column)}</td>)}
               <td>
                 <div className="cms-actions">
                   {onMove && <button title="Move up" onClick={() => onMove(row, -1)}><ArrowUp size={15} /></button>}

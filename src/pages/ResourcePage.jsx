@@ -1,3 +1,4 @@
+import AsyncState from "../components/AsyncState.jsx";
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
@@ -6,21 +7,24 @@ import RelationshipSelect from "../components/RelationshipSelect.jsx";
 
 export default function ResourcePage({ title, endpoint, columns, phase, rowHref, fields = [] }) {
   const [rows, setRows] = useState([]);
+  const [loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[saving,setSaving]=useState(false);
   const [search, setSearch] = useState("");
+  const [statusFilter,setStatusFilter]=useState(""),[sort,setSort]=useState("created_at"),[overdue,setOverdue]=useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
 
+  useEffect(()=>{setEditing(null);setForm({});setStatusFilter("");},[endpoint]);
   useEffect(() => {
-    setError("");
-    api.get(`${endpoint}?search=${encodeURIComponent(search)}`)
-      .then((result) => setRows(result.data || []))
+    let active=true; setLoading(true); setError("");
+    api.get(`${endpoint}?search=${encodeURIComponent(search)}&status=${statusFilter}&sort_by=${sort}&overdue=${overdue}`)
+      .then((result) => {if(active)setRows(result.data || []);})
       .catch((err) => {
-        setRows([]);
-        setError(err.message);
-      });
-  }, [endpoint, search]);
+        if(active){setRows([]);setError(err.message);}
+      }).finally(()=>{if(active)setLoading(false);});
+    return ()=>{active=false;};
+  }, [endpoint, search, revision,statusFilter,sort,overdue]);
 
   function openCreate() {
     setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? false : ""])));
@@ -39,6 +43,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
 
   async function saveForm(event) {
     event.preventDefault();
+    if(saving)return; setSaving(true);
     setError("");
     setNotice("");
     const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value === "" ? null : value]));
@@ -53,7 +58,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
         setNotice(`${title.replace(/s$/, "")} created.`);
       }
       setEditing(null);
-      const result = await api.get(`${endpoint}?search=${encodeURIComponent(search)}`);
+      const result = await api.get(`${endpoint}?search=${encodeURIComponent(search)}&status=${statusFilter}&sort_by=${sort}&overdue=${overdue}`);
       setRows(result.data || []);
     } catch (err) {
       if (err.message.includes("Possible duplicate")) {
@@ -61,7 +66,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
       } else {
         setError(err.message);
       }
-    }
+    } finally {setSaving(false);}
   }
 
   return (
@@ -75,11 +80,13 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <div className="toolbar">
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} />
-        <select><option>All statuses</option></select>
-        <select><option>Newest first</option></select>
+        <input aria-label="Search records" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} />
+
+        {columns.includes('status')&&(statusFilter||rows.some(r=>r.status))&&<label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">All statuses</option>{[...new Set([statusFilter,...rows.map(r=>r.status)].filter(Boolean))].map(status=><option key={status}>{status}</option>)}</select></label>}
+        <label>Sort<select value={sort} onChange={e=>setSort(e.target.value)}><option value="created_at">Newest first</option><option value="updated_at">Recently updated</option></select></label>
+        {endpoint==='/tasks'&&<label>Overdue only<input type="checkbox" checked={overdue} onChange={e=>setOverdue(e.target.checked)}/></label>}
       </div>
-      <DataTable rows={rows} columns={columns} getRowHref={rowHref} onEdit={fields.length ? openEdit : null} />
+      <AsyncState loading={loading} error={error} onRetry={()=>setRevision(r=>r+1)} noun={title.toLowerCase()}>{!loading&&!error&&<DataTable rows={rows} columns={columns} getRowHref={rowHref} onEdit={fields.length ? openEdit : null} />}</AsyncState>
       {editing && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <form className="modal" onSubmit={saveForm}>
@@ -107,7 +114,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
             </div>
             <div className="modal-actions">
               <button type="button" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="primary-action">Save</button>
+              <button className="primary-action" disabled={saving}>{saving?"Saving…":"Save"}</button>
             </div>
           </form>
         </div>
