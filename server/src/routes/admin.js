@@ -1,3 +1,6 @@
+import {reportingQuery} from "../services/reporting-query.js";
+import {saveRoster,rosterDetail} from "../services/roster-service.js";
+import { normalizeInvoice, invoiceBalanceSql } from "../../../shared/invoice-balance.js";
 import { assertManagedUser, assertGrantablePermissions, assignUserPermissions } from '../services/user-access-service.js';
 import { Router } from "express";
 import { env } from "../config/env.js";
@@ -287,6 +290,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       const offset = (page - 1) * pageSize;
       const where = ["deleted_at IS NULL"];
       const params = [];
+      if(filters.data_scope==="business" && ["leads","clients","events","bookings","proposals","invoices","payments","tasks"].includes(table))where.push("data_classification IN ('BUSINESS','UNREVIEWED')");
       if (filters.status) {
         params.push(filters.status);
         where.push(`status = $${params.length}`);
@@ -368,7 +372,9 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         params
       );
       const count = await query(`SELECT count(*)::int AS count FROM ${table} WHERE ${where.join(" AND ")}`, params.slice(0, -2));
-      res.json({ data: rows.rows, pagination: { page, pageSize, total: count.rows[0].count } });
+      let data=rows.rows;
+      if(table==='tasks'&&data.length){const ids=data.map(r=>r.id);data=(await query(`SELECT t.*,u.name AS owner_name,e.event_name,c.name AS client_name FROM tasks t LEFT JOIN users u ON u.id=t.assigned_user_id LEFT JOIN events e ON e.id=t.event_id LEFT JOIN clients c ON c.id=t.client_id WHERE t.id=ANY($1::uuid[]) ORDER BY array_position($1::uuid[],t.id)`,[ids])).rows;}
+      res.json({ data, pagination: { page, pageSize, total: count.rows[0].count } });
     })
   ];
 }
@@ -771,9 +777,13 @@ adminRouter.get("/leads/:id/convert-preview", requirePermission("read:sales"), a
 
 adminRouter.post("/leads/:id/convert", requirePermission("write:sales"), asyncHandler(async (req, res) => {
   const converted = await transaction(async (client) => {
-    const leadResult = await client.query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
+    const leadResult = await client.query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.params.id]);
     const lead = leadResult.rows[0];
     if (!lead) throw notFound("Lead");
+    if(lead.converted_event_id){
+      const [customer,event,booking]=await Promise.all([client.query('SELECT * FROM clients WHERE id=$1',[lead.converted_client_id]),client.query('SELECT * FROM events WHERE id=$1',[lead.converted_event_id]),client.query('SELECT * FROM bookings WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1',[lead.id])]);
+      return {client:customer.rows[0],event:event.rows[0],booking:booking.rows[0],duplicatePrevented:true};
+    }
 
     let clientResult = await client.query("SELECT * FROM clients WHERE email=$1 AND deleted_at IS NULL", [lead.email]);
     let customer = clientResult.rows[0];
@@ -811,6 +821,7 @@ adminRouter.post("/leads/:id/convert", requirePermission("write:sales"), asyncHa
     return { client: customer, event: eventResult.rows[0], booking: bookingResult.rows[0] };
   });
 
+  if(converted.duplicatePrevented)return res.json(converted);
   await recordActivity({ actorUserId: req.user.id, entityType: "lead", entityId: req.params.id, action: "lead_converted", summary: "Lead converted to booking" });
   await logAutomationEvent({ triggerKey: "booking_confirmed", entityType: "booking", entityId: converted.booking.id });
   await writeAudit({ req, action: "lead_converted", entity: "lead", entityId: req.params.id, after: converted });
@@ -873,7 +884,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
     query(`SELECT count(e.id)::int AS total_events, COALESCE(sum(b.total),0)::text AS lifetime_value, COALESCE(sum(b.balance_due),0)::text AS outstanding_balance
       FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
   ]);
-  res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows, payments: payments.rows, tasks: tasks.rows, files: files.rows, communications: communications.rows, activity: activity.rows });
+  res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows, communications: communications.rows, activity: activity.rows });
 }));
 
 adminRouter.get("/clients/:id/duplicates", requirePermission("read:sales"), asyncHandler(async (req, res) => {
@@ -1065,7 +1076,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query("SELECT * FROM invoices WHERE event_id=$1 AND deleted_at IS NULL ORDER BY due_date DESC", [req.params.id]),
     getEventOperations(req.params.id, req.user)
   ]);
-  res.json({ ...event.rows[0], staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows, operations });
+  res.json({ ...event.rows[0], staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
 }));
 
 adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {
@@ -1158,6 +1169,13 @@ adminRouter.post("/events/:id/cancel", requirePermission("write:events"), asyncH
   res.json(updated.rows[0]);
 }));
 
+for (const [resource,table,permission] of [["users","users","read:tasks"],["staff","staff_profiles","read:events"],["equipment","equipment","read:events"]]) {
+  adminRouter.get(`/pickers/${resource}`,requirePermission(permission),asyncHandler(async(req,res)=>{
+    const result=await query(`SELECT id,name AS label FROM ${table} WHERE deleted_at IS NULL AND name ILIKE $1 ORDER BY name LIMIT 50`,[`%${String(req.query.q||'').slice(0,100)}%`]);
+    res.json({data:result.rows});
+  }));
+}
+
 adminRouter.get("/pickers/clients", requirePermission("read:sales"), asyncHandler(async (req, res) => {
   const rows = await pickerRows(req.query.q, "SELECT id, name AS label, email AS subtitle FROM clients WHERE deleted_at IS NULL AND (name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) ORDER BY name LIMIT 25");
   res.json({ data: rows });
@@ -1204,6 +1222,7 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
   const offset = (filters.page - 1) * pageSize;
   const params = [];
   const where = ["p.deleted_at IS NULL"];
+  if(filters.data_scope==="business")where.push("p.data_classification IN ('BUSINESS','UNREVIEWED')");
   const activity=filters.funnel||filters.activity;
   const timeColumn=activity==='accepted'?'p.accepted_at':activity==='sent'?'p.sent_at':'p.created_at';
   if(filters.from){params.push(filters.from);where.push(`${timeColumn}>=$${params.length}::timestamptz`);}
@@ -1335,8 +1354,8 @@ adminRouter.get("/invoices", requirePermission("read:finance"), validate(paginat
   const offset = (filters.page - 1) * pageSize;
   const params = [];
   const where = ["i.deleted_at IS NULL"];
-  if(filters.balance==='open')where.push("COALESCE(i.amount_outstanding,i.balance_due,0)>0 AND i.status NOT IN ('VOID','REFUNDED')");
-  if(filters.due==='week')where.push("i.due_date>=current_date AND i.due_date<current_date+interval '7 days' AND COALESCE(i.amount_outstanding,i.balance_due,0)>0 AND i.status NOT IN ('VOID','REFUNDED')");
+  if(filters.balance==='open')where.push(`${invoiceBalanceSql()} > 0 AND i.status NOT IN ('VOID','REFUNDED')`);
+  if(filters.due==='week')where.push(`i.due_date>=current_date AND i.due_date<current_date+interval '7 days' AND ${invoiceBalanceSql()} > 0 AND i.status NOT IN ('VOID','REFUNDED')`);
 
   if (filters.status) {
     params.push(filters.status);
@@ -1351,7 +1370,7 @@ adminRouter.get("/invoices", requirePermission("read:finance"), validate(paginat
   const direction = String(filters.sort_direction || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
   params.push(pageSize, offset);
   const rows = await query(
-    `SELECT i.*, c.name AS client_name, e.event_name, e.event_date, p.proposal_number
+    `SELECT i.*, (SELECT count(*) FROM invoice_items ii WHERE ii.invoice_id=i.id) AS item_count, c.name AS client_name, e.event_name, e.event_date, p.proposal_number
      FROM invoices i
      LEFT JOIN clients c ON c.id=i.client_id
      LEFT JOIN events e ON e.id=i.event_id
@@ -1361,7 +1380,7 @@ adminRouter.get("/invoices", requirePermission("read:finance"), validate(paginat
     params
   );
   const count = await query(`SELECT count(*)::int AS count FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN events e ON e.id=i.event_id WHERE ${where.join(" AND ")}`, params.slice(0, -2));
-  res.json({ data: rows.rows, pagination: { page: filters.page, pageSize, total: count.rows[0].count } });
+  res.json({ data: rows.rows.map(normalizeInvoice), pagination: { page: filters.page, pageSize, total: count.rows[0].count } });
 }));
 
 adminRouter.post("/invoices", requirePermission("write:finance"), validate(invoiceSchema), asyncHandler(async (req, res) => {
@@ -1615,6 +1634,11 @@ adminRouter.patch("/website/site-settings", requirePermission("publish:website")
   res.json(after);
 }));
 
+for(const kind of ["staff","equipment"]){
+ adminRouter.post(`/${kind}`,requirePermission("write:events"),asyncHandler(async(req,res)=>res.status(201).json(await saveRoster(kind,req))));
+ adminRouter.patch(`/${kind}/:id`,requirePermission("write:events"),asyncHandler(async(req,res)=>res.json(await saveRoster(kind,req))));
+ adminRouter.get(`/${kind}/:id`,requirePermission("read:events"),asyncHandler(async(req,res)=>res.json(await rosterDetail(kind,req.params.id))));
+}
 adminRouter.get("/staff", ...listRoute("staff_profiles", ["name", "email", "role"], "read:events"));
 adminRouter.get("/packages", ...listRoute("packages", ["name", "description"], "read:content"));
 adminRouter.get("/experiences", ...listRoute("experiences", ["name", "description"], "read:content"));
@@ -2177,6 +2201,7 @@ adminRouter.post("/events/:id/staff", requirePermission("write:events"), asyncHa
   if (!event.rows[0]) throw notFound("Event");
   const staff = await query("SELECT * FROM staff_profiles WHERE id=$1 AND deleted_at IS NULL AND active=true", [staffProfileId]);
   if (!staff.rows[0]) throw notFound("Staff");
+  if ((staff.rows[0].availability?.unavailable_dates || []).includes((event.rows[0].event_date instanceof Date ? event.rows[0].event_date.toISOString().slice(0,10) : String(event.rows[0].event_date).slice(0,10)))) throw new AppError("This staff member is unavailable on the event date.",409,"STAFF_UNAVAILABLE");
   const conflict = await query(
     `SELECT e.id, e.event_name, e.event_date, e.start_time, e.end_time, e.venue_name
      FROM staff_assignments sa
@@ -2295,24 +2320,28 @@ adminRouter.post("/payments", requirePermission("write:finance"), validate(payme
   res.status(201).json(await recordManualPayment(req));
 }));
 
-adminRouter.get("/analytics", requirePermission("read:analytics"), asyncHandler(async (_req, res) => {
+adminRouter.get("/analytics", requirePermission("read:analytics"), asyncHandler(async (req, res) => {
   const [summary, revenueByMonth, byPackage, byExperience, sourcePerformance] = await Promise.all([
-    query(`SELECT
+    reportingQuery(`SELECT
       (SELECT count(*)::int FROM leads WHERE date_trunc('month', created_at)=date_trunc('month', now())) AS leads_this_month,
       (SELECT count(*)::int FROM bookings WHERE date_trunc('month', created_at)=date_trunc('month', now())) AS bookings_this_month,
       (SELECT COALESCE(sum(total),0)::text FROM bookings) AS revenue_booked,
       (SELECT COALESCE(sum(amount_paid),0)::text FROM bookings) AS revenue_collected,
       (SELECT COALESCE(sum(balance_due),0)::text FROM bookings) AS outstanding_balance,
       (SELECT COALESCE(avg(total),0)::text FROM bookings) AS average_booking_value`),
-    query("SELECT to_char(created_at, 'YYYY-MM') AS month, sum(total)::text AS revenue FROM bookings GROUP BY 1 ORDER BY 1"),
-    query("SELECT p.name, count(*)::int AS bookings FROM events e JOIN packages p ON p.id=e.package_id GROUP BY p.name ORDER BY bookings DESC"),
-    query("SELECT x.name, count(*)::int AS bookings FROM events e JOIN experiences x ON x.id=e.experience_id GROUP BY x.name ORDER BY bookings DESC"),
-    query("SELECT COALESCE(referral_source, lead_source, 'Unknown') AS source, count(*)::int AS leads, count(*) FILTER (WHERE status='WON')::int AS won FROM leads GROUP BY 1 ORDER BY leads DESC")
+    reportingQuery("SELECT to_char(created_at, 'YYYY-MM') AS month, sum(total)::text AS revenue FROM bookings GROUP BY 1 ORDER BY 1"),
+    reportingQuery("SELECT p.name, count(*)::int AS bookings FROM events e JOIN packages p ON p.id=e.package_id GROUP BY p.name ORDER BY bookings DESC"),
+    reportingQuery("SELECT x.name, count(*)::int AS bookings FROM events e JOIN experiences x ON x.id=e.experience_id GROUP BY x.name ORDER BY bookings DESC"),
+    reportingQuery("SELECT COALESCE(referral_source, lead_source, 'Unknown') AS source, count(*)::int AS leads, count(*) FILTER (WHERE status='WON')::int AS won FROM leads GROUP BY 1 ORDER BY leads DESC")
   ]);
   const [phase8, phase9] = await Promise.all([sourceQualityAnalytics(), operationsAnalytics()]);
+  const dashboard = await getOperationalDashboard({range:req.query.range || "mtd",user:req.user});
+  const metrics=Object.fromEntries(dashboard.groups.flatMap(g=>g.metrics).map(m=>[m.key,m.value]));
   res.json({
-    summary: summary.rows[0],
-    revenueByMonth: revenueByMonth.rows,
+    summary: {leads:metrics.new_leads,bookings:metrics.bookings_won,booked_revenue:metrics.booked_revenue,collected_revenue:metrics.collected_revenue,outstanding_balance:metrics.outstanding_balance,average_booking_value:metrics.average_booking_value},
+    range:dashboard.sqlRange,
+    metricDefinitions:dashboard.metricDefinitions,
+    revenueByMonth: dashboard.trends.map(row=>({month:row.bucket,revenue:row.booked_revenue})),
     bookingsByPackage: byPackage.rows,
     bookingsByExperience: byExperience.rows,
     leadSourcePerformance: sourcePerformance.rows,
@@ -2352,7 +2381,15 @@ adminRouter.get("/search", requirePermission("read:admin"), asyncHandler(async (
   res.json({ data: [...clients.rows, ...leads.rows, ...events.rows, ...invoices.rows] });
 }));
 
-adminRouter.get("/audit-logs", requirePermission("read:audit"), ...listRoute("audit_logs", ["action", "entity"], "read:audit"));
+adminRouter.get("/audit-logs",requirePermission("read:audit"),asyncHandler(async(req,res)=>{
+ const values=[],where=["a.deleted_at IS NULL"];
+ for(const [key,column] of [["actor","u.name"],["action","a.action"],["entity","a.entity"]])if(req.query[key]){values.push(`%${String(req.query[key]).slice(0,150)}%`);where.push(`${column} ILIKE $${values.length}`);}
+ for(const [key,op] of [["from",">="],["to","<"]])if(req.query[key]){const value=z.string().date().parse(req.query[key]);values.push(value);where.push(`a.created_at ${op} $${values.length}::date${key==='to'?" + interval '1 day'":""}`);}
+ const result=await query(`SELECT a.id,a.action,a.entity,a.entity_id,a.created_at,COALESCE(u.name,'System') AS actor_name,
+ COALESCE(a.after_value->>'name',a.after_value->>'event_name',a.after_value->>'proposal_number',a.after_value->>'invoice_number',a.before_value->>'name',initcap(a.entity)) AS target_label
+ FROM audit_logs a LEFT JOIN users u ON u.id=COALESCE(a.actor_user_id,a.user_id) WHERE ${where.join(' AND ')} ORDER BY a.created_at DESC LIMIT 200`,values);
+ res.json({data:result.rows});
+}));
 
 adminRouter.get("/settings", requirePermission("read:settings"), asyncHandler(async (_req, res) => {
   const settings = await query("SELECT * FROM business_settings LIMIT 1");

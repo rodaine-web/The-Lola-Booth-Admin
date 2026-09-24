@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import {constants} from "node:fs";
 import { env, productionReadinessIssues } from "../config/env.js";
 import { query } from "../db/pool.js";
 import { AppError, notFound } from "../utils/errors.js";
@@ -64,7 +66,7 @@ export async function getSystemHealth() {
   checks.push(smsCheck());
   checks.push(await communicationReadinessCheck());
   checks.push(await fallbackCheck());
-  checks.push(storageCheck());
+  checks.push(await storageCheck());
   checks.push(await websiteIntegrationCheck());
   checks.push(await workerCheck());
   checks.push(await jobBacklogCheck());
@@ -78,17 +80,22 @@ export async function getSystemHealth() {
 
 function smsCheck() {
   const sms = smsProviderStatus();
-  if (sms.state === "NOT_CONFIGURED") return check("sms", "DISCONNECTED", "SMS provider is not configured.", sms);
+  if (sms.state === "NOT_CONFIGURED") return check("sms", "DISABLED", "SMS is intentionally not configured.", sms);
   if (sms.state === "READY") return check("sms", "HEALTHY", `${sms.provider} SMS adapter is ready.`, sms);
   return check("sms", "MISCONFIGURED", `${sms.provider} SMS adapter is not ready.`, sms);
 }
 
-function storageCheck() {
-  if (env.storageProvider === "local") {
-    return check("storage", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Local file storage is active; production needs a persistent volume and backup plan or an object storage adapter.", { provider: env.storageProvider, root: env.localStorageRoot });
+export async function storageCheck(config=env) {
+  if (config.storageProvider === "local") {
+    try {
+      const stat=await fs.stat(config.localStorageRoot);
+      if(!stat.isDirectory())throw new Error('Not a directory');
+      await fs.access(config.localStorageRoot,constants.R_OK|constants.W_OK);
+      return check("storage",config.nodeEnv==='production'?"DEGRADED":"HEALTHY","Storage path exists and is readable/writable. Persistent volume durability and backup restore require infrastructure verification.",{provider:"local",pathAccessible:true,durabilityVerified:false});
+    } catch {return check("storage","ERROR","Configured storage directory is missing or is not readable/writable.",{provider:"local",pathAccessible:false});}
   }
-  if (env.storageProvider === "s3") return check("storage", "MISCONFIGURED", "S3-compatible storage is selected but the adapter is not active yet.", { provider: env.storageProvider });
-  return check("storage", "UNKNOWN", "Storage provider is not recognized.", { provider: env.storageProvider });
+  if(config.storageProvider==='s3')return check("storage","MISCONFIGURED","S3-compatible adapter is not active yet.",{provider:'s3'});
+  return check("storage","UNKNOWN","Storage provider is not recognized.");
 }
 
 async function websiteIntegrationCheck() {

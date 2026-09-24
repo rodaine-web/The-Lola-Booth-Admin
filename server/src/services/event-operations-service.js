@@ -186,7 +186,7 @@ async function readinessScore(event, data) {
 }
 
 function proximitySeverity(eventDate, base) {
-  const days = (new Date(`${eventDate}T12:00:00`).getTime() - Date.now()) / 86400000;
+  const days = (new Date(`${eventDate instanceof Date ? eventDate.toISOString().slice(0,10) : String(eventDate).slice(0,10)}T12:00:00`).getTime() - Date.now()) / 86400000;
   if (days <= 1 && base !== "INFO") return "CRITICAL";
   if (days <= 14 && base === "INFO") return "WARNING";
   return base;
@@ -340,7 +340,8 @@ export async function updateEquipmentLifecycle(eventId, assignmentId, action, bo
   const config = map[action];
   if (!config) throw new AppError("Unsupported equipment action.", 400, "INVALID_EQUIPMENT_ACTION");
   const result = await query(
-    `UPDATE equipment_assignments SET lifecycle_status=$1,
+    `WITH typed_input AS (SELECT $1::text, $2::uuid, $3::text, $4::text, $5::text, $6::uuid, $7::uuid)
+     UPDATE equipment_assignments SET lifecycle_status=$1,
       ${config.at ? `${config.at}=now(), ${config.by}=$2,` : ""}
       ${config.condition ? `${config.condition}=$3, ${config.notes}=$4, missing_accessories=$5,` : ""}
       released_at=released_at

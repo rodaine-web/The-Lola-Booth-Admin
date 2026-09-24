@@ -1,3 +1,4 @@
+import {emailIntegrationStatus} from "./integration-status.js";
 import crypto from "crypto";
 import { query, transaction } from "../db/pool.js";
 import { AppError } from "../utils/errors.js";
@@ -368,7 +369,7 @@ export async function integrationOverview() {
       ...(connections.rows.find((row) => row.provider === provider) || { provider, status: providerConfig[provider].defaultStatus }),
       fieldMaps: maps.rows.filter((row) => row.provider === provider)
     })),
-    communications: connections.rows.filter((row) => row.category === "EMAIL"),
+    communications: [emailIntegrationStatus()],
     failedInbound: failed.data
   };
 }

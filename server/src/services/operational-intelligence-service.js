@@ -1,4 +1,6 @@
-import { query } from "../db/pool.js";
+import {getEventOperations} from "./event-operations-service.js";
+import { query as rawQuery } from "../db/pool.js";
+import { reportingQuery as query } from "./reporting-query.js";
 import { getBusinessDateRanges, toSqlRange } from "../utils/date-ranges.js";
 
 const rangeLabels = {
@@ -32,7 +34,9 @@ export async function getOperationalDashboard({ range = "today", user } = {}) {
     topPerformers(params)
   ]);
 
+  const quality=(await rawQuery("SELECT count(*)::int AS unreviewed FROM leads WHERE data_classification='UNREVIEWED' AND deleted_at IS NULL")).rows[0];
   return {
+    dataScope: {excluded:['QA','SEED','LEGACY_FIXTURE'],unreviewedLeads:quality.unreviewed},
     range,
     label: rangeLabels[range] || rangeLabels.today,
     timeZone: settings.timezone,
@@ -163,6 +167,7 @@ async function dashboardLists([start, end], range, user) {
   const todayOnly = range === "today";
   const todayEvents = await eventRows(todayOnly ? "e.event_date >= $1::date AND e.event_date < $2::date" : "e.event_date >= $1::date AND e.event_date < $2::date", [start, end], 12);
   const upcomingEvents = await eventRows("e.event_date >= current_date AND e.event_date < current_date + interval '30 days'", [], 10);
+  const readinessDetails=await Promise.all(upcomingEvents.map(async event=>({...event,operational_readiness:(await getEventOperations(event.id,user)).readiness})));
   const [tasks, attention, activity, weekly] = await Promise.all([
     query(`SELECT t.*, u.name AS owner_name, c.name AS client_name, e.event_name
       FROM tasks t LEFT JOIN users u ON u.id=t.assigned_user_id LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN events e ON e.id=t.event_id
@@ -174,7 +179,7 @@ async function dashboardLists([start, end], range, user) {
   ]);
   return {
     todaysEvents: todayEvents.map((event) => redactForRole(event, user)),
-    upcomingEvents,
+    upcomingEvents:readinessDetails,
     tasksDue: tasks.rows,
     needsAttention: attention,
     recentActivity: activity.rows,
@@ -219,17 +224,17 @@ async function attentionItems([start, end]) {
   return [
     ...missingStaff.map((event) => attention("EVENT_MISSING_STAFF", `${event.event_name} needs staff assigned.`, `/events/events/${event.id}`, event.event_date)),
     ...missingEquipment.map((event) => attention("EVENT_MISSING_EQUIPMENT", `${event.event_name} needs equipment assigned.`, `/events/events/${event.id}`, event.event_date)),
-    ...overdueInvoices.rows.map((invoice) => attention("BALANCE_OVERDUE", `${invoice.invoice_number} has an overdue balance.`, `/finance/invoices/${invoice.id}`, invoice.due_date)),
+    ...overdueInvoices.rows.map((invoice) => attention("BALANCE_OVERDUE", `${invoice.invoice_number || "Legacy invoice (number missing)"} has an overdue balance.`, `/finance/invoices/${invoice.id}`, invoice.due_date)),
     ...failedPayments.rows.map((payment) => attention("PAYMENT_FAILED", `${payment.provider} payment failed.`, `/finance/payments/${payment.id}`, payment.created_at)),
     ...leadFollowUp.rows.map((lead) => attention("LEAD_FOLLOW_UP", `${lead.first_name} ${lead.last_name} needs follow-up.`, `/sales/leads/${lead.id}`, lead.follow_up_date || lead.event_date)),
-    ...proposals.rows.map((proposal) => attention("PROPOSAL_ATTENTION", `${proposal.proposal_number} needs proposal follow-up.`, `/sales/proposals/${proposal.id}`, proposal.valid_through || proposal.sent_at)),
+    ...proposals.rows.map((proposal) => attention("PROPOSAL_ATTENTION", `${proposal.proposal_number || "Legacy proposal (number missing)"} needs proposal follow-up.`, `/sales/proposals/${proposal.id}`, proposal.valid_through || proposal.sent_at)),
     ...operationalEvents.rows.map((event) => attention("EVENT_DAY_STATUS", `${event.event_name} is ${event.operational_status.replaceAll("_", " ")}.`, `/events/events/${event.id}`, event.event_date)),
     ...criticalIncidents.rows.map((incident) => attention("CRITICAL_INCIDENT", `${incident.severity} ${incident.type} incident needs review.`, `/events/events/${incident.event_id}`, new Date().toISOString()))
   ].slice(0, 18);
 }
 
 function attention(type, message, href, date) {
-  return { type, message, href, date };
+  return { type, message, href, date, severity: /OVERDUE|FAILED|CRITICAL/.test(type) ? "BLOCKED" : "NEEDS_ATTENTION" };
 }
 
 async function revenueTrend([start, end], range) {

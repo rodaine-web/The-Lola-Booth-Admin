@@ -1,3 +1,5 @@
+import AsyncState from "../components/AsyncState.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
 import { AlertTriangle, CheckCircle2, FlaskConical, RefreshCw, RotateCcw, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
@@ -57,6 +59,7 @@ export default function Integrations() {
     }
   }
 
+  if(error&&!data)return <main className="page"><AsyncState error={error} onRetry={load} noun="integrations"/></main>;
   if (!data) return <main className="page"><div className="empty-state">Loading integrations...</div></main>;
 
   return (
@@ -137,10 +140,7 @@ export default function Integrations() {
   );
 }
 
-function Status({ status }) {
-  const ok = status === "CONNECTED";
-  return <span className={`status-pill ${status?.toLowerCase()}`}>{ok ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{status?.replaceAll("_", " ")}</span>;
-}
+function Status({status}) { return <StatusBadge status={status==='AWAITING_APPROVAL'?'PENDING_APPROVAL':status==='DISCONNECTED'?'NOT_CONFIGURED':status}/>; }
 
 function Field({ label, value }) { return <div className="field-row"><span>{label}</span><strong>{value || "—"}</strong></div>; }
 

@@ -1,9 +1,9 @@
 export function funnelHref(key, range) {
-  const params=new URLSearchParams({from:range.start,to:range.end});
+  const params=new URLSearchParams({from:range.start,to:range.end,data_scope:"business"});
   if(key==='proposals_sent'||key==='proposals_accepted'){params.set('funnel',key==='proposals_sent'?'sent':'accepted');return '/sales/proposals?'+params;}
   params.set('funnel',key);return '/sales/leads?'+params;
 }
-export function sourceHref(source,range){return '/sales/leads?'+new URLSearchParams({source_group:source,from:range.start,to:range.end});}
+export function sourceHref(source,range){return '/sales/leads?'+new URLSearchParams({source_group:source,from:range.start,to:range.end,data_scope:"business"});}
 
 export function metricHref(metric, range) {
   if (metric.key === 'new_leads') return funnelHref('leads', range);

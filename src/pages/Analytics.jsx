@@ -1,3 +1,4 @@
+import AsyncState from "../components/AsyncState.jsx";
 import { formatDisplay, formatMoney } from "../utils/display.js";
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -5,11 +6,13 @@ import { api } from "../api/client.js";
 
 export default function Analytics() {
   const [data, setData] = useState(null);
+  const [error,setError]=useState(""),[range,setRange]=useState("mtd"),[revision,setRevision]=useState(0);
 
   useEffect(() => {
-    api.get("/analytics").then(setData);
-  }, []);
+    setError(""); api.get(`/analytics?range=${range}`).then(setData).catch(e=>setError(e.message));
+  }, [range,revision]);
 
+  if(error)return <main className="page"><AsyncState error={error} noun="analytics" onRetry={()=>setRevision(r=>r+1)}/></main>;
   if (!data) return <main className="page"><div className="empty-state">Loading analytics...</div></main>;
 
   return (
@@ -20,6 +23,7 @@ export default function Analytics() {
           <h1>Analytics</h1>
         </div>
       </div>
+      <label>Date range<select value={range} onChange={e=>setRange(e.target.value)}><option value="today">Today</option><option value="week">This week</option><option value="mtd">Month to date</option><option value="ytd">Year to date</option></select></label><p className="note-text">Revenue and average booking value share the Dashboard definitions and selected period. Outstanding is the current unpaid balance.</p>
       <section className="kpi-grid compact">
         {Object.entries(data.summary).map(([key, value]) => (
           <article className="kpi" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatDisplay(value,key)}</strong></article>
