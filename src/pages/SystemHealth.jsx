@@ -40,11 +40,12 @@ export default function SystemHealth() {
     <main className="page">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">Production readiness</p>
+          <p className="eyebrow">{health?.build?.environment==='staging'?'Staging baseline':'Environment readiness'}</p>
           <h1>System Health</h1>
         </div>
         <button className="primary-action" onClick={load}><RefreshCw size={16} />Refresh</button>
       </div>
+      {health?.build&&<p className="note-text">Environment: {health.build.environment} · API revision: {health.build.revision.slice(0,12)} · Admin revision: {__BUILD_REVISION__.slice(0,12)}</p>}
       {error && <div className="toast error">{error}</div>}
       {health && <section className={`health-banner ${health.status.toLowerCase()}`}>
         <AlertTriangle size={18} />

@@ -1,3 +1,4 @@
+import {stagingEmailPolicy} from '../config/staging-safety.js';
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import { AppError } from "../utils/errors.js";
@@ -84,6 +85,7 @@ export class MicrosoftEmailProvider {
   }
 
   async send({ to, cc, bcc, subject, body, html, text, replyTo, attachments = [] }) {
+    ({to,cc,bcc,subject}=stagingEmailPolicy({to,cc,bcc,subject}));
     const token = await this.getAccessToken();
     const message = {
       subject,
@@ -244,6 +246,7 @@ export function getEmailProviderReadiness(config = env, providerOptions = {}) {
 }
 
 export async function sendEmail({ to, cc, bcc, subject, body, html, text, replyTo, attachments = [] }) {
+  ({to,cc,bcc,subject}=stagingEmailPolicy({to,cc,bcc,subject}));
   if (!env.emailProvider || env.emailProvider === "development") {
     return {
       provider: "development",

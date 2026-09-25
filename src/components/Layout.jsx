@@ -1,3 +1,4 @@
+import EnvironmentBadge from "./EnvironmentBadge.jsx";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, BriefcaseBusiness, CalendarDays, CircleDollarSign, ClipboardList, Gauge, HeartPulse, LogOut, Package, Search, Shield, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -57,7 +58,7 @@ export default function Layout() {
         <div className="brand">
           <img className="brand-logo brand-logo-admin-stacked" src="/brand/LOLA_Primary_Dark_Transparent.png" alt="The LOLA Booth" />
           <div>
-            <span>Admin Portal</span>
+            <span>Admin Portal</span><EnvironmentBadge/>
           </div>
         </div>
         <button className="navigation-toggle" aria-expanded={navigationOpen} aria-controls="admin-navigation" onClick={() => setNavigationOpen(!navigationOpen)}>{navigationOpen ? "Close navigation" : "Menu"}</button>

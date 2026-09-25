@@ -1516,3 +1516,5 @@ input,select,textarea{min-width:0}button:focus-visible,a:focus-visible,[tabindex
  .audit-entry-summary p:first-child { grid-column: 1 / -1; }
  .audit-entry { padding: 10px 12px; }
 }
+
+.brand .environment-badge {display:inline-block;background:#fff1c7;color:#765100;border:1px solid #c49734;border-radius:4px;padding:3px 7px;font:700 11px/1.2 Arial,sans-serif;letter-spacing:1px;margin-top:6px;}

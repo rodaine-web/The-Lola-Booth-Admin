@@ -1,6 +1,8 @@
+import {assertStagingConfiguration} from './staging-safety.js';
 import dotenv from "dotenv";
 
 dotenv.config();
+assertStagingConfiguration();
 
 const required = ["DATABASE_URL", "JWT_SECRET"];
 

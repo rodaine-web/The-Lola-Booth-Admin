@@ -1,3 +1,4 @@
+import {stagingJobsPaused} from '../config/staging-safety.js';
 import { query, transaction } from "../db/pool.js";
 import { logger } from "../config/logger.js";
 import { env } from "../config/env.js";
@@ -1022,6 +1023,7 @@ async function executeAutomationJob(client, job) {
 }
 
 export async function processDueJobs({ limit = 25 } = {}) {
+  if(stagingJobsPaused())throw new AppError('Staging bulk automation is paused.',409,'STAGING_AUTOMATIONS_PAUSED');
   const processed = [];
   await transaction(async (client) => {
     await recoverStaleProcessingJobs(client);

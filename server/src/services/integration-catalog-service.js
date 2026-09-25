@@ -1,3 +1,4 @@
+import {isStaging} from '../config/staging-safety.js';
 import crypto from 'node:crypto';
 import {MARKETING_PROVIDERS,marketingConfiguration,marketingPayload} from './marketing-adapters.js';
 import {query} from '../db/pool.js';
@@ -25,6 +26,7 @@ export async function integrationCatalog(){
   else if(provider==='LINKEDIN'){status='PENDING_APPROVAL';detail='Optional integration; API approval and external delivery are pending.';}
   else if(MARKETING_PROVIDERS.includes(provider)){const c=marketingConfiguration(provider);mode=c.enabled?'PROVIDER':'DISABLED';status=!c.enabled?'DISABLED':!c.complete?'NOT_CONFIGURED':evidence.last_failure&&(!evidence.last_success||evidence.last_failure>evidence.last_success)?'ERROR':evidence.last_success?'READY':'TEST_READY';detail='Server adapter available. Payload tests never dispatch externally. Provider acceptance does not certify attribution or reporting.';}
   else if(present){status=present===keys.length?'PENDING_VERIFICATION':'ERROR';}
+  if(provider==='MICROSOFT'&&isStaging()&&process.env.STAGING_EMAIL_ENABLED!=='true'){mode='STAGING_PAUSED';status='DISABLED';detail='Microsoft configuration retained; staging sends are paused pending controlled inbox qualification.';}
   return {provider,label,group,mode,status,...(provider==='TWILIO'?{counts:smsCounts}:{}),config:{present,required:keys.length,fields:keys},lastTest:evidence.last_test,lastSuccess:provider==='MICROSOFT'?mail?.last_success:evidence.last_success,lastFailure:provider==='MICROSOFT'?mail?.last_failure:evidence.last_failure,evidenceMode:provider==='MICROSOFT'?'Provider accepted':MARKETING_PROVIDERS.includes(provider)?'Provider HTTP acceptance':'LOCAL MOCK',detail,testAvailable:env.nodeEnv!=='production'&&['GA4','META','TIKTOK','STRIPE'].includes(provider)};
  })};
 }

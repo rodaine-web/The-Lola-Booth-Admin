@@ -1,3 +1,4 @@
+import {buildInfo,isStaging} from '../config/staging-safety.js';
 import fs from "node:fs/promises";
 import {constants} from "node:fs";
 import { env, productionReadinessIssues } from "../config/env.js";
@@ -76,7 +77,7 @@ export async function getSystemHealth() {
   for (const item of checks) item.optional = item.name.startsWith("payments.") || ["sms", "integrations"].includes(item.name);
   const status = overallStatus(checks.filter(item => !item.optional));
   await query("INSERT INTO system_health_snapshots (status, checks) VALUES ($1,$2)", [status, checks]).catch(() => null);
-  return { status, generatedAt: new Date().toISOString(), checks };
+  return { status, build:buildInfo(), generatedAt: new Date().toISOString(), checks };
 }
 
 function smsCheck() {
@@ -109,8 +110,8 @@ async function websiteIntegrationCheck() {
 }
 
 function environmentChecks() {
-  if (!productionReadinessIssues.length) return [check("environment", "HEALTHY", "Required production environment values are present.")];
-  return [check("environment", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Production environment values still need attention.", { issues: productionReadinessIssues })];
+  if (!productionReadinessIssues.length) return [check("environment", "HEALTHY", "Required server environment values are present.")];
+  return [check("environment", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Required server environment values still need attention.", { issues: productionReadinessIssues })];
 }
 
 function paymentChecks() {
@@ -123,6 +124,7 @@ function paymentChecks() {
 }
 
 async function emailCheck() {
+  if(isStaging()&&process.env.STAGING_EMAIL_ENABLED!=='true'){try{getEmailProviderReadiness();return check("email","DISABLED","Staging sends paused; adapter configuration validated. Inbox qualification pending.",{provider:env.emailProvider});}catch{return check("email","MISCONFIGURED","Staging email provider configuration incomplete.");}}
   if (env.emailProvider === "development") return check("email", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Email is using the development adapter and does not deliver externally.", { provider: env.emailProvider, from: env.emailFrom });
   try {
     const readiness = getEmailProviderReadiness();
@@ -167,7 +169,7 @@ async function workerCheck() {
   const ageSeconds = Math.round((Date.now() - new Date(heartbeat.last_heartbeat_at).getTime()) / 1000);
   if (ageSeconds > 300) return check("worker", "DOWN", "Automation worker heartbeat is down.", { lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds, lastSuccess: heartbeat.last_successful_communication_processing_at, lastFailure: heartbeat.last_failed_communication_processing_at, error: heartbeat.last_processing_error });
   if (ageSeconds > 180) return check("worker", "STALE", "Automation worker heartbeat is stale.", { lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds, lastSuccess: heartbeat.last_successful_communication_processing_at, lastFailure: heartbeat.last_failed_communication_processing_at, error: heartbeat.last_processing_error });
-  return check("worker", "HEALTHY", "Automation worker heartbeat is current.", { lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds, lastSuccess: heartbeat.last_successful_communication_processing_at, lastFailure: heartbeat.last_failed_communication_processing_at, error: heartbeat.last_processing_error });
+  return check("worker", "HEALTHY", heartbeat.metadata?.jobsPaused?"Staging worker heartbeat is current; automatic jobs are paused.":"Automation worker heartbeat is current.", { build:heartbeat.metadata, lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds, lastSuccess: heartbeat.last_successful_communication_processing_at, lastFailure: heartbeat.last_failed_communication_processing_at, error: heartbeat.last_processing_error });
 }
 
 async function jobBacklogCheck() {

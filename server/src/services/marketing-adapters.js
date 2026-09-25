@@ -1,3 +1,4 @@
+import {isStaging} from '../config/staging-safety.js';
 import crypto from 'node:crypto';
 import {AppError} from '../utils/errors.js';
 
@@ -39,7 +40,7 @@ export function marketingPayload(job, config=process.env) {
 // provider messages enter these payloads or the persisted response summaries.
 export async function dispatchMarketing(job,{config=process.env,transport=fetch}={}) {
  const settings=marketingConfiguration(job.provider,config);
- if(!settings.enabled)return {mode:'DISABLED',result:'DISABLED'};
+ if(isStaging(config)||!settings.enabled)return {mode:'DISABLED',result:'DISABLED'};
  if(!settings.complete)throw new AppError('Provider configuration incomplete.',422,'MARKETING_NOT_CONFIGURED');
  const body=marketingPayload(job,config);let url,headers={'content-type':'application/json'};
  if(job.provider==='GA4'){url=new URL('https://www.google-analytics.com/mp/collect');url.searchParams.set('measurement_id',config.GA4_MEASUREMENT_ID);url.searchParams.set('api_secret',config.GA4_API_SECRET);}

@@ -1,3 +1,4 @@
+import {buildInfo,stagingJobsPaused} from './config/staging-safety.js';
 import {recoverPublicInquiryAcknowledgments} from "./services/public-form-email-service.js";
 import {processIntegrationJobs,queueDueReminders} from "./services/integration-jobs-service.js";
 import { logger } from "./config/logger.js";
@@ -10,7 +11,8 @@ let stopping = false;
 async function tick() {
   if (stopping) return;
   try {
-    await recordWorkerHeartbeat("automation-worker", { pid: process.pid });
+    await recordWorkerHeartbeat("automation-worker", { pid: process.pid, ...buildInfo(), jobsPaused:stagingJobsPaused() });
+    if(stagingJobsPaused())return;
     await recoverPublicInquiryAcknowledgments();
     await queueDueReminders();
     const result = await processDueJobs({ limit: 25 });

@@ -1,3 +1,4 @@
+import EnvironmentBadge from "../components/EnvironmentBadge.jsx";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -36,7 +37,7 @@ export default function Login() {
         <div className="brand large login-brand">
           <img className="brand-logo brand-logo-primary" src="/brand/LOLA_Primary_Dark_Transparent.png" alt="The LOLA Booth" />
           <div>
-            <strong>Admin Portal</strong>
+            <strong>Admin Portal</strong><EnvironmentBadge/>
             <span>Luxury event operations</span>
           </div>
         </div>

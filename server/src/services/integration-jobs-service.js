@@ -1,3 +1,4 @@
+import {stagingJobsPaused} from '../config/staging-safety.js';
 import crypto from 'node:crypto';
 import {MARKETING_PROVIDERS,marketingConfiguration,dispatchMarketing} from './marketing-adapters.js';
 import {query,transaction} from '../db/pool.js';
@@ -86,6 +87,7 @@ async function developmentDispatch(job){
  await query(`INSERT INTO integration_dispatches(idempotency_key,provider,provider_reference) VALUES($1,$2,$3) ON CONFLICT(idempotency_key) DO NOTHING`,[job.idempotency_key,job.provider,'mock_'+crypto.createHash('sha256').update(job.idempotency_key).digest('hex').slice(0,24)]);
 }
 export async function processIntegrationJobs({limit=25,dispatch=defaultDispatch}={}){
+ if(stagingJobsPaused())return [];
  if(dispatch!==defaultDispatch&&env.nodeEnv!=='test')throw new AppError('Test adapter unavailable.',403,'TEST_ONLY');
  await query("UPDATE integration_jobs SET status=CASE WHEN mode='PROVIDER' THEN 'FAILED' ELSE 'QUEUED' END,last_error=CASE WHEN mode='PROVIDER' THEN 'PROVIDER_OUTCOME_UNKNOWN' ELSE last_error END,available_at=now() WHERE status='PROCESSING' AND started_at<now()-interval '5 minutes'");
  const results=[];
