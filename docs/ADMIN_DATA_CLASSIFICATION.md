@@ -6,4 +6,6 @@ Existing records remain UNREVIEWED. Newly created business records default to BU
 
 Classification procedure: inventory the source and known fixture IDs; record proposed classification and reason; review affected relationships and totals; apply in development fixtures first. Historical invoices keep their original line items and numbers; missing history is labeled, never fabricated. Production classification requires a separate reviewed change and explicit authorization. The current production baseline has not been cleaned.
 
-Remaining gate: provide an authorized Admin classification workflow and finish reviewing historical rows before using metrics as an operational business baseline. The current strategy prevents explicitly classified test data entering metrics; it cannot prove that all unreviewed history is genuine business data.
+The local Admin now provides `/system/data-review`: record type and scope filters, pagination, evidence/reason input and audited classification changes. Listing requires Settings access plus the record-type read permission; changing classification additionally requires its write permission. Related records are reviewed separately to avoid classifying a real customer solely because one event was a test.
+
+Remaining gate: finish reviewing historical rows before using metrics as an operational business baseline. The current strategy prevents explicitly classified test data entering metrics; it cannot prove that all unreviewed history is genuine business data.

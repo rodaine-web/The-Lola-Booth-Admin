@@ -1,0 +1,1663 @@
+{
+  "verifiedAt": "2026-09-25T01:15:01.745Z",
+  "verdict": "ADMIN NEEDS ANOTHER DEVELOPMENT PASS",
+  "branch": "codex/admin-product-stabilization",
+  "implementationCommits": [
+    "9ba7b68",
+    "3231110",
+    "e21ae9b"
+  ],
+  "scope": {
+    "localOnly": true,
+    "productionDeployed": false,
+    "stagingCreated": false,
+    "pushed": false,
+    "stripeHostedTest": "DEFERRED_BY_USER",
+    "emailProvider": "development",
+    "smsAndMarketing": "mock"
+  },
+  "counts": {
+    "unitTests": 176,
+    "unitFailures": 0,
+    "build": "PASS",
+    "actualServiceRegressionGroups": 7,
+    "focusedBrowserRegressionGroups": 6,
+    "combinedDisposableDbAndBrowserGroups": 48,
+    "roleApiCases": 80,
+    "additionalRestrictedWriteDenials": 5,
+    "roleUiVisits": 80,
+    "roleUiModuleViews": 60,
+    "restrictedUiRedirects": 20,
+    "responsiveScreenWidthCombinations": 60,
+    "emailTypeWidthCombinations": 20,
+    "calendarBoundaryViewQueries": 12,
+    "frontendJsAssetsScanned": 36,
+    "paymentSecretLiteralMatches": 0
+  },
+  "countNote": "Categories overlap. Do not sum into a unique test total. Tests use disposable data; provider results are mocks.",
+  "combinedPassedGroups": [
+    "Complete migration chain applies to an empty database",
+    "Unauthenticated and restricted users denied protected API actions",
+    "Super Admin create/edit and canonical privileges; ROOT/OWNER escalation denied",
+    "Deactivate/reactivate, invitation invalidation and concurrent single-use password setup",
+    "Login, refresh, logout invalidation, incorrect credentials and expired setup-token rejection",
+    "Lead/client create/view/update, event creation/calendar and all dashboard date ranges",
+    "Dashboard proposal funnel count matches its filtered list for repeated proposals on one lead",
+    "Standard/bespoke proposal PDF/public link/version/email/acceptance and uploaded-document retrieval",
+    "Draft invoice edits recalculate totals; sent documents and restricted actors cannot edit",
+    "Invoice creation/detail/PDF/not-found and experience picker execute against migrated schema",
+    "Hero/gallery/event/testimonial/FAQ/image mapping lifecycle with asset replacement and public retrieval",
+    "Experience/package publish, edit, replacement where applicable, ordering, unpublish and republish",
+    "Website editors cannot bypass publish privileges through direct record creation",
+    "CMS page-item edit/order/publish/unpublish/republish and protected diagnostics",
+    "Form honeypot, persistence, two durable HTML email records and worker delivery",
+    "Public content reads do not consume the form-submission quota",
+    "Staff/equipment real CRUD, audit history, assignment, unavailable/maintenance denial and restricted-role denial",
+    "Equipment checkout/on-site/return, staff acknowledgment, seven operational statuses and run-sheet PDF against real schema",
+    "Human-readable roster/user pickers, Dashboard/Analytics metric parity, audit filters and development integration status",
+    "Concurrent lead conversion produces one client/event/booking and safely reuses the result",
+    "Tax/discount invoice totals agree across list/detail/public payload and actual PDF text",
+    "Private media denied to anonymous public requests and unauthorized Admin users",
+    "Explicit QA classification excludes reporting activity without deleting original records",
+    "Continuous inquiry \u2192 assigned lead \u2192 client/event \u2192 numbered proposal \u2192 development send \u2192 public acceptance \u2192 related draft invoice and communication/audit records",
+    "Secure invoice lookup has generic results, throttled email delivery, public field allowlist and expiry denial",
+    "Mock Stripe checkout amount, signed webhook, unpaid/decline safety, failed-event retry, concurrent duplicate delivery, one payment/receipt/email and reconciled balance",
+    "Revoking invoice access denies the bearer URL; receipt download is invoice-scoped",
+    "Generated invoice PDF is rasterized and its QR decodes to the invoice-specific LOLA payment page",
+    "Attribution first/latest touch, URL minimization, no extra PII, durable mock marketing dispatch, deduplication and retry",
+    "Email-first event reminder persists once; SMS escalation only queues when separately enabled and consented",
+    "SMS disabled by default, explicit escalation plus recorded consent, deduplicated queue, consent withdrawal rechecked at send and mock dispatch",
+    "Mock integration worker recovers a stale claim without duplicate dispatch",
+    "Mock SMS provider failure retries safely and records one successful dispatch",
+    "Interrupted form acknowledgment is recovered from a persisted lead marker; replay leaves one owner email and one customer email",
+    "Provider failure and failed retry stay visible; successful development retry clears failure and repeated send produces one delivery",
+    "System Health separates optional integrations from core checks and does not equate payment credentials with verified provider health",
+    "Four disposable roles: 80 actual API module access cases plus five restricted write denials",
+    "Actual simultaneous equipment assignment conflict, repeated assignment reuse and damaged-return replay creates one maintenance task",
+    "Staff concurrency conflict, assigned operational-user acknowledgment/decline, removal and reassignment",
+    "Task validation recovery/complete/reopen/overdue search, incident resolve, reschedule preview/commit and 12 Calendar boundary queries",
+    "Permissioned data review preserves records and audit reasons; chart drilldown records reconcile to each revenue bucket",
+    "Real local API/browser route and responsive checks: 15 major screens at 1440, 820, 390; screenshots recorded",
+    "Four-role browser/API access matrix: 80 module visits with allowed/denied responses and denial UX",
+    "15 extra responsive checks including public payment lookup/token page, Clients, Proposal Editor and Integrations",
+    "20 HTML email rendering checks across ten message types: local assets load, no clipping or unresolved tokens; browser preview only",
+    "Actual browser communication draft/schedule/cancel and Settings save/reload",
+    "Actual browser test-checkout selection reaches a mocked Stripe session using server-priced amount; hosted destination blocked",
+    "Actual browser invoice lookup, keyboard dialog focus/escape restoration, uploaded proposal/development send/public acceptance and accepted-version edit denial"
+  ],
+  "roleApi": [
+    {
+      "role": "OWNER",
+      "area": "Dashboard",
+      "allowed": true,
+      "status": 200,
+      "route": "/"
+    },
+    {
+      "role": "OWNER",
+      "area": "Leads",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/leads"
+    },
+    {
+      "role": "OWNER",
+      "area": "Clients",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/clients"
+    },
+    {
+      "role": "OWNER",
+      "area": "Events",
+      "allowed": true,
+      "status": 200,
+      "route": "/events/events"
+    },
+    {
+      "role": "OWNER",
+      "area": "Calendar",
+      "allowed": true,
+      "status": 200,
+      "route": "/events/calendar"
+    },
+    {
+      "role": "OWNER",
+      "area": "Tasks",
+      "allowed": true,
+      "status": 200,
+      "route": "/operations/tasks"
+    },
+    {
+      "role": "OWNER",
+      "area": "Proposals",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/proposals"
+    },
+    {
+      "role": "OWNER",
+      "area": "Invoices",
+      "allowed": true,
+      "status": 200,
+      "route": "/finance/invoices"
+    },
+    {
+      "role": "OWNER",
+      "area": "Communications",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "OWNER",
+      "area": "Templates",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "OWNER",
+      "area": "Automations",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "OWNER",
+      "area": "Staff",
+      "allowed": true,
+      "status": 200,
+      "route": "/events/staff"
+    },
+    {
+      "role": "OWNER",
+      "area": "Equipment",
+      "allowed": true,
+      "status": 200,
+      "route": "/events/equipment"
+    },
+    {
+      "role": "OWNER",
+      "area": "CMS",
+      "allowed": true,
+      "status": 200,
+      "route": "/website/page-items"
+    },
+    {
+      "role": "OWNER",
+      "area": "Analytics",
+      "allowed": true,
+      "status": 200,
+      "route": "/insights/analytics"
+    },
+    {
+      "role": "OWNER",
+      "area": "Users",
+      "allowed": true,
+      "status": 200,
+      "route": "/system/users"
+    },
+    {
+      "role": "OWNER",
+      "area": "Integrations",
+      "allowed": true,
+      "status": 200,
+      "route": "/system/integrations"
+    },
+    {
+      "role": "OWNER",
+      "area": "Health",
+      "allowed": true,
+      "status": 200,
+      "route": "/system/health"
+    },
+    {
+      "role": "OWNER",
+      "area": "Audit",
+      "allowed": true,
+      "status": 200,
+      "route": "/system/audit-log"
+    },
+    {
+      "role": "OWNER",
+      "area": "Settings",
+      "allowed": true,
+      "status": 200,
+      "route": "/system/settings"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Dashboard",
+      "allowed": false,
+      "status": 403,
+      "route": "/"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Leads",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/leads"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Clients",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/clients"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Events",
+      "allowed": false,
+      "status": 403,
+      "route": "/events/events"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Calendar",
+      "allowed": false,
+      "status": 403,
+      "route": "/events/calendar"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Tasks",
+      "allowed": false,
+      "status": 403,
+      "route": "/operations/tasks"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Proposals",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/proposals"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Invoices",
+      "allowed": true,
+      "status": 200,
+      "route": "/finance/invoices"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Communications",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Templates",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Automations",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Staff",
+      "allowed": false,
+      "status": 403,
+      "route": "/events/staff"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Equipment",
+      "allowed": false,
+      "status": 403,
+      "route": "/events/equipment"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "CMS",
+      "allowed": true,
+      "status": 200,
+      "route": "/website/page-items"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Analytics",
+      "allowed": false,
+      "status": 403,
+      "route": "/insights/analytics"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Users",
+      "allowed": true,
+      "status": 200,
+      "route": "/system/users"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Integrations",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/integrations"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Health",
+      "allowed": true,
+      "status": 200,
+      "route": "/system/health"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Audit",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/audit-log"
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Settings",
+      "allowed": true,
+      "status": 200,
+      "route": "/system/settings"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Dashboard",
+      "allowed": true,
+      "status": 200,
+      "route": "/"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Leads",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/leads"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Clients",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/clients"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Events",
+      "allowed": true,
+      "status": 200,
+      "route": "/events/events"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Calendar",
+      "allowed": true,
+      "status": 200,
+      "route": "/events/calendar"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Tasks",
+      "allowed": true,
+      "status": 200,
+      "route": "/operations/tasks"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Proposals",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/proposals"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Invoices",
+      "allowed": true,
+      "status": 200,
+      "route": "/finance/invoices"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Communications",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Templates",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Automations",
+      "allowed": true,
+      "status": 200,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Staff",
+      "allowed": true,
+      "status": 200,
+      "route": "/events/staff"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Equipment",
+      "allowed": true,
+      "status": 200,
+      "route": "/events/equipment"
+    },
+    {
+      "role": "ADMIN",
+      "area": "CMS",
+      "allowed": true,
+      "status": 200,
+      "route": "/website/page-items"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Analytics",
+      "allowed": true,
+      "status": 200,
+      "route": "/insights/analytics"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Users",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/users"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Integrations",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/integrations"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Health",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/health"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Audit",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/audit-log"
+    },
+    {
+      "role": "ADMIN",
+      "area": "Settings",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/settings"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Dashboard",
+      "allowed": false,
+      "status": 403,
+      "route": "/"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Leads",
+      "allowed": false,
+      "status": 403,
+      "route": "/sales/leads"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Clients",
+      "allowed": false,
+      "status": 403,
+      "route": "/sales/clients"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Events",
+      "allowed": false,
+      "status": 403,
+      "route": "/events/events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Calendar",
+      "allowed": false,
+      "status": 403,
+      "route": "/events/calendar"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Tasks",
+      "allowed": true,
+      "status": 200,
+      "route": "/operations/tasks"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Proposals",
+      "allowed": false,
+      "status": 403,
+      "route": "/sales/proposals"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Invoices",
+      "allowed": false,
+      "status": 403,
+      "route": "/finance/invoices"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Communications",
+      "allowed": false,
+      "status": 403,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Templates",
+      "allowed": false,
+      "status": 403,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Automations",
+      "allowed": false,
+      "status": 403,
+      "route": "/sales/communications"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Staff",
+      "allowed": false,
+      "status": 403,
+      "route": "/events/staff"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Equipment",
+      "allowed": false,
+      "status": 403,
+      "route": "/events/equipment"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "CMS",
+      "allowed": false,
+      "status": 403,
+      "route": "/website/page-items"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Analytics",
+      "allowed": false,
+      "status": 403,
+      "route": "/insights/analytics"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Users",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/users"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Integrations",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/integrations"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Health",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/health"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Audit",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/audit-log"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Settings",
+      "allowed": false,
+      "status": 403,
+      "route": "/system/settings"
+    }
+  ],
+  "roleUi": [
+    {
+      "role": "OWNER",
+      "area": "Dashboard",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Leads",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Clients",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Events",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Calendar",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Tasks",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Proposals",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Invoices",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Communications",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Templates",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Automations",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Staff",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Equipment",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "CMS",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Analytics",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Users",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Integrations",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Health",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Audit",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "OWNER",
+      "area": "Settings",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Dashboard",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Leads",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Clients",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Events",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Calendar",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Tasks",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Proposals",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Invoices",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Communications",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Templates",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Automations",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Staff",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Equipment",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "CMS",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Analytics",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Users",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Integrations",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Health",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Audit",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "SUPER_ADMIN",
+      "area": "Settings",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Dashboard",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Leads",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Clients",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Events",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Calendar",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Tasks",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Proposals",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Invoices",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Communications",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Templates",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Automations",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Staff",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Equipment",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "CMS",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Analytics",
+      "allowed": true,
+      "apiStatus": 200
+    },
+    {
+      "role": "ADMIN",
+      "area": "Users",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "ADMIN",
+      "area": "Integrations",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "ADMIN",
+      "area": "Health",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "ADMIN",
+      "area": "Audit",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "ADMIN",
+      "area": "Settings",
+      "allowed": false,
+      "apiStatus": 403
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Dashboard",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Leads",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Clients",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Events",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Calendar",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Tasks",
+      "apiAllowed": true,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Proposals",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Invoices",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Communications",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Templates",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Automations",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Staff",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Equipment",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "CMS",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Analytics",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Users",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Integrations",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Health",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Audit",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    },
+    {
+      "role": "ATTENDANT",
+      "area": "Settings",
+      "apiAllowed": false,
+      "uiBehavior": "Redirected to assigned events"
+    }
+  ],
+  "responsive": [
+    {
+      "name": "dashboard",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "users",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "communications",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "leads",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "invoice",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "event",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "live",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "equipment",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "staff",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "cms",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "settings",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "audit",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "calendar",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "analytics",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "dashboard",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "users",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "communications",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "leads",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "invoice",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "event",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "live",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "equipment",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "staff",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "cms",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "settings",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "audit",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "calendar",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "analytics",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "dashboard",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "users",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "communications",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "leads",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "invoice",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "event",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "live",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "equipment",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "staff",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "cms",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "settings",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "audit",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "calendar",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "analytics",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "payment-lookup",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "payment-invoice",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "clients",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal-editor",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "integrations",
+      "width": 1440,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "payment-lookup",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "payment-invoice",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "clients",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal-editor",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "integrations",
+      "width": 820,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "payment-lookup",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "payment-invoice",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "clients",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "proposal-editor",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "name": "integrations",
+      "width": 390,
+      "overflow": false,
+      "errors": []
+    }
+  ],
+  "email": [
+    {
+      "kind": "contact",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "public_inquiry_customer_confirmation"
+    },
+    {
+      "kind": "contact",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "public_inquiry_customer_confirmation"
+    },
+    {
+      "kind": "booking-inquiry",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "email_new_inquiry_ack"
+    },
+    {
+      "kind": "booking-inquiry",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "email_new_inquiry_ack"
+    },
+    {
+      "kind": "proposal",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "proposal_sent"
+    },
+    {
+      "kind": "proposal",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "proposal_sent"
+    },
+    {
+      "kind": "invoice",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "deposit_invoice_sent"
+    },
+    {
+      "kind": "invoice",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "deposit_invoice_sent"
+    },
+    {
+      "kind": "invoice-reminder",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "balance_due_reminder"
+    },
+    {
+      "kind": "invoice-reminder",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "balance_due_reminder"
+    },
+    {
+      "kind": "payment",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "payment_receipt"
+    },
+    {
+      "kind": "payment",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "payment_receipt"
+    },
+    {
+      "kind": "event-reminder",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "event_week_reminder"
+    },
+    {
+      "kind": "event-reminder",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "event_week_reminder"
+    },
+    {
+      "kind": "gallery",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "gallery_delivery"
+    },
+    {
+      "kind": "gallery",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "gallery_delivery"
+    },
+    {
+      "kind": "review",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "review_request"
+    },
+    {
+      "kind": "review",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "review_request"
+    },
+    {
+      "kind": "manual",
+      "width": 1440,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "manual branded fallback"
+    },
+    {
+      "kind": "manual",
+      "width": 390,
+      "brokenImages": 0,
+      "overflow": false,
+      "unresolvedTokens": false,
+      "template": "manual branded fallback"
+    }
+  ],
+  "remaining": [
+    "Complete full continuous browser sales journey and all Communications/Settings/CMS/operations lifecycle variants",
+    "Implement and qualify external marketing dispatch adapters; current queue dispatch is synthetic",
+    "Finish overdue SMS automation and operational-alert UI",
+    "Complete accessibility review and mobile visual polish",
+    "Controlled provider inbox and hosted Stripe verification are not certified; hosted Stripe explicitly deferred"
+  ]
+}

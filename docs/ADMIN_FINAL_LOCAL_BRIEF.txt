@@ -1,0 +1,1392 @@
+LOLA ADMIN — FINAL LOCAL PRODUCT COMPLETION + PAYMENTS + COMMUNICATIONS + INTEGRATIONS
+
+IMPORTANT PRODUCT DECISION
+
+LOLA Admin is still in DEVELOPMENT.
+
+DO NOT:
+- create staging
+- deploy to production
+- edit production business records
+- enable live Stripe keys
+- execute real payments
+- send uncontrolled external SMS
+- send uncontrolled external marketing events
+- publish unfinished CMS changes to the public website
+
+GOAL
+
+Finish and locally certify the complete LOLA platform, including:
+
+1. Core Admin workflows
+2. Dashboard/analytics
+3. Users/roles/privileges
+4. Proposals
+5. Invoices
+6. Communications/email
+7. Payments
+8. SMS
+9. Marketing/analytics integrations
+10. Staff/equipment/event operations
+11. CMS Admin usability
+12. Error/retry/responsive behavior
+13. Full E2E business journeys
+
+Only after this pass is complete should we decide whether to create staging.
+
+==================================================
+CURRENT BASELINE
+==================================================
+
+The latest stabilization pass produced:
+
+- 169 tests passing
+- npm run build passing
+- 7 actual-service regression groups passing
+- 25 disposable DB integration groups passing
+- 45 responsive screen/width combinations passing
+- no tested page-level overflow
+- Communications SQL fixed
+- date-only bug fixed
+- shared formatting fixed
+- invoice balance inconsistency fixed
+- Calendar raw IDs fixed
+- improved Dashboard
+- improved navigation
+- Equipment/Staff management added
+- Files/Galleries hidden until ready
+
+Current verdict:
+
+ADMIN NEEDS ANOTHER DEVELOPMENT PASS
+
+This sprint must close the remaining lifecycle gaps AND complete the integration architecture.
+
+==================================================
+PART 1 — ROLE-BY-ROLE PRODUCT UAT
+==================================================
+
+Create disposable test users for:
+
+OWNER
+SUPER_ADMIN
+ADMIN
+OPERATIONS / restricted role
+
+Exercise actual UI + API.
+
+Test:
+
+Dashboard
+Leads
+Clients
+Events
+Calendar
+Tasks
+Proposals
+Invoices
+Communications
+Templates
+Automations
+Staff
+Equipment
+CMS
+Analytics
+Users
+Integrations
+Health
+Audit Log
+Settings
+
+Verify both:
+
+allowed
+denied
+
+Server-side permission enforcement is mandatory.
+
+==================================================
+PART 2 — USERS / ROLES / PRIVILEGES
+==================================================
+
+Complete:
+
+Create User
+Invitation
+Setup password
+Edit
+Role change
+Privilege change
+Deactivate
+Reactivate
+Reset password
+Resend invitation
+Session invalidation
+Expired token
+Used token
+Privilege escalation denial
+
+Never use reusable default passwords.
+
+Group privileges visually:
+
+CRM
+Events
+Documents
+Finance
+Communications
+Website
+Operations
+Reporting
+Administration
+
+==================================================
+PART 3 — DASHBOARD FINAL DESIGN
+==================================================
+
+Keep the improved Dashboard but finish it.
+
+Required:
+
+Executive KPIs
+
+- Leads
+- Bookings
+- Booked Revenue
+- Collected Revenue
+- Outstanding
+- Upcoming Events
+
+Interactive charts:
+
+1. Revenue trend
+2. Lead funnel
+3. Lead source
+4. Event readiness
+
+Use semantic status colors:
+
+GREEN
+healthy / ready / complete
+
+YELLOW
+attention / pending / due soon
+
+RED
+blocked / overdue / conflict / failure
+
+GRAY
+draft / inactive / disabled
+
+Never use color alone.
+
+Use icon + label + color.
+
+Charts must be clickable where useful.
+
+Examples:
+
+Lead funnel stage
+→ filtered Leads
+
+Revenue segment
+→ matching finance records
+
+Readiness status
+→ matching Events
+
+==================================================
+PART 4 — PROPOSALS
+==================================================
+
+Complete:
+
+standard proposal
+bespoke corporate proposal
+uploaded proposal
+custom sections
+custom services
+versioning
+preview
+PDF
+public link
+acceptance
+development-email send
+audit
+
+Complete uploaded proposal browser journey.
+
+Do not modify immutable accepted versions.
+
+==================================================
+PART 5 — INVOICES
+==================================================
+
+Maintain one authoritative calculation for:
+
+subtotal
+discount
+tax
+total
+amount paid
+balance due
+
+Verify identical values across:
+
+invoice list
+invoice detail
+preview
+PDF
+public invoice API
+
+Do not invent historical financial line items.
+
+Classify legacy/QA/seed data safely.
+
+==================================================
+PART 6 — CUSTOMER PAYMENT PAGE
+==================================================
+
+Implement the LOLA public payment architecture.
+
+NO CART.
+
+Main payment entry point concept:
+
+https://thelolabooth.com/pay
+
+Customer can enter:
+
+Invoice Number
+
+Then securely verify/access the corresponding invoice.
+
+IMPORTANT:
+
+Invoice number alone must NOT expose private financial information.
+
+Use secure secondary verification or tokenized lookup architecture.
+
+==================================================
+PART 7 — UNIQUE INVOICE QR PAYMENT URL
+==================================================
+
+Every invoice gets its own unique stable QR payment URL.
+
+Example concept:
+
+https://thelolabooth.com/pay/{secure-invoice-token}
+
+NOT:
+
+/pay/INV-0001
+
+by itself.
+
+The QR should:
+
+scan
+→ identify invoice securely
+→ display invoice/payment summary
+→ allow customer to choose payment method
+
+No invoice-number re-entry after QR scan.
+
+The QR is tied to that invoice.
+
+==================================================
+PART 8 — INVOICE PAYMENT UX
+==================================================
+
+Payment page should show:
+
+Invoice Number
+Customer
+Event
+Invoice Total
+Amount Paid
+Balance Due
+Due Date
+Payment Status
+
+Then:
+
+CHOOSE PAYMENT METHOD
+
+Examples:
+
+Credit / Debit Card
+PayPal
+Manual / ACH if intentionally supported later
+
+Only show enabled/healthy providers.
+
+==================================================
+PART 9 — STRIPE
+==================================================
+
+Integrate Stripe in TEST MODE ONLY.
+
+Use provider-neutral payment architecture.
+
+Preferred:
+
+LOLA payment page
+→ Stripe-hosted Checkout
+→ webhook
+→ LOLA payment record
+→ invoice reconciliation
+
+Do not embed card entry directly unless existing architecture requires it.
+
+Do not expose:
+
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+
+to frontend.
+
+==================================================
+PART 10 — STRIPE TEST FLOW
+==================================================
+
+Verify locally/test environment:
+
+invoice
+→ payment page
+→ Stripe test Checkout
+→ success
+→ webhook
+→ one payment
+→ invoice balance update
+→ receipt
+→ communication record
+
+Then replay webhook.
+
+Verify:
+
+no duplicate payment
+no duplicate receipt
+no duplicate email
+no duplicate balance reconciliation
+
+==================================================
+PART 11 — STRIPE FAILURE
+==================================================
+
+Run test decline.
+
+Verify:
+
+invoice not marked paid
+balance remains correct
+failure recorded
+safe customer UX
+Admin shows failure
+
+==================================================
+PART 12 — PAYMENT PROVIDERS
+==================================================
+
+Preserve provider-neutral architecture.
+
+Providers may include:
+
+Stripe
+PayPal
+Manual
+
+Do not require all providers to be configured.
+
+Integration status:
+
+READY
+TEST_READY
+DISABLED
+NOT_CONFIGURED
+ERROR
+
+==================================================
+PART 13 — PAYMENT PAGE SECURITY
+==================================================
+
+Verify:
+
+no PAN/CVV stored by LOLA
+amount determined server-side
+currency determined server-side
+invoice token secure
+invoice-number enumeration protected
+expired/revoked tokens handled
+webhook signatures validated
+duplicate events idempotent
+financial actions audited
+
+==================================================
+PART 14 — EMAIL — PRIMARY CUSTOMER CHANNEL
+==================================================
+
+Email is LOLA's PRIMARY communication channel.
+
+Microsoft Graph remains primary production provider.
+
+Development/test environments may use development provider or controlled QA mailbox.
+
+Customer-facing HTML emails include:
+
+Contact acknowledgment
+Booking inquiry acknowledgment
+Proposal delivery
+Invoice delivery
+Invoice reminder
+Payment confirmation
+Event reminder
+Gallery delivery
+Review request
+Generic manual email
+
+==================================================
+PART 15 — HTML EMAIL QUALITY
+==================================================
+
+Complete:
+
+desktop rendering
+390px mobile rendering
+no clipping
+no unresolved merge tokens
+working CTAs
+plain-text fallback
+correct branding
+communication history
+
+Email remains preferred over SMS whenever possible.
+
+==================================================
+PART 16 — FORM AUTO RESPONSES
+==================================================
+
+For public forms:
+
+Contact
+Availability / Booking Inquiry
+and any other live public form
+
+verify:
+
+submission persists
+Admin sees record
+owner notification created
+customer receives appropriate HTML acknowledgment
+
+Do not say "booking confirmed" unless actually booked.
+
+==================================================
+PART 17 — DUPLICATE ACKNOWLEDGMENT PREVENTION
+==================================================
+
+Audit:
+
+direct public-form acknowledgment
+automation acknowledgment
+
+The audit previously found potential duplicate acknowledgment paths.
+
+Define ONE owner per trigger.
+
+Example:
+
+CONTACT_SUBMITTED
+→ contact acknowledgment once
+
+BOOKING_INQUIRY_SUBMITTED
+→ inquiry acknowledgment once
+
+Prevent duplicate emails.
+
+==================================================
+PART 18 — EMAIL FAILURE / RETRY
+==================================================
+
+Email failure must not delete/loss customer form submission.
+
+Persist first.
+
+Then:
+
+send
+retry
+fail visibly
+
+Track:
+
+queued
+processing
+sent_to_provider
+failed
+retrying
+
+==================================================
+PART 19 — SMS STRATEGY
+==================================================
+
+SMS is NOT a default communication channel.
+
+Use SMS only when timing/urgency justifies the API cost.
+
+Email first.
+
+SMS examples:
+
+event tomorrow reminder
+urgent schedule change
+overdue balance escalation
+critical event-day operations
+important staff alert
+
+Do NOT send SMS for every:
+
+inquiry
+proposal
+invoice
+receipt
+task
+automation
+
+==================================================
+PART 20 — SMS PREFERENCES
+==================================================
+
+Add clear SMS automation controls.
+
+Example:
+
+Email reminder: ON
+
+SMS escalation:
+[ ] 24 hours before event
+[ ] overdue balance after X days
+[ ] urgent operational alert
+
+SMS should remain disabled unless:
+
+provider configured
+consent valid
+specific automation enabled
+
+==================================================
+PART 21 — SMS CONSENT
+==================================================
+
+Persist customer SMS consent.
+
+Track:
+
+consented?
+timestamp
+source
+withdrawn timestamp
+
+Do not send marketing/optional SMS without appropriate consent.
+
+==================================================
+PART 22 — TWILIO
+==================================================
+
+Support Twilio architecture but do NOT require it for platform readiness.
+
+Statuses:
+
+DISABLED
+PENDING_VERIFICATION
+READY
+ERROR
+
+Twilio pending should not make the entire platform unhealthy.
+
+Test with mock/development provider unless authorized otherwise.
+
+==================================================
+PART 23 — MARKETING & ANALYTICS INTEGRATIONS
+==================================================
+
+Build a proper integration layer for:
+
+Google Analytics / GA4
+Meta / Instagram
+TikTok
+LinkedIn if current architecture supports it
+
+These should connect marketing acquisition to CRM outcomes.
+
+==================================================
+PART 24 — ATTRIBUTION CAPTURE
+==================================================
+
+Persist where available:
+
+utm_source
+utm_medium
+utm_campaign
+utm_content
+utm_term
+
+landing_page
+referrer
+
+gclid
+gbraid
+wbraid
+fbclid
+ttclid
+
+GA client/session identifiers where available
+
+lead source
+lead source detail
+
+Do not overwrite first-touch attribution accidentally.
+
+Where useful maintain:
+
+first touch
+latest touch
+
+==================================================
+PART 25 — GOOGLE ANALYTICS
+==================================================
+
+Support:
+
+website analytics
+CRM conversion events
+server-side/offline lifecycle events
+
+Examples:
+
+generate_lead
+proposal_sent
+proposal_accepted
+booking_confirmed
+invoice_issued
+payment_completed
+event_completed
+
+Use safe server-side architecture.
+
+Analytics secrets stay backend-only.
+
+Do not send unnecessary PII.
+
+==================================================
+PART 26 — META / INSTAGRAM
+==================================================
+
+Treat Instagram marketing attribution through Meta integration.
+
+Public social presence may still use Instagram only.
+
+Integration should support:
+
+website/browser events where configured
+server-side conversion events
+CRM lifecycle events
+deduplication
+safe customer matching where permitted
+
+Do not require Facebook to appear as a public social link.
+
+==================================================
+PART 27 — TIKTOK
+==================================================
+
+Support:
+
+TikTok website attribution
+TikTok Events API architecture
+CRM/offline lifecycle events
+ttclid persistence
+deduplication
+
+Do not send real marketing events during local-only development unless using safe test mode.
+
+==================================================
+PART 28 — LINKEDIN
+==================================================
+
+If LinkedIn integration already exists:
+
+preserve it.
+
+Clearly report status:
+
+PENDING_APPROVAL
+READY
+NOT_CONFIGURED
+
+Do not make it a launch blocker unless explicitly required.
+
+==================================================
+PART 29 — INTEGRATIONS PAGE REDESIGN
+==================================================
+
+Rebuild integration cards around actual runtime status.
+
+Groups:
+
+COMMUNICATIONS
+- Microsoft 365
+- Twilio
+
+PAYMENTS
+- Stripe
+- PayPal
+- Manual
+
+MARKETING & ANALYTICS
+- Google Analytics
+- Meta / Instagram
+- TikTok
+- LinkedIn
+
+WEBSITE
+- CMS/Public API
+
+Each card shows:
+
+provider
+status
+mode
+last successful activity
+last failure
+configuration completeness
+Test button where safe
+Configure action
+
+==================================================
+PART 30 — INTEGRATION STATUS COLORS
+==================================================
+
+Use:
+
+GREEN
+CONNECTED / READY
+
+YELLOW
+PENDING / PARTIAL / TEST MODE
+
+RED
+ERROR / MISCONFIGURED
+
+GRAY
+DISABLED / NOT CONFIGURED
+
+Always include text labels.
+
+==================================================
+PART 31 — INTEGRATION HEALTH VS CONFIG
+==================================================
+
+Do not confuse:
+
+CONFIGURED
+CONNECTED
+HEALTHY
+
+Examples:
+
+Microsoft credentials exist
+≠ message delivered
+
+Stripe keys exist
+≠ webhook works
+
+GA API secret exists
+≠ CRM event accepted
+
+Provide evidence-based states.
+
+==================================================
+PART 32 — TEST CONNECTION ACTIONS
+==================================================
+
+Where safe, provide:
+
+Test Email
+Test SMS
+Test Analytics Event
+Test Meta Event
+Test TikTok Event
+Test Stripe Configuration
+
+Development/test only.
+
+Never expose secrets.
+
+==================================================
+PART 33 — WORKER
+==================================================
+
+Verify worker processing for:
+
+scheduled email
+email retry
+optional SMS job
+marketing event job where architecture uses queue
+stale job recovery
+
+Test restart/replay.
+
+No duplicates.
+
+==================================================
+PART 34 — COMMUNICATIONS
+==================================================
+
+Complete browser lifecycle:
+
+History
+Compose
+Draft
+Preview
+Development Send
+Schedule
+Cancel
+Retry
+Search
+Sort
+Pagination
+
+Relationships:
+
+Lead
+Client
+Event
+Proposal
+Invoice
+
+==================================================
+PART 35 — STAFF
+==================================================
+
+Complete:
+
+Create
+Edit
+Availability
+Unavailable
+Assign
+Acknowledge
+Decline
+Reassign
+Conflict
+Remove assignment
+History
+
+==================================================
+PART 36 — EQUIPMENT
+==================================================
+
+Complete:
+
+Create
+Edit
+Available
+Reserved
+Assigned
+Checked Out
+On Site
+Returned
+Damaged
+Maintenance
+Out of Service
+Archive
+
+Test conflict/race conditions.
+
+==================================================
+PART 37 — TASKS
+==================================================
+
+Complete:
+
+Create
+Edit
+Assign
+Due date
+Priority
+Related entity
+Complete
+Reopen
+Overdue
+Search
+Filter
+Failed save recovery
+
+==================================================
+PART 38 — EVENTS
+==================================================
+
+Complete:
+
+reschedule
+conflict recalculation
+incident create/update/resolve
+run sheet
+readiness
+staff
+equipment
+tasks
+creative status
+audit
+
+==================================================
+PART 39 — CALENDAR
+==================================================
+
+Test:
+
+DST spring
+DST fall
+month boundary
+year boundary
+late-night events
+multi-day where supported
+
+Month/Week/Day must agree.
+
+==================================================
+PART 40 — AUDIT LOG
+==================================================
+
+Complete:
+
+Actor
+Action
+Entity
+Target
+Date
+Time
+Before/After summary
+Filters
+Pagination
+Links
+
+Keep raw metadata secondary.
+
+==================================================
+PART 41 — SETTINGS
+==================================================
+
+Verify save/reload for:
+
+Business
+Brand
+Documents
+Email
+Operations
+Website
+Payments
+SMS
+Marketing Integrations
+System
+
+Canonical business email:
+
+info@thelolabooth.com
+
+unless explicitly overridden.
+
+==================================================
+PART 42 — SYSTEM HEALTH
+==================================================
+
+Core:
+
+API
+DB
+Worker
+Email
+Storage
+
+Optional/configurable:
+
+Stripe
+PayPal
+Twilio
+GA4
+Meta
+TikTok
+LinkedIn
+
+Optional disabled providers should not make core health fail.
+
+==================================================
+PART 43 — CMS ADMIN
+==================================================
+
+Continue Admin-side usability improvements only.
+
+Do NOT publish CMS migration to frozen public website.
+
+Improve:
+
+page/section labels
+thumbnails
+media picker
+replacement
+sort/reorder
+publication clarity
+package public/catalog distinction
+experience media selection
+FAQ grouping
+media usage
+
+==================================================
+PART 44 — PAYMENT PAGE LOCAL UI
+==================================================
+
+Create/complete payment page UI locally.
+
+Desktop/mobile.
+
+Flow A:
+
+/pay
+→ enter invoice number
+→ secure verification
+→ invoice payment view
+
+Flow B:
+
+/pay/{secure-token}
+→ invoice loaded immediately
+
+No invoice entry required after QR.
+
+==================================================
+PART 45 — QR
+==================================================
+
+Every generated invoice should include:
+
+stable payment URL
+unique QR
+invoice-specific token
+
+QR should NOT point directly to Stripe.
+
+It should point to LOLA payment page.
+
+Verify QR destination from generated PDF.
+
+==================================================
+PART 46 — RECEIPTS
+==================================================
+
+After test payment:
+
+generate receipt.
+
+Verify:
+
+invoice
+amount
+method
+provider reference
+date
+customer
+branding
+
+Public/download access secure.
+
+==================================================
+PART 47 — FULL SALES E2E
+==================================================
+
+Using browser + local API + disposable DB:
+
+Inquiry
+→ acknowledgment email
+→ Lead
+→ assign
+→ Client
+→ Event
+→ Proposal
+→ preview
+→ development send
+→ public proposal
+→ acceptance
+→ Invoice
+→ invoice email
+→ payment page
+→ Stripe test payment
+→ webhook
+→ receipt
+→ payment confirmation
+
+Use TEST mode only.
+
+==================================================
+PART 48 — MARKETING ATTRIBUTION E2E
+==================================================
+
+Synthetic inquiry should include:
+
+UTMs
+referrer
+landing page
+ad click ID where applicable
+
+Verify:
+
+stored on Lead
+visible in Admin
+preserved through booking lifecycle
+available for conversion event dispatch
+
+==================================================
+PART 49 — SMS ESCALATION E2E
+==================================================
+
+Using development/mock provider:
+
+create reminder that is email-only
+
+then a reminder where SMS escalation is explicitly enabled.
+
+Verify:
+
+email sends
+SMS only queues when criteria met
+consent enforced
+no duplicate notification
+
+==================================================
+PART 50 — ERROR / RETRY E2E
+==================================================
+
+Simulate:
+
+network error
+email provider error
+SMS provider error
+analytics provider error
+payment webhook duplicate
+payment failure
+validation failure
+permission denial
+
+Verify safe recovery.
+
+==================================================
+PART 51 — RESPONSIVE
+==================================================
+
+Test:
+
+1440
+820
+390
+
+Include:
+
+Dashboard
+Leads
+Clients
+Proposal Editor
+Invoice
+Payment Page
+Communications
+Users
+Integrations
+Staff
+Equipment
+Calendar
+Settings
+
+No page-level overflow.
+
+==================================================
+PART 52 — ACCESSIBILITY
+==================================================
+
+Check:
+
+keyboard
+focus
+labels
+contrast
+dialogs
+status labels
+chart descriptions
+form validation
+
+==================================================
+PART 53 — TESTS
+==================================================
+
+Run:
+
+npm test
+npm run build
+
+Actual service regressions
+Disposable DB suite
+Responsive browser suite
+Business journey E2E
+Role matrix
+Failure/recovery
+Payment TEST-mode suite
+Integration mock/test suite
+
+Return exact counts.
+
+==================================================
+PART 54 — NO STAGING / NO PRODUCTION
+==================================================
+
+DO NOT create staging.
+
+DO NOT deploy production.
+
+At the end only determine whether the Admin is READY FOR STAGING.
+
+==================================================
+PART 55 — FINAL ACCEPTANCE MATRIX
+==================================================
+
+Return:
+
+AREA | STATUS | VERIFIED JOURNEY | EVIDENCE | REMAINING GAP
+
+Include:
+
+Dashboard
+Leads
+Clients
+Proposals
+Invoices
+Payment Page
+Invoice QR
+Stripe test flow
+Receipts
+Communications
+Email
+Form acknowledgments
+SMS
+Twilio
+GA4
+Meta / Instagram
+TikTok
+LinkedIn
+Events
+Calendar
+Tasks
+Staff
+Equipment
+Users
+Roles
+Analytics
+Integrations
+System Health
+Audit
+Settings
+CMS Admin
+Responsive
+Accessibility
+Sales E2E
+Failure Recovery
+
+Use:
+
+PASS
+PASS WITH MINOR ISSUE
+PARTIAL
+FAIL
+DEFERRED
+
+==================================================
+PART 56 — INTEGRATION READINESS TABLE
+==================================================
+
+Return:
+
+PROVIDER | MODE | CONFIG | TEST | LIVE READY? | NOTES
+
+Include:
+
+Microsoft 365
+Stripe
+PayPal
+Twilio
+Google Analytics
+Meta / Instagram
+TikTok
+LinkedIn
+
+Do not claim LIVE READY based only on code.
+
+==================================================
+PART 57 — SECURITY
+==================================================
+
+Verify:
+
+no secrets frontend
+no secrets logs
+Stripe secret backend-only
+webhook secrets backend-only
+Microsoft secret backend-only
+analytics API secrets backend-only
+role enforcement
+secure invoice tokens
+payment enumeration protection
+consent enforcement
+audit trail
+
+==================================================
+PART 58 — FINAL STAGING GATE
+==================================================
+
+Recommend staging ONLY if:
+
+- no P0 defects
+- core sales UI journey passes
+- role matrix passes
+- proposal/invoice paths pass
+- communications pass
+- payment TEST-mode flow passes
+- QR payment flow passes
+- email acknowledgment passes
+- SMS rules behave correctly
+- integration status model is trustworthy
+- staff/equipment lifecycle passes
+- error/retry paths pass
+- responsive acceptance passes
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Return exactly one:
+
+ADMIN READY TO CREATE STAGING ENVIRONMENT
+
+ADMIN NEEDS ANOTHER DEVELOPMENT PASS
+
+ADMIN CORE WORKFLOWS STILL BLOCKED
+
+Also return:
+
+PRODUCTION DEPLOYMENT: NOT AUTHORIZED
+
+PAYMENTS:
+TEST MODE ONLY
+
+SMS:
+COST-CONTROLLED / OPT-IN ONLY
+
+EMAIL:
+PRIMARY COMMUNICATION CHANNEL
