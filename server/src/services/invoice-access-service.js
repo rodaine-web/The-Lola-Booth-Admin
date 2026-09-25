@@ -1,3 +1,4 @@
+import { documentOrigin } from "../utils/public-document-url.js";
 import {query,transaction} from '../db/pool.js';
 import {env} from '../config/env.js';
 import {brandedEmailHtml} from './automation-service.js';
@@ -14,7 +15,7 @@ export async function requestInvoiceAccess({invoiceNumber,email}) {
       ON CONFLICT(invoice_id) DO UPDATE SET requested_at=now()
       WHERE invoice_access_requests.requested_at < now()-interval '15 minutes' RETURNING invoice_id`,[invoice.id]);
     if(!claimed.rowCount)return;
-    const body=`Use this secure link to view your invoice and payment options:\n${env.publicBaseUrl}/pay/${invoice.secure_token}\nIf you did not request this email, no action is required.`;
+    const body=`Use this secure link to view your invoice and payment options:\n${documentOrigin()}/pay/${invoice.secure_token}\nIf you did not request this email, no action is required.`;
     await query(`INSERT INTO communications(invoice_id,type,channel,direction,recipient,subject,rendered_subject,rendered_body,rendered_html,status,send_mode,scheduled_at,trigger_key)
       VALUES($1,'EMAIL','EMAIL','OUTBOUND',$2,'Your secure invoice link','Your secure invoice link',$3,$4,'SCHEDULED','SCHEDULED',now(),'INVOICE_ACCESS')`,[invoice.id,invoice.email,body,brandedEmailHtml(body)]);
   });

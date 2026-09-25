@@ -1,3 +1,4 @@
+import { documentOrigin } from "../utils/public-document-url.js";
 import { normalizeInvoice } from "../../../shared/invoice-balance.js";
 import crypto from "node:crypto";
 import { env } from "../config/env.js";
@@ -223,5 +224,5 @@ function invoiceMergeData(invoice, invoiceUrl, amountDue) {
 }
 
 export function publicInvoiceUrl(invoice) {
-  return `${env.publicBaseUrl.replace(/\/$/, "")}/pay/${invoice.secure_token}`;
+  return `${documentOrigin()}/pay/${invoice.secure_token}`;
 }

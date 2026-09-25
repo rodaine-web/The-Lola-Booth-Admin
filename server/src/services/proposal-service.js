@@ -1,3 +1,4 @@
+import { documentOrigin } from "../utils/public-document-url.js";
 import crypto from "node:crypto";
 import { env } from "../config/env.js";
 import { query, transaction } from "../db/pool.js";
@@ -313,7 +314,7 @@ export function userDocumentFilename(kind, number, extension = "pdf") {
 }
 
 export function publicProposalUrl(proposal) {
-  return `${env.publicBaseUrl.replace(/\/$/, "")}/proposal/${proposal.secure_token}`;
+  return `${documentOrigin()}/proposal/${proposal.secure_token}`;
 }
 
 function proposalEmailEvent(proposal) {

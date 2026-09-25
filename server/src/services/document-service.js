@@ -1,3 +1,4 @@
+import { documentOrigin } from "../utils/public-document-url.js";
 import { normalizeInvoice } from "../../../shared/invoice-balance.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -480,7 +481,7 @@ function drawQrCode(doc, value, x, y, size) {
 }
 
 function publicUrl(kind, token) {
-  return `${env.publicBaseUrl.replace(/\/$/, "")}/${kind}/${token || ""}`;
+  return `${documentOrigin()}/${kind}/${token || ""}`;
 }
 
 function formatDate(value) {

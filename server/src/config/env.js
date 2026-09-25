@@ -76,6 +76,7 @@ export const env = {
   localStorageRoot: process.env.LOCAL_STORAGE_ROOT || "storage/uploads",
   emailProvider: (process.env.EMAIL_PROVIDER || "development").toLowerCase(),
   smsProvider: process.env.SMS_PROVIDER || "none",
+  publicDocumentBaseUrl: process.env.PUBLIC_DOCUMENT_BASE_URL || "",
   publicBaseUrl: process.env.PUBLIC_BASE_URL || process.env.CLIENT_ORIGIN || "http://localhost:5173",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",

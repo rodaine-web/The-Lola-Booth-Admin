@@ -16,3 +16,9 @@ test('semantic status text meets 4.5:1 contrast against its actual stylesheet ba
  const luminance=hex=>{const rgb=[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);return rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;};
  const colors=[...css.matchAll(/\.semantic-(success|warning|danger|neutral|info)\{color:#([a-f0-9]{6});background:#([a-f0-9]{6})/g)];assert.equal(colors.length,5);for(const [,name,fg,bg] of colors){const a=luminance(fg),b=luminance(bg);assert.ok((Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)>=4.5,name);}
 });
+
+import {documentOrigin} from '../server/src/utils/public-document-url.js';
+test('secure document links use the Admin origin independently of the frozen marketing website',()=>{
+ const saved={clientOrigin:env.clientOrigin,publicBaseUrl:env.publicBaseUrl,publicDocumentBaseUrl:env.publicDocumentBaseUrl};
+ try {env.clientOrigin='https://admin.example.invalid/';env.publicBaseUrl='https://website.example.invalid';env.publicDocumentBaseUrl='';assert.equal(documentOrigin(),'https://admin.example.invalid');env.publicDocumentBaseUrl='https://documents.example.invalid/';assert.equal(documentOrigin(),'https://documents.example.invalid');} finally {Object.assign(env,saved);}
+});

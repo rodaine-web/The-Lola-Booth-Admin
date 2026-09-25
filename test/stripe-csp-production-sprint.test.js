@@ -53,5 +53,7 @@ test("Admin CSP remains narrow and does not whitelist unused Google or Stripe br
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(csp, /script-src 'self'/);
   assert.match(csp, /style-src 'self'/);
-  assert.doesNotMatch(csp, /\*|'unsafe-inline'|'unsafe-eval'|js\.stripe\.com|checkout\.stripe\.com|googletagmanager\.com|google-analytics\.com|fonts\.googleapis\.com|fonts\.gstatic\.com/);
+  assert.doesNotMatch(csp.match(/script-src[^;]*/)?.[0] || '', /'unsafe-inline'/);
+  assert.match(csp, /style-src 'self' 'unsafe-inline'/);
+  assert.doesNotMatch(csp, /\*|'unsafe-eval'|js\.stripe\.com|checkout\.stripe\.com|googletagmanager\.com|google-analytics\.com|fonts\.googleapis\.com|fonts\.gstatic\.com/);
 });

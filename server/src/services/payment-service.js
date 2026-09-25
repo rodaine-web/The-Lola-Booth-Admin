@@ -1,3 +1,4 @@
+import { documentOrigin } from "../utils/public-document-url.js";
 import crypto from "node:crypto";
 import { invoiceBalance } from "../../../shared/invoice-balance.js";
 import { brandedEmailHtml } from "./automation-service.js";
@@ -212,7 +213,7 @@ async function recordProviderPayment(input) {
   await query("INSERT INTO payment_receipts(payment_id,invoice_id) VALUES($1,$2) ON CONFLICT(payment_id) DO NOTHING",[payment.id,input.invoiceId]);
   const customer=(await query("SELECT name,email FROM clients WHERE id=$1",[payment.client_id])).rows[0];
   if(customer?.email){
-    const url=`${env.publicBaseUrl}/pay/${invoice.rows[0].secure_token}`;
+    const url=`${documentOrigin()}/pay/${invoice.rows[0].secure_token}`;
     const subject=`Payment confirmation — ${invoice.rows[0].invoice_number}`;
     const body=`Thank you, ${customer.name}.\nWe received ${Number(payment.amount).toFixed(2)} ${payment.currency} for invoice ${invoice.rows[0].invoice_number}.\nView your invoice and download your receipt: ${url}`;
     await query(`INSERT INTO communications(client_id,event_id,invoice_id,type,channel,direction,recipient,subject,rendered_subject,rendered_body,rendered_html,status,send_mode,scheduled_at,idempotency_key,trigger_key)
@@ -267,8 +268,8 @@ async function createStripeCheckout(invoice, key, currency) {
   const amount = invoiceBalance(invoice);
   const params = new URLSearchParams({
     mode: "payment",
-    success_url: `${env.publicBaseUrl}/pay/${invoice.secure_token}?payment=success`,
-    cancel_url: `${env.publicBaseUrl}/pay/${invoice.secure_token}?payment=cancelled`,
+    success_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success`,
+    cancel_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=cancelled`,
     "line_items[0][price_data][currency]": currency.toLowerCase(),
     "line_items[0][price_data][product_data][name]": `LOLA Booths Invoice ${invoice.invoice_number}`,
     "line_items[0][price_data][unit_amount]": String(cents(amount)),
@@ -300,7 +301,7 @@ async function createPaypalOrder(invoice, key, currency) {
     body: JSON.stringify({
       intent: "CAPTURE",
       purchase_units: [{ custom_id: invoice.id, invoice_id: invoice.id, amount: { currency_code: currency, value: amount.toFixed(2) } }],
-      application_context: { return_url: `${env.publicBaseUrl}/pay/${invoice.secure_token}?payment=success`, cancel_url: `${env.publicBaseUrl}/pay/${invoice.secure_token}?payment=cancelled` }
+      application_context: { return_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success`, cancel_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=cancelled` }
     })
   });
   const data = await response.json();
