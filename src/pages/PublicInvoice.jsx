@@ -1,6 +1,6 @@
 import { formatMoney, formatDateOnly } from "../utils/display.js";
 import { CreditCard, Download } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import DataTable from "../components/DataTable.jsx";
 
@@ -13,6 +13,7 @@ export default function PublicInvoice() {
   const [paymentOptions, setPaymentOptions] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const paymentKeys=useRef({}),paymentLock=useRef(false);
 
   async function load(){
     setError("");
@@ -21,8 +22,8 @@ export default function PublicInvoice() {
   }
   useEffect(()=>{setInvoice(null);load();},[token]);
   async function pay(provider){
-    if(busy)return;setBusy(provider);setError("");
-    try{const res=await fetch(`${API_URL}/public/invoices/${token}/payment-session`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,idempotencyKey:crypto.randomUUID()})});const data=await res.json();if(!res.ok)throw new Error(data.error?.message||'Checkout is unavailable. Please try again.');const url=new URL(data.checkoutUrl);if(url.protocol!=='https:'||!['checkout.stripe.com','www.paypal.com','www.sandbox.paypal.com'].includes(url.hostname))throw new Error('Invalid checkout destination.');window.location.assign(url.href);}catch(err){setError(err.message);}finally{setBusy('');}
+    if(paymentLock.current)return;paymentLock.current=true;setBusy(provider);setError("");
+    try{const res=await fetch(`${API_URL}/public/invoices/${token}/payment-session`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,idempotencyKey:paymentKeys.current[`${token}:${provider}`]??=(crypto.randomUUID())})});const data=await res.json();if(!res.ok)throw new Error(data.error?.message||'Checkout is unavailable. Please try again.');const url=new URL(data.checkoutUrl);if(url.protocol!=='https:'||!['checkout.stripe.com','www.paypal.com','www.sandbox.paypal.com'].includes(url.hostname))throw new Error('Invalid checkout destination.');window.location.assign(url.href);}catch(err){setError(err.message);}finally{setBusy('');paymentLock.current=false;}
   }
 
   if (error&&!invoice) return <main className="public-document"><h1>Invoice unavailable</h1><div role="alert" className="toast error">{error}</div><button className="primary-action" onClick={load}>Try again</button><a href="/pay">Request a new link</a></main>;

@@ -150,6 +150,8 @@ export async function updateMedia(req, id) {
   const fields = Object.keys(req.body).filter((field) => allowed.includes(field));
   if (!fields.length) throw new AppError("No supported fields to update.", 400, "NO_FIELDS");
   const before = await getById("media_library", id);
+  if(req.body.visibility&&!['PUBLIC','PRIVATE'].includes(req.body.visibility)||req.body.permission_state&&!['UNKNOWN','APPROVED','RESTRICTED','DO_NOT_PUBLISH'].includes(req.body.permission_state))throw new AppError('Invalid media permissions.',422,'MEDIA_PERMISSION_INVALID');
+  if(((req.body.visibility&&req.body.visibility!==before.visibility)||(req.body.permission_state&&req.body.permission_state!==before.permission_state))&&(await withUsage(before)).usage_count>0)throw new AppError('Resolve website references before changing media permissions.',409,'MEDIA_IN_USE');
   const values = fields.map((field) => field === "tags" ? normalizeTags(req.body[field]) : req.body[field]);
   values.push(req.user.id, id);
   const updated = await query(
@@ -162,7 +164,7 @@ export async function updateMedia(req, id) {
 
 export async function archiveMedia(id) {
   const media = await withUsage(await getById("media_library", id));
-  if (media.usage_count > 0) throw new AppError("Resolve active website references before archiving this media item.", 409, "MEDIA_IN_USE", { usage: media.usage });
+  if (media.usage_count > 0) throw new AppError("Resolve website references before archiving this media item.", 409, "MEDIA_IN_USE", { usage: media.usage });
   const updated = await query("UPDATE media_library SET visibility='ARCHIVED', archived_at=now(), deleted_at=now(), updated_at=now() WHERE id=$1 RETURNING *", [id]);
   return { before: media, after: updated.rows[0] };
 }
@@ -191,6 +193,7 @@ export async function createCmsRecord(req, type) {
   const config = cmsTables[type];
   if (!config) throw notFound("CMS type");
   const body = normalizeCmsBody(type, req.body, config.allowed);
+  if(type==="content"&&!/^page\.[a-z0-9-]+$/.test(body.content_key||""))throw new AppError("Use a page key such as page.home.",400,"PAGE_KEY_REQUIRED");
   if (type === "eventTypes" && body.name && !body.slug) body.slug = slugify(body.name);
   if (body.status === "PUBLISHED") assertCanPublish(req);
   await assertPublishable(type, body);
@@ -205,6 +208,7 @@ export async function updateCmsRecord(req, type, id) {
   if (!config) throw notFound("CMS type");
   const before = await getById(config.table, id);
   const body = normalizeCmsBody(type, req.body, config.allowed);
+  if(type==="content"&&body.content_key!==undefined&&!/^page\.[a-z0-9-]+$/.test(body.content_key))throw new AppError("Use a page key such as page.home.",400,"PAGE_KEY_REQUIRED");
   if (before.status === "PUBLISHED" || body.status === "PUBLISHED") assertCanPublish(req);
   await assertPublishable(type, { ...before, ...body });
   const fields = Object.keys(body);
@@ -341,6 +345,7 @@ function normalizeCmsBody(type, source, allowed) {
   for (const field of allowed) {
     if (source[field] !== undefined) body[field] = normalizeCmsValue(field, source[field]);
   }
+  if(type==="gallery"&&body.category===null)body.category="ALL";
   if (type === "hero" && body.desktop_image_file_id && !body.image_media_id) body.image_media_id = body.desktop_image_file_id;
 
   return body;

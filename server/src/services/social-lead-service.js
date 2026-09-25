@@ -240,7 +240,7 @@ export async function ingestProviderLead({ provider, payload, sourceSubtype, web
     }
 
     normalized.public_ack_pending=normalizedProvider==="WEBSITE";
-    normalized.first_touch=attributionFrom(payload);
+    normalized.first_touch=attributionFrom(payload,{capture:true});
     normalized.latest_touch=normalized.first_touch;
     normalized.assigned_user_id = await assignLead(client, normalized);
     normalized.duplicate_status = duplicate.type;

@@ -22,6 +22,7 @@ try {
  const superAdmin=(await db.query("INSERT INTO users(name,email,password_hash) VALUES('QA Super Admin','super@example.invalid','disabled') RETURNING id")).rows[0];
  await db.query("INSERT INTO user_roles SELECT $1,id FROM roles WHERE name='SUPER_ADMIN'",[superAdmin.id]);
  await db.query("INSERT INTO business_settings(business_name) SELECT 'LOLA QA' WHERE NOT EXISTS(SELECT 1 FROM business_settings)");
+ for(const key of ['GA4_ENABLED','META_EVENTS_ENABLED','TIKTOK_EVENTS_ENABLED'])process.env[key]='false';
  process.env.DATABASE_URL=`postgresql://localhost:55439/${name}?host=/private/tmp`;process.env.JWT_SECRET=crypto.randomBytes(40).toString('hex');process.env.EMAIL_PROVIDER='development';process.env.SMS_PROVIDER='none';process.env.NODE_ENV='test';process.env.PORT='0';process.env.RATE_LIMIT_MAX='5000';process.env.LOCAL_STORAGE_ROOT='/private/tmp/'+name;
  const {env}=await import('../config/env.js');env.databaseUrl=process.env.DATABASE_URL;env.port=0;env.emailProvider='development';env.jwtSecret=process.env.JWT_SECRET;
  ({server}=await import('../index.js'));({pool}=await import('../db/pool.js'));if(!server.listening)await new Promise(r=>server.once('listening',r));
@@ -234,6 +235,7 @@ try {
   const {verifyRoleAndOperations}=await import("./verify-role-and-operations.js");
   const roleResult=await verifyRoleAndOperations({db,call,owner,token});passed.push(...roleResult.passed);completionRoles=roleResult.roles;
  }
+ if(process.argv.includes('--pre-staging')){const {verifyPreStagingBrowser}=await import('./verify-pre-staging-browser.js');passed.push(...await verifyPreStagingBrowser({base,owner,token,db,call}));}
  if(process.argv.includes('--visual')){
   if(!process.argv.includes('--journeys-only')){
   await db.query("UPDATE events SET event_date=current_date,status='CONFIRMED',operational_status='LIVE' WHERE id=$1",[event.data.id]);

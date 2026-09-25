@@ -1,3 +1,4 @@
+import {useDialogFocus} from "../utils/use-dialog-focus.js";
 import AsyncState from "../components/AsyncState.jsx";
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
@@ -14,6 +15,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
+  useDialogFocus(Boolean(editing),()=>setEditing(null));
 
   useEffect(()=>{setEditing(null);setForm({});setStatusFilter("");},[endpoint]);
   useEffect(() => {
@@ -28,6 +30,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
 
   function openCreate() {
     setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? false : ""])));
+    if (endpoint === "/experiences") setForm(current=>({...current,website_status:"DRAFT",active:true}));
     if (endpoint === "/packages") setForm(current => ({ ...current, pricing_mode: "STARTING", website_status: "DRAFT", currency: "USD", active: true }));
     setEditing({ mode: "create" });
     setError("");
@@ -47,6 +50,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     setError("");
     setNotice("");
     const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value === "" ? null : value]));
+    for(const [name,,type] of fields)if(type==="number"&&payload[name]===null&&name!=="starting_price")delete payload[name];
     for (const [name, , type] of fields) if (type === "lines") payload[name] = String(form[name] || "").split("\n").map(value => value.trim()).filter(Boolean);
     if (endpoint === "/packages" && payload.pricing_mode === "CUSTOM") payload.starting_price = null;
     try {
@@ -88,7 +92,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
       </div>
       <AsyncState loading={loading} error={error} onRetry={()=>setRevision(r=>r+1)} noun={title.toLowerCase()}>{!loading&&!error&&<DataTable rows={rows} columns={columns} getRowHref={rowHref} onEdit={fields.length ? openEdit : null} />}</AsyncState>
       {editing && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title+" editor"}>
           <form className="modal" onSubmit={saveForm}>
             <div className="modal-heading">
               <h2>{editing.mode === "edit" ? "Edit" : "New"} {title.replace(/s$/, "")}</h2>
@@ -98,10 +102,10 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
               {fields.map(([name, label, type = "text", config = {}]) => (
                 <label key={name} className={type === "textarea" ? "wide" : ""}>
                   {label}
-                  {name.endsWith("media_id") ? <MediaSelect value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "lines" ? (
-                    <textarea value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                  {name.endsWith("media_id") ? <MediaSelect label={label} value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "lines" ? (
+                    <textarea aria-label={label} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
                   ) : type === "select" ? (
-                    <select value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
+                    <select aria-label={label} value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
                   ) : type === "checkbox" ? (
                     <input type="checkbox" checked={Boolean(form[name])} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.checked }))} />
                   ) : type === "relationship" ? (

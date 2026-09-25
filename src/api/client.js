@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "/api";
+const API_URL = import.meta.env?.VITE_API_URL || "/api";
 
 let accessToken = localStorage.getItem("lola_access_token");
 let refreshToken = localStorage.getItem("lola_refresh_token");
@@ -137,6 +137,16 @@ async function text(path, retry = true) {
   return response.text();
 }
 
+// Coalesce identical concurrent mutations from rapid UI actions. This protects
+// one browser session; server transactions still enforce business invariants.
+const pendingMutations=new Map();
+function mutate(method,path,body){
+ const encoded=JSON.stringify(body),key=JSON.stringify([accessToken,method,path,encoded]);
+ if(pendingMutations.has(key))return pendingMutations.get(key);
+ const promise=request(path,{method,body:encoded}).finally(()=>pendingMutations.delete(key));
+ pendingMutations.set(key,promise);return promise;
+}
+
 export const api = {
   login: (credentials) => request("/auth/login", { method: "POST", body: JSON.stringify(credentials) }, false),
   setupPassword: (payload) => request("/auth/setup-password", { method: "POST", body: JSON.stringify(payload) }, false),
@@ -144,8 +154,8 @@ export const api = {
   me: () => request("/auth/me"),
   get: (path) => request(path),
   blob: (path) => request(path, {}, true, "blob"),
-  post: (path, body) => request(path, { method: "POST", body: JSON.stringify(body) }),
-  patch: (path, body) => request(path, { method: "PATCH", body: JSON.stringify(body) }),
+  post: (path, body) => mutate("POST",path,body),
+  patch: (path, body) => mutate("PATCH",path,body),
   delete: (path) => request(path, { method: "DELETE" }),
   download,
   downloadPost,

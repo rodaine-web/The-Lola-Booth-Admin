@@ -10,7 +10,7 @@ export default function RelationshipSelect({ resource, value, onChange, placehol
     let live = true;
     api.get(`/pickers/${resource}?q=${encodeURIComponent(search)}`)
       .then((result) => {
-        if (live) setOptions(result.data || []);
+        if (live) {setOptions(result.data || []);setError('');}
       })
       .catch((err) => {
         if (live) setError(err.message);
@@ -22,8 +22,8 @@ export default function RelationshipSelect({ resource, value, onChange, placehol
 
   return (
     <div className="relationship-select">
-      <input value={search} disabled={disabled} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${placeholder.toLowerCase()}...`} />
-      <select value={value || ""} disabled={disabled} onChange={(event) => onChange(event.target.value || null)}>
+      <input aria-label={`Search ${placeholder}`} value={search} disabled={disabled} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${placeholder.toLowerCase()}...`} />
+      <select aria-label={placeholder} value={value || ""} disabled={disabled} onChange={(event) => onChange(event.target.value || null)}>
         <option value="">{placeholder}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>

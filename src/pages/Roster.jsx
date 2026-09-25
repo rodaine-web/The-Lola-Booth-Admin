@@ -1,3 +1,4 @@
+import {useDialogFocus} from '../utils/use-dialog-focus.js';
 import {useEffect,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {api} from '../api/client.js';
@@ -9,6 +10,8 @@ import RelationshipSelect from '../components/RelationshipSelect.jsx';
 export default function Roster({kind}){
  const staff=kind==='staff',title=staff?'Staff':'Equipment';const {can}=useAuth();
  const [rows,setRows]=useState([]),[search,setSearch]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[editing,setEditing]=useState(null),[detail,setDetail]=useState(null),[form,setForm]=useState({});
+
+ useDialogFocus(Boolean(editing),()=>setEditing(null));
  async function load(){setLoading(true);setError('');try{const r=await api.get(`/${kind}?pageSize=100&search=${encodeURIComponent(search)}`);setRows(r.data);}catch(e){setError(e.message);}finally{setLoading(false);}}
  useEffect(()=>{setDetail(null);setEditing(null);load();},[kind,search]);
  async function view(row){try{setDetail(await api.get(`/${kind}/${row.id}`));}catch(e){setError(e.message);}}

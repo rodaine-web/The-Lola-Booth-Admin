@@ -1,3 +1,4 @@
+import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import CustomerPreferences from "../components/CustomerPreferences.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
@@ -66,7 +67,11 @@ export default function LeadDetail() {
     }
   }
 
-  async function updateStatus(status) {
+  async function updateDetails(patch) {
+ if(busy)return;setBusy(true);setError('');try {const updated=await api.patch(`/leads/${id}`,patch);setLead(current=>({...current,...updated}));setNotice('Lead details saved.');}catch(e){setError(e.message);}finally{setBusy(false);}
+ }
+
+ async function updateStatus(status) {
     setBusy(true);
     setError("");
     setNotice("");
@@ -143,7 +148,7 @@ export default function LeadDetail() {
           <p className="lede">{lead.event_type} · {formatDate(lead.event_date)} · {lead.city || "Location TBD"}{lead.state ? `, ${lead.state}` : ""}</p>
         </div>
         <div className="detail-actions">
-          <select value={lead.status} disabled={busy} onChange={(event) => updateStatus(event.target.value)}>
+          <select aria-label="Lead status" value={lead.status} disabled={busy} onChange={(event) => updateStatus(event.target.value)}>
             {statuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
           </select>
           <button className="primary-action" disabled={!canConvert || busy} onClick={openConvertReview}>
@@ -169,6 +174,7 @@ export default function LeadDetail() {
 
       {tab === "Overview" && (
         <section className="detail-grid">
+          <Panel title="Assignment and experience"><RelationshipSelect resource="users" placeholder="Lead owner" value={lead.assigned_user_id} disabled={busy} onChange={value=>updateDetails({assigned_user_id:value})}/><RelationshipSelect resource="packages" placeholder="Preferred package" value={lead.preferred_package_id} disabled={busy} onChange={value=>updateDetails({preferred_package_id:value})}/></Panel>
           <Panel title="Client Details">
             <Field label="Name" value={fullName} />
             <Field label="Email" value={lead.email} />
@@ -201,7 +207,7 @@ export default function LeadDetail() {
           <Panel title="Notes">
             <p className="note-text">{lead.message || "No notes yet."}</p>
             <div className="inline-form note-form">
-              <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add an internal note..." />
+              <input value={note} onChange={(event) => setNote(event.target.value)} aria-label="Internal note" placeholder="Add an internal note..." />
               <button className="primary-action" onClick={addNote} disabled={!note.trim()}>Add Note</button>
             </div>
           </Panel>

@@ -1,3 +1,4 @@
+import {enqueueLifecycle} from './integration-jobs-service.js';
 import { documentOrigin } from "../utils/public-document-url.js";
 import crypto from "node:crypto";
 import { invoiceBalance } from "../../../shared/invoice-balance.js";
@@ -221,6 +222,7 @@ async function recordProviderPayment(input) {
       ON CONFLICT(idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,[payment.client_id,payment.event_id,input.invoiceId,customer.email,subject,body,brandedEmailHtml(body),`payment-confirmation:${payment.id}`]);
   }
   await writeAudit({req:{},action:"payment_succeeded",entity:"payment",entityId:payment.id,after:{invoice_id:input.invoiceId,amount:payment.amount,currency:payment.currency,provider:payment.provider}});
+  await enqueueLifecycle({action:'payment_succeeded',entityType:'payment',entityId:payment.id});
   return payment;
 }
 

@@ -1,3 +1,4 @@
+import {useDialogFocus} from "../utils/use-dialog-focus.js";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -8,6 +9,10 @@ const statuses = ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_SENT", "FOLLOW_UP",
 const sources = ["", "WEBSITE", "META", "FACEBOOK", "INSTAGRAM", "TIKTOK", "LINKEDIN", "Referral", "Phone", "Manual", "Other"];
 
 export default function Leads() {
+  const [creating,setCreating]=useState(false),[saving,setSaving]=useState(false),[draft,setDraft]=useState({}),[revision,setRevision]=useState(0);
+  useDialogFocus(creating,()=>setCreating(false));
+  async function createLead(e){e.preventDefault();if(saving)return;setSaving(true);setError('');try{await api.post('/leads',draft);setCreating(false);setRevision(v=>v+1);}catch(error){setError(error.message);}finally{setSaving(false);}}
+
   const [urlParams, setUrlParams] = useSearchParams();
   const [view, setView] = useState("table");
   const [leads, setLeads] = useState([]);
@@ -25,7 +30,7 @@ export default function Leads() {
     let active = true;
     api.get(`/leads?${params}`).then((result) => { if (active) { setLeads(result.data); setError(""); } }).catch(err => { if (active) setError(err.message); });
     return () => { active = false; };
-  }, [search, source, campaign, urlParams]);
+  }, [search, source, campaign, urlParams,revision]);
 
   const columns = useMemo(() => ["first_name", "last_name", "email", "event_date", "event_type", "lead_source", "source_subtype", "campaign", "status"], []);
 
@@ -36,7 +41,7 @@ export default function Leads() {
           <p className="eyebrow">Sales CRM</p>
           <h1>Leads</h1>
         </div>
-        <div className="segmented">
+        <div className="segmented"><button onClick={()=>{setDraft({});setCreating(true);setError('');}}>New Lead</button>
           <button className={view === "table" ? "active" : ""} onClick={() => setView("table")}>Table</button>
           <button className={view === "kanban" ? "active" : ""} onClick={() => setView("kanban")}>Kanban</button>
         </div>
@@ -49,6 +54,7 @@ export default function Leads() {
         </select>
         <input aria-label="Campaign" value={campaign} onChange={(event) => setCampaign(event.target.value)} placeholder="Campaign..." />
       </div>
+      {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="New lead"><form className="modal" onSubmit={createLead} aria-describedby={error?'lead-form-error':undefined}><h2>New Lead</h2>{error&&<p role="alert" id="lead-form-error">{error}</p>}<div className="form-grid">{[['first_name','First name','text'],['last_name','Last name','text'],['email','Email','email'],['phone','Phone','tel'],['event_date','Event date','date'],['event_type','Event type','text']].map(([key,label,type])=><label key={key}>{label}<input required type={type} value={draft[key]||''} onChange={e=>setDraft({...draft,[key]:e.target.value})}/></label>)}</div><button disabled={saving}>Create Lead</button><button type="button" onClick={()=>setCreating(false)}>Cancel</button></form></div>}
       {view === "table" ? <DataTable rows={leads} columns={columns} empty="No new inquiries." getRowHref={(lead) => `/sales/leads/${lead.id}`} /> : <Kanban leads={leads} />}
     </main>
   );

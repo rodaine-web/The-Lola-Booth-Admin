@@ -37,8 +37,8 @@ export default function InvoiceEditor() {
     <main className="page">
       <div className="detail-back"><Link to="/finance/invoices"><ArrowLeft size={16} />Back to invoices</Link></div>
       <div className="page-heading"><div><p className="eyebrow">Invoice editor</p><h1>{id ? "Edit Invoice" : "New Invoice"}</h1></div></div>
-      {error && <div className="toast error">{error}</div>}
-      <form className="document-editor" onSubmit={save}>
+      {error && <div id="invoice-error" role="alert" className="toast error">{error}</div>}
+      <form aria-describedby={error?"invoice-error":undefined} className="document-editor" onSubmit={save}>
         <section className="panel">
           <h2>Source</h2>
           <div className="form-grid">
@@ -54,13 +54,13 @@ export default function InvoiceEditor() {
           <section className="panel">
             <h2>Line Items</h2>
             <div className="inline-form invoice-line-form">
-              <input value={item.description} onChange={(event) => setItem((current) => ({ ...current, description: event.target.value }))} placeholder="Description" />
-              <input type="number" min="1" value={item.quantity} onChange={(event) => setItem((current) => ({ ...current, quantity: event.target.value }))} />
-              <input type="number" min="0" value={item.unit_price} onChange={(event) => setItem((current) => ({ ...current, unit_price: event.target.value }))} />
-              <input type="number" min="0" value={item.tax_rate} onChange={(event) => setItem((current) => ({ ...current, tax_rate: event.target.value }))} />
+              <input aria-label="Line description" value={item.description} onChange={(event) => setItem((current) => ({ ...current, description: event.target.value }))} placeholder="Description" />
+              <input type="number" min="1" aria-label="Quantity" value={item.quantity} onChange={(event) => setItem((current) => ({ ...current, quantity: event.target.value }))} />
+              <input type="number" min="0" aria-label="Unit price" value={item.unit_price} onChange={(event) => setItem((current) => ({ ...current, unit_price: event.target.value }))} />
+              <input type="number" min="0" aria-label="Tax rate" value={item.tax_rate} onChange={(event) => setItem((current) => ({ ...current, tax_rate: event.target.value }))} />
               <button type="button" className="primary-action" disabled={!item.description} onClick={() => { setForm((current) => ({ ...current, items: [...current.items, item] })); setItem({ description: "", quantity: 1, unit_price: 0, taxable: true, tax_rate: 0, discount: 0 }); }}><Plus size={16} />Add</button>
             </div>
-            <div className="line-list">{form.items.map((line, index) => <div key={`${line.description}-${index}`}><span>{line.description} · {line.quantity} x ${line.unit_price}</span><button type="button" onClick={() => setForm((current) => ({ ...current, items: current.items.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
+            <div className="line-list">{form.items.map((line, index) => <div key={`${line.description}-${index}`}><span>{line.description} · {line.quantity} x ${line.unit_price}</span><button type="button" aria-label="Remove invoice line" onClick={() => setForm((current) => ({ ...current, items: current.items.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
           </section>
         )}
         <div className="modal-actions"><Link to="/finance/invoices">Cancel</Link><button className="primary-action" disabled={!loaded||saving}>{id ? "Save Invoice" : "Create Invoice"}</button></div>

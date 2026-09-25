@@ -98,8 +98,8 @@ export default function ProposalEditor() {
           <button type="button" className={mode === "upload" ? "active" : ""} onClick={() => setMode("upload")}>Upload External Proposal</button>
         </div>
       </div>
-      {error && <div className="toast error">{error}</div>}
-      <form className="document-editor" onSubmit={save}>
+      {error && <div id="proposal-error" role="alert" className="toast error">{error}</div>}
+      <form aria-describedby={error?"proposal-error":undefined} className="document-editor" onSubmit={save}>
         <section className="panel">
           <h2>Proposal</h2>
           <div className="form-grid">
@@ -139,18 +139,18 @@ export default function ProposalEditor() {
               </div>
               <div className="inline-form">
                 <RelationshipSelect resource="addons" value={addon.addon_id} placeholder="Add-on" onChange={(value) => setAddon((current) => ({ ...current, addon_id: value }))} />
-                <input type="number" min="1" value={addon.quantity} onChange={(event) => setAddon((current) => ({ ...current, quantity: event.target.value }))} />
+                <input aria-label="Add-on quantity" type="number" min="1" value={addon.quantity} onChange={(event) => setAddon((current) => ({ ...current, quantity: event.target.value }))} />
                 <button type="button" className="primary-action" disabled={!addon.addon_id} onClick={() => { setForm((current) => ({ ...current, addons: [...current.addons, addon] })); setAddon({ addon_id: "", quantity: 1 }); }}><Plus size={16} />Add</button>
               </div>
-              <div className="line-list">{form.addons.map((item, index) => <div key={`${item.addon_id}-${index}`}><span>Add-on {index + 1} · Qty {item.quantity}</span><button type="button" onClick={() => setForm((current) => ({ ...current, addons: current.addons.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
+              <div className="line-list">{form.addons.map((item, index) => <div key={`${item.addon_id}-${index}`}><span>Add-on {index + 1} · Qty {item.quantity}</span><button type="button" aria-label="Remove add-on" onClick={() => setForm((current) => ({ ...current, addons: current.addons.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
               <div className="inline-form custom-line-form">
-                <input placeholder="Custom service" value={customLine.description} onChange={(event) => setCustomLine((current) => ({ ...current, description: event.target.value }))} />
-                <input placeholder="Description" value={customLine.detail} onChange={(event) => setCustomLine((current) => ({ ...current, detail: event.target.value }))} />
-                <input type="number" min="1" value={customLine.quantity} onChange={(event) => setCustomLine((current) => ({ ...current, quantity: event.target.value }))} />
-                <input type="number" placeholder="Rate" value={customLine.unit_price} onChange={(event) => setCustomLine((current) => ({ ...current, unit_price: event.target.value }))} />
+                <input aria-label="Custom service" placeholder="Custom service" value={customLine.description} onChange={(event) => setCustomLine((current) => ({ ...current, description: event.target.value }))} />
+                <input aria-label="Description" placeholder="Description" value={customLine.detail} onChange={(event) => setCustomLine((current) => ({ ...current, detail: event.target.value }))} />
+                <input aria-label="Service quantity" type="number" min="1" value={customLine.quantity} onChange={(event) => setCustomLine((current) => ({ ...current, quantity: event.target.value }))} />
+                <input type="number" aria-label="Rate" placeholder="Rate" value={customLine.unit_price} onChange={(event) => setCustomLine((current) => ({ ...current, unit_price: event.target.value }))} />
                 <button type="button" className="primary-action" disabled={!customLine.description} onClick={() => { setForm((current) => ({ ...current, custom_line_items: [...current.custom_line_items, customLine] })); setCustomLine({ description: "", detail: "", quantity: 1, unit_price: "" }); }}><Plus size={16} />Service</button>
               </div>
-              <div className="line-list">{form.custom_line_items.map((item, index) => <div key={`${item.description}-${index}`}><span>{item.description} · Qty {item.quantity} · ${item.unit_price || 0}</span><button type="button" onClick={() => setForm((current) => ({ ...current, custom_line_items: current.custom_line_items.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
+              <div className="line-list">{form.custom_line_items.map((item, index) => <div key={`${item.description}-${index}`}><span>{item.description} · Qty {item.quantity} · ${item.unit_price || 0}</span><button type="button" aria-label="Remove service" onClick={() => setForm((current) => ({ ...current, custom_line_items: current.custom_line_items.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
             </section>
 
             <section className="panel">
@@ -163,13 +163,13 @@ export default function ProposalEditor() {
                 {form.sections.map((item, index) => (
                   <article className="proposal-section-editor" key={`${item.id}-${index}`}>
                     <div className="section-toolbar">
-                      <input value={item.title} onChange={(event) => updateSection(index, { title: event.target.value })} />
+                      <input aria-label="Section title" value={item.title} onChange={(event) => updateSection(index, { title: event.target.value })} />
                       <button type="button" aria-label="Move section up" onClick={() => moveSection(index, -1)}><ArrowUp size={14} /></button>
                       <button type="button" aria-label="Move section down" onClick={() => moveSection(index, 1)}><ArrowDown size={14} /></button>
                       <button type="button" aria-label="Remove section" onClick={() => setForm((current) => ({ ...current, sections: current.sections.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button>
                     </div>
-                    <textarea value={item.body} onChange={(event) => updateSection(index, { body: event.target.value })} placeholder="Section body" />
-                    <textarea className="compact-textarea" value={(item.items || []).join("\n")} onChange={(event) => updateSection(index, { items: event.target.value.split("\n").filter(Boolean) })} placeholder="Optional bullets, one per line" />
+                    <textarea aria-label="Section body" value={item.body} onChange={(event) => updateSection(index, { body: event.target.value })} placeholder="Section body" />
+                    <textarea aria-label="Section bullet points" className="compact-textarea" value={(item.items || []).join("\n")} onChange={(event) => updateSection(index, { items: event.target.value.split("\n").filter(Boolean) })} placeholder="Optional bullets, one per line" />
                   </article>
                 ))}
               </div>

@@ -1,3 +1,4 @@
+import {useDialogFocus} from "../utils/use-dialog-focus.js";
 import AsyncState from "../components/AsyncState.jsx";
 import MediaThumbnail from "../components/MediaThumbnail.jsx";
 import {formatDisplay} from "../utils/display.js";
@@ -21,7 +22,7 @@ const configs = {
       ["seo_title", "SEO title"],
       ["seo_description", "Meta description", "textarea"]
     ],
-    guidance: "Edit visible page copy in Page Items. These records manage page titles and search descriptions.",
+    guidance: "Edit visible page copy in Page Items. These records manage page titles and search descriptions. Use a content key such as page.home or page.about.",
     empty: "No page metadata yet."
   },
   hero: {
@@ -230,7 +231,7 @@ function CmsEditor({ config }) {
       {config.guidance && <p className="cms-guidance">{config.guidance}</p>}
       {(notice || error) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <div className="toolbar">
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${config.title.toLowerCase()}...`} />
+        <input aria-label={`Search ${config.title}`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${config.title.toLowerCase()}...`} />
         <select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option><option>DRAFT</option><option>PUBLISHED</option><option>ARCHIVED</option></select>
         <button className="primary-action" onClick={previewHomepage}><Eye size={16} />Preview</button>
       </div>
@@ -247,6 +248,7 @@ function CmsEditor({ config }) {
 }
 
 function MediaLibrary() {
+  const [editingMedia,setEditingMedia]=useState(null);
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [upload, setUpload] = useState({ visibility: "PRIVATE", permissionState: "UNKNOWN", mediaType: "IMAGE" });
@@ -297,32 +299,39 @@ function MediaLibrary() {
           <label>Alt text<input value={upload.altText || ""} onChange={(event) => setUpload((current) => ({ ...current, altText: event.target.value }))} /></label>
           <label>Caption<input value={upload.caption || ""} onChange={(event) => setUpload((current) => ({ ...current, caption: event.target.value }))} /></label>
           <label>Tags<input value={upload.tags || ""} onChange={(event) => setUpload((current) => ({ ...current, tags: event.target.value }))} /></label>
-          <label>Visibility<select value={upload.visibility} onChange={(event) => setUpload((current) => ({ ...current, visibility: event.target.value }))}><option>PRIVATE</option><option>PUBLIC</option></select></label>
-          <label>Permission<select value={upload.permissionState} onChange={(event) => setUpload((current) => ({ ...current, permissionState: event.target.value }))}><option>UNKNOWN</option><option>APPROVED</option><option>RESTRICTED</option><option>DO_NOT_PUBLISH</option></select></label>
+          <label>Visibility<select aria-label="Visibility" value={upload.visibility} onChange={(event) => setUpload((current) => ({ ...current, visibility: event.target.value }))}><option>PRIVATE</option><option>PUBLIC</option></select></label>
+          <label>Permission<select aria-label="Permission" value={upload.permissionState} onChange={(event) => setUpload((current) => ({ ...current, permissionState: event.target.value }))}><option>UNKNOWN</option><option>APPROVED</option><option>RESTRICTED</option><option>DO_NOT_PUBLISH</option></select></label>
           <button className="primary-action" disabled={!upload.data}><UploadCloud size={16} />Upload</button>
         </form>
       </section>
       <div className="toolbar"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search media..." /></div>
-      <div className="media-grid">{rows.slice(0,24).map(row=><article className="panel" key={row.id}><MediaThumbnail id={row.id} alt={row.alt_text||row.filename}/><strong>{row.filename}</strong><small>{row.visibility} · {row.permission_state} · Used {row.usage_count||0} times</small></article>)}</div>
-      <CmsTable rows={rows} columns={["filename", "media_type", "visibility", "permission_state", "usage_count"]} empty="No media uploaded yet." actions={["archive"]} onAction={async (row, verb) => {
+      <div className="media-grid">{rows.slice(0,24).map(row=><article className="panel" key={row.id}><MediaThumbnail id={row.id} alt={row.alt_text||row.filename}/><strong>{row.filename}</strong><small>{row.visibility} · {row.permission_state} · Used {row.usage_count||0} times</small>{row.usage?.length>0&&<details><summary>Where this media is used</summary><ul>{row.usage.filter(item=>item.count>0).map((item,index)=><li key={index}>{item.entity||item.type||item.table||item.label||"Website reference"}: {item.count}</li>)}</ul></details>}</article>)}</div>
+      <CmsTable onEdit={row=>setEditingMedia({...row})} rows={rows} columns={["filename", "media_type", "visibility", "permission_state", "usage_count"]} empty="No media uploaded yet." actions={["archive"]} onAction={async (row, verb) => {
         if (verb === "archive") {
-          await api.delete(`/website/media/${row.id}`);
-          await load();
+          try{await api.delete(`/website/media/${row.id}`);await load();}catch(error){setError(error.message);}
         }
       }} />
+      {editingMedia&&<MediaEditor error={error} value={editingMedia} setValue={setEditingMedia} onClose={()=>setEditingMedia(null)} onSave={async e=>{e.preventDefault();try{await api.patch(`/website/media/${editingMedia.id}`,{filename:editingMedia.filename,alt_text:editingMedia.alt_text,caption:editingMedia.caption,visibility:editingMedia.visibility,permission_state:editingMedia.permission_state});setEditingMedia(null);setNotice('Media details saved.');await load();}catch(error){setError(error.message);}}}/>}
     </main>
   );
 }
+function MediaEditor({error,value,setValue,onClose,onSave}){
+ useDialogFocus(true,onClose);
+ return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit media"><form className="modal" onSubmit={onSave}><h2>Edit media</h2>{error&&<p role="alert">{error}</p>}{[['filename','Filename'],['alt_text','Alt text'],['caption','Caption']].map(([key,label])=><label key={key}>{label}<input aria-label={label} value={value[key]||''} onChange={e=>setValue({...value,[key]:e.target.value})}/></label>)}<label>Visibility<select aria-label="Visibility" value={value.visibility} onChange={e=>setValue({...value,visibility:e.target.value})}>{['PUBLIC','PRIVATE'].map(v=><option key={v}>{v}</option>)}</select></label><label>Permission<select aria-label="Permission" value={value.permission_state} onChange={e=>setValue({...value,permission_state:e.target.value})}>{['UNKNOWN','APPROVED','RESTRICTED','DO_NOT_PUBLISH'].map(v=><option key={v}>{v}</option>)}</select></label><button>Save media details</button><button type="button" onClick={onClose}>Cancel</button></form></div>;
+}
 
 function SiteSettings() {
-  const [form, setForm] = useState({});
+  const [form, setForm] = useState(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => { api.get("/website/site-settings").then(setForm).catch((err) => setError(err.message)); }, []);
+  const [saving,setSaving]=useState(false),[loading,setLoading]=useState(true);
+  async function load(){setLoading(true);setError("");try{setForm(await api.get("/website/site-settings"));}catch(err){setError(err.message);}finally{setLoading(false);}}
+  useEffect(() => { load(); }, []);
 
   async function save(event) {
     event.preventDefault();
+    if(saving)return;setSaving(true);
     setNotice("");
     setError("");
     try {
@@ -330,9 +339,10 @@ function SiteSettings() {
       setNotice("Site settings published.");
     } catch (err) {
       setError(err.message);
-    }
+    } finally {setSaving(false);}
   }
 
+  if(!form)return <main className="page"><CmsHeading title="SEO / Site Settings" eyebrow="Website CMS"/><AsyncState loading={loading} error={error} onRetry={load} noun="site settings"/></main>;
   return (
     <main className="page">
       <CmsHeading title="SEO / Site Settings" eyebrow="Website CMS" />
@@ -351,7 +361,7 @@ function SiteSettings() {
       </section>
       <form className="panel form-grid" onSubmit={save}>
         {siteFields.map(([name, label, type = "text"]) => <Field key={name} name={name} label={label} type={type} form={form} setForm={setForm} />)}
-        <div className="modal-actions wide"><button className="primary-action"><Send size={16} />Publish Site Settings</button></div>
+        <div className="modal-actions wide"><button disabled={saving} className="primary-action"><Send size={16} />Publish Site Settings</button></div>
       </form>
     </main>
   );
@@ -374,7 +384,7 @@ function CmsTable({ rows, columns, empty, onEdit, onAction, onMove, actions = []
         <thead><tr>{columns.map((column) => <th key={column}>{labelize(column)}</th>)}<th>Actions</th></tr></thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} data-cms-id={row.id}>
               {columns.map((column) => <td key={column}>{column.endsWith("media_id") ? <MediaThumbnail id={row[column]}/> : column === "html" ? String(row[column]||"").replace(/<[^>]*>/g,"").slice(0,180) : formatDisplay(row[column],column)}</td>)}
               <td>
                 <div className="cms-actions">
@@ -395,8 +405,9 @@ function CmsTable({ rows, columns, empty, onEdit, onAction, onMove, actions = []
 }
 
 function CmsModal({ title, fields, form, setForm, onClose, onSave }) {
+  useDialogFocus(true,onClose);
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title}>
       <form className="modal" onSubmit={(event) => onSave(event, false)}>
         <div className="modal-heading"><h2>{title}</h2><button type="button" onClick={onClose}>Close</button></div>
         <div className="form-grid">
@@ -416,12 +427,12 @@ function Field({ name, label, type, form, setForm }) {
   return (
     <label className={type === "textarea" || type === "json" ? "wide" : ""}>
       {label}
-      {(name.endsWith("media_id") || name === "desktop_image_file_id") ? <MediaSelect value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "json" ? (
-        <textarea value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+      {(name.endsWith("media_id") || name === "desktop_image_file_id") ? <MediaSelect label={label} value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "json" ? (
+        <textarea aria-label={label} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
       ) : type === "checkbox" ? (
-        <input type="checkbox" checked={Boolean(form[name])} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.checked }))} />
+        <input aria-label={label} type="checkbox" checked={Boolean(form[name])} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.checked }))} />
       ) : (
-        <input type={type} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+        <input aria-label={label} type={type} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
       )}
     </label>
   );

@@ -197,7 +197,13 @@ async function snapshotTemplateVersion(client, template, userId = null) {
   );
 }
 
+function validateTemplateIdentity(input,creating=false){
+ if((creating||input.name!==undefined)&&!String(input.name||'').trim())throw new AppError('Template name is required.',422,'TEMPLATE_NAME_REQUIRED');
+ const key=input.key??input.template_key;
+ if((creating||key!==undefined)&&!/^\w[\w.-]{0,99}$/.test(key||''))throw new AppError('Use a template key containing letters, numbers, periods, dashes or underscores.',422,'TEMPLATE_KEY_INVALID');
+}
 export async function updateEmailTemplate(id, body, user = {}) {
+  validateTemplateIdentity(body);
   const allowed = [
     "name", "category", "subject", "body", "active", "transactional",
     "key", "template_key", "template_type", "channel", "status", "subject_template", "body_template",
@@ -205,12 +211,13 @@ export async function updateEmailTemplate(id, body, user = {}) {
   ];
   const patch = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
   let incrementVersion = false;
-  if (patch.subject || patch.body || patch.subject_template || patch.body_template) {
+  if (["subject","body","subject_template","body_template"].some(key=>patch[key]!==undefined)) {
     const current = (await query("SELECT subject, body, subject_template, body_template FROM email_templates WHERE id=$1 AND deleted_at IS NULL", [id])).rows[0];
     if (!current) throw new AppError("Template not found.", 404, "TEMPLATE_NOT_FOUND");
     const nextSubject = patch.subject_template ?? patch.subject ?? current.subject_template ?? current.subject;
     const nextBody = patch.body_template ?? patch.body ?? current.body_template ?? current.body;
     patch.variables = validateTemplate(nextBody, nextSubject);
+    patch.body=nextBody;patch.body_template=nextBody;patch.subject=nextSubject;patch.subject_template=nextSubject;
     if (patch.subject_template && !patch.subject) patch.subject = patch.subject_template;
     if (patch.body_template && !patch.body) patch.body = patch.body_template;
     if (patch.subject && !patch.subject_template) patch.subject_template = patch.subject;
@@ -364,7 +371,16 @@ export function brandedEmailHtml(body, options = {}) {
     .brand-pad, .content-pad, .closing-pad, .footer-pad { padding-left: 20px !important; padding-right: 20px !important; width: auto !important; }
     .content-copy { font-size: 16px !important; line-height: 1.48 !important; overflow-wrap: break-word !important; }
     .kicker { font-size: 12px !important; letter-spacing: 5px !important; line-height: 1.55 !important; overflow-wrap: anywhere !important; }
-    .brand-center { border-left: 0 !important; border-right: 0 !important; padding: 18px 0 !important; }
+    .benefit-strip { display:none !important; }
+    .brand-pad { padding-top: 12px !important; padding-bottom: 12px !important; }
+    .brand-row td:first-child { display:none !important; }
+    .brand-center img { width:108px !important; }
+    .footer-row img { width:88px !important; }
+    .hero-strip { height:88px !important; }
+    .hero-text { padding-top:10px !important; font-size:11px !important; line-height:1.4 !important; }
+    .footer-pad { padding-top:16px !important; padding-bottom:16px !important; }
+    .signature-tagline { letter-spacing:2px !important; }
+    .brand-center { border-left: 0 !important; border-right: 0 !important; padding: 6px 0 !important; }
     .contact-cell { padding-left: 0 !important; font-size: 14px !important; line-height: 1.7 !important; }
     .hero-text { padding-left: 20px !important; width: 160px !important; }
     .field-cell { display: block !important; width: auto !important; border-left: 0 !important; border-top: 1px solid #d9c6b5 !important; }
@@ -399,7 +415,7 @@ export function brandedEmailHtml(body, options = {}) {
         ${ctaUrl ? `<div style="text-align:center;margin:28px 0 8px"><a class="cta-button" href="${htmlEscape(ctaUrl)}" style="display:inline-block;background:#b1844c;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;letter-spacing:6px;text-transform:uppercase;padding:17px 54px;border-radius:2px">${htmlEscape(ctaLabel)} &rarr;</a><div class="copy-link" style="font-size:13px;margin-top:14px;color:#101a36">Or copy and paste this link into your browser:<br><span style="color:#a8753b">${htmlEscape(ctaUrl)}</span></div></div>` : ""}
       </td></tr>
       ${summaryCells ? `<tr><td style="padding:0 30px 22px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3efe8"><tr>${summaryCells}</tr></table></td></tr>` : ""}
-      <tr><td style="padding:0 30px 26px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #b2864b;border-bottom:1px solid #b2864b"><tr>
+      <tr class="benefit-strip"><td style="padding:0 30px 26px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #b2864b;border-bottom:1px solid #b2864b"><tr>
         ${cell("Premium Experience", " ", "camera")}${cell("Beautiful Brandable Content", " ", "heart")}${cell("Instant Sharing", " ", "share")}${cell("A Team That Takes Care Of You", " ", "users")}
       </tr></table></td></tr>
       <tr><td class="closing-pad closing-text" style="padding:0 42px 34px;font-size:18px;line-height:1.5;color:#101a36">${options.closing || "Thank you again for reaching out. We can't wait to help you create unforgettable moments with The Lola Booth!"}<div class="signature" style="font-size:38px;color:#a8753b;margin-top:22px;font-style:italic">The Lola Booth Team</div><div class="signature-tagline" style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:5px;text-transform:uppercase">The Lola Booth<br>Unforgettable Moments, Beautifully Captured</div></td></tr>
@@ -662,6 +678,7 @@ export async function retryCommunication(id, user = {}) {
 }
 
 export async function createEmailTemplate(input = {}, user = {}) {
+  validateTemplateIdentity(input,true);
   const subject = input.subject_template || input.subject || input.name || "Untitled template";
   const body = input.body_template || input.body || "";
   const variables = validateTemplate(body, subject);
@@ -734,6 +751,10 @@ export async function listAutomations() {
 }
 
 export async function updateAutomation(id, body) {
+  if(body.name!==undefined&&!String(body.name).trim())throw new AppError('Rule name is required.',422,'AUTOMATION_INVALID');
+  if(body.delay_amount!==undefined&&(!Number.isInteger(Number(body.delay_amount))||Number(body.delay_amount)<0||Number(body.delay_amount)>365))throw new AppError('Delay must be an integer from 0 to 365.',422,'AUTOMATION_INVALID');
+  if(body.delay_unit!==undefined&&!['MINUTES','HOURS','DAYS'].includes(body.delay_unit))throw new AppError('Invalid delay unit.',422,'AUTOMATION_INVALID');
+  if(body.enabled!==undefined&&typeof body.enabled!=='boolean')throw new AppError('Enabled must be true or false.',422,'AUTOMATION_INVALID');
   const allowed = ["name", "trigger_key", "conditions", "action_type", "action_config", "delay_amount", "delay_unit", "send_window", "enabled"];
   const patch = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
   const fields = Object.keys(patch);

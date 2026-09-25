@@ -24,6 +24,7 @@ const blankTemplate = {
 };
 
 export default function Communications() {
+  const [automationEdit,setAutomationEdit]=useState(null);
   const [section, setSection] = useState("Communications");
   const [templateTab, setTemplateTab] = useState("All");
   const [communicationTab, setCommunicationTab] = useState("SENT_TO_PROVIDER");
@@ -104,6 +105,7 @@ export default function Communications() {
   }
 
   async function saveTemplate() {
+    if(busy)return;setBusy(true);
     setError("");
     setNotice("");
     try {
@@ -115,7 +117,7 @@ export default function Communications() {
       await load();
     } catch (err) {
       setError(err.message);
-    }
+    } finally {setBusy(false);}
   }
 
   async function previewTemplate(templateId = selectedTemplate?.id) {
@@ -228,7 +230,7 @@ export default function Communications() {
                 {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => {setCommunicationPage(1);setCommunicationTab(tab);}}>{tab.toLowerCase().replaceAll("_"," ")}</button>)}
               </div>
             </div>
-            <div className="toolbar"><label>Search communications<input value={communicationSearch} onChange={e=>{setCommunicationPage(1);setCommunicationSearch(e.target.value);}} placeholder="Recipient or subject"/></label><label>Sort<select value={communicationSort} onChange={e=>setCommunicationSort(e.target.value)}><option value="created_at">Newest first</option><option value="scheduled_at">Scheduled time</option><option value="recipient">Recipient</option></select></label></div>
+            <div className="toolbar"><label>Search communications<input value={communicationSearch} onChange={e=>{setCommunicationPage(1);setCommunicationSearch(e.target.value);}} placeholder="Recipient or subject"/></label><label>Sort<select aria-label="Sort" value={communicationSort} onChange={e=>setCommunicationSort(e.target.value)}><option value="created_at">Newest first</option><option value="scheduled_at">Scheduled time</option><option value="recipient">Recipient</option></select></label></div>
             <DataTable rows={communications.data || []} columns={["status", "channel", "recipient", "rendered_subject", "template_name", "scheduled_at", "sent_at", "failure_message"]} empty="No communications match this view." onEdit={openCommunication} />
             <div className="button-row"><button disabled={communicationPage<=1} onClick={()=>setCommunicationPage(p=>p-1)}>Previous page</button><span>Page {communicationPage} · {communications.pagination?.total??communications.data?.length??0} records</span><button disabled={communicationPage*50>=(communications.pagination?.total||0)} onClick={()=>setCommunicationPage(p=>p+1)}>Next page</button></div>
           </section>
@@ -298,11 +300,12 @@ export default function Communications() {
                     <strong>{row.name}</strong>
                     <span>{row.trigger_key.replaceAll("_", " ")} · {row.action_type.replaceAll("_", " ")} · {row.action_config?.template_key || "No template"} · {row.action_config?.send_mode || "template default"}</span>
                   </div>
-                  <small>{row.last_run_at ? new Date(row.last_run_at).toLocaleString() : "No runs yet"}</small>
+                  <button onClick={()=>setAutomationEdit({...row})}>Edit rule</button><small>{row.last_run_at ? new Date(row.last_run_at).toLocaleString() : "No runs yet"}</small>
                 </article>
               ))}
             </div>
           </section>
+          {automationEdit&&<form className="panel" onSubmit={async e=>{e.preventDefault();if(busy)return;setBusy(true);setError('');try{await api.patch(`/communications/automations/${automationEdit.id}`,{name:automationEdit.name,delay_amount:Number(automationEdit.delay_amount),delay_unit:automationEdit.delay_unit,enabled:automationEdit.enabled});await load();setNotice('Automation saved.');setAutomationEdit(null);}catch(error){setError(error.message);}finally{setBusy(false);}}}><h2>Edit automation rule</h2><p>Trigger: {automationEdit.trigger_key}. Existing jobs keep their scheduled time. Changes affect future triggers.</p><div className="form-grid"><label>Rule name<input required value={automationEdit.name} onChange={e=>setAutomationEdit({...automationEdit,name:e.target.value})}/></label><label>Delay amount<input type="number" min="0" max="365" required value={automationEdit.delay_amount} onChange={e=>setAutomationEdit({...automationEdit,delay_amount:e.target.value})}/></label><label>Delay unit<select value={automationEdit.delay_unit} onChange={e=>setAutomationEdit({...automationEdit,delay_unit:e.target.value})}>{['MINUTES','HOURS','DAYS'].map(v=><option key={v}>{v}</option>)}</select></label><label>Rule enabled<input type="checkbox" checked={automationEdit.enabled} onChange={e=>setAutomationEdit({...automationEdit,enabled:e.target.checked})}/></label></div><button disabled={busy}>Save automation</button><button type="button" onClick={()=>setAutomationEdit(null)}>Cancel</button></form>}
           <section className="dashboard-grid">
             <article className="panel"><h2>Jobs</h2><DataTable rows={automations.jobs} columns={["job_type", "related_entity_type", "scheduled_for", "status", "attempt_count", "last_error"]} empty="No automation jobs yet." /></article>
             <article className="panel"><h2>History</h2><DataTable rows={automations.runs} columns={["automation_name", "entity_type", "scheduled_for", "executed_at", "result", "error"]} empty="No automation runs yet." /></article>

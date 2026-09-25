@@ -13,6 +13,7 @@ export default function ProposalDetail() {
   const [proposal, setProposal] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [busy,setBusy]=useState(false);
 
   useEffect(() => { load(); }, [id]);
 
@@ -26,6 +27,7 @@ export default function ProposalDetail() {
   }
 
   async function action(fn, message) {
+    if(busy)return;setBusy(true);
     setError("");
     setNotice("");
     try {
@@ -34,7 +36,7 @@ export default function ProposalDetail() {
       await load();
     } catch (err) {
       setError(err.message);
-    }
+    } finally {setBusy(false);}
   }
 
   if (error && !proposal) return <main className="page"><AsyncState error={error} noun="proposal" onRetry={()=>{setError("");load();}}/></main>;
@@ -52,12 +54,12 @@ export default function ProposalDetail() {
         <div className="detail-actions">
           {can("write:sales") && ["DRAFT", "READY"].includes(proposal.status) && proposal.proposal_source !== "UPLOADED" && <Link className="primary-action" to={`/sales/proposals/${id}/edit`}>Edit proposal</Link>}
           {proposal.public_url && <a href={proposal.public_url} target="_blank" rel="noreferrer">Public proposal</a>}
-          <button className="primary-action" onClick={() => action(() => api.post(`/proposals/${id}/send`, {}), "Proposal submitted to the email provider.")}><Mail size={16} />Send</button>
-          <button onClick={() => action(() => api.download(`/proposals/${id}/pdf`, `${proposal.proposal_number}.pdf`), "PDF generated.")}><Download size={16} />PDF</button>
-          <button onClick={() => action(() => api.download(`/proposals/${id}/docx`, `${proposal.proposal_number}.docx`), "DOCX generated.")}><FileText size={16} />DOCX</button>
-          <button onClick={() => action(() => api.post(`/proposals/${id}/duplicate`, {}), "Proposal duplicated.")}><Copy size={16} />Duplicate</button>
-          <button onClick={() => action(() => api.post(`/proposals/${id}/archive`, {}), "Proposal archived.")}><Archive size={16} />Archive</button>
-          <button className="primary-action" disabled={proposal.status !== "ACCEPTED"} onClick={() => action(() => api.post(`/proposals/${id}/create-invoice`, { depositOnly: true }), "Deposit invoice created.")}><ReceiptText size={16} />Deposit Invoice</button>
+          <button disabled={busy} className="primary-action" onClick={() => action(() => api.post(`/proposals/${id}/send`, {}), "Proposal submitted to the email provider.")}><Mail size={16} />Send</button>
+          <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/pdf`, `${proposal.proposal_number}.pdf`), "PDF generated.")}><Download size={16} />PDF</button>
+          <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/docx`, `${proposal.proposal_number}.docx`), "DOCX generated.")}><FileText size={16} />DOCX</button>
+          <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/duplicate`, {}), "Proposal duplicated.")}><Copy size={16} />Duplicate</button>
+          <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/archive`, {}), "Proposal archived.")}><Archive size={16} />Archive</button>
+          <button className="primary-action" disabled={busy||proposal.status !== "ACCEPTED"} onClick={() => action(() => api.post(`/proposals/${id}/create-invoice`, { depositOnly: true }), "Deposit invoice created.")}><ReceiptText size={16} />Deposit Invoice</button>
         </div>
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}

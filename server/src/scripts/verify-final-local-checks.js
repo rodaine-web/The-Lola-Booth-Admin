@@ -78,10 +78,23 @@ export async function verifyFinalLocalChecks({db,call,base,env,owner,invoiceId})
   await db.query("UPDATE events SET event_date=(now()+interval '12 hours')::date,start_time=(now()+interval '12 hours')::time,status='CONFIRMED' WHERE id=$1",[invoice.event_id]);
   const emailFirst=await jobs.queueEventReminder(invoice.event_id);assert.equal(emailFirst.emailQueued,true);assert.equal(emailFirst.sms.queued,false);
   await db.query("UPDATE business_settings SET sms_escalations=jsonb_set(sms_escalations,'{event_24h}','true')");
-  const escalated=await jobs.queueEventReminder(invoice.event_id);assert.equal(escalated.sms.queued,true);await jobs.queueEventReminder(invoice.event_id);
+  assert.equal((await jobs.queueEventReminder(invoice.event_id)).sms.queued,false);await automation.processDueJobs({limit:100});await db.query("UPDATE business_settings SET sms_escalations=jsonb_set(sms_escalations,'{email_delay_hours}','0')");const escalated=await jobs.queueEventReminder(invoice.event_id);assert.equal(escalated.sms.queued,true);await jobs.queueEventReminder(invoice.event_id);
   assert.equal((await db.query("SELECT count(*)::int n FROM communications WHERE event_id=$1 AND trigger_key='EVENT_24H_REMINDER'",[invoice.event_id])).rows[0].n,1);
   await automation.processDueJobs({limit:100});await jobs.processIntegrationJobs({limit:100});assert.equal((await db.query("SELECT status FROM communications WHERE event_id=$1 AND trigger_key='EVENT_24H_REMINDER'",[invoice.event_id])).rows[0].status,'SENT_TO_PROVIDER');
   passed.push('Email-first event reminder persists once; SMS escalation only queues when separately enabled and consented');
+  const overdue=(await call('POST','/invoices',{client_id:invoice.client_id,event_id:invoice.event_id,due_date:'2025-01-01',items:[{description:'Synthetic overdue fixture',quantity:1,unit_price:50}]})).data;
+  await call('POST','/invoices/'+overdue.id+'/send',{});
+  await db.query("UPDATE business_settings SET sms_escalations=jsonb_set(sms_escalations,'{overdue_balance}','true')");
+  assert.equal((await jobs.queueOverdueReminder(overdue.id)).sms.queued,false);
+  await automation.processDueJobs({limit:100});
+  const overdueSms=await jobs.queueOverdueReminder(overdue.id);assert.equal(overdueSms.sms.queued,true);assert.equal((await jobs.queueOverdueReminder(overdue.id)).sms.id,overdueSms.sms.id);
+  await jobs.setSmsConsent({entityType:'client',entityId:invoice.client_id,consented:false,req:{user:owner}});await jobs.processIntegrationJobs();assert.equal((await db.query('SELECT status FROM integration_jobs WHERE id=$1',[overdueSms.sms.id])).rows[0].status,'CANCELLED');
+  await jobs.setSmsConsent({entityType:'client',entityId:invoice.client_id,consented:true,source:'Synthetic reset',req:{user:owner}});
+  passed.push('Overdue email must be sent before mock SMS; threshold, per-invoice dedup and send-time consent withdrawal enforced');
+  const unknown=await jobs.enqueueIntegrationEvent({provider:'GA4',eventName:'generate_lead',entityType:'invoice',entityId:invoice.id,idempotencyKey:'unknown-provider-outcome'});
+  await db.query("UPDATE integration_jobs SET mode='PROVIDER',status='PROCESSING',started_at=now()-interval '6 minutes' WHERE id=$1",[unknown.id]);await jobs.processIntegrationJobs();assert.equal((await db.query('SELECT last_error FROM integration_jobs WHERE id=$1',[unknown.id])).rows[0].last_error,'PROVIDER_OUTCOME_UNKNOWN');assert.equal((await db.query('SELECT count(*)::int n FROM integration_dispatches WHERE idempotency_key=$1',[unknown.idempotency_key])).rows[0].n,0);
+  passed.push('Stale external provider claim requires outcome review; worker restart never blindly resends');
+
   passed.push('SMS disabled by default, explicit escalation plus recorded consent, deduplicated queue, consent withdrawal rechecked at send and mock dispatch');
   const stale=await jobs.enqueueIntegrationEvent({provider:'META',eventName:'stale',entityType:'invoice',entityId:invoice.id,idempotencyKey:'stale-mock'});await db.query("UPDATE integration_jobs SET status='PROCESSING',started_at=now()-interval '6 minutes' WHERE id=$1",[stale.id]);await jobs.processIntegrationJobs();assert.equal((await db.query('SELECT status FROM integration_jobs WHERE id=$1',[stale.id])).rows[0].status,'SUCCEEDED');
   passed.push('Mock integration worker recovers a stale claim without duplicate dispatch');

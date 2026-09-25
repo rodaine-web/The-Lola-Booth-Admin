@@ -1348,6 +1348,7 @@ adminRouter.post("/proposals/:id/send", requirePermission("write:sales"), asyncH
   const proposal = await getProposal(req.params.id);
   const result = await sendProposal(req, proposal);
   await recordGeneratedFile({ req, document: result.document, entityType: "proposal", entity: proposal });
+  await recordActivity({actorUserId:req.user.id,entityType:"proposal",entityId:proposal.id,action:"proposal_sent",summary:"Proposal sent to email provider"});
   await writeAudit({ req, action: "proposal_sent", entity: "proposal", entityId: proposal.id, before: proposal });
   res.json(result);
 }));
@@ -2327,7 +2328,7 @@ const paymentSchema = z.object({
   client_id: uuid,
   invoice_id: uuid.optional().nullable(),
   amount: money,
-  currency: z.string().min(3).max(3).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
   payment_method: z.enum(["CARD", "CASH", "CHECK", "BANK_TRANSFER", "ZELLE", "EXTERNAL_CARD", "OTHER"]),
   reference_number: z.string().optional().nullable(),
   payment_date: z.string(),
@@ -2404,11 +2405,11 @@ adminRouter.get("/audit-logs",requirePermission("read:audit"),asyncHandler(async
  const values=[],where=["a.deleted_at IS NULL"];
  for(const [key,column] of [["actor","u.name"],["action","a.action"],["entity","a.entity"]])if(req.query[key]){values.push(`%${String(req.query[key]).slice(0,150)}%`);where.push(`${column} ILIKE $${values.length}`);}
  for(const [key,op] of [["from",">="],["to","<"]])if(req.query[key]){const value=z.string().date().parse(req.query[key]);values.push(value);where.push(`a.created_at ${op} $${values.length}::date${key==='to'?" + interval '1 day'":""}`);}
- const page=Math.max(1,Math.min(100000,Number(req.query.page)||1)),pageSize=50;
+ const page=Math.max(1,Math.min(100000,Math.floor(Number(req.query.page))||1)),pageSize=Math.max(1,Math.min(50,Math.floor(Number(req.query.pageSize))||50));
  const count=(await query(`SELECT count(*)::int total FROM audit_logs a LEFT JOIN users u ON u.id=COALESCE(a.actor_user_id,a.user_id) WHERE ${where.join(' AND ')}`,values)).rows[0].total;
  const result=await query(`SELECT COALESCE(a.before_json,a.before_value) AS before,COALESCE(a.after_json,a.after_value) AS after,a.id,a.action,a.entity,a.entity_id,a.created_at,COALESCE(u.name,'System') AS actor_name,
  COALESCE(a.after_value->>'name',a.after_value->>'event_name',a.after_value->>'proposal_number',a.after_value->>'invoice_number',a.before_value->>'name',initcap(a.entity)) AS target_label
- FROM audit_logs a LEFT JOIN users u ON u.id=COALESCE(a.actor_user_id,a.user_id) WHERE ${where.join(' AND ')} ORDER BY a.created_at DESC,a.id LIMIT 50 OFFSET $${values.length+1}`, [...values,(page-1)*pageSize]);
+ FROM audit_logs a LEFT JOIN users u ON u.id=COALESCE(a.actor_user_id,a.user_id) WHERE ${where.join(' AND ')} ORDER BY a.created_at DESC,a.id LIMIT $${values.length+1} OFFSET $${values.length+2}`, [...values,pageSize,(page-1)*pageSize]);
  res.json({data:result.rows.map(row=>({...row,before:redactAudit(row.before),after:redactAudit(row.after),changes:auditChanges(row.before,row.after)})),pagination:{page,pageSize,total:count}});
 }));
 
@@ -2425,9 +2426,9 @@ const settingsSchema = z.object({
   website: z.string().optional().nullable(),
   service_area: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
-  timezone: z.string().min(1).optional(),
+  timezone: z.string().refine(value=>{try{new Intl.DateTimeFormat("en",{timeZone:value});return true;}catch{return false;}},"Use a valid timezone.").optional(),
   business_week_start: z.coerce.number().int().min(0).max(6).optional(),
-  currency: z.string().min(3).max(3).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
   sales_tax_percent: z.coerce.number().min(0).max(100).optional(),
   default_deposit_percent: z.coerce.number().min(0).max(100).optional(),
   default_balance_due_days: z.coerce.number().int().min(0).optional(),
@@ -2464,7 +2465,7 @@ const settingsSchema = z.object({
   lead_assignment_rules: z.record(z.string(), z.string()).optional(),
   auto_acknowledge_website_leads: z.boolean().optional(),
   auto_acknowledge_social_leads: z.boolean().optional(),
-  sms_escalations: z.object({event_24h:z.boolean(),overdue_balance:z.boolean(),urgent_operations:z.boolean(),overdue_days:z.number().int().min(1).max(90)}).optional(),
+  sms_escalations: z.object({event_24h:z.boolean(),overdue_balance:z.boolean(),urgent_operations:z.boolean(),overdue_days:z.number().int().min(1).max(90),email_delay_hours:z.number().int().min(0).max(168).optional()}).optional(),
   business_hours: z.record(z.string(), z.array(z.string())).optional(),
   google_review_url: z.string().optional().nullable(),
   facebook_review_url: z.string().optional().nullable(),

@@ -64,7 +64,7 @@ export default function Dashboard() {
         {primaryKeys.map(key => data.groups.flatMap(group => group.metrics).find(metric => metric.key === key)).filter(Boolean).map(metric => <Kpi key={metric.key} metric={metric} range={data.sqlRange} />)}
       </section>
       <section className="dashboard-revenue">
-        <Panel title="Revenue Trend"><div className="segmented-control" aria-label="Revenue series">{[["both","Both series"],["booked","Booked"],["collected","Collected"]].map(([key,label])=><button aria-pressed={revenueSeries===key} key={key} onClick={()=>setRevenueSeries(key)}>{label}</button>)}</div>
+        <Panel title="Revenue Trend"><p className="note-text" role="status">{trend.length} revenue periods. Booked {formatMoney(trend.reduce((sum,row)=>sum+Number(row.booked_revenue||0),0))}; collected {formatMoney(trend.reduce((sum,row)=>sum+Number(row.collected_revenue||0),0))}. Use Inspect revenue period for keyboard access to exact records.</p><div className="segmented-control" aria-label="Revenue series">{[["both","Both series"],["booked","Booked"],["collected","Collected"]].map(([key,label])=><button aria-pressed={revenueSeries===key} key={key} onClick={()=>setRevenueSeries(key)}>{label}</button>)}</div>
           {trend.length ? (
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={trend} onClick={point=>showRevenue(point?.activeLabel)} accessibilityLayer>
