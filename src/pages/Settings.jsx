@@ -25,7 +25,7 @@ export default function Settings() {
     setNotice("");
     setError("");
     try {
-      const updated = await api.patch("/settings", Object.fromEntries(fields.filter(k=>form[k]!==null&&form[k]!==undefined).map(k=>[k,form[k]])));
+      const updated = await api.patch("/settings", {...Object.fromEntries(fields.filter(k=>form[k]!==null&&form[k]!==undefined).map(k=>[k,form[k]])),sms_escalations:form.sms_escalations,stripe_enabled:Boolean(form.stripe_enabled)});
       setSettings(updated);
       setForm(updated);
       setNotice("Settings saved.");
@@ -69,6 +69,7 @@ export default function Settings() {
         <button className="primary-action" onClick={save} disabled={busy}>Save Changes</button>
       </div>
       {(notice || error) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      <section className="panel" id="integrations"><h2>Integration preferences</h2><p><a href="/system/data-review">Review business and test-data classifications</a></p><p>Email is the primary channel. Payment checkout is test-only. Credentials are configured securely on the server.</p><div className="form-grid"><label>Enable Stripe test checkout<input type="checkbox" checked={Boolean(form.stripe_enabled)} onChange={e=>setForm({...form,stripe_enabled:e.target.checked})}/></label>{['event_24h','overdue_balance','urgent_operations'].map(rule=><label key={rule}>SMS escalation · {labelize(rule)}<input type="checkbox" checked={Boolean(form.sms_escalations?.[rule])} onChange={e=>setForm({...form,sms_escalations:{...form.sms_escalations,[rule]:e.target.checked}})}/></label>)}<label>Balance overdue days before SMS<input type="number" min="1" max="90" value={form.sms_escalations?.overdue_days||7} onChange={e=>setForm({...form,sms_escalations:{...form.sms_escalations,overdue_days:Number(e.target.value)}})}/></label></div><p>SMS additionally requires a ready provider, current recorded consent and qualifying timing. Marketing dispatch remains local mock only.</p></section>
       <section className="brand-settings-preview">
         <div>
           <p className="eyebrow">Branding</p>

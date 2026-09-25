@@ -74,6 +74,7 @@ export default function InvoiceDetail() {
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       {invoice.data_quality==='INCOMPLETE_HISTORICAL'&&<p className="toast" role="status">Historical invoice: line-item detail is missing. Original amounts are preserved; do not reconstruct charges without source records.</p>}
+      <section className="panel"><h2>Secure payment access</h2><p>{invoice.token_revoked_at?'This invoice link is revoked.':'The invoice PDF QR opens its unique secure LOLA payment page.'}</p><div className="button-row"><a href={invoice.public_url} target="_blank" rel="noreferrer">Open payment page</a><button onClick={()=>action(()=>api.post(`/invoices/${id}/revoke-access`,{}),'Invoice access revoked.')}>Revoke link</button><button onClick={()=>action(()=>api.post(`/invoices/${id}/reissue-access`,{}),'New secure link issued. Regenerate the PDF to use the new QR.')}>Reissue secure link</button></div><p className="note-text">Reissuing invalidates the previous QR and document link. It does not cancel a checkout already opened at a payment provider.</p></section>
       <section className="detail-summary">
         <Metric label="Total" value={formatMoney(invoice.total || 0)} />
         <Metric label="Paid" value={formatMoney(invoice.amount_paid || 0)} />

@@ -168,7 +168,7 @@ export default function Communications() {
     try {
       let current = selectedCommunication;
       if (!current.id) current = await api.post("/communications/drafts", { ...current, subject: current.rendered_subject, body: current.rendered_body, channel: "EMAIL" });
-      else if (["DRAFT", "SCHEDULED", "FAILED"].includes(current.status)) current = await api.patch(`/communications/${current.id}`, current);
+      else if (!["cancel", "retry"].includes(action) && ["DRAFT", "SCHEDULED", "FAILED"].includes(current.status)) current = await api.patch(`/communications/${current.id}`, current);
       let result = current;
       if (action !== "save" && action !== "preview") result = await api.post(`/communications/${current.id}/${action}`, action === "schedule" ? { scheduled_at: new Date(current.scheduled_at).toISOString() } : {});
       setSelectedCommunication(result.communication || result);
@@ -347,27 +347,27 @@ function TemplateEditor({ editor, setEditor, selectedTemplate, preview, saveTemp
 }
 
 function CommunicationComposer({ communication, setCommunication, onAction, busy }) {
-  const immutable = busy || !["DRAFT", "SCHEDULED", "FAILED"].includes(communication.status);
+  const immutable = !["DRAFT", "SCHEDULED", "FAILED"].includes(communication.status);
   return (
     <section className="panel composer-panel">
       <div className="table-heading"><h2>Composer</h2><span className="status-pill">{communication.status}</span></div>
       <div className="editor-grid">
         <Field label="Channel" value={communication.channel} />
         <Field label="Template" value={communication.template_name || communication.template_key} />
-        {[["Lead","lead_id","lead_name","leads","sales/leads"],["Client","client_id","client_name","clients","sales/clients"],["Event","event_id","event_name","events","events/events"],["Proposal","proposal_id","proposal_number","proposals","sales/proposals"],["Invoice","invoice_id","invoice_number","invoices","finance/invoices"]].map(([label,key,name,resource,route])=><div key={key}><strong>{label}</strong>{communication[key]&&<Link to={`/${route}/${communication[key]}`}>{communication[name]||`Open related ${label.toLowerCase()}`}</Link>}{!immutable&&<RelationshipSelect resource={resource} value={communication[key]} placeholder={label} disabled={!!communication.id} onChange={value=>setCommunication(row=>({...row,[key]:value}))}/>}</div>)}
+        {[["Lead","lead_id","lead_name","leads","sales/leads"],["Client","client_id","client_name","clients","sales/clients"],["Event","event_id","event_name","events","events/events"],["Proposal","proposal_id","proposal_number","proposals","sales/proposals"],["Invoice","invoice_id","invoice_number","invoices","finance/invoices"]].map(([label,key,name,resource,route])=><div key={key}><strong>{label}</strong>{communication[key]&&<Link to={`/${route}/${communication[key]}`}>{communication[name]||`Open related ${label.toLowerCase()}`}</Link>}{!immutable&&<RelationshipSelect resource={resource} value={communication[key]} placeholder={label} disabled={busy || !!communication.id} onChange={value=>setCommunication(row=>({...row,[key]:value}))}/>}</div>)}
       </div>
-      <label>Recipient<input disabled={immutable} value={communication.recipient || ""} onChange={(e) => setCommunication((row) => ({ ...row, recipient: e.target.value }))} /></label>
-      <label>Subject<input disabled={immutable} value={communication.rendered_subject || communication.subject || ""} onChange={(e) => setCommunication((row) => ({ ...row, rendered_subject: e.target.value, subject: e.target.value }))} /></label>
-      <label>Body<textarea disabled={immutable} rows={8} value={communication.rendered_body || ""} onChange={(e) => setCommunication((row) => ({ ...row, rendered_body: e.target.value }))} /></label>
+      <label>Recipient<input disabled={busy || immutable} value={communication.recipient || ""} onChange={(e) => setCommunication((row) => ({ ...row, recipient: e.target.value }))} /></label>
+      <label>Subject<input disabled={busy || immutable} value={communication.rendered_subject || communication.subject || ""} onChange={(e) => setCommunication((row) => ({ ...row, rendered_subject: e.target.value, subject: e.target.value }))} /></label>
+      <label>Body<textarea disabled={busy || immutable} rows={8} value={communication.rendered_body || ""} onChange={(e) => setCommunication((row) => ({ ...row, rendered_body: e.target.value }))} /></label>
       {communication.channel === "SMS" && <p className="muted">{(communication.rendered_body || "").length} characters</p>}
       {!immutable && <label>Schedule (your local time)<input type="datetime-local" value={timestampInput(communication.scheduled_at)} onChange={(e) => setCommunication((row) => ({ ...row, scheduled_at: e.target.value }))} /></label>}
-      {communication.rendered_html&&<iframe title="Email preview" sandbox="" srcDoc={communication.rendered_html} style={{width:"100%",height:420,border:"1px solid #ddd"}}/>}
       <div className="button-row">
-        <button disabled={immutable} onClick={() => onAction("save")}><Save size={15}/>Save draft</button><button disabled={immutable} onClick={() => onAction("preview")}><Eye size={15}/>Preview</button>{communication.status==="FAILED"&&<button disabled={busy} onClick={()=>onAction("retry")}>Retry failed</button>}
-        <button disabled={immutable || !communication.id} onClick={() => onAction("cancel")}><XCircle size={15} />Cancel</button>
-        <button disabled={immutable || !communication.scheduled_at} onClick={() => onAction("schedule")}><Clock size={15} />Schedule</button>
-        <button className="primary-action" disabled={immutable} onClick={() => onAction("send")}><Send size={15} />Send Now</button>
+        <button disabled={busy || immutable} onClick={() => onAction("save")}><Save size={15}/>Save draft</button><button disabled={busy || immutable} onClick={() => onAction("preview")}><Eye size={15}/>Preview</button>{communication.status==="FAILED"&&<button disabled={busy} onClick={()=>onAction("retry")}>Retry failed</button>}
+        <button disabled={busy || immutable || !communication.id} onClick={() => onAction("cancel")}><XCircle size={15} />Cancel</button>
+        <button disabled={busy || immutable || !communication.scheduled_at} onClick={() => onAction("schedule")}><Clock size={15} />Schedule</button>
+        <button className="primary-action" disabled={busy || immutable} onClick={() => onAction("send")}><Send size={15} />Send Now</button>
       </div>
+      {communication.rendered_html&&<iframe title="Email preview" sandbox="" srcDoc={communication.rendered_html} style={{width:"100%",height:420,border:"1px solid #ddd"}}/>}
     </section>
   );
 }

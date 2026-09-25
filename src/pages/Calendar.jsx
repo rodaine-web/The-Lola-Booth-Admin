@@ -1,3 +1,4 @@
+import AsyncState from "../components/AsyncState.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import {businessToday,formatDateOnly} from "../utils/display.js";
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
@@ -13,12 +14,14 @@ export default function Calendar() {
   const [filters, setFilters] = useState({ status: "", eventType: "", venue: "", city: "", experienceId: "", packageId: "", staffId: "", equipmentId: "" });
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState("");
+  const [revision,setRevision]=useState(0);
 
   useEffect(() => {
+    setError("");
     const params = new URLSearchParams({ view, date });
     Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
     api.get(`/calendar?${params}`).then(setPayload).catch((err) => setError(err.message));
-  }, [view, date, filters]);
+  }, [view, date, filters,revision]);
 
   const grouped = useMemo(() => (payload?.events || []).reduce((map, event) => {
     const day = dateKey(event.event_date);
@@ -33,7 +36,7 @@ export default function Calendar() {
     setDate(current.toISOString().slice(0,10));
   }
 
-  if (error) return <main className="page"><div className="toast error">{error}</div></main>;
+  if (error) return <main className="page"><h1>Calendar</h1><AsyncState error={error} onRetry={()=>setRevision(r=>r+1)} noun="calendar"/></main>;
 
   return (
     <main className="page">

@@ -9,7 +9,7 @@ import { api } from "../api/client.js";
 import { funnelHref, sourceHref, metricHref } from "../utils/dashboard-links.js";
 import DataTable from "../components/DataTable.jsx";
 
-const primaryKeys = ["new_leads", "booked_revenue", "collected_revenue", "outstanding_balance", "events_scheduled", "conversion_rate"];
+const primaryKeys = ["new_leads", "bookings_won", "booked_revenue", "collected_revenue", "outstanding_balance", "upcoming_events"];
 
 const ranges = [
   ["today", "Today"],
@@ -26,6 +26,8 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [revision,setRevision]=useState(0);
   const [revenueSeries,setRevenueSeries]=useState("both");
+  const [revenueRecords,setRevenueRecords]=useState(null),[revenueError,setRevenueError]=useState("");
+  async function showRevenue(bucket){if(!bucket)return;setRevenueError("");try{setRevenueRecords(await api.get('/dashboard/revenue-records?'+new URLSearchParams({from:data.sqlRange.start,to:data.sqlRange.end,bucket})));}catch(e){setRevenueError(e.message);}}
 
   useEffect(() => {
     setError("");
@@ -65,7 +67,7 @@ export default function Dashboard() {
         <Panel title="Revenue Trend"><div className="segmented-control" aria-label="Revenue series">{[["both","Both series"],["booked","Booked"],["collected","Collected"]].map(([key,label])=><button aria-pressed={revenueSeries===key} key={key} onClick={()=>setRevenueSeries(key)}>{label}</button>)}</div>
           {trend.length ? (
             <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={trend}>
+              <AreaChart data={trend} onClick={point=>showRevenue(point?.activeLabel)} accessibilityLayer>
                 <CartesianGrid stroke="#E8DDD0" />
                 <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={value=>formatMoney(value)}/>
@@ -75,6 +77,10 @@ export default function Dashboard() {
               </AreaChart>
             </ResponsiveContainer>
           ) : <div className="empty-state">No revenue movement in this period.</div>}
+          <p className="note-text">Booked and collected revenue in the business timezone. Select a chart point or a period below to inspect matching records.</p>
+          {trend.length>0&&<label>Inspect revenue period<select value={revenueRecords?.bucket||''} onChange={e=>showRevenue(e.target.value)}><option value="">Choose a period</option>{trend.map(point=><option key={point.bucket} value={point.bucket}>{point.bucket}</option>)}</select></label>}
+          {revenueError&&<p role="alert">{revenueError}</p>}
+          {revenueRecords&&<section><h3>Revenue records · {revenueRecords.bucket}</h3><h4>Booked</h4>{revenueRecords.bookings.length?revenueRecords.bookings.map(row=><p key={row.id}><Link to={'/events/events/'+row.event_id}>{row.label||'Booked event'}</Link> · {formatMoney(row.amount)}</p>):<p>No bookings in this period.</p>}<h4>Collected</h4>{revenueRecords.payments.length?revenueRecords.payments.map(row=><p key={row.id}><Link to={'/finance/payments/'+row.id}>{row.label||'Payment receipt'}</Link> · {formatMoney(row.amount)}</p>):<p>No collections in this period.</p>}</section>}
           <div className="chart-links"><Link to="/events/events">View booked events</Link><Link to="/finance/invoices?balance=open">Review outstanding invoices</Link></div>
         </Panel>
 

@@ -16,12 +16,12 @@ const originalSections = [
   { label: "Insights", icon: BarChart3, items: [{ label: "Analytics", to: "/insights/analytics", permission: "read:analytics" }] },
   { label: "System", icon: Shield, items: [{ label: "Users", to: "/system/users", permission: "view:users" }, { label: "Integrations", to: "/system/integrations", permission: "read:integrations" }, { label: "Health", to: "/system/health", permission: "read:settings", icon: HeartPulse }, { label: "Audit Log", to: "/system/audit-log", permission: "read:audit" }, { label: "Settings", to: "/system/settings", permission: "read:settings" }] }
 ];
-// Routes remain stable; incomplete standalone modules and deferred payments are omitted from primary navigation.
+// Routes remain stable; incomplete standalone modules are omitted from primary navigation.
 const items = originalSections.flatMap(section=>section.items);
 const pick = paths => paths.map(to=>items.find(item=>item.to===to)).filter(Boolean);
 const sections = [
  {label:'Dashboard',icon:Gauge,items:pick(['/'])},
- {label:'Sales',icon:BriefcaseBusiness,items:pick(['/sales/leads','/sales/clients','/sales/proposals','/finance/invoices','/content/addons'])},
+ {label:'Sales',icon:BriefcaseBusiness,items:pick(['/sales/leads','/sales/clients','/sales/proposals','/finance/invoices','/finance/payments','/content/addons'])},
  {label:'Events',icon:CalendarDays,items:pick(['/events/events','/events/calendar','/operations/tasks'])},
  {label:'Operations',icon:ClipboardList,items:pick(['/operations/live','/events/staff','/events/equipment'])},
  {label:'Communications',icon:BriefcaseBusiness,items:pick(['/sales/communications'])},

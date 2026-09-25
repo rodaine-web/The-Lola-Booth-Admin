@@ -54,7 +54,7 @@ export default function SystemHealth() {
         {(health?.checks || []).map((item) => (
           <article className={`health-card ${item.status.toLowerCase()}`} key={item.name}>
             <small>{item.status}</small>
-            <strong>{item.name.replaceAll(".", " ")}</strong>
+            <strong>{item.name.replaceAll(".", " ")}{item.optional ? " · optional" : ""}</strong>
             <p>{item.summary}</p>
           </article>
         ))}

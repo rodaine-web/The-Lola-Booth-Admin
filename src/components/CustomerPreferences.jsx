@@ -1,0 +1,8 @@
+import {useState} from 'react';
+import {api} from '../api/client.js';
+import {formatTimestamp,labelize} from '../utils/display.js';
+export default function CustomerPreferences({record,type,onSaved}){
+ const [source,setSource]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function save(consented){if(busy)return;setBusy(true);setError('');try{await api.patch(`/sms-consent/${type}/${record.id}`,{consented,source});await onSaved();}catch(e){setError(e.message);}finally{setBusy(false);}}
+ return <section className="panel"><h2>Communication preferences and attribution</h2><p>Email is the primary channel. SMS: <strong>{labelize(record.sms_consent_status||'NOT_CONFIGURED')}</strong></p>{record.sms_consented_at&&<p>Consent recorded {formatTimestamp(record.sms_consented_at)} · {record.sms_consent_source}</p>}{record.sms_opted_out_at&&<p>Withdrawn {formatTimestamp(record.sms_opted_out_at)}</p>}<label>Consent source or reference<input value={source} onChange={e=>setSource(e.target.value)} placeholder="Customer request or opt-in form reference"/></label><div className="button-row"><button disabled={busy||!source.trim()} onClick={()=>save(true)}>Record customer opt-in</button><button disabled={busy} onClick={()=>save(false)}>Withdraw SMS consent</button></div>{error&&<p role="alert">{error}</p>}{['first_touch','latest_touch'].map(key=><details key={key}><summary>{labelize(key)}</summary>{Object.entries(record[key]||{}).length?Object.entries(record[key]).map(([k,v])=><p key={k}><strong>{labelize(k)}</strong>: {String(v)}</p>):<p>No attribution recorded.</p>}</details>)}</section>;
+}

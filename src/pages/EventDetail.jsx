@@ -1,7 +1,7 @@
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, CheckCircle2, ClipboardList, Download, MessageSquare, Plus, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
@@ -12,6 +12,8 @@ const operationalStatuses = ["PREPARING", "READY", "EN_ROUTE", "ON_SITE", "SETTI
 
 export default function EventDetail() {
   const { id } = useParams();
+  const actionBusy=useRef(false);
+  const [reschedule,setReschedule]=useState({event_date:"",start_time:"18:00",end_time:"21:00"}),[reschedulePreview,setReschedulePreview]=useState(null);
   const [event, setEvent] = useState(null);
   const [tab, setTab] = useState("Overview");
   const [staffOptions, setStaffOptions] = useState([]);
@@ -30,8 +32,8 @@ export default function EventDetail() {
 
   useEffect(() => {
     load();
-    api.get("/staff?pageSize=100").then((result) => setStaffOptions(result.data || []));
-    api.get("/equipment?pageSize=100").then((result) => setEquipmentOptions(result.data || []));
+    api.get("/staff?pageSize=100").then((result) => setStaffOptions(result.data || [])).catch(()=>setStaffOptions([]));
+    api.get("/equipment?pageSize=100").then((result) => setEquipmentOptions(result.data || [])).catch(()=>setEquipmentOptions([]));
     api.get("/users?pageSize=100").then((result) => setUsers(result.data || [])).catch(() => setUsers([]));
   }, [id]);
 
@@ -45,6 +47,7 @@ export default function EventDetail() {
   }
 
   async function action(fn, success) {
+    if(actionBusy.current)return;actionBusy.current=true;
     setError("");
     setNotice("");
     try {
@@ -53,7 +56,7 @@ export default function EventDetail() {
       await load();
     } catch (err) {
       setError(err.message);
-    }
+    } finally{actionBusy.current=false;}
   }
 
   async function downloadRunSheet() {
@@ -138,6 +141,7 @@ export default function EventDetail() {
             </div>
             <button className="primary-action" onClick={() => action(() => api.post(`/events/${id}/checklists/instantiate`, {}), "Checklist template applied.")}><ClipboardList size={15} />Apply Checklist Template</button>
           </Panel>
+          <Panel title="Reschedule event"><div className="form-grid">{['event_date','start_time','end_time'].map(key=><label key={key}>{key.replaceAll('_',' ')}<input type={key==='event_date'?'date':'time'} value={reschedule[key]} onChange={e=>{setReschedule({...reschedule,[key]:e.target.value});setReschedulePreview(null);}}/></label>)}</div><button disabled={!reschedule.event_date} onClick={()=>action(async()=>setReschedulePreview(await api.post(`/events/${id}/operations/reschedule`,reschedule)),"Reschedule checked.")}>Check reschedule</button>{reschedulePreview&&<><p>Staff conflicts: {reschedulePreview.warnings.staff_conflicts} · Equipment conflicts: {reschedulePreview.warnings.equipment_conflicts}</p><button disabled={Boolean(reschedulePreview.warnings.staff_conflicts+reschedulePreview.warnings.equipment_conflicts)} onClick={()=>action(()=>api.post(`/events/${id}/operations/reschedule`,{...reschedule,confirm:true}),"Event rescheduled.")}>Confirm reschedule</button></>}</Panel>
           <Panel title="Operational Status">
             <select value={event.operational_status || "PREPARING"} onChange={(e) => action(() => api.post(`/events/${id}/operations/status`, { status: e.target.value }), "Operational status updated.")}>
               {operationalStatuses.map((status) => <option key={status}>{status}</option>)}
@@ -186,7 +190,7 @@ export default function EventDetail() {
               <input value={incident.description} onChange={(e) => setIncident((c) => ({ ...c, description: e.target.value }))} placeholder="Description" />
               <button className="primary-action" disabled={!incident.description} onClick={() => action(() => api.post(`/events/${id}/incidents`, incident), "Incident reported.")}><TriangleAlert size={15} />Report</button>
             </div>
-            <DataTable rows={event.operations?.incidents || []} columns={["severity", "type", "quick_issue", "description", "status"]} empty="No incidents." />
+            <DataTable rows={event.operations?.incidents || []} columns={["severity", "type", "quick_issue", "description", "status"]} empty="No incidents." />{(event.operations?.incidents||[]).filter(item=>!['RESOLVED','CLOSED'].includes(item.status)).map(item=><button key={item.id} onClick={()=>action(()=>api.patch(`/events/${id}/incidents/${item.id}`,{status:'RESOLVED',resolution_notes:incident.description||'Resolved by operations manager'}),"Incident resolved.")}>Resolve {item.description}</button>)}
           </Panel>
           <Panel title="Gallery / Completion">
             <Field label="Gallery" value={event.gallery_status} />
@@ -207,8 +211,8 @@ export default function EventDetail() {
       )}
 
       {tab === "Client" && <Panel title="Linked Client"><Field label="Name" value={event.client_name} /><Field label="Email" value={event.client_email} /><Field label="Phone" value={event.client_phone} /><Field label="Company" value={event.client_company} /><Link className="inline-link" to={`/sales/clients/${event.client_id}`}>View Client</Link></Panel>}
-      {tab === "Staff" && <Panel title="Assigned Staff"><AssignStaff form={staffForm} setForm={setStaffForm} options={staffOptions} onSubmit={() => action(() => api.post(`/events/${id}/staff`, staffForm), "Staff assigned.")} /><DataTable rows={event.operations?.staff || event.staff} columns={["name", "email", "assignment_role", "call_time", "acknowledgement_status", "lead_attendant", "notes"]} empty="No staff assigned." /></Panel>}
-      {tab === "Equipment" && <Panel title="Assigned Equipment"><AssignEquipment value={equipmentId} setValue={setEquipmentId} options={equipmentOptions} onSubmit={() => action(() => api.post(`/events/${id}/equipment`, { equipmentId }), "Equipment assigned.")} /><div className="button-row"><button onClick={downloadEquipmentLabels}><Download size={15} />Download QR Labels</button><Link className="inline-link" to={`/scan?eventId=${id}`}>Open Scanner</Link></div><DataTable rows={event.operations?.equipment || event.equipment} columns={["name", "category", "asset_uid", "lifecycle_status", "condition_before", "condition_after"]} empty="No equipment assigned." /></Panel>}
+      {tab === "Staff" && <Panel title="Assigned Staff"><AssignStaff form={staffForm} setForm={setStaffForm} options={staffOptions} onSubmit={() => action(() => api.post(`/events/${id}/staff`, staffForm), "Staff assigned.")} /><DataTable rows={event.operations?.staff || event.staff} columns={["name", "email", "assignment_role", "call_time", "acknowledgement_status", "lead_attendant", "notes"]} empty="No staff assigned." />{(event.operations?.staff||event.staff||[]).map(item=><div className="button-row" key={item.id}><span>{item.name}</span><button onClick={()=>action(()=>api.post(`/events/${id}/staff/${item.id}/acknowledge`,{}),"Assignment acknowledged.")}>Acknowledge</button><button onClick={()=>action(()=>api.post(`/events/${id}/staff/${item.id}/decline`,{reason:staffForm.notes||'Unable to attend'}),"Assignment declined.")}>Decline</button><button onClick={()=>action(()=>api.delete(`/events/${id}/staff/${item.id}`),"Assignment removed.")}>Remove assignment</button></div>)}</Panel>}
+      {tab === "Equipment" && <Panel title="Assigned Equipment"><AssignEquipment value={equipmentId} setValue={setEquipmentId} options={equipmentOptions} onSubmit={() => action(() => api.post(`/events/${id}/equipment`, { equipmentId }), "Equipment assigned.")} /><div className="button-row"><button onClick={downloadEquipmentLabels}><Download size={15} />Download QR Labels</button><Link className="inline-link" to={`/scan?eventId=${id}`}>Open Scanner</Link></div><DataTable rows={event.operations?.equipment || event.equipment} columns={["name", "category", "asset_uid", "lifecycle_status", "condition_before", "condition_after"]} empty="No equipment assigned." />{(event.operations?.equipment||event.equipment||[]).map(item=><div className="button-row" key={item.id}><span>{item.name}</span>{[['checkout','Check out',{condition_before:'GOOD'}],['onsite','Mark on site',{}],['return','Return in good condition',{condition_after:'GOOD'}],['return','Return damaged',{condition_after:'DAMAGED'}]].map(([verb,label,body])=><button key={label} onClick={()=>action(()=>api.post(`/events/${id}/equipment/${item.id}/${verb}`,body),"Equipment updated.")}>{label}</button>)}<button onClick={()=>action(()=>api.delete(`/events/${id}/equipment/${item.id}`),"Assignment removed.")}>Remove assignment</button></div>)}</Panel>}
       {tab === "Tasks" && <Panel title="Tasks"><TaskForm users={users} task={task} setTask={setTask} onSubmit={() => action(() => api.post("/tasks", { ...task, event_id: id }), "Task created.")} /><DataTable rows={event.tasks} columns={["title", "due_date", "priority", "status"]} empty="No event tasks yet." /></Panel>}
       {tab === "Files" && <Panel title="Files"><button className="primary-action" disabled>Upload File</button><DataTable rows={event.files} columns={["filename", "category", "visibility", "created_at"]} empty="No files attached." /></Panel>}
       {tab === "Finance" && <Panel title="Finance"><Field label="Booked Total" value={formatMoney(event.booked_total || 0)} /><Field label="Deposit Required" value={formatMoney(event.deposit_required || 0)} /><Field label="Paid" value={formatMoney(event.amount_paid || 0)} /><Field label="Outstanding" value={formatMoney(event.balance_due || 0)} /><DataTable rows={event.payments} columns={["amount", "payment_method", "payment_date", "reference_number"]} empty="No payments recorded." /></Panel>}

@@ -1,3 +1,4 @@
+import CustomerPreferences from "../components/CustomerPreferences.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, CheckCircle2, CircleDollarSign } from "lucide-react";
@@ -133,6 +134,7 @@ export default function LeadDetail() {
 
   return (
     <main className="page">
+      {tab==="Overview"&&<CustomerPreferences record={lead} type="lead" onSaved={loadLead}/>}
       <div className="detail-back"><Link to="/sales/leads"><ArrowLeft size={16} />Back to leads</Link></div>
       <div className="page-heading detail-heading">
         <div>

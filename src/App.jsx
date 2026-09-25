@@ -1,3 +1,5 @@
+import DataReview from "./pages/DataReview.jsx";
+import InvoiceLookup from "./pages/InvoiceLookup.jsx";
 import AuditLog from "./pages/AuditLog.jsx";
 import Roster from "./pages/Roster.jsx";
 import { lazy, Suspense } from "react";
@@ -42,7 +44,7 @@ function PrivateRoute({ children }) {
   const location = useLocation();
   if (loading) return <main className="boot-screen">Opening Admin Portal...</main>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.roles?.includes("ATTENDANT") && !user.roles?.some((role) => ["OWNER", "ADMIN", "SUPER_ADMIN", "EVENT_MANAGER"].includes(role)) && !location.pathname.startsWith("/my-events")) {
+  if (user.roles?.includes("ATTENDANT") && !user.roles?.some((role) => ["OWNER", "ADMIN", "SUPER_ADMIN", "EVENT_MANAGER"].includes(role)) && !location.pathname.startsWith("/my-events") && !location.pathname.startsWith("/scan")) {
     return <Navigate to="/my-events" replace />;
   }
   return children;
@@ -55,7 +57,9 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
       <Route path="/proposal/:token" element={<PublicProposal />} />
-      <Route path="/invoice/:token" element={<PublicInvoice />} />
+      <Route path="/pay" element={<InvoiceLookup />} />
+          <Route path="/pay/:token" element={<PublicInvoice />} />
+          <Route path="/invoice/:token" element={<PublicInvoice />} />
       <Route path="/delivery/:token" element={<PublicDelivery />} />
       <Route path="/my-events" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
       <Route path="/my-events/:eventId" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
@@ -108,6 +112,7 @@ export default function App() {
         <Route path="system/integrations" element={<Integrations />} />
         <Route path="system/health" element={<SystemHealth />} />
         <Route path="system/audit-log" element={<AuditLog/>} />
+        <Route path="system/data-review" element={<DataReview/>}/>
         <Route path="system/settings" element={<Settings />} />
       </Route>
     </Routes>

@@ -61,7 +61,7 @@ export default function PublicProposal() {
         <h2>Acceptance</h2>
         <p className="note-text">{payload.acceptanceWording}</p>
         <div className="inline-form note-form">
-          <input value={acceptedByName} onChange={(event) => setAcceptedByName(event.target.value)} placeholder="Your full name" />
+          <input aria-label="Your full name" value={acceptedByName} onChange={(event) => setAcceptedByName(event.target.value)} placeholder="Your full name" />
           <button className="primary-action" disabled={!acceptedByName.trim() || proposal.status === "ACCEPTED"} onClick={() => decide("accept", { acceptedByName })}><CheckCircle2 size={16} />Accept</button>
           <button disabled={proposal.status === "ACCEPTED"} onClick={() => decide("decline")}><XCircle size={16} />Decline</button>
           <a className="primary-action" href={`${API_URL}/public/proposals/${token}/pdf`}><Download size={16} />PDF</a>

@@ -1,3 +1,4 @@
+import CustomerPreferences from "../components/CustomerPreferences.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatMoney } from "../utils/display.js";
 import { ArrowLeft } from "lucide-react";
@@ -63,6 +64,7 @@ export default function ClientDetail() {
 
   return (
     <main className="page">
+      {tab==="Overview"&&<CustomerPreferences record={client} type="client" onSaved={loadClient}/>}
       <div className="detail-back"><Link to="/sales/clients"><ArrowLeft size={16} />Back to clients</Link></div>
       <div className="page-heading detail-heading">
         <div>
