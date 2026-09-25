@@ -90,7 +90,7 @@ function customerConfirmationBody({ lead = {}, payload = {} }) {
   ].filter(Boolean).join("\n");
 }
 
-export async function sendPublicInquiryEmails({ lead, payload, action, sendEmailImpl = sendEmail }) {
+export async function sendPublicInquiryEmails({ lead, payload, action, sendEmailImpl = sendEmail, ownerRecipient }) {
   if(action === "IDEMPOTENT_REPLAY") return;
   // Persist email work before responding; the worker owns delivery and retry visibility.
   const deliver = sendEmailImpl === sendEmail ? async message => {
@@ -100,7 +100,7 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
       [lead?.id || null,message.to,message.subject,message.body.slice(0,500),message.body,message.html || brandedEmailHtml(message.body),`public-form:${lead.id}:${message.purpose}`]);
     return result.rows[0];
   } : sendEmailImpl;
-  const ownerTo = notificationRecipient();
+  const ownerTo = ownerRecipient || notificationRecipient();
   const name = submissionName(lead, payload);
   const label = formLabel(payload);
   const mergeData = publicInquiryMergeData({ lead, payload, action, label, name });

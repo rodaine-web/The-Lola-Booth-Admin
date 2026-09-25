@@ -216,7 +216,7 @@ async function duplicateCheck(client, normalized) {
   return { type: normalized.test_mode ? "TEST" : "UNIQUE", leadId: null };
 }
 
-export async function ingestProviderLead({ provider, payload, sourceSubtype, webhookEventId = null, testMode = false }) {
+export async function ingestProviderLead({ provider, payload, sourceSubtype, webhookEventId = null, testMode = false, skipAutomations = false }) {
   const normalizedProvider = String(provider || "WEBSITE").toUpperCase();
   const mapping = await fieldMapFor(normalizedProvider, payload.form_id || payload.formId);
   const normalizers = { WEBSITE: normalizeWebsiteLead, META: normalizeMetaLead, TIKTOK: normalizeTikTokLead, LINKEDIN: normalizeLinkedInLead };
@@ -281,7 +281,7 @@ export async function ingestProviderLead({ provider, payload, sourceSubtype, web
       metadata: { provider: normalized.provider, source_subtype: normalized.source_subtype, form_id: normalized.form_id, campaign: normalized.campaign }
     });
     await logAutomationEvent({ triggerKey: "LEAD_CREATED", entityType: "lead", entityId: result.lead.id, payload: { source: normalized.provider, source_subtype: normalized.source_subtype } });
-    await triggerAutomations({ triggerKey: "LEAD_CREATED", entityType: "lead", entityId: result.lead.id, payload: { source: normalized.provider, source_subtype: normalized.source_subtype } });
+    if(!skipAutomations)await triggerAutomations({ triggerKey: "LEAD_CREATED", entityType: "lead", entityId: result.lead.id, payload: { source: normalized.provider, source_subtype: normalized.source_subtype } });
   }
   return result;
 }

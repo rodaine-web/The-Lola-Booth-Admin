@@ -8,7 +8,7 @@ const index = fs.readFileSync(new URL("../server/src/index.js", import.meta.url)
 const paymentService = fs.readFileSync(new URL("../server/src/services/payment-service.js", import.meta.url), "utf8");
 const publicInvoice = fs.readFileSync(new URL("../src/pages/PublicInvoice.jsx", import.meta.url), "utf8");
 const vercel = fs.readFileSync(new URL("../vercel.json", import.meta.url), "utf8");
-const csp = JSON.parse(vercel).headers[0].headers.find((header) => header.key === "Content-Security-Policy").value;
+const csp = JSON.parse(vercel).headers.find(rule => rule.source === "/(.*)").headers.find((header) => header.key === "Content-Security-Policy").value;
 
 test("Stripe hosted checkout is server-side and does not require frontend publishable keys", () => {
   assert.doesNotMatch(env + example + paymentService + publicInvoice, /STRIPE_PUBLISHABLE_KEY|stripePublishable|publishableKey/);

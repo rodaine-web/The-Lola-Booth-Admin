@@ -1,0 +1,35 @@
+import {Router} from 'express';
+import {randomUUID} from 'node:crypto';
+import path from 'node:path';
+import {getStorageProvider} from '../services/storage-service.js';
+import {assertMagicBytes} from '../services/website-cms-service.js';
+import {asyncHandler} from '../utils/async-handler.js';
+import {requirePermission} from '../middleware/auth.js';
+import {query} from '../db/pool.js';
+import {AppError} from '../utils/errors.js';
+import {listStagingRecords,saveStagingRecord,stagingSitePayload,assertStagingChannel} from '../services/staging-cms-service.js';
+export const stagingCmsRouter=Router();
+stagingCmsRouter.use((req,_res,next)=>{try{assertStagingChannel(req.query);assertStagingChannel(req.body);next();}catch(e){next(e);}});
+stagingCmsRouter.get('/site',requirePermission('read:website'),asyncHandler(async(_req,res)=>res.json(await stagingSitePayload())));
+stagingCmsRouter.post('/upload',requirePermission('write:website'),asyncHandler(async(req,res)=>{
+  const {mimeType,data}=req.body;
+  if(!['image/jpeg','image/png','image/webp'].includes(mimeType))throw new AppError('Upload PNG, JPEG or WebP.',422,'MEDIA_TYPE_INVALID');
+  const buffer=Buffer.from(String(data||''),'base64');
+  if(!buffer.length||buffer.length>10*1024*1024)throw new AppError('Image must be between 1 byte and 10 MB.',422,'MEDIA_SIZE_INVALID');
+  assertMagicBytes(buffer,mimeType);
+  const filename=path.basename(req.body.filename||'staging-image').replace(/[^a-zA-Z0-9_.-]/g,'_');
+  const stored=await getStorageProvider().put({buffer,filename}),id=randomUUID();
+  const payload={title:filename,filename,alt_text:'',url:`/api/public/staging/media/${id}`,storage_key:stored.storageKey,storage_provider:stored.storageProvider,mime_type:mimeType};
+  const result=await query("INSERT INTO website_channel_records(id,channel,cms_type,entity_key,payload,status,created_by,updated_by) VALUES($1,'STAGING','media',$2,$3,'DRAFT',$4,$4) RETURNING *",[id,'upload:'+id,JSON.stringify(payload),req.user.id]);
+  res.status(201).json(result.rows[0]);
+}));
+stagingCmsRouter.get('/:type',requirePermission('read:website'),asyncHandler(async(req,res)=>res.json({channel:'STAGING',data:await listStagingRecords(req.params.type)})));
+stagingCmsRouter.post('/:type',requirePermission('write:website'),asyncHandler(async(req,res)=>res.status(201).json(await saveStagingRecord(req.params.type,req.body,req.user))));
+stagingCmsRouter.patch('/:type/:id',requirePermission('write:website'),asyncHandler(async(req,res)=>res.json(await saveStagingRecord(req.params.type,req.body,req.user,req.params.id))));
+stagingCmsRouter.post('/:type/:id/:action',requirePermission('publish:website'),asyncHandler(async(req,res)=>{
+  const state={publish:'PUBLISHED',unpublish:'DRAFT',archive:'ARCHIVED'}[req.params.action];
+  if(!state)throw new AppError('Unknown lifecycle action.',404,'NOT_FOUND');
+  const row=(await query("SELECT * FROM website_channel_records WHERE channel='STAGING' AND cms_type=$1 AND id=$2",[req.params.type,req.params.id])).rows[0];
+  if(!row)throw new AppError('Staging record not found.',404,'NOT_FOUND');
+  res.json(await saveStagingRecord(req.params.type,{...row,status:state},req.user,row.id));
+}));

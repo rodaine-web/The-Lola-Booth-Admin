@@ -31,7 +31,7 @@ const PaymentDetail = lazy(() => import("./pages/PaymentDetail.jsx"));
 const PublicProposal = lazy(() => import("./pages/PublicProposal.jsx"));
 const PublicInvoice = lazy(() => import("./pages/PublicInvoice.jsx"));
 const Integrations = lazy(() => import("./pages/Integrations.jsx"));
-const WebsiteCms = lazy(() => import("./pages/WebsiteCms.jsx"));
+const WebsiteCms = lazy(() => import("./pages/StagingCms.jsx"));
 const Communications = lazy(() => import("./pages/Communications.jsx"));
 const MyEvents = lazy(() => import("./pages/MyEvents.jsx"));
 const PublicDelivery = lazy(() => import("./pages/PublicDelivery.jsx"));
@@ -93,8 +93,8 @@ export default function App() {
         <Route path="website/homepage" element={<WebsiteCms section="homepage" />} />
         <Route path="website/hero-slides" element={<WebsiteCms section="hero" />} />
         <Route path="website/gallery" element={<WebsiteCms section="gallery" />} />
-        <Route path="website/packages" element={<ResourcePage title="Website Packages" endpoint="/packages" phase="Website CMS" columns={["name", "website_key", "starting_price", "pricing_mode", "website_status", "most_popular"]} fields={packageFields} />} />
-        <Route path="website/experiences" element={<ResourcePage title="Website Experiences" endpoint="/experiences" phase="Website CMS" columns={["name", "website_name", "show_on_website", "website_featured", "active"]} fields={experienceFields} />} />
+        <Route path="website/packages" element={<WebsiteCms section="packages" />} />
+        <Route path="website/experiences" element={<WebsiteCms section="experiences" />} />
         <Route path="website/events" element={<WebsiteCms section="events" />} />
         <Route path="website/testimonials" element={<WebsiteCms section="testimonials" />} />
         <Route path="website/faq" element={<WebsiteCms section="faqs" />} />

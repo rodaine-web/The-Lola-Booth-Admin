@@ -153,9 +153,17 @@ import { getStorageProvider } from "../services/storage-service.js";
 import { sendEmail } from "../services/email-service.js";
 import { cancelSystemJob, getSystemHealth, listSystemJobs, retrySelectedSystemJobs, retrySystemJob } from "../services/system-health-service.js";
 
+import {stagingCmsRouter} from './staging-cms.js';
+import {freezesPublicMutation} from '../services/staging-cms-service.js';
+import {isStaging} from '../config/staging-safety.js';
 export const adminRouter = Router();
 
 adminRouter.use(authenticate);
+adminRouter.use((req,_res,next)=>{
+  if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)&&freezesPublicMutation(req.path,req.body))return next(new AppError('Public website V1 is frozen. Use the STAGING CMS channel.',409,'PUBLIC_CONTENT_FROZEN'));
+  next();
+});
+adminRouter.use('/website/staging',stagingCmsRouter);
 
 const eventStatuses = ["INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "READY", "IN_PROGRESS", "COMPLETED", "CANCELLED", "DRAFT", "PENDING_CONTRACT", "PENDING_DEPOSIT"];
 const leadStatuses = ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_DRAFT", "PROPOSAL_SENT", "FOLLOW_UP", "WON", "LOST", "ARCHIVED"];

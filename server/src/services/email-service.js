@@ -118,12 +118,14 @@ export class MicrosoftEmailProvider {
         provider: "microsoft",
         status: response.status,
         retryable: classification.retryable,
+        outcomeUnknown: response.status===408||response.status>=500,
         retryAfter: response.headers.get("retry-after") || undefined
       }, "Microsoft Graph sendMail request failed");
       throw new AppError(classification.customerMessage, classification.statusCode, classification.code, {
         provider: "microsoft",
         status: response.status,
         retryable: classification.retryable,
+        outcomeUnknown: response.status===408||response.status>=500,
         retryAfter: response.headers.get("retry-after") || undefined
       });
     }
@@ -170,7 +172,8 @@ export class MicrosoftEmailProvider {
       logger.warn({ provider: "microsoft", error: error.name }, "Microsoft Graph network request failed");
       throw new AppError("Email provider request failed.", 502, "MICROSOFT_NETWORK_ERROR", {
         provider: "microsoft",
-        retryable: true
+        retryable: !url.endsWith("/sendMail"),
+        outcomeUnknown: url.endsWith("/sendMail")
       });
     } finally {
       clearTimeout(timeout);

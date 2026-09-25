@@ -1,0 +1,721 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Contact | The LOLA Booth</title>
+<meta name="description" content="Contact The LOLA Booth for event questions, booking inquiries, weddings, celebrations, corporate events, and custom brand activations.">
+
+
+<meta property="og:title" content="Contact | The LOLA Booth">
+<meta property="og:description" content="Tell us what you're planning. Contact The LOLA Booth for event questions, booking inquiries, and custom photo booth experiences.">
+<meta property="og:url" content="https://thelolabooth.com/contact">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://thelolabooth.com/assets/hero-3.jpg">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Contact | The LOLA Booth">
+<meta name="twitter:description" content="Tell us what you're planning. Contact The LOLA Booth for event questions, booking inquiries, and custom photo booth experiences.">
+<meta name="twitter:image" content="https://thelolabooth.com/assets/hero-3.jpg">
+
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@graph":[
+    {
+      "@type":"Organization",
+      "@id":"https://thelolabooth.com/#organization",
+      "name":"The LOLA Booth",
+      "url":"https://thelolabooth.com",
+      "logo":"https://thelolabooth.com/assets/LOLA_Primary_Dark_Transparent.png",
+      "email":"info@thelolabooth.com",
+      "telephone":"+1-773-240-2744",
+      "slogan":"Good people. Better photos."
+    },
+    {
+      "@type":"WebSite",
+      "@id":"https://thelolabooth.com/#website",
+      "name":"The LOLA Booth",
+      "url":"https://thelolabooth.com",
+      "publisher":{"@id":"https://thelolabooth.com/#organization"}
+    },
+    {
+      "@type":"ContactPage",
+      "@id":"https://thelolabooth.com/contact#webpage",
+      "url":"https://thelolabooth.com/contact",
+      "name":"Contact | The LOLA Booth",
+      "description":"Contact The LOLA Booth for event questions, booking inquiries, weddings, celebrations, corporate events, and custom brand activations.",
+      "isPartOf":{"@id":"https://thelolabooth.com/#website"},
+      "about":{"@id":"https://thelolabooth.com/#organization"}
+    }
+  ]
+}
+</script>
+
+<link href="styles.css" rel="stylesheet">
+
+<style>
+.contact-hero{
+  padding:88px 0 52px;
+  text-align:center;
+}
+.contact-hero .display{
+  max-width:900px;
+  margin:0 auto 18px;
+}
+.contact-hero .muted{
+  max-width:740px;
+  margin:0 auto;
+  font-size:1.08rem;
+  line-height:1.72;
+}
+
+.contact-paths{
+  padding:12px 0 54px;
+}
+.contact-path-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+}
+.contact-path{
+  padding:26px;
+  border-radius:22px;
+  border:1px solid rgba(176,137,80,.2);
+  background:#fff;
+}
+.contact-path .num{
+  display:block;
+  margin-bottom:18px;
+  color:#b08950;
+  font-family:Georgia,"Times New Roman",serif;
+}
+.contact-path h2{
+  margin:0 0 9px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-weight:400;
+  font-size:1.55rem;
+}
+.contact-path p{
+  margin:0 0 16px;
+  color:#6c655d;
+  line-height:1.65;
+}
+.contact-path a{
+  font-weight:800;
+  color:#8d6938;
+}
+
+.contact-main{
+  padding:70px 0 88px;
+  background:#f8f5f0;
+}
+.contact-main-grid{
+  display:grid;
+  grid-template-columns:.82fr 1.18fr;
+  gap:46px;
+  align-items:start;
+}
+.contact-sidebar{
+  position:sticky;
+  top:110px;
+}
+.contact-sidebar h2{
+  margin:0 0 16px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:2.7rem;
+  line-height:1.08;
+  font-weight:400;
+}
+.contact-sidebar>p{
+  color:#6b645d;
+  line-height:1.72;
+  margin:0 0 24px;
+}
+.contact-info{
+  display:grid;
+  gap:12px;
+  margin-top:24px;
+}
+.contact-info-card{
+  padding:18px;
+  border-radius:18px;
+  background:#fff;
+  border:1px solid rgba(176,137,80,.18);
+}
+.contact-info-card strong{
+  display:block;
+  margin-bottom:6px;
+  font-size:.82rem;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  color:#9b743e;
+}
+.contact-info-card a,
+.contact-info-card span{
+  color:#2e2925;
+  line-height:1.5;
+}
+
+.contact-form-wrap{
+  background:#fff;
+  border:1px solid rgba(176,137,80,.18);
+  border-radius:26px;
+  padding:30px;
+}
+.contact-form-head{
+  margin-bottom:24px;
+}
+.contact-form-head h2{
+  margin:0 0 8px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:2rem;
+  font-weight:400;
+}
+.contact-form-head p{
+  margin:0;
+  color:#6b645d;
+  line-height:1.65;
+}
+.form-note{
+  margin-top:8px;
+  font-size:.8rem;
+  color:#817970;
+}
+.check-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+}
+.check-option{
+  display:flex;
+  gap:9px;
+  align-items:flex-start;
+  padding:12px 13px;
+  border:1px solid rgba(176,137,80,.18);
+  border-radius:14px;
+  background:#fbf8f4;
+  cursor:pointer;
+}
+.check-option input{
+  margin-top:3px;
+}
+.check-option span{
+  font-size:.9rem;
+  line-height:1.4;
+}
+
+.next-steps{
+  padding:80px 0;
+}
+.next-steps-head{
+  max-width:760px;
+  margin:0 auto 30px;
+  text-align:center;
+}
+.next-steps-head h2{
+  margin:0 0 12px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:2.7rem;
+  font-weight:400;
+}
+.next-steps-head p{
+  margin:0;
+  color:#6c655d;
+  line-height:1.7;
+}
+.steps-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
+}
+.step-card{
+  padding:24px 22px;
+  border-radius:20px;
+  border:1px solid rgba(176,137,80,.18);
+  background:#fff;
+}
+.step-card .step-num{
+  display:block;
+  color:#b08950;
+  margin-bottom:15px;
+  font-family:Georgia,"Times New Roman",serif;
+}
+.step-card h3{
+  margin:0 0 8px;
+  font-size:1.02rem;
+}
+.step-card p{
+  margin:0;
+  color:#6c655d;
+  line-height:1.62;
+  font-size:.92rem;
+}
+
+.corporate-contact{
+  padding:78px 0;
+  background:#171512;
+  color:#fff;
+}
+.corporate-grid{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:38px;
+  align-items:center;
+}
+.corporate-grid h2{
+  margin:0 0 12px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:2.8rem;
+  line-height:1.08;
+  font-weight:400;
+}
+.corporate-grid p{
+  max-width:760px;
+  margin:0;
+  color:#d7d0c7;
+  line-height:1.72;
+}
+
+.contact-help{
+  padding:76px 0;
+}
+.contact-help-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
+}
+.contact-help-card{
+  padding:22px;
+  border-radius:18px;
+  background:#f8f5f0;
+}
+.contact-help-card h3{
+  margin:0 0 8px;
+  font-size:1rem;
+}
+.contact-help-card p{
+  margin:0 0 12px;
+  color:#6c655d;
+  line-height:1.58;
+  font-size:.9rem;
+}
+.contact-help-card a{
+  font-weight:800;
+  color:#8d6938;
+  font-size:.88rem;
+}
+
+@media(max-width:960px){
+  .contact-main-grid{grid-template-columns:1fr}
+  .contact-sidebar{position:static}
+  .contact-path-grid{grid-template-columns:1fr}
+  .steps-grid{grid-template-columns:repeat(2,1fr)}
+  .contact-help-grid{grid-template-columns:repeat(2,1fr)}
+  .corporate-grid{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  .contact-hero{padding:60px 0 38px}
+  .contact-form-wrap{padding:20px}
+  .check-grid{grid-template-columns:1fr}
+  .steps-grid,.contact-help-grid{grid-template-columns:1fr}
+  .contact-sidebar h2,.next-steps-head h2,.corporate-grid h2{font-size:2.1rem}
+}
+</style>
+
+
+
+
+<link rel="icon" type="image/png" sizes="512x512" href="/staging-site/favicon.png">
+<link rel="apple-touch-icon" href="/staging-site/favicon.png">
+
+
+<meta name="robots" content="noindex,nofollow"></head>
+
+<body><aside class="staging-notice" style="padding:10px;text-align:center;background:#20253b;color:white">STAGING · CMS qualification · Public website V1 is unchanged</aside>
+
+<header>
+<div class="container nav">
+  <div class="brand-lockup">
+    <a href="index.html"><img alt="The LOLA Booth" class="logo" src="/staging-site/assets/LOLA_Primary_Dark_Transparent.webp" data-cms-media="assets/LOLA_Primary_Dark_Transparent.webp"></a>
+    <span class="brand-tag" data-cms-copy="contact.100">Good people. Better photos.</span>
+  </div>
+  <nav class="navlinks">
+    <a href="index.html" data-cms-copy="contact.001">Home</a>
+    <a href="experiences.html" data-cms-copy="contact.002">Experiences</a>
+    <a href="packages.html" data-cms-copy="contact.003">Packages</a>
+
+
+    <a href="about.html" data-cms-copy="contact.006">About</a>
+    <a href="contact.html" aria-current="page" data-cms-copy="contact.007">Contact</a>
+    <a class="btn gold" href="availability.html" data-cms-copy="contact.008">Book Now →</a>
+  </nav>
+  <button aria-label="Menu" class="menu-btn">☰</button>
+</div>
+</header>
+
+<div class="mobile-menu">
+  <span class="mobile-brand-tag" data-cms-copy="contact.101">Good people. Better photos.</span>
+  <a href="index.html" data-cms-copy="contact.009">Home</a>
+  <a href="experiences.html" data-cms-copy="contact.010">Experiences</a>
+  <a href="packages.html" data-cms-copy="contact.011">Packages</a>
+
+
+  <a href="about.html" data-cms-copy="contact.014">About</a>
+  <a href="contact.html" data-cms-copy="contact.015">Contact</a>
+  <a href="availability.html" data-cms-copy="contact.016">Book Now</a>
+</div>
+
+<main data-cms-contact="page">
+
+<section class="contact-hero" data-cms-contact-section="hero">
+<div class="container">
+  <p class="eyebrow" data-cms-copy="contact.017">Contact</p>
+  <h1 class="display" data-cms-copy="contact.018">Tell us what you’re planning.</h1>
+  <p class="muted" data-cms-copy="contact.019">Have a question, planning something unusual, or need a custom experience? Start here and the LOLA team will point you in the right direction.</p>
+</div>
+</section>
+
+<section class="contact-paths" data-cms-contact-section="paths">
+<div class="container">
+  <div class="contact-path-grid">
+    <article class="contact-path">
+      <span class="num" data-cms-copy="contact.102">01</span>
+      <h2 data-cms-copy="contact.020">General Question</h2>
+      <p data-cms-copy="contact.021">Need help choosing an experience, understanding a package, or figuring out what works for your event?</p>
+      <a href="#contact-form" data-cms-copy="contact.022">Send us a message →</a>
+    </article>
+
+    <article class="contact-path">
+      <span class="num" data-cms-copy="contact.103">02</span>
+      <h2 data-cms-copy="contact.023">Ready to Book?</h2>
+      <p data-cms-copy="contact.024">If you already know your date and are ready to move forward, head straight to availability and booking.</p>
+      <a href="availability.html" data-cms-copy="contact.025">Check availability →</a>
+    </article>
+
+    <article class="contact-path">
+      <span class="num" data-cms-copy="contact.104">03</span>
+      <h2 data-cms-copy="contact.026">Corporate or Brand Activation</h2>
+      <p data-cms-copy="contact.027">Planning a launch, conference, employee event, sponsored activation, or multi-day experience?</p>
+      <a href="#corporate-contact" data-cms-copy="contact.028">Start a custom project →</a>
+    </article>
+  </div>
+</div>
+</section>
+
+<section class="contact-main" id="contact-form">
+<div class="container contact-main-grid">
+
+  <aside class="contact-sidebar">
+    <p class="eyebrow" data-cms-copy="contact.029">Let’s Talk</p>
+    <h2 data-cms-copy="contact.030">Tell us enough to get started.</h2>
+    <p data-cms-copy="contact.031">Share the basics and we’ll follow up with availability, recommendations, and next steps. If you are not sure which experience fits, that is completely fine.</p>
+
+    <div class="contact-info">
+      <div class="contact-info-card">
+        <strong>Email</strong>
+        <a data-site-email="true" href="mailto:info@thelolabooth.com">info@thelolabooth.com</a>
+      </div>
+
+      <div class="contact-info-card">
+        <strong>Phone</strong>
+        <a data-site-phone="true" href="tel:+17732402744">(773) 240-2744</a>
+      </div>
+
+      <div class="contact-info-card">
+        <strong>Instagram</strong>
+        <a href="https://www.instagram.com/thelolabooth/" target="_blank" rel="noopener noreferrer" data-cms-copy="contact.034">@thelolabooth</a>
+      </div>
+
+      <div class="contact-info-card">
+        <strong>TikTok</strong>
+        <a href="https://www.tiktok.com/@thelolabooth" target="_blank" rel="noopener noreferrer" data-cms-copy="contact.035">@thelolabooth</a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="contact-form-wrap">
+    <div class="contact-form-head">
+      <p class="eyebrow" data-cms-copy="contact.036">Event Inquiry</p>
+      <h2 data-cms-copy="contact.037">What are we celebrating?</h2>
+      <p data-cms-copy="contact.038">Fields marked with * are required.</p>
+    </div>
+
+    <!-- IMPORTANT:
+         This form preserves the existing CMS/API hooks and field names used by app.js.
+         Do not remove data-lola-inquiry, data-event-type-select, data-experience-select,
+         the honeypot field, or data-form-status without updating the backend integration. -->
+    <form class="form" data-lola-inquiry="true" novalidate="novalidate">
+      <div class="form-grid">
+
+        <div>
+          <label for="contact-first">First Name *</label>
+          <input id="contact-first" maxlength="80" name="firstName" required="">
+        </div>
+
+        <div>
+          <label for="contact-last">Last Name *</label>
+          <input id="contact-last" maxlength="80" name="lastName" required="">
+        </div>
+
+        <div>
+          <label for="contact-email">Email *</label>
+          <input id="contact-email" maxlength="160" name="email" required="" type="email">
+        </div>
+
+        <div>
+          <label for="contact-phone">Phone *</label>
+          <input id="contact-phone" maxlength="40" name="phone" required="" type="tel">
+        </div>
+
+        <div>
+          <label for="contact-date">Event Date *</label>
+          <input id="contact-date" name="eventDate" required="" type="date">
+        </div>
+
+        <div>
+          <label for="contact-type">Event Type *</label>
+          <select data-event-type-select="" id="contact-type" name="eventType" required="">
+            <option value="">Select event type</option>
+            <option>Wedding</option>
+            <option>Birthday</option>
+            <option>Corporate Event</option>
+            <option>Brand Activation</option>
+            <option>Bridal Shower</option>
+            <option>Baby Shower</option>
+            <option>Graduation</option>
+            <option>Private Event</option>
+            <option>Other</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="contact-city">City *</label>
+          <input id="contact-city" maxlength="100" name="city" required="">
+        </div>
+
+        <div>
+          <label for="contact-state">State *</label>
+          <input id="contact-state" maxlength="40" name="state" placeholder="e.g. IL" required="">
+        </div>
+
+        <div>
+          <label for="contact-exp">Primary Experience</label>
+          <select data-experience-select="" id="contact-exp" name="preferredExperienceId">
+            <option value="">Not sure yet</option>
+          </select>
+          <div class="form-note">Choose an experience, or let us recommend one.</div>
+        </div>
+
+        <div>
+          <label for="contact-venue">Venue</label>
+          <input id="contact-venue" maxlength="160" name="venueName" placeholder="If known">
+        </div>
+
+        <div>
+          <label for="contact-guests">Estimated Guest Count</label>
+          <input id="contact-guests" min="1" max="5000" name="guestCount" type="number" placeholder="e.g. 150">
+        </div>
+
+        <div>
+          <label for="contact-budget">Budget Range</label>
+          <select id="contact-budget" name="budgetRange">
+            <option value="">Prefer not to say</option>
+            <option value="under-750">Under $750</option>
+            <option value="750-1250">$750–$1,250</option>
+            <option value="1250-2000">$1,250–$2,000</option>
+            <option value="2000-3500">$2,000–$3,500</option>
+            <option value="3500-plus">$3,500+</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:18px">
+        <label>Interested In</label>
+        <div class="check-grid">
+          <label class="check-option"><input type="checkbox" name="interestedIn" value="glam"><span data-cms-copy="contact.105">The Glam</span></label>
+          <label class="check-option"><input type="checkbox" name="interestedIn" value="360"><span data-cms-copy="contact.106">The 360 Booth</span></label>
+          <label class="check-option"><input type="checkbox" name="interestedIn" value="vogue"><span data-cms-copy="contact.107">The Vogue</span></label>
+          <label class="check-option"><input type="checkbox" name="interestedIn" value="audio-guest-book"><span data-cms-copy="contact.108">The Audio Guest Book</span></label>
+        </div>
+        <div class="form-note">Optional. Select any that interest you.</div>
+      </div>
+
+      <div style="margin-top:18px">
+        <label for="contact-message">Tell us about your event</label>
+        <textarea id="contact-message" maxlength="2500" name="message" placeholder="Tell us about the event, the mood, any must-haves, or anything unusual we should know."></textarea>
+      </div>
+
+      <input aria-hidden="true" autocomplete="off" class="hp-field" name="website" tabindex="-1">
+
+      <button class="btn dark" style="margin-top:18px" type="submit">Send Inquiry →</button>
+      <div aria-live="polite" class="form-status" data-form-status=""></div>
+    </form>
+  </div>
+
+</div>
+</section>
+
+<section class="next-steps" data-cms-contact-section="next-steps">
+<div class="container">
+  <div class="next-steps-head">
+    <p class="eyebrow" data-cms-copy="contact.039">What Happens Next</p>
+    <h2 data-cms-copy="contact.040">Simple from inquiry to event day.</h2>
+    <p data-cms-copy="contact.041">Once we have the details, we can move quickly without making you repeat yourself.</p>
+  </div>
+
+  <div class="steps-grid">
+    <article class="step-card">
+      <span class="step-num" data-cms-copy="contact.109">01</span>
+      <h3 data-cms-copy="contact.042">You send the details</h3>
+      <p data-cms-copy="contact.043">Tell us the date, location, event type, and what you have in mind.</p>
+    </article>
+
+    <article class="step-card">
+      <span class="step-num" data-cms-copy="contact.110">02</span>
+      <h3 data-cms-copy="contact.044">We review availability</h3>
+      <p data-cms-copy="contact.045">We check the date, equipment, staffing, logistics, and the experience that best fits.</p>
+    </article>
+
+    <article class="step-card">
+      <span class="step-num" data-cms-copy="contact.111">03</span>
+      <h3 data-cms-copy="contact.046">You receive next steps</h3>
+      <p data-cms-copy="contact.047">We send the appropriate package, proposal, or custom recommendation for your event.</p>
+    </article>
+
+    <article class="step-card">
+      <span class="step-num" data-cms-copy="contact.112">04</span>
+      <h3 data-cms-copy="contact.048">Your date gets secured</h3>
+      <p data-cms-copy="contact.049">Once the booking documents and required 30% down payment are completed, we move into event preparation.</p>
+    </article>
+  </div>
+</div>
+</section>
+
+<section class="corporate-contact" id="corporate-contact" data-cms-contact-section="corporate">
+<div class="container corporate-grid">
+  <div>
+    <p class="eyebrow" style="color:#d6b47a" data-cms-copy="contact.050">Corporate &amp; Brand Activations</p>
+    <h2 data-cms-copy="contact.051">Need more than a standard booth package?</h2>
+    <p data-cms-copy="contact.052">We can build custom branded experiences for conferences, launches, employee events, sponsored activations, galas, and multi-day projects. Tell us the campaign, guest count, venue, goals, and scope and we’ll build around it.</p>
+  </div>
+  <a class="btn gold" href="#contact-form" data-cms-copy="contact.053">Start a Custom Inquiry →</a>
+</div>
+</section>
+
+<section class="contact-help" data-cms-contact-section="help">
+<div class="container">
+  <div class="contact-help-grid">
+    <article class="contact-help-card">
+      <h3 data-cms-copy="contact.054">Looking for pricing?</h3>
+      <p data-cms-copy="contact.055">See starting rates, package lengths, included features, and add-ons.</p>
+      <a href="packages.html" data-cms-copy="contact.056">View Packages →</a>
+    </article>
+
+    <article class="contact-help-card">
+      <h3 data-cms-copy="contact.057">Not sure which booth?</h3>
+      <p data-cms-copy="contact.058">Compare The Glam, 360 Booth, Vogue, and Audio Guest Book.</p>
+      <a href="experiences.html" data-cms-copy="contact.059">Explore Experiences →</a>
+    </article>
+
+    <article class="contact-help-card">
+      <h3 data-cms-copy="contact.060">Have a quick question?</h3>
+      <p data-cms-copy="contact.061">We may already have the answer about deposits, setup, travel, printing, or customization.</p>
+      <a href="faq.html" data-cms-copy="contact.062">Browse FAQs →</a>
+    </article>
+
+    <article class="contact-help-card">
+      <h3 data-cms-copy="contact.063">Ready to move?</h3>
+      <p data-cms-copy="contact.064">If you already know what you want, go straight to date and availability details.</p>
+      <a href="availability.html" data-cms-copy="contact.065">Book Now →</a>
+    </article>
+  </div>
+</div>
+</section>
+
+<section class="cta">
+<div class="container cta-inner">
+  <p class="eyebrow" data-cms-copy="contact.066">READY WHEN YOU ARE</p>
+  <h2 class="display" data-cms-copy="contact.067">Let’s Make It Official.</h2>
+  <p data-cms-copy="contact.068">Check your date, tell us what you’re planning, and let’s create something unforgettable together.</p>
+  <a class="btn gold" href="availability.html" data-cms-copy="contact.069">Book Now →</a>
+</div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+<div class="container footer-top">
+
+  <div class="footer-brand">
+    <img alt="The LOLA Booth" class="footer-logo" src="/staging-site/assets/LOLA_Primary_Light_Transparent.webp" data-cms-media="assets/LOLA_Primary_Light_Transparent.webp">
+    <span class="foot-tag" data-brand-line="true">Good people. Better photos.</span>
+    <p class="small" data-cms-copy="contact.070">Premium photo booth experiences for weddings, celebrations, corporate events, and brands.</p>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="contact.071">Experiences</h4>
+    <a href="experiences.html#glam" data-cms-copy="contact.072">The Glam</a>
+    <a href="experiences.html#360" data-cms-copy="contact.073">The 360 Booth</a>
+    <a href="experiences.html#vogue" data-cms-copy="contact.074">The Vogue</a>
+    <a href="experiences.html#audio" data-cms-copy="contact.075">The Audio Guest Book</a>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="contact.076">Add-ons</h4>
+    <a href="packages.html" data-cms-copy="contact.077">Additional Hours</a>
+    <a href="packages.html" data-cms-copy="contact.078">Premium Backdrops</a>
+    <a href="packages.html" data-cms-copy="contact.079">On-site Printing</a>
+    <a href="packages.html" data-cms-copy="contact.080">Custom Signage</a>
+    <a href="packages.html" data-cms-copy="contact.081">Branding</a>
+  </div>
+
+
+
+  <div>
+    <h4 data-cms-copy="contact.089">Company</h4>
+    <a href="about.html" data-cms-copy="contact.090">About LOLA</a>
+
+    <a href="faq.html" data-cms-copy="contact.092">FAQ</a>
+    <a href="contact.html" data-cms-copy="contact.093">Contact</a>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="contact.094">Get in touch</h4>
+    <a href="availability.html" data-cms-copy="contact.095">Book Now</a>
+    <a data-site-email="true" href="mailto:info@thelolabooth.com">info@thelolabooth.com</a>
+    <span class="footer-placeholder" data-site-phone="true">Phone: <a href="tel:+17732402744">(773) 240-2744</a></span>
+    <span class="footer-placeholder" data-site-service-area="true">Service area: Available by inquiry</span>
+
+    <div class="footer-social" data-site-socials="true">
+      <a class="social-link" href="https://www.instagram.com/thelolabooth/" target="_blank" rel="noopener noreferrer" aria-label="The LOLA Booth on Instagram">
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <rect x="3" y="3" width="18" height="18" rx="5"></rect>
+          <circle cx="12" cy="12" r="4"></circle>
+          <circle cx="17.5" cy="6.5" r="1.2"></circle>
+        </svg>
+      </a>
+
+      <a class="social-link" href="https://www.tiktok.com/@thelolabooth" target="_blank" rel="noopener noreferrer" aria-label="The LOLA Booth on TikTok">
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <path d="M14 3v10.2a4.2 4.2 0 1 1-4.2-4.2"></path>
+          <path d="M14 3c.6 3.4 2.6 5.4 6 5.8"></path>
+        </svg>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<div class="container footer-bottom">
+  <span data-site-copyright="true">© 2026 The LOLA Booth. All rights reserved.</span>
+  <span class="footer-legal"><a href="privacy.html" data-cms-copy="contact.098">Privacy</a> · <a href="terms.html" data-cms-copy="contact.099">Terms</a></span>
+  <span data-cms-copy="contact.113">Good people. Better photos. ♡</span>
+</div>
+</footer>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+
+
+
+</body></html>

@@ -33,7 +33,7 @@ app.use("/api/webhooks", express.raw({ type: "application/json", limit: "1mb" })
 app.use(express.json({ limit: "14mb" }));
 // Public images have their own bounded quota so browsing a gallery cannot exhaust
 // the authenticated API/form quota. The media route still enforces public permission.
-const publicImageRequest = req => ["GET", "HEAD"].includes(req.method) && /^\/api\/public\/media\/[^/]+$/.test(req.path);
+const publicImageRequest = req => ["GET", "HEAD"].includes(req.method) && /^\/api\/public\/(?:staging\/)?media\/[^/]+$/.test(req.path);
 const mediaLimiter = rateLimit({ windowMs: env.rateLimitWindowMs, limit: 600, standardHeaders: true, legacyHeaders: false });
 app.use((req, res, next) => publicImageRequest(req) ? mediaLimiter(req, res, next) : next());
 app.use(rateLimit({ windowMs: env.rateLimitWindowMs, limit: env.rateLimitMax, skip: publicImageRequest, standardHeaders: true, legacyHeaders: false }));

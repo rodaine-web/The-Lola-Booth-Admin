@@ -1,0 +1,776 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Book Now | The LOLA Booth</title>
+<meta name="description" content="Check availability and request a personalized quote from The LOLA Booth for weddings, birthdays, corporate events, brand activations, showers, graduations, and private celebrations.">
+
+
+<meta property="og:title" content="Book Now | The LOLA Booth">
+<meta property="og:description" content="Start your LOLA booking request. Tell us your date, venue, guest count, preferred experience, and event details.">
+<meta property="og:url" content="https://thelolabooth.com/availability">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://thelolabooth.com/assets/hero-3.jpg">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Book Now | The LOLA Booth">
+<meta name="twitter:description" content="Start your LOLA booking request. Tell us your date, venue, guest count, preferred experience, and event details.">
+<meta name="twitter:image" content="https://thelolabooth.com/assets/hero-3.jpg">
+
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@graph":[
+    {
+      "@type":"Organization",
+      "@id":"https://thelolabooth.com/#organization",
+      "name":"The LOLA Booth",
+      "url":"https://thelolabooth.com",
+      "logo":"https://thelolabooth.com/assets/LOLA_Primary_Dark_Transparent.png",
+      "email":"info@thelolabooth.com",
+      "telephone":"+1-773-240-2744",
+      "slogan":"Good people. Better photos."
+    },
+    {
+      "@type":"WebSite",
+      "@id":"https://thelolabooth.com/#website",
+      "name":"The LOLA Booth",
+      "url":"https://thelolabooth.com",
+      "publisher":{"@id":"https://thelolabooth.com/#organization"}
+    },
+    {
+      "@type":"WebPage",
+      "@id":"https://thelolabooth.com/availability#webpage",
+      "url":"https://thelolabooth.com/availability",
+      "name":"Book Now | The LOLA Booth",
+      "description":"Check availability and request a personalized quote from The LOLA Booth.",
+      "isPartOf":{"@id":"https://thelolabooth.com/#website"}
+    }
+  ]
+}
+</script>
+
+<link href="styles.css" rel="stylesheet">
+
+<style>
+.booking-hero{
+  padding:88px 0 50px;
+  text-align:center;
+}
+.booking-hero .display{
+  max-width:920px;
+  margin:0 auto 18px;
+}
+.booking-hero .muted{
+  max-width:780px;
+  margin:0 auto;
+  font-size:1.08rem;
+  line-height:1.75;
+}
+.booking-progress{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:10px;
+  margin-top:28px;
+}
+.booking-progress span{
+  padding:9px 13px;
+  border-radius:999px;
+  background:#f6f1ea;
+  color:#655d55;
+  font-size:.83rem;
+  font-weight:700;
+}
+
+.booking-main{
+  padding:36px 0 88px;
+}
+.booking-layout{
+  display:grid;
+  grid-template-columns:.78fr 1.22fr;
+  gap:46px;
+  align-items:start;
+}
+.booking-intro{
+  position:sticky;
+  top:110px;
+}
+.booking-intro h2{
+  margin:0 0 16px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:2.8rem;
+  line-height:1.08;
+  font-weight:400;
+}
+.booking-intro>p{
+  color:#6b645d;
+  line-height:1.75;
+  margin:0 0 22px;
+}
+.booking-note{
+  padding:20px;
+  border-radius:18px;
+  background:#171512;
+  color:#fff;
+  margin-bottom:18px;
+}
+.booking-note strong{
+  display:block;
+  color:#d7b67c;
+  margin-bottom:7px;
+}
+.booking-note p{
+  margin:0;
+  color:#ddd6cd;
+  line-height:1.62;
+  font-size:.93rem;
+}
+.booking-contact{
+  display:grid;
+  gap:10px;
+}
+.booking-contact-card{
+  padding:16px 18px;
+  border-radius:16px;
+  background:#f8f5f0;
+}
+.booking-contact-card strong{
+  display:block;
+  margin-bottom:5px;
+  color:#9b743e;
+  font-size:.8rem;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+
+.booking-form-shell{
+  border:1px solid rgba(176,137,80,.18);
+  border-radius:26px;
+  padding:30px;
+  background:#fff;
+}
+.form-section{
+  padding:0 0 28px;
+  margin-bottom:28px;
+  border-bottom:1px solid rgba(176,137,80,.16);
+}
+.form-section:last-of-type{
+  margin-bottom:20px;
+}
+.form-section-head{
+  margin-bottom:18px;
+}
+.form-section-head h2{
+  margin:0 0 6px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:1.75rem;
+  font-weight:400;
+}
+.form-section-head p{
+  margin:0;
+  color:#706860;
+  line-height:1.6;
+  font-size:.92rem;
+}
+.field-help{
+  margin-top:7px;
+  color:#817970;
+  font-size:.8rem;
+  line-height:1.45;
+}
+
+.booking-links{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:16px;
+}
+.booking-links a{
+  padding:8px 11px;
+  border-radius:999px;
+  background:#f5efe8;
+  color:#6a5437;
+  font-size:.82rem;
+  font-weight:700;
+}
+
+.booking-steps{
+  padding:80px 0;
+  background:#f8f5f0;
+}
+.booking-steps-head{
+  max-width:760px;
+  margin:0 auto 30px;
+  text-align:center;
+}
+.booking-steps-head h2{
+  margin:0 0 12px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:2.7rem;
+  font-weight:400;
+}
+.booking-steps-head p{
+  margin:0;
+  color:#6c655d;
+  line-height:1.7;
+}
+.booking-steps-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:14px;
+}
+.booking-step{
+  padding:23px 20px;
+  border-radius:20px;
+  background:#fff;
+  border:1px solid rgba(176,137,80,.16);
+}
+.booking-step .num{
+  display:block;
+  margin-bottom:14px;
+  color:#b08950;
+  font-family:Georgia,"Times New Roman",serif;
+}
+.booking-step h3{
+  margin:0 0 7px;
+  font-size:1rem;
+}
+.booking-step p{
+  margin:0;
+  color:#6c655d;
+  line-height:1.58;
+  font-size:.89rem;
+}
+
+.deposit-band{
+  padding:72px 0;
+  background:#171512;
+  color:#fff;
+}
+.deposit-band-grid{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:34px;
+  align-items:center;
+}
+.deposit-band h2{
+  margin:0 0 10px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:2.45rem;
+  font-weight:400;
+}
+.deposit-band p{
+  max-width:760px;
+  margin:0;
+  color:#d9d2c9;
+  line-height:1.7;
+}
+.deposit-badge{
+  min-width:180px;
+  text-align:center;
+  padding:22px 26px;
+  border:1px solid rgba(216,183,127,.5);
+  border-radius:20px;
+}
+.deposit-badge strong{
+  display:block;
+  color:#d8b77f;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:2.2rem;
+  font-weight:400;
+}
+.deposit-badge span{
+  display:block;
+  margin-top:4px;
+  color:#ddd6cd;
+  font-size:.84rem;
+}
+
+.booking-help{
+  padding:76px 0;
+}
+.booking-help-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:14px;
+}
+.booking-help-card{
+  padding:24px;
+  border-radius:20px;
+  border:1px solid rgba(176,137,80,.18);
+  background:#fff;
+}
+.booking-help-card h3{
+  margin:0 0 8px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:1.35rem;
+  font-weight:400;
+}
+.booking-help-card p{
+  margin:0 0 13px;
+  color:#6c655d;
+  line-height:1.62;
+  font-size:.92rem;
+}
+.booking-help-card a{
+  font-weight:800;
+  color:#8d6938;
+}
+
+@media(max-width:1000px){
+  .booking-layout{grid-template-columns:1fr}
+  .booking-intro{position:static}
+  .booking-steps-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:720px){
+  .booking-hero{padding:60px 0 38px}
+  .booking-form-shell{padding:20px}
+  .booking-steps-grid,.booking-help-grid{grid-template-columns:1fr}
+  .deposit-band-grid{grid-template-columns:1fr}
+  .deposit-badge{max-width:220px}
+  .booking-intro h2,.booking-steps-head h2,.deposit-band h2{font-size:2.1rem}
+}
+</style>
+
+
+
+
+<link rel="icon" type="image/png" sizes="512x512" href="/staging-site/favicon.png">
+<link rel="apple-touch-icon" href="/staging-site/favicon.png">
+
+
+<meta name="robots" content="noindex,nofollow"></head>
+
+<body><aside class="staging-notice" style="padding:10px;text-align:center;background:#20253b;color:white">STAGING · CMS qualification · Public website V1 is unchanged</aside>
+
+<header>
+<div class="container nav">
+  <div class="brand-lockup">
+    <a href="index.html"><img alt="The LOLA Booth" class="logo" src="/staging-site/assets/LOLA_Primary_Dark_Transparent.webp" data-cms-media="assets/LOLA_Primary_Dark_Transparent.webp"></a>
+    <span class="brand-tag" data-cms-copy="availability.104">Good people. Better photos.</span>
+  </div>
+  <nav class="navlinks">
+    <a href="index.html" data-cms-copy="availability.001">Home</a>
+    <a href="experiences.html" data-cms-copy="availability.002">Experiences</a>
+    <a href="packages.html" data-cms-copy="availability.003">Packages</a>
+
+
+    <a href="about.html" data-cms-copy="availability.006">About</a>
+    <a href="contact.html" data-cms-copy="availability.007">Contact</a>
+    <a class="btn gold" href="availability.html" aria-current="page" data-cms-copy="availability.008">Book Now →</a>
+  </nav>
+  <button aria-label="Menu" class="menu-btn">☰</button>
+</div>
+</header>
+
+<div class="mobile-menu">
+  <span class="mobile-brand-tag" data-cms-copy="availability.105">Good people. Better photos.</span>
+  <a href="index.html" data-cms-copy="availability.009">Home</a>
+  <a href="experiences.html" data-cms-copy="availability.010">Experiences</a>
+  <a href="packages.html" data-cms-copy="availability.011">Packages</a>
+
+
+  <a href="about.html" data-cms-copy="availability.014">About</a>
+  <a href="contact.html" data-cms-copy="availability.015">Contact</a>
+  <a href="availability.html" data-cms-copy="availability.016">Book Now</a>
+</div>
+
+<main data-cms-booking="page">
+
+<section class="booking-hero" data-cms-booking-section="hero">
+<div class="container">
+  <p class="eyebrow" data-cms-copy="availability.017">Book Now</p>
+  <h1 class="display" data-cms-copy="availability.018">Your event starts here.</h1>
+  <p class="muted" data-cms-copy="availability.019">Every celebration is different, so we build your quote around the date, venue, guest count, experience, and details that matter to your event.</p>
+
+  <div class="booking-progress" aria-label="Booking process summary">
+    <span data-cms-copy="availability.106">1. Send Request</span>
+    <span data-cms-copy="availability.107">2. Confirm Availability</span>
+    <span data-cms-copy="availability.108">3. Review Proposal</span>
+    <span data-cms-copy="availability.109">4. Pay 30% Down</span>
+    <span data-cms-copy="availability.110">5. Booking Confirmed</span>
+  </div>
+</div>
+</section>
+
+<section class="booking-main">
+<div class="container booking-layout">
+
+  <aside class="booking-intro">
+    <p class="eyebrow" data-cms-copy="availability.020">Let’s Get Started</p>
+    <h2 data-cms-copy="availability.021">Tell us what you’re planning.</h2>
+    <p data-cms-copy="availability.022">Use the form to share the essentials. We’ll review the date, logistics, and experience options, then come back with availability and next steps.</p>
+
+    <div class="booking-note">
+      <strong>Important booking note</strong>
+      <p data-cms-copy="availability.023">Submitting this form is a booking request, not a confirmed reservation. Your date is secured only after the required booking documents and 30% down payment are completed.</p>
+    </div>
+
+    <div class="booking-contact">
+      <div class="booking-contact-card">
+        <strong>Email</strong>
+        <a data-site-email="true" href="mailto:info@thelolabooth.com">info@thelolabooth.com</a>
+      </div>
+      <div class="booking-contact-card">
+        <strong>Phone</strong>
+        <a data-site-phone="true" href="tel:+17732402744">(773) 240-2744</a>
+      </div>
+      <div class="booking-contact-card">
+        <strong>Not ready to book?</strong>
+        <a href="contact.html" data-cms-copy="availability.026">Ask us a question instead →</a>
+      </div>
+    </div>
+
+    <div class="booking-links">
+      <a href="experiences.html" data-cms-copy="availability.027">Compare Experiences</a>
+      <a href="packages.html" data-cms-copy="availability.028">View Packages</a>
+      <a href="faq.html" data-cms-copy="availability.029">Read FAQs</a>
+    </div>
+  </aside>
+
+  <div class="booking-form-shell">
+    <!-- Existing CMS/API integration preserved:
+         data-lola-inquiry
+         data-event-type-select
+         data-experience-select
+         data-package-select
+         data-form-status
+         existing field names
+         honeypot field
+    -->
+    <form class="form booking-form" data-lola-inquiry="true" novalidate="novalidate">
+
+      <section class="form-section">
+        <div class="form-section-head">
+          <p class="eyebrow" data-cms-copy="availability.030">01</p>
+          <h2 data-cms-copy="availability.031">Your Details</h2>
+          <p data-cms-copy="availability.032">Who should we contact about the event?</p>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label for="book-first">First Name *</label>
+            <input id="book-first" maxlength="80" name="firstName" required="">
+          </div>
+
+          <div>
+            <label for="book-last">Last Name *</label>
+            <input id="book-last" maxlength="80" name="lastName" required="">
+          </div>
+
+          <div>
+            <label for="book-email">Email *</label>
+            <input id="book-email" maxlength="160" name="email" required="" type="email">
+          </div>
+
+          <div>
+            <label for="book-phone">Phone *</label>
+            <input id="book-phone" maxlength="40" name="phone" required="" type="tel">
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-head">
+          <p class="eyebrow" data-cms-copy="availability.033">02</p>
+          <h2 data-cms-copy="availability.034">Your Event</h2>
+          <p data-cms-copy="availability.035">Give us the details we need to check availability and logistics.</p>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label for="book-date">Event Date *</label>
+            <input id="book-date" name="eventDate" required="" type="date">
+          </div>
+
+          <div>
+            <label for="book-type">Event Type *</label>
+            <select data-event-type-select="" id="book-type" name="eventType" required="">
+              <option value="">Select event type</option>
+              <option>Wedding</option>
+              <option>Birthday</option>
+              <option>Corporate Event</option>
+              <option>Brand Activation</option>
+              <option>Bridal Shower</option>
+              <option>Baby Shower</option>
+              <option>Graduation</option>
+              <option>Private Event</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="book-guests">Estimated Guest Count</label>
+            <input id="book-guests" min="1" name="guestCount" placeholder="e.g. 150" type="number">
+          </div>
+
+          <div>
+            <label for="book-start">Event Start Time</label>
+            <input id="book-start" name="eventStartTime" type="time">
+          </div>
+
+          <div>
+            <label for="book-venue">Venue Name</label>
+            <input id="book-venue" maxlength="160" name="venueName" placeholder="If known">
+          </div>
+
+          <div>
+            <label for="book-city">City *</label>
+            <input id="book-city" maxlength="100" name="city" required="">
+          </div>
+
+          <div>
+            <label for="book-state">State *</label>
+            <input id="book-state" maxlength="40" name="state" placeholder="e.g. IL" required="">
+          </div>
+
+          <div>
+            <label for="book-referral">How did you hear about us?</label>
+            <select id="book-referral" name="referralSource">
+              <option value="">Select one</option>
+              <option>Instagram</option>
+              <option>TikTok</option>
+              <option>Google</option>
+              <option>Friend / Referral</option>
+              <option>Venue / Planner</option>
+              <option>Previous Event</option>
+              <option>Other</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-head">
+          <p class="eyebrow" data-cms-copy="availability.036">03</p>
+          <h2 data-cms-copy="availability.037">Choose Your LOLA Experience</h2>
+          <p data-cms-copy="availability.038">If you are not sure which option fits your event, choose “Not sure yet” and we’ll recommend one.</p>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label for="book-exp">Preferred Experience</label>
+            <select data-experience-select="" id="book-exp" name="preferredExperienceId">
+              <option value="">Not sure yet</option>
+            </select>
+            <div class="field-help">Choose an experience, or let us recommend one.</div>
+          </div>
+
+          <div>
+            <label for="book-package">Package</label>
+            <select data-package-select="" id="book-package" name="preferredPackageId">
+              <option value="">Not sure yet</option>
+            </select>
+            <div class="field-help">Package options continue to populate from the CMS.</div>
+          </div>
+        </div>
+
+        <div class="booking-links">
+          <a href="experiences.html" data-cms-copy="availability.039">See Experiences →</a>
+          <a href="packages.html" data-cms-copy="availability.040">Compare Packages →</a>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-head">
+          <p class="eyebrow" data-cms-copy="availability.041">04</p>
+          <h2 data-cms-copy="availability.042">Anything Else We Should Know?</h2>
+          <p data-cms-copy="availability.043">Tell us about the feel of the event, special requests, branding needs, or anything unusual.</p>
+        </div>
+
+        <div>
+          <label for="book-message">Tell us about your event</label>
+          <textarea id="book-message" maxlength="2500" name="message" placeholder="Theme, venue details, what you’re celebrating, special requests, branding needs, or anything else we should know."></textarea>
+        </div>
+      </section>
+
+      <label class="marketing-optin">
+        <input name="marketing_email_opt_in" type="checkbox">
+        I’d like occasional LOLA updates and inspiration.
+      </label>
+
+      <input aria-hidden="true" autocomplete="off" class="hp-field" name="website" tabindex="-1">
+
+      <button class="btn dark" style="margin-top:18px" type="submit">Send Booking Request →</button>
+      <div aria-live="polite" class="form-status" data-form-status=""></div>
+
+      <p class="form-help" data-cms-copy="availability.044">
+        We’ll use these details to review availability and prepare a personalized quote. Your date is not reserved until your booking is confirmed.
+      </p>
+    </form>
+  </div>
+
+</div>
+</section>
+
+<section class="booking-steps" data-cms-booking-section="steps">
+<div class="container">
+  <div class="booking-steps-head">
+    <p class="eyebrow" data-cms-copy="availability.045">What Happens Next</p>
+    <h2 data-cms-copy="availability.046">From request to confirmed.</h2>
+    <p data-cms-copy="availability.047">We keep the booking process clear so you always know what happens next.</p>
+  </div>
+
+  <div class="booking-steps-grid">
+    <article class="booking-step">
+      <span class="num" data-cms-copy="availability.111">01</span>
+      <h3 data-cms-copy="availability.048">Request submitted</h3>
+      <p data-cms-copy="availability.049">You send the event details through this form.</p>
+    </article>
+
+    <article class="booking-step">
+      <span class="num" data-cms-copy="availability.112">02</span>
+      <h3 data-cms-copy="availability.050">Availability reviewed</h3>
+      <p data-cms-copy="availability.051">We check the date, equipment, staffing, venue needs, and requested experience.</p>
+    </article>
+
+    <article class="booking-step">
+      <span class="num" data-cms-copy="availability.113">03</span>
+      <h3 data-cms-copy="availability.052">Proposal and next steps</h3>
+      <p data-cms-copy="availability.053">You receive the appropriate package, proposal, or custom recommendation.</p>
+    </article>
+
+    <article class="booking-step">
+      <span class="num" data-cms-copy="availability.114">04</span>
+      <h3 data-cms-copy="availability.054">30% down payment</h3>
+      <p data-cms-copy="availability.055">The required down payment and booking documents move the event into confirmation.</p>
+    </article>
+
+    <article class="booking-step">
+      <span class="num" data-cms-copy="availability.115">05</span>
+      <h3 data-cms-copy="availability.056">Booking confirmed</h3>
+      <p data-cms-copy="availability.057">Once confirmed, we move into creative approvals, logistics, and event preparation.</p>
+    </article>
+  </div>
+</div>
+</section>
+
+<section class="deposit-band" data-cms-booking-section="deposit">
+<div class="container deposit-band-grid">
+  <div>
+    <p class="eyebrow" style="color:#d7b67c" data-cms-copy="availability.058">Securing Your Date</p>
+    <h2 data-cms-copy="availability.059">Your date is held when the booking is confirmed.</h2>
+    <p data-cms-copy="availability.060">Submitting a request does not reserve the date. After availability is confirmed, the required booking documents and 30% down payment secure the event in the LOLA calendar.</p>
+  </div>
+
+  <div class="deposit-badge">
+    <strong>30%</strong>
+    <span data-cms-copy="availability.116">down payment</span>
+  </div>
+</div>
+</section>
+
+<section class="booking-help" data-cms-booking-section="help">
+<div class="container">
+  <div class="booking-help-grid">
+
+    <article class="booking-help-card">
+      <h3 data-cms-copy="availability.061">Still choosing an experience?</h3>
+      <p data-cms-copy="availability.062">Compare The Glam, 360 Booth, Vogue, and Audio Guest Book before submitting.</p>
+      <a href="experiences.html" data-cms-copy="availability.063">Explore Experiences →</a>
+    </article>
+
+    <article class="booking-help-card">
+      <h3 data-cms-copy="availability.064">Need pricing details?</h3>
+      <p data-cms-copy="availability.065">Review starting prices, package lengths, included features, and add-ons.</p>
+      <a href="packages.html" data-cms-copy="availability.066">View Packages →</a>
+    </article>
+
+    <article class="booking-help-card">
+      <h3 data-cms-copy="availability.067">Have a question first?</h3>
+      <p data-cms-copy="availability.068">Check common questions about setup, deposits, printing, travel, customization, and more.</p>
+      <a href="faq.html" data-cms-copy="availability.069">Browse FAQs →</a>
+    </article>
+
+  </div>
+</div>
+</section>
+
+<section class="cta">
+<div class="container cta-inner">
+  <p class="eyebrow" data-cms-copy="availability.070">NEED HELP FIRST?</p>
+  <h2 class="display" data-cms-copy="availability.071">Not ready to book yet?</h2>
+  <p data-cms-copy="availability.072">Send us a question and we’ll help you figure out the right experience before you submit a booking request.</p>
+  <a class="btn gold" href="contact.html" data-cms-copy="availability.073">Contact Us →</a>
+</div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+<div class="container footer-top">
+
+  <div class="footer-brand">
+    <img alt="The LOLA Booth" class="footer-logo" src="/staging-site/assets/LOLA_Primary_Light_Transparent.webp" data-cms-media="assets/LOLA_Primary_Light_Transparent.webp">
+    <span class="foot-tag" data-brand-line="true">Good people. Better photos.</span>
+    <p class="small" data-cms-copy="availability.074">Premium photo booth experiences for weddings, celebrations, corporate events, and brands.</p>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="availability.075">Experiences</h4>
+    <a href="experiences.html#glam" data-cms-copy="availability.076">The Glam</a>
+    <a href="experiences.html#360" data-cms-copy="availability.077">The 360 Booth</a>
+    <a href="experiences.html#vogue" data-cms-copy="availability.078">The Vogue</a>
+    <a href="experiences.html#audio" data-cms-copy="availability.079">The Audio Guest Book</a>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="availability.080">Add-ons</h4>
+    <a href="packages.html" data-cms-copy="availability.081">Additional Hours</a>
+    <a href="packages.html" data-cms-copy="availability.082">Premium Backdrops</a>
+    <a href="packages.html" data-cms-copy="availability.083">On-site Printing</a>
+    <a href="packages.html" data-cms-copy="availability.084">Custom Signage</a>
+    <a href="packages.html" data-cms-copy="availability.085">Branding</a>
+  </div>
+
+
+
+  <div>
+    <h4 data-cms-copy="availability.093">Company</h4>
+    <a href="about.html" data-cms-copy="availability.094">About LOLA</a>
+
+    <a href="faq.html" data-cms-copy="availability.096">FAQ</a>
+    <a href="contact.html" data-cms-copy="availability.097">Contact</a>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="availability.098">Get in touch</h4>
+    <a href="availability.html" data-cms-copy="availability.099">Book Now</a>
+    <a data-site-email="true" href="mailto:info@thelolabooth.com">info@thelolabooth.com</a>
+    <span class="footer-placeholder" data-site-phone="true">Phone: <a href="tel:+17732402744">(773) 240-2744</a></span>
+    <span class="footer-placeholder" data-site-service-area="true">Service area: Available by inquiry</span>
+
+    <div class="footer-social" data-site-socials="true">
+      <a class="social-link" href="https://www.instagram.com/thelolabooth/" target="_blank" rel="noopener noreferrer" aria-label="The LOLA Booth on Instagram">
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <rect x="3" y="3" width="18" height="18" rx="5"></rect>
+          <circle cx="12" cy="12" r="4"></circle>
+          <circle cx="17.5" cy="6.5" r="1.2"></circle>
+        </svg>
+      </a>
+
+      <a class="social-link" href="https://www.tiktok.com/@thelolabooth" target="_blank" rel="noopener noreferrer" aria-label="The LOLA Booth on TikTok">
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <path d="M14 3v10.2a4.2 4.2 0 1 1-4.2-4.2"></path>
+          <path d="M14 3c.6 3.4 2.6 5.4 6 5.8"></path>
+        </svg>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<div class="container footer-bottom">
+  <span data-site-copyright="true">© 2026 The LOLA Booth. All rights reserved.</span>
+  <span class="footer-legal"><a href="privacy.html" data-cms-copy="availability.102">Privacy</a> · <a href="terms.html" data-cms-copy="availability.103">Terms</a></span>
+  <span data-cms-copy="availability.117">Good people. Better photos. ♡</span>
+</div>
+</footer>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+
+
+
+</body></html>

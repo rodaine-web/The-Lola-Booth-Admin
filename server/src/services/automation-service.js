@@ -1,4 +1,4 @@
-import {stagingJobsPaused} from '../config/staging-safety.js';
+import {stagingJobsPaused,isStaging} from '../config/staging-safety.js';
 import { query, transaction } from "../db/pool.js";
 import { logger } from "../config/logger.js";
 import { env } from "../config/env.js";
@@ -603,7 +603,8 @@ export async function createCommunicationDraft(input = {}, user = {}) {
   return result.rows[0];
 }
 
-export async function sendCommunication(id, user = {}, { workerClaim = false } = {}) {
+export async function sendCommunication(id, user = {}, { workerClaim = false, qualificationClaim = false } = {}) {
+  if(isStaging()&&!qualificationClaim&&(await query('SELECT 1 FROM staging_email_qualification_jobs WHERE communication_id=$1',[id])).rowCount)throw new AppError('This QA message is controlled by its qualification job.',409,'STAGING_JOB_REQUIRED');
   const result = await transaction(async (client) => {
     const communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!communication) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
@@ -611,6 +612,7 @@ export async function sendCommunication(id, user = {}, { workerClaim = false } =
       logger.warn({ communicationId: id, providerMessageId: communication.provider_message_id }, "Duplicate communication send prevented");
       return { communication, delivery: { status: communication.status, provider: communication.provider, providerMessageId: communication.provider_message_id, duplicatePrevented: true } };
     }
+    if(communication.failure_code==="DELIVERY_OUTCOME_UNKNOWN")throw new AppError("Delivery outcome is unknown. Review provider history before any retry.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
     if (!["DRAFT", "SCHEDULED", "FAILED", ...(workerClaim ? ["PROCESSING"] : [])].includes(communication.status)) throw new AppError("This communication cannot be sent.", 409, "COMMUNICATION_IMMUTABLE");
     if (communication.channel === "SMS") throw new AppError("SMS provider is disabled or not configured. Message was not sent.", 422, "SMS_PROVIDER_DISABLED", { retryable: false });
     if (communication.channel !== "EMAIL") throw new AppError("Only email sending is currently enabled.", 422, "CHANNEL_NOT_IMPLEMENTED", { retryable: false });
@@ -626,8 +628,11 @@ export async function sendCommunication(id, user = {}, { workerClaim = false } =
       html: communication.rendered_html
     });
     } catch (error) {
-      await client.query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code='EMAIL_SEND_FAILED',failure_message='Email provider rejected the send. Check provider configuration and retry.',updated_at=now() WHERE id=$1", [id]);
-      return { sendError: new AppError("Email delivery failed. The message is saved and can be retried.", 502, "EMAIL_SEND_FAILED") };
+      const unknown=error.details?.outcomeUnknown===true;
+      const code=unknown?'DELIVERY_OUTCOME_UNKNOWN':(error.code||'EMAIL_SEND_FAILED');
+      const message=unknown?'Delivery outcome is unknown. Review provider history; automatic retry is blocked.':'Email delivery failed. The saved message can be reviewed and retried.';
+      await client.query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$2,failure_message=$3,updated_at=now() WHERE id=$1",[id,code,message]);
+      return {sendError:new AppError(message,502,code,{retryable:!unknown&&error.details?.retryable!==false})};
     }
     const updated = await client.query(
       `UPDATE communications

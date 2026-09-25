@@ -1,4 +1,7 @@
+import {authenticate,requirePermission} from '../middleware/auth.js';
+import {isStaging,stagingEmailPolicy} from '../config/staging-safety.js';
 import { Router } from "express";
+import {stagingSitePayload,assertStagingChannel} from '../services/staging-cms-service.js';
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { env } from "../config/env.js";
@@ -93,6 +96,23 @@ publicRouter.post("/inquiries", (req, _res, next) => {
   });
 }));
 
+// Authenticated QA-only form path. Existing public form behavior remains unchanged.
+publicRouter.post('/staging/inquiries',authenticate,requirePermission('write:sales'),validate(inquirySchema),asyncHandler(async(req,res)=>{
+  if(!isStaging())throw new AppError('Staging forms are unavailable.',404,'NOT_FOUND');
+  const owner=process.env.STAGING_FORM_OWNER_EMAIL;
+  if(!owner)throw new AppError('Choose an approved QA owner inbox before form qualification.',409,'STAGING_OWNER_REQUIRED');
+  stagingEmailPolicy({to:req.body.email,cc:owner,subject:'Form recipient validation'},{...process.env,STAGING_EMAIL_ENABLED:'true'});
+  const payload={...req.body,form_id:'staging-'+(req.body.form_id||'inquiry'),marketing_email_opt_in:false,referrer_url:req.body.referrer_url||req.headers.referer||null};
+  for(const [field,type] of [['preferredExperienceId','experiences'],['preferredPackageId','packages']])if(payload[field]){
+    const record=(await query("SELECT payload FROM website_channel_records WHERE id=$1 AND channel='STAGING' AND cms_type=$2 AND status='PUBLISHED'",[payload[field],type])).rows[0];
+    if(!record)throw new AppError('Choose an available staging package or experience.',422,'STAGING_SELECTION_INVALID');
+    if(record.payload.source_catalog_id)payload[field]=record.payload.source_catalog_id;else delete payload[field];
+  }
+  const result=await ingestProviderLead({provider:'WEBSITE',payload,testMode:true,skipAutomations:true});
+  await sendPublicInquiryEmails({lead:result.lead,payload,action:result.action,ownerRecipient:owner});
+  res.status(201).json({message:'Staging QA inquiry saved. Email delivery is controlled by the qualification queue.',inquiryStatus:result.action,leadId:result.lead.id});
+}));
+
 function cachePublicContent(res) {
   res.set("Cache-Control", "public, max-age=0, must-revalidate");
 }
@@ -100,6 +120,16 @@ function cachePublicContent(res) {
 publicRouter.get("/site", asyncHandler(async (_req, res) => {
   cachePublicContent(res);
   res.json(await publicSitePayload());
+}));
+
+publicRouter.get('/staging/site',asyncHandler(async(req,res)=>{
+  assertStagingChannel(req.query);
+  res.set('Cache-Control','no-store').set('X-Robots-Tag','noindex, nofollow').json(await stagingSitePayload());
+}));
+publicRouter.get('/staging/media/:id',asyncHandler(async(req,res)=>{
+  const row=(await query("SELECT payload FROM website_channel_records WHERE id=$1 AND channel='STAGING' AND cms_type='media' AND status='PUBLISHED'",[req.params.id])).rows[0];
+  if(!row?.payload.storage_key)throw new AppError('Staging image not found.',404,'NOT_FOUND');
+  res.set('Cache-Control','no-store').set('Cross-Origin-Resource-Policy','cross-origin').type(row.payload.mime_type).send(await getStorageProvider().get(row.payload.storage_key));
 }));
 
 publicRouter.get("/homepage", asyncHandler(async (_req, res) => {

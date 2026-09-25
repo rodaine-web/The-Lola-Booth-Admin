@@ -1,0 +1,902 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width,initial-scale=1" name="viewport">
+
+<title>The LOLA Booth | Premium Photo Booth Experiences in Chicago</title>
+<meta content="Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas." name="description">
+
+
+<meta property="og:title" content="The LOLA Booth | Premium Photo Booth Experiences">
+<meta property="og:description" content="Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas.">
+<meta property="og:url" content="https://thelolabooth.com">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://thelolabooth.com/assets/hero-3.jpg">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The LOLA Booth | Premium Photo Booth Experiences">
+<meta name="twitter:description" content="Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas.">
+<meta name="twitter:image" content="https://thelolabooth.com/assets/hero-3.jpg">
+
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@graph":[
+    {
+      "@type":["Organization","LocalBusiness"],
+      "@id":"https://thelolabooth.com/#organization",
+      "name":"The LOLA Booth",
+      "url":"https://thelolabooth.com",
+      "logo":"https://thelolabooth.com/assets/LOLA_Primary_Dark_Transparent.png",
+      "email":"info@thelolabooth.com",
+      "telephone":"+1-773-240-2744",
+      "slogan":"Good people. Better photos.",
+      "areaServed":"Chicago, Illinois",
+      "sameAs":[
+        "https://www.instagram.com/thelolabooth/",
+        "https://www.tiktok.com/@thelolabooth"
+      ]
+    },
+    {
+      "@type":"WebSite",
+      "@id":"https://thelolabooth.com/#website",
+      "name":"The LOLA Booth",
+      "url":"https://thelolabooth.com",
+      "publisher":{"@id":"https://thelolabooth.com/#organization"}
+    },
+    {
+      "@type":"Service",
+      "@id":"https://thelolabooth.com/#service",
+      "name":"Premium Photo Booth Experiences",
+      "provider":{"@id":"https://thelolabooth.com/#organization"},
+      "serviceType":"Photo booth rental and event photo experiences",
+      "areaServed":"Chicago, Illinois",
+      "url":"https://thelolabooth.com/experiences"
+    },
+    {
+      "@type":"WebPage",
+      "@id":"https://thelolabooth.com/#webpage",
+      "url":"https://thelolabooth.com",
+      "name":"The LOLA Booth | Premium Photo Booth Experiences in Chicago",
+      "description":"Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas.",
+      "isPartOf":{"@id":"https://thelolabooth.com/#website"}
+    }
+  ]
+}
+</script>
+
+<link href="styles.css" rel="stylesheet">
+
+
+
+
+<style>
+.feature-band .feature-icons{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:20px;
+  margin-top:30px;
+  align-items:start;
+}
+.feature-band .feature-item{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  gap:12px;
+  min-width:0;
+  text-align:center;
+  line-height:1.25;
+  font-weight:600;
+}
+.feature-band .feature-item .ic{
+  width:72px;
+  height:72px;
+  flex:0 0 72px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+}
+.feature-band .feature-item .ic svg{
+  width:28px;
+  height:28px;
+  display:block;
+}
+.feature-band .feature-label{
+  display:block;
+  text-align:center;
+  white-space:normal;
+}
+
+/* Partner / brand proof */
+.brand-proof{
+  padding:58px 0;
+  border-top:1px solid rgba(176,137,80,.14);
+  border-bottom:1px solid rgba(176,137,80,.14);
+  background:#fbf8f4;
+}
+.brand-proof-head{
+  max-width:760px;
+  margin:0 auto 30px;
+  text-align:center;
+}
+.brand-proof-head h2{
+  margin:.08em 0 .25em;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:clamp(2rem,3.6vw,3.2rem);
+  font-weight:400;
+}
+.brand-proof-head p{
+  margin:0 auto;
+  max-width:640px;
+  color:#6d655e;
+  line-height:1.7;
+}
+.partner-logos{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:14px;
+  align-items:center;
+}
+.partner-logo{
+  min-height:98px;
+  padding:18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(176,137,80,.16);
+  border-radius:18px;
+  background:#fff;
+}
+.partner-logo img{
+  display:block;
+  max-width:100%;
+  max-height:54px;
+  object-fit:contain;
+  filter:grayscale(1);
+  opacity:.72;
+}
+.partner-logo span{
+  text-align:center;
+  font-size:.84rem;
+  letter-spacing:.04em;
+  color:#6e665f;
+}
+.brand-proof-note{
+  margin:18px 0 0;
+  text-align:center;
+  color:#817970;
+  font-size:.78rem;
+}
+.partner-placeholder{
+  border-style:dashed;
+  background:#fffdfa;
+}
+.partner-placeholder span{
+  color:#8a8178;
+  font-size:.78rem;
+  line-height:1.4;
+}
+.testimonial-placeholder{
+  border-style:dashed;
+  background:#fffdfa;
+}
+
+/* Occasion cards remain as homepage service context, but do not link to hidden Events page */
+.occasion-actions{
+  margin-top:24px;
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+/* Testimonials */
+.testimonial-section{
+  padding:82px 0;
+}
+.testimonial-section .section-head{
+  align-items:end;
+}
+.testimonial-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:18px;
+}
+.testimonial-card{
+  display:flex;
+  flex-direction:column;
+  min-height:270px;
+  padding:28px;
+  border:1px solid rgba(176,137,80,.17);
+  border-radius:22px;
+  background:#fff;
+}
+.testimonial-stars{
+  margin-bottom:20px;
+  color:#b08950;
+  letter-spacing:.16em;
+  font-size:.9rem;
+}
+.testimonial-quote{
+  margin:0 0 24px;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:1.28rem;
+  line-height:1.48;
+  color:#28231f;
+}
+.testimonial-meta{
+  margin-top:auto;
+  padding-top:16px;
+  border-top:1px solid rgba(176,137,80,.14);
+}
+.testimonial-meta strong{
+  display:block;
+  margin-bottom:4px;
+}
+.testimonial-meta span{
+  color:#777068;
+  font-size:.88rem;
+}
+.testimonial-empty{
+  grid-column:1/-1;
+  padding:30px;
+  border:1px dashed rgba(176,137,80,.3);
+  border-radius:20px;
+  text-align:center;
+  color:#7b736b;
+}
+
+/* Corporate / brand activation callout */
+.brand-activation{
+  padding:78px 0;
+  background:#181613;
+  color:#fff;
+}
+.brand-activation-grid{
+  display:grid;
+  grid-template-columns:1.1fr .9fr;
+  gap:42px;
+  align-items:center;
+}
+.brand-activation h2{
+  margin:.1em 0 .25em;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:clamp(2.4rem,4.2vw,4rem);
+  font-weight:400;
+  line-height:1.08;
+}
+.brand-activation p{
+  margin:0;
+  max-width:720px;
+  color:#d9d2c9;
+  line-height:1.75;
+}
+.brand-activation-points{
+  display:grid;
+  gap:10px;
+}
+.brand-activation-points span{
+  display:block;
+  padding:13px 15px;
+  border:1px solid rgba(216,183,127,.24);
+  border-radius:14px;
+  color:#e5ded5;
+}
+.brand-activation-actions{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:24px;
+}
+
+@media (max-width:1000px){
+  .partner-logos{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .testimonial-grid{grid-template-columns:1fr 1fr}
+  .brand-activation-grid{grid-template-columns:1fr}
+}
+@media (max-width:900px){
+  .feature-band .feature-icons{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:24px 18px;
+  }
+}
+@media (max-width:640px){
+  .partner-logos{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .testimonial-grid{grid-template-columns:1fr}
+}
+@media (max-width:520px){
+  .feature-band .feature-icons{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:22px 12px;
+  }
+  .feature-band .feature-item .ic{
+    width:64px;
+    height:64px;
+    flex-basis:64px;
+  }
+  .feature-band .feature-item{
+    font-size:.92rem;
+  }
+}
+
+.static-partner-logos{
+  grid-template-columns:repeat(5,minmax(0,1fr));
+}
+.static-partner-logos .static-brand{
+  min-height:120px;
+  padding:16px;
+  background:#fff;
+  border:1px solid rgba(176,137,80,.18);
+  border-radius:18px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
+}
+.static-partner-logos .static-brand:hover{
+  transform:translateY(-3px);
+  border-color:rgba(176,137,80,.42);
+  box-shadow:0 12px 30px rgba(43,34,25,.07);
+}
+.static-partner-logos .brand-wordmark,
+.static-partner-logos .brand-submark{
+  display:block;
+  text-align:center;
+}
+.brand-hue .brand-wordmark{
+  font-family:Georgia,"Times New Roman",serif;
+  font-style:italic;
+  font-size:2rem;
+  font-weight:700;
+  letter-spacing:.02em;
+  text-transform:lowercase;
+  color:#222;
+}
+.brand-eventnoire .brand-wordmark{
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:1.2rem;
+  font-weight:800;
+  letter-spacing:.24em;
+  color:#0f0f10;
+}
+.brand-eventnoire .brand-submark{
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:1.2rem;
+  font-weight:300;
+  letter-spacing:.42em;
+  color:#0f0f10;
+  margin-left:.42em;
+}
+.brand-fasha .brand-wordmark{
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:1.9rem;
+  font-weight:700;
+  letter-spacing:.2em;
+  color:#7d5d2f;
+}
+.brand-malestudio .brand-wordmark{
+  font-family:"Trebuchet MS",Arial,sans-serif;
+  font-size:1.25rem;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:lowercase;
+  color:#212121;
+}
+.brand-dayoonas .brand-wordmark{
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:1.3rem;
+  font-weight:700;
+  letter-spacing:.24em;
+  color:#2d2a26;
+}
+.brand-dayoonas .brand-submark{
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:.8rem;
+  font-weight:700;
+  letter-spacing:.46em;
+  color:#a9824d;
+  margin-left:.46em;
+}
+@media (max-width:1100px){
+  .static-partner-logos{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+@media (max-width:720px){
+  .static-partner-logos{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media (max-width:520px){
+  .static-partner-logos{
+    grid-template-columns:1fr;
+  }
+}
+
+
+
+
+
+/* Compact cards extend each logo background without cropping the artwork. */
+.static-partner-logos { grid-template-columns:repeat(5,minmax(0,1fr)); gap:18px; align-items:stretch; }
+.static-partner-logos .static-brand { box-sizing:border-box; min-width:0; min-height:120px; height:120px; padding:16px; display:flex; align-items:center; justify-content:center; border:0; border-radius:16px; background:#fff; overflow:hidden; }
+.static-partner-logos .partner-logo-image img { display:block; width:100%; height:100%; max-width:100%; max-height:100%; min-width:0; object-fit:contain; object-position:center; margin:0; filter:none; opacity:1; }
+.static-partner-logos .brand-hue { background:#060606; }
+.static-partner-logos .brand-eventnoire { background:#7f4de0; }
+.static-partner-logos .brand-malestudio { background:#000; }
+.static-partner-logos .brand-malestudio img { filter:brightness(7); max-width:130px; }
+.static-partner-logos .brand-eventnoire img { max-width:160px; }
+.static-partner-logos .brand-fasha img { max-width:176px; }
+.static-partner-logos .brand-dayoonas { flex-direction:column; gap:6px; }
+.static-partner-logos .brand-dayoonas .brand-wordmark { font-family:Georgia,"Times New Roman",serif; font-size:clamp(.8rem,1.3vw,1.3rem); font-weight:700; letter-spacing:.18em; color:#2d2a26; }
+.static-partner-logos .brand-dayoonas .brand-submark { font-family:Arial,Helvetica,sans-serif; font-size:.75rem; font-weight:700; letter-spacing:.35em; color:#a9824d; }
+@media(max-width:1100px) { .static-partner-logos { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:720px) { .static-partner-logos { grid-template-columns:repeat(2,minmax(0,1fr)); } .static-partner-logos .static-brand { padding:12px; height:104px; min-height:104px; } }
+@media(max-width:380px) { .static-partner-logos { grid-template-columns:1fr; } }
+
+</style>
+
+<link rel="icon" type="image/png" sizes="512x512" href="/staging-site/favicon.png">
+<link rel="apple-touch-icon" href="/staging-site/favicon.png">
+
+
+<meta name="robots" content="noindex,nofollow"></head>
+
+<body><aside class="staging-notice" style="padding:10px;text-align:center;background:#20253b;color:white">STAGING · CMS qualification · Public website V1 is unchanged</aside>
+
+
+<header>
+<div class="container nav">
+  <div class="brand-lockup">
+    <a href="index.html">
+      <img alt="The LOLA Booth" class="logo" src="/staging-site/assets/LOLA_Primary_Dark_Transparent.webp" data-cms-media="assets/LOLA_Primary_Dark_Transparent.webp">
+    </a>
+    <span class="brand-tag" data-cms-copy="home.071">Good people. Better photos.</span>
+  </div>
+
+  <nav class="navlinks">
+    <a href="experiences.html" data-cms-copy="home.001">Experiences</a>
+    <a href="packages.html" data-cms-copy="home.002">Packages</a>
+    <a href="about.html" data-cms-copy="home.004">About</a>
+    <a href="faq.html" data-cms-copy="home.072">FAQ</a>
+    <a href="contact.html" data-cms-copy="home.006">Contact</a>
+    <a class="btn gold" href="availability.html" data-cms-copy="home.007">Book Now →</a>
+  </nav>
+
+  <button aria-label="Menu" class="menu-btn">☰</button>
+</div>
+</header>
+
+<div class="mobile-menu">
+  <span class="mobile-brand-tag" data-cms-copy="home.073">Good people. Better photos.</span>
+  <a href="index.html" data-cms-copy="home.008">Home</a>
+  <a href="experiences.html" data-cms-copy="home.009">Experiences</a>
+  <a href="packages.html" data-cms-copy="home.010">Packages</a>
+  <a href="about.html" data-cms-copy="home.013">About</a>
+  <a href="faq.html" data-cms-copy="home.074">FAQ</a>
+  <a href="contact.html" data-cms-copy="home.014">Contact</a>
+  <a href="availability.html" data-cms-copy="home.015">Book Now</a>
+</div>
+
+<main>
+
+<section class="hero-v2" data-cms-homepage="true">
+  <div class="hero-copy">
+    <div class="hero-copy-inner">
+      <p class="eyebrow" data-cms-copy="home.016">Photos. Videos. Good times.</p>
+      <h1 class="display" data-cms-copy="home.017">Your event.<br>Their favorite memory.</h1>
+      <p data-cms-copy="home.018">Premium photo booth experiences for weddings, celebrations, corporate events and brand activations in Chicago and surrounding areas. Elegant, interactive, and made to be shared.</p>
+
+      <div class="hero-actions">
+        <a class="btn dark" href="availability.html" data-cms-copy="home.019">Book Now →</a>
+        <a class="btn light" href="experiences.html" data-cms-copy="home.020">▶ &nbsp; Explore Experiences</a>
+      </div>
+
+      <div class="hero-proof">
+        <div class="proof-item"><span class="proof-icon" data-cms-copy="home.075">★</span>Premium Experience</div>
+        <div class="proof-item"><span class="proof-icon" data-cms-copy="home.076">♟</span>For Every Occasion</div>
+        <div class="proof-item"><span class="proof-icon" data-cms-copy="home.077">♥</span>Unforgettable Moments</div>
+      </div>
+    </div>
+  </div>
+
+  <div aria-label="The LOLA Booth event slideshow" class="hero-media" data-cms-hero-slides="true">
+    <div class="hero-slide active" style="background-image:url('assets/hero-1.webp')"></div>
+    <div class="hero-slide" style="background-image:url('assets/hero-2.webp')"></div>
+    <div class="hero-slide" style="background-image:url('assets/hero-3.webp')"></div>
+    <div class="hero-slide" style="background-image:url('assets/hero-4.webp')"></div>
+    <div class="hero-slide" style="background-image:url('assets/hero-5.webp')"></div>
+    <div class="hero-slide" style="background-image:url('assets/hero-6.webp')"></div>
+
+    <div class="hero-script" data-cms-copy="home.021">Good<br>People<br>Better<br>Photos ♡</div>
+
+    <div class="photo-strip">
+      <img alt="Guest photo" src="/staging-site/assets/hero-v2-2.webp" data-cms-media="assets/hero-v2-2.webp">
+      <img alt="Guest photo" src="/staging-site/assets/hero-v2-4.webp" data-cms-media="assets/hero-v2-4.webp">
+      <strong>THE LOLA BOOTH</strong>
+      <span data-cms-copy="home.078">Same energy,<br>always ♡</span>
+    </div>
+
+    <div class="hero-dots">
+      <button aria-label="Slide 1" class="dot active"></button>
+      <button aria-label="Slide 2" class="dot"></button>
+      <button aria-label="Slide 3" class="dot"></button>
+      <button aria-label="Slide 4" class="dot"></button>
+      <button aria-label="Slide 5" class="dot"></button>
+      <button aria-label="Slide 6" class="dot"></button>
+    </div>
+  </div>
+</section>
+
+<section aria-label="Celebrations served by The LOLA Booth" class="hero-marquee" data-cms-marquee="true">
+  <div class="marquee-track">
+    <span data-cms-copy="home.079">GRADUATIONS <i class="sep">✦</i> WEDDINGS <i class="sep">✦</i> BIRTHDAYS <i class="sep">✦</i> BRAND ACTIVATIONS <i class="sep">✦</i> CORPORATE PARTIES <i class="sep">✦</i> SHOWERS <i class="sep">✦</i> PRIVATE EVENTS <i class="sep">✦</i></span>
+    <span data-cms-copy="home.080">GRADUATIONS <i class="sep">✦</i> WEDDINGS <i class="sep">✦</i> BIRTHDAYS <i class="sep">✦</i> BRAND ACTIVATIONS <i class="sep">✦</i> CORPORATE PARTIES <i class="sep">✦</i> SHOWERS <i class="sep">✦</i> PRIVATE EVENTS <i class="sep">✦</i></span>
+  </div>
+</section>
+
+
+<!-- STATIC OVERRIDE: Brands & Partners
+     This section intentionally does NOT use CMS hooks right now.
+     Replace these placeholders with real partner logos/names when ready. -->
+
+
+<section class="section">
+<div class="container">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow" data-cms-copy="home.022">Our Experiences</p>
+      <h2 class="display" data-cms-copy="home.023">Choose Your Moment</h2>
+    </div>
+
+    <div>
+      <p class="muted" data-cms-copy="home.024">From timeless portraits to viral-worthy videos, we bring the wow to every kind of celebration.</p>
+      <a class="eyebrow" href="experiences.html" data-cms-copy="home.025">Explore all experiences →</a>
+    </div>
+  </div>
+
+  <div class="grid four" data-cms-experiences="home">
+    <article class="card" data-experience-key="glam">
+      <img alt="The Glam by The LOLA Booth" src="/staging-site/assets/glam.webp" data-cms-media="assets/glam.webp">
+      <div class="card-body"><span class="arrow">→</span><h3>The Glam</h3><p>Studio-quality portraits with that iconic polished look.</p></div>
+    </article>
+
+    <article class="card" data-experience-key="360">
+      <img alt="The 360 Booth by The LOLA Booth" src="/staging-site/assets/booth360.webp" data-cms-media="assets/booth360.webp">
+      <div class="card-body"><span class="arrow">→</span><h3>The 360 Booth</h3><p>Dynamic video moments designed to move, loop, and get shared.</p></div>
+    </article>
+
+    <article class="card" data-experience-key="vogue">
+      <img alt="The Vogue by The LOLA Booth" src="/staging-site/assets/vogue.webp" data-cms-media="assets/vogue.webp">
+      <div class="card-body"><span class="arrow">→</span><h3>The Vogue</h3><p>An editorial-style experience for your main-character moment.</p></div>
+    </article>
+
+    <article class="card" data-experience-key="audio">
+      <img alt="The Audio Guest Book by The LOLA Booth" src="/staging-site/assets/audio.webp" data-cms-media="assets/audio.webp">
+      <div class="card-body"><span class="arrow">→</span><h3>The Audio Guest Book</h3><p>Heartfelt and hilarious voice messages worth hearing again.</p></div>
+    </article>
+  </div>
+</div>
+</section>
+
+
+
+<section class="feature-band">
+<div class="container feature-wrap">
+  <div>
+    <p class="eyebrow" data-cms-copy="home.026">Made to be shared</p>
+    <h2 class="display" style="font-size:clamp(2.8rem,4.4vw,4.6rem);margin:.12em 0" data-cms-copy="home.027">Made for the<br>camera roll.</h2>
+    <p class="muted" data-cms-copy="home.028">Photos, GIFs, videos and more, designed to be shared, saved, and relived long after the party is over.</p>
+
+    <div class="feature-icons">
+      <div class="feature-item">
+        <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="5" width="10" height="10" rx="1.5"></rect><rect x="5" y="9" width="10" height="10" rx="1.5"></rect><path d="m8 16 2.2-2.4 1.8 1.9 1.2-1.2 1.8 1.7"></path><circle cx="12.6" cy="11.8" r=".8"></circle></svg></span>
+        <span class="feature-label" data-cms-copy="home.029">Photo Strips</span>
+      </div>
+
+      <div class="feature-item">
+        <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 8h10l-3-3"></path><path d="M17 16H7l3 3"></path><path d="M17 8v3.5"></path><path d="M7 16v-3.5"></path></svg></span>
+        <span class="feature-label" data-cms-copy="home.030">GIFs + Boomerangs</span>
+      </div>
+
+      <div class="feature-item">
+        <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="7" cy="12" r="2.3"></circle><circle cx="17" cy="6.5" r="2.3"></circle><circle cx="17" cy="17.5" r="2.3"></circle><path d="m9.1 10.9 5.8-3.2"></path><path d="m9.1 13.1 5.8 3.2"></path></svg></span>
+        <span class="feature-label" data-cms-copy="home.031">Instant Sharing</span>
+      </div>
+
+      <div class="feature-item">
+        <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 4.5 13.4 9l4.1 1.5-4.1 1.5L12 16.5 10.6 12l-4.1-1.5L10.6 9 12 4.5Z"></path><path d="M18.5 14.5 19.2 17l2.3.8-2.3.8-.7 2.4-.7-2.4-2.3-.8 2.3-.8.7-2.5Z"></path><path d="M5.5 3.5 6 5l1.5.5L6 6l-.5 1.5L5 6l-1.5-.5L5 5l.5-1.5Z"></path></svg></span>
+        <span class="feature-label" data-cms-copy="home.032">360 Clips</span>
+      </div>
+    </div>
+  </div>
+
+  <img alt="LOLA photo strips, phone sharing and keepsakes" src="/staging-site/assets/camera-roll-v2.webp" data-cms-media="assets/camera-roll-v2.webp">
+</div>
+</section>
+
+<!-- Keep event categories on the homepage for context/SEO, but do not link to the hidden Events page. -->
+<section class="section">
+<div class="container">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow" data-cms-copy="home.033">For Every Occasion</p>
+      <h2 class="display" data-cms-copy="home.034">Whatever you’re celebrating,<br>make it memorable.</h2>
+    </div>
+    <a class="eyebrow" href="availability.html" data-cms-copy="home.081">Tell us what you’re planning →</a>
+  </div>
+
+  <div class="grid three" data-cms-events="home">
+    <article class="event-card" data-event-key="weddings">
+      <img alt="Wedding photo booth experience" src="/staging-site/assets/wedding.webp" data-cms-media="assets/wedding.webp">
+      <div class="label"><h3>Weddings</h3><p>Elegant entertainment your guests will love.</p></div>
+    </article>
+
+    <article class="event-card" data-event-key="birthdays">
+      <img alt="Birthday photo booth experience" src="/staging-site/assets/birthday.webp" data-cms-media="assets/birthday.webp">
+      <div class="label"><h3>Birthdays</h3><p>A reason to pose, laugh and do it again.</p></div>
+    </article>
+
+    <article class="event-card" data-event-key="showers">
+      <img alt="Shower photo booth experience" src="/staging-site/assets/shower.webp" data-cms-media="assets/shower.webp">
+      <div class="label"><h3>Showers</h3><p>Beautiful keepsakes for life’s sweetest moments.</p></div>
+    </article>
+
+    <article class="event-card" data-event-key="graduations">
+      <img alt="Graduation photo booth experience" src="/staging-site/assets/graduation.webp" data-cms-media="assets/graduation.webp">
+      <div class="label"><h3>Graduations</h3><p>You earned the photo.</p></div>
+    </article>
+
+    <article class="event-card" data-event-key="corporate-events">
+      <img alt="Corporate photo booth and brand activation" src="/staging-site/assets/corporate.webp" data-cms-media="assets/corporate.webp">
+      <div class="label"><h3>Corporate Events</h3><p>Branded experiences that create connection.</p></div>
+    </article>
+
+    <article class="event-card" data-event-key="private-events">
+      <img alt="Private event photo booth experience" src="/staging-site/assets/private.webp" data-cms-media="assets/private.webp">
+      <div class="label"><h3>Private Events</h3><p>Sometimes the best reason to celebrate is everyone together.</p></div>
+    </article>
+  </div>
+
+  <div class="occasion-actions">
+    <a class="btn dark" href="availability.html" data-cms-copy="home.082">Check Your Date →</a>
+    <a class="btn light" href="contact.html" data-cms-copy="home.083">Planning Something Different?</a>
+  </div>
+</div>
+</section>
+
+<section class="section alt">
+<div class="container">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow" data-cms-copy="home.036">Packages</p>
+      <h2 class="display" data-cms-copy="home.037">Something for every<br>kind of celebration.</h2>
+    </div>
+    <a class="eyebrow" href="packages.html" data-cms-copy="home.038">View all packages →</a>
+  </div>
+
+  <div class="grid four" data-cms-packages="home">
+    <div class="card package" data-package-key="glam:essential">
+      <h3>The Essential</h3>
+      <p class="muted">A simple, stylish experience with the essentials covered.</p>
+      <div class="price">Starting at $599</div>
+    </div>
+
+    <div class="card package featured" data-package-key="glam:signature">
+      <p class="eyebrow">Most Popular</p>
+      <h3>The Signature</h3>
+      <p class="muted">More time, more customization, more ways to enjoy.</p>
+      <div class="price">Starting at $899</div>
+    </div>
+
+    <div class="card package" data-package-key="glam:luxe">
+      <h3>The Luxe</h3>
+      <p class="muted">An elevated experience with premium upgrades.</p>
+      <div class="price">Starting at $1,499</div>
+    </div>
+
+    <div class="card package" data-package-key="glam:custom">
+      <h3>Custom</h3>
+      <p class="muted">For brands, large events, or something completely your own.</p>
+      <div class="price">Let’s Create Together</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<section class="brand-activation" data-cms-home-section="brand-activations">
+<div class="container brand-activation-grid">
+  <div>
+    <p class="eyebrow" style="color:#d7b67c" data-cms-copy="home.084">Corporate &amp; Brand Activations</p>
+    <h2 data-cms-copy="home.085">Make your brand part of the moment.</h2>
+    <p data-cms-copy="home.086">LOLA creates photo and video experiences that can be customized around launches, conferences, employee events, sponsored activations, pop-ups and large-scale celebrations. From branded overlays and welcome screens to fully customized guest experiences, we build around the campaign, the space and the people in it.</p>
+
+    <div class="brand-activation-actions">
+      <a class="btn gold" href="contact.html" data-cms-copy="home.087">Start a Custom Project →</a>
+      <a class="btn light" href="experiences.html" data-cms-copy="home.088">Explore Experiences</a>
+    </div>
+  </div>
+
+  <div class="brand-activation-points">
+    <span data-cms-copy="home.089">Custom branded overlays and digital assets</span>
+    <span data-cms-copy="home.090">Guest-friendly content capture and instant sharing</span>
+    <span data-cms-copy="home.091">Multi-experience and high-volume event options</span>
+    <span data-cms-copy="home.092">Custom creative, staffing and event-day support</span>
+  </div>
+</div>
+</section>
+
+
+<!-- STATIC OVERRIDE: Testimonials
+     This section intentionally does NOT use CMS hooks right now.
+     Replace the placeholder copy with verified client testimonials before final production use. -->
+
+<!-- TESTIMONIAL COPY BELOW IS DRAFTED FOR CLIENT APPROVAL. Confirm exact wording with Terry, Jeff/Event Noire and Didi before publishing as direct quotations. -->
+<section class="brand-proof" id="brands-partners">
+  <div class="container">
+    <div class="brand-proof-head">
+      <p class="eyebrow" data-cms-copy="home.093">Brands &amp; Partners</p>
+      <h2 data-cms-copy="home.094">Good company makes good events better.</h2>
+      <p data-cms-copy="home.095">LOLA creates polished photo and video experiences for celebrations, corporate events, launches, pop-ups, and brand activations.</p>
+    </div>
+
+
+
+<div class="partner-logos static-partner-logos" aria-label="Brands and partners">
+      <div class="partner-logo static-brand partner-logo-image brand-hue" aria-label="Hue Chicago">
+        <img src="/staging-site/assets/hue-logo-fit.jpg" alt="Hue Chicago logo" data-cms-media="assets/hue-logo-fit.jpg">
+      </div>
+      <div class="partner-logo static-brand partner-logo-image brand-eventnoire" aria-label="Eventnoire">
+        <img src="/staging-site/assets/eventnoire-logo-fit.jpg" alt="Eventnoire logo" data-cms-media="assets/eventnoire-logo-fit.jpg">
+      </div>
+      <div class="partner-logo static-brand partner-logo-image brand-fasha" aria-label="Fasha">
+        <img src="/staging-site/assets/fasha-logo-fit.jpg" alt="Fasha logo" data-cms-media="assets/fasha-logo-fit.jpg">
+      </div>
+      <div class="partner-logo static-brand partner-logo-image brand-malestudio" aria-label="Male Studios">
+        <img src="/staging-site/assets/approved-5efe203360a9bd84.jpg" alt="Male Studios logo" data-cms-media="assets/approved-5efe203360a9bd84.jpg">
+      </div>
+      <div class="partner-logo static-brand brand-dayoonas" aria-label="Dayoonas Events">
+        <span class="brand-wordmark" data-cms-copy="home.096">DAYOONAS</span>
+        <span class="brand-submark" data-cms-copy="home.097">EVENTS</span>
+      </div>
+    </div>
+    <p class="brand-proof-note" data-cms-copy="home.098">Selected brands and partners we’ve worked with.</p>
+
+
+  </div>
+</section>
+
+<section class="testimonial-section" id="testimonials" data-cms-testimonial-section="">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow" data-cms-copy="home.099">Kind Words</p>
+        <h2 class="display" data-cms-copy="home.100">Real moments.<br>Happy people.</h2>
+      </div>
+      <p class="muted" style="max-width:480px" data-cms-copy="home.101">A few words from the people and teams we’ve had the pleasure of creating with.</p>
+    </div>
+
+    <div class="testimonial-grid static-testimonials" data-cms-testimonials="">
+
+      <article class="testimonial-card" data-testimonial-status="draft">
+        <div class="testimonial-stars" aria-label="5 stars">★★★★★</div>
+        <p class="testimonial-quote">“The Glam gave us the beautiful portraits we wanted, and The Vogue was such a fun surprise for our guests. People kept going back all night. Looking through the photos afterward felt like reliving the wedding all over again.”</p>
+        <div class="testimonial-meta">
+          <strong>Terry</strong>
+          <span>Chicago Wedding · The Glam + The Vogue</span>
+        </div>
+      </article>
+
+      <article class="testimonial-card" data-testimonial-status="draft">
+        <div class="testimonial-stars" aria-label="5 stars">★★★★★</div>
+        <p class="testimonial-quote">“LOLA was a strong event partner for Culture Ball. The team came prepared, worked seamlessly within the event environment, and delivered both the 360 and Glam experiences in a way that felt polished, engaging, and aligned with the occasion. Our guests had a great experience, and the content gave them something memorable to take with them.”</p>
+        <div class="testimonial-meta">
+          <strong>Jeff · Event Noire</strong>
+          <span>Culture Ball · Obama Presidential Center · The 360 Booth + The Glam</span>
+        </div>
+      </article>
+
+      <article class="testimonial-card" data-testimonial-status="draft">
+        <div class="testimonial-stars" aria-label="5 stars">★★★★★</div>
+        <p class="testimonial-quote">“I wanted my 50th to feel special without making everything feel too formal. The Glam was perfect. Everyone looked amazing, people had so much fun with it, and I ended up with photos of so many people I love in one place. It was one of my favorite parts of the night.”</p>
+        <div class="testimonial-meta">
+          <strong>Didi</strong>
+          <span>50th Birthday Celebration · The Glam</span>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+<div class="container cta-inner">
+  <h2 class="display" data-cms-copy="home.041">Let’s Make It Official.</h2>
+  <p data-cms-copy="home.042">Check your date, get a custom quote, and let’s create something unforgettable together.</p>
+  <a class="btn gold" href="availability.html" data-cms-copy="home.043">Book Now →</a>
+  <div class="script-note" data-cms-copy="home.044">Good people.<br>Better photos. ♡</div>
+</div>
+</section>
+
+</main>
+
+
+
+<footer class="site-footer">
+<div class="container footer-top">
+
+  <div class="footer-brand">
+    <img alt="The LOLA Booth" class="footer-logo" src="/staging-site/assets/LOLA_Primary_Light_Transparent.webp" data-cms-media="assets/LOLA_Primary_Light_Transparent.webp">
+    <span class="foot-tag" data-brand-line="true">Good people. Better photos.</span>
+    <p class="small" data-cms-copy="home.045">Premium photo booth experiences for weddings, celebrations, corporate events, and brands.</p>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="home.102">Experiences</h4>
+    <a href="experiences.html#glam" data-cms-copy="home.103">The Glam</a>
+    <a href="experiences.html#360" data-cms-copy="home.104">The 360 Booth</a>
+    <a href="experiences.html#vogue" data-cms-copy="home.105">The Vogue</a>
+    <a href="experiences.html#audio" data-cms-copy="home.106">The Audio Guest Book</a>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="home.107">Plan Your Event</h4>
+    <a href="packages.html" data-cms-copy="home.108">Packages</a>
+    <a href="availability.html" data-cms-copy="home.109">Check Availability</a>
+    <a href="faq.html" data-cms-copy="home.110">FAQ</a>
+    <a href="contact.html" data-cms-copy="home.111">Contact</a>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="home.112">Company</h4>
+    <a href="about.html" data-cms-copy="home.067">About LOLA</a>
+    <a href="contact.html" data-cms-copy="home.113">Corporate &amp; Brands</a>
+    <a href="faq.html" data-cms-copy="home.069">FAQ</a>
+    <a href="contact.html" data-cms-copy="home.070">Contact</a>
+  </div>
+
+  <div>
+    <h4 data-cms-copy="home.114">Get in touch</h4>
+    <a href="availability.html" data-cms-copy="home.115">Book Now</a>
+    <a data-site-email="true" href="mailto:info@thelolabooth.com">info@thelolabooth.com</a>
+    <span class="footer-placeholder" data-site-phone="true">Phone: <a href="tel:+17732402744">(773) 240-2744</a></span>
+    <span class="footer-placeholder" data-site-service-area="true">Chicago &amp; surrounding areas</span>
+
+    <div class="footer-social" data-site-socials="true">
+      <a class="social-link" href="https://www.instagram.com/thelolabooth/" target="_blank" rel="noopener noreferrer" aria-label="The LOLA Booth on Instagram">
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <rect x="3" y="3" width="18" height="18" rx="5"></rect>
+          <circle cx="12" cy="12" r="4"></circle>
+          <circle cx="17.5" cy="6.5" r="1.2"></circle>
+        </svg>
+      </a>
+
+      <a class="social-link" href="https://www.tiktok.com/@thelolabooth" target="_blank" rel="noopener noreferrer" aria-label="The LOLA Booth on TikTok">
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <path d="M14 3v10.2a4.2 4.2 0 1 1-4.2-4.2"></path>
+          <path d="M14 3c.6 3.4 2.6 5.4 6 5.8"></path>
+        </svg>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<div class="container footer-bottom">
+  <span data-site-copyright="true">© 2026 The LOLA Booth. All rights reserved.</span>
+  <span class="footer-legal"><a href="privacy.html" data-cms-copy="home.116">Privacy</a> · <a href="terms.html" data-cms-copy="home.117">Terms</a></span>
+  <span data-cms-copy="home.118">Good people. Better photos. ♡</span>
+</div>
+</footer>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+
+
+
+
+
+</body></html>

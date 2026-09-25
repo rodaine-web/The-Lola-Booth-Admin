@@ -515,7 +515,7 @@ function normalizeTags(value) {
   return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
 }
 
-function assertMagicBytes(buffer, mimeType) {
+export function assertMagicBytes(buffer, mimeType) {
   const ok =
     (mimeType === "image/jpeg" && buffer[0] === 0xff && buffer[1] === 0xd8) ||
     (mimeType === "image/png" && buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) ||
