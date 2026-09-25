@@ -1,3 +1,4 @@
+import {attributionFrom,captureAttribution} from "./integration-jobs-service.js";
 import {emailIntegrationStatus} from "./integration-status.js";
 import crypto from "crypto";
 import { query, transaction } from "../db/pool.js";
@@ -229,6 +230,7 @@ export async function ingestProviderLead({ provider, payload, sourceSubtype, web
   const result = await transaction(async (client) => {
     const duplicate = await duplicateCheck(client, normalized);
     if (duplicate.type === "IDEMPOTENT_REPLAY") {
+      await captureAttribution(duplicate.leadId,payload);
       await client.query(
         `INSERT INTO lead_source_events (lead_id, webhook_event_id, provider, source_subtype, form_id, form_name, campaign_id, campaign_name, ad_set_id, ad_id, external_lead_id, status, test_mode, safe_payload, received_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'IDEMPOTENT_REPLAY',$12,$13,$14)`,
@@ -237,6 +239,9 @@ export async function ingestProviderLead({ provider, payload, sourceSubtype, web
       return { action: "IDEMPOTENT_REPLAY", lead: { id: duplicate.leadId }, duplicateOf: duplicate.leadId };
     }
 
+    normalized.public_ack_pending=normalizedProvider==="WEBSITE";
+    normalized.first_touch=attributionFrom(payload);
+    normalized.latest_touch=normalized.first_touch;
     normalized.assigned_user_id = await assignLead(client, normalized);
     normalized.duplicate_status = duplicate.type;
     normalized.duplicate_of_lead_id = duplicate.leadId;

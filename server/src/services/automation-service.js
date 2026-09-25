@@ -333,7 +333,9 @@ export function brandedEmailHtml(body, options = {}) {
   const monogram = `${publicBase}/brand/LOLA_LB_Monogram_Gold.png`;
   const darkLogo = `${publicBase}/brand/LOLA_Primary_Light_Transparent.png`;
   const hero = options.heroUrl || `${publicBase}/brand/lola-booth-logo.jpg`;
-  const firstName = options.firstName || "there";
+  const greeting = String(body || "").match(/^\s*(?:Hi|Hello|Dear)\s+([^,\n]{1,100}),?\s*\n+/i);
+  const firstName = options.firstName || greeting?.[1]?.trim() || "there";
+  const contentBody = greeting ? String(body).slice(greeting[0].length) : body;
   const kicker = options.kicker || "";
   const ctaUrl = options.ctaUrl || "";
   const ctaLabel = options.ctaLabel || "LET'S STAY CONNECTED";
@@ -393,7 +395,7 @@ export function brandedEmailHtml(body, options = {}) {
       <tr><td class="content-pad" style="padding:30px 42px 20px">
         <div style="font-size:32px;line-height:1.1;color:#090909">Hi ${htmlEscape(firstName)},</div>
         ${kicker ? `<div class="kicker" style="font-family:Arial,sans-serif;font-size:15px;letter-spacing:7px;text-transform:uppercase;color:#a8753b;margin-top:18px">${htmlEscape(kicker)}</div>` : ""}
-        <div class="content-copy" style="font-size:16px;line-height:1.65;margin-top:18px;color:#101a36;overflow-wrap:anywhere">${bodyToHtml(body)}</div>
+        <div class="content-copy" style="font-size:16px;line-height:1.65;margin-top:18px;color:#101a36;overflow-wrap:anywhere">${bodyToHtml(contentBody)}</div>
         ${ctaUrl ? `<div style="text-align:center;margin:28px 0 8px"><a class="cta-button" href="${htmlEscape(ctaUrl)}" style="display:inline-block;background:#b1844c;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;letter-spacing:6px;text-transform:uppercase;padding:17px 54px;border-radius:2px">${htmlEscape(ctaLabel)} &rarr;</a><div class="copy-link" style="font-size:13px;margin-top:14px;color:#101a36">Or copy and paste this link into your browser:<br><span style="color:#a8753b">${htmlEscape(ctaUrl)}</span></div></div>` : ""}
       </td></tr>
       ${summaryCells ? `<tr><td style="padding:0 30px 22px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3efe8"><tr>${summaryCells}</tr></table></td></tr>` : ""}
@@ -585,7 +587,7 @@ export async function createCommunicationDraft(input = {}, user = {}) {
 }
 
 export async function sendCommunication(id, user = {}, { workerClaim = false } = {}) {
-  return transaction(async (client) => {
+  const result = await transaction(async (client) => {
     const communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!communication) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
     if (communication.status === "SENT" || communication.status === "SENT_TO_PROVIDER") {
@@ -597,7 +599,8 @@ export async function sendCommunication(id, user = {}, { workerClaim = false } =
     if (communication.channel !== "EMAIL") throw new AppError("Only email sending is currently enabled.", 422, "CHANNEL_NOT_IMPLEMENTED", { retryable: false });
     if (!communication.recipient) throw new AppError("Recipient is required before sending.", 422, "COMMUNICATION_RECIPIENT_REQUIRED", { retryable: false });
     if (!communication.subject || !communication.rendered_body) throw new AppError("Subject and body are required before sending.", 422, "COMMUNICATION_CONTENT_REQUIRED", { retryable: false });
-    const delivery = await sendEmail({
+    let delivery;
+    try { delivery = await sendEmail({
       to: communication.recipient,
       cc: communication.cc,
       bcc: communication.bcc,
@@ -605,9 +608,13 @@ export async function sendCommunication(id, user = {}, { workerClaim = false } =
       body: communication.rendered_body,
       html: communication.rendered_html
     });
+    } catch (error) {
+      await client.query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code='EMAIL_SEND_FAILED',failure_message='Email provider rejected the send. Check provider configuration and retry.',updated_at=now() WHERE id=$1", [id]);
+      return { sendError: new AppError("Email delivery failed. The message is saved and can be retried.", 502, "EMAIL_SEND_FAILED") };
+    }
     const updated = await client.query(
       `UPDATE communications
-       SET status='SENT_TO_PROVIDER', provider=$1, provider_message_id=$2, sent_at=now(), occurred_at=now(), sent_by=$3, rendered_subject=COALESCE(rendered_subject, subject), idempotency_key=COALESCE(idempotency_key,$5), updated_at=now()
+       SET status='SENT_TO_PROVIDER', failed_at=NULL, failure_code=NULL, failure_message=NULL, provider=$1, provider_message_id=$2, sent_at=now(), occurred_at=now(), sent_by=$3, rendered_subject=COALESCE(rendered_subject, subject), idempotency_key=COALESCE(idempotency_key,$5), updated_at=now()
        WHERE id=$4 RETURNING *`,
       [delivery.provider, delivery.providerMessageId, user.id || null, id, `communication:${id}`]
     );
@@ -619,6 +626,8 @@ export async function sendCommunication(id, user = {}, { workerClaim = false } =
     await recordActivity({ actorUserId: user.id, entityType: "communication", entityId: id, action: "communication_sent_to_provider", summary: `${communication.channel} sent to provider for ${communication.recipient}` });
     return { communication: updated.rows[0], delivery };
   });
+  if (result.sendError) throw result.sendError;
+  return result;
 }
 
 export async function scheduleCommunication(id, scheduledAt, user = {}) {
@@ -645,7 +654,7 @@ export async function cancelCommunication(id) {
 
 export async function retryCommunication(id, user = {}) {
   const result = await query(
-    "UPDATE communications SET status='DRAFT', failed_at=NULL, failure_code=NULL, failure_message=NULL, updated_at=now() WHERE id=$1 AND deleted_at IS NULL AND status='FAILED' RETURNING id",
+    "SELECT id FROM communications WHERE id=$1 AND deleted_at IS NULL AND status='FAILED'",
     [id]
   );
   if (!result.rows[0]) throw new AppError("Failed communication not found.", 404, "COMMUNICATION_NOT_FOUND");
@@ -757,6 +766,8 @@ export async function triggerAutomations({ triggerKey, entityType, entityId, pay
   const jobs = [];
   for (const automation of automations.rows) {
     if (!conditionsMatch(automation.conditions, payload)) continue;
+    // Public-form service exclusively owns immediate website acknowledgments.
+    if(triggerKey==="LEAD_CREATED" && payload.source==="WEBSITE" && /ACKNOWLEDG|INQUIRY.*ACK/i.test(automation.action_config?.template_key||""))continue;
     const inserted = await query(
       `INSERT INTO automation_jobs (automation_id, job_type, related_entity_type, related_entity_id, payload, scheduled_for, status)
        VALUES ($1,$2,$3,$4,$5,$6,'PENDING') RETURNING *`,
@@ -1027,6 +1038,9 @@ export async function processDueJobs({ limit = 25 } = {}) {
     }
   });
   const scheduled = await transaction(async (client) => {
+    // A crash after claiming cannot silently strand a message. An unknown external
+    // outcome requires operator review rather than an automatic duplicate send.
+    await client.query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code='DELIVERY_OUTCOME_UNKNOWN',failure_message='Worker stopped during send. Check provider history before retrying.' WHERE status='PROCESSING' AND updated_at<now()-interval '5 minutes'");
     const due = await client.query(
       `SELECT id FROM communications
        WHERE status='SCHEDULED' AND channel='EMAIL' AND scheduled_at <= now() AND deleted_at IS NULL

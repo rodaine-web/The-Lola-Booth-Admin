@@ -91,12 +91,13 @@ function customerConfirmationBody({ lead = {}, payload = {} }) {
 }
 
 export async function sendPublicInquiryEmails({ lead, payload, action, sendEmailImpl = sendEmail }) {
+  if(action === "IDEMPOTENT_REPLAY") return;
   // Persist email work before responding; the worker owns delivery and retry visibility.
   const deliver = sendEmailImpl === sendEmail ? async message => {
     const result = await query(
-      `INSERT INTO communications (lead_id,type,channel,direction,recipient,subject,rendered_subject,message_summary,rendered_body,rendered_html,status,send_mode,scheduled_at,trigger_key)
-       VALUES ($1,'EMAIL','EMAIL','OUTBOUND',$2,$3,$3,$4,$5,$6,'SCHEDULED','SCHEDULED',now(),'PUBLIC_FORM') RETURNING id`,
-      [lead?.id || null,message.to,message.subject,message.body.slice(0,500),message.body,message.html || brandedEmailHtml(message.body)]);
+      `INSERT INTO communications (lead_id,type,channel,direction,recipient,subject,rendered_subject,message_summary,rendered_body,rendered_html,status,send_mode,scheduled_at,trigger_key,idempotency_key)
+       VALUES ($1,'EMAIL','EMAIL','OUTBOUND',$2,$3,$3,$4,$5,$6,'SCHEDULED','SCHEDULED',now(),'PUBLIC_FORM',$7) ON CONFLICT(idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key RETURNING id`,
+      [lead?.id || null,message.to,message.subject,message.body.slice(0,500),message.body,message.html || brandedEmailHtml(message.body),`public-form:${lead.id}:${message.purpose}`]);
     return result.rows[0];
   } : sendEmailImpl;
   const ownerTo = notificationRecipient();
@@ -111,6 +112,7 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
 
   const deliveries = [
     deliver({
+      purpose: "owner",
       to: ownerTo,
       subject: ownerRendered.subject,
       body: ownerRendered.body,
@@ -142,6 +144,7 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
       : { subject: customerFallback.fallbackSubject, body: customerFallback.fallbackBody, html: brandedEmailHtml(customerFallback.fallbackBody, { firstName: lead.first_name || payload.firstName || "there" }) };
     if (!customerRendered && legacyCustomerTemplateKey) await renderPublicInquiryTemplate("public_inquiry_customer_confirmation", mergeData, customerFallback);
     deliveries.push(deliver({
+      purpose: "customer",
       to: lead.email || payload.email,
       subject: customerRendered.subject,
       body: customerRendered.body,
@@ -152,7 +155,8 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
     }));
   }
 
-  await Promise.all(deliveries);
+  const results=await Promise.all(deliveries);
+  if(sendEmailImpl===sendEmail&&results.every(Boolean))await query("UPDATE leads SET public_ack_pending=false WHERE id=$1",[lead.id]);
 }
 
 async function renderPublicInquiryTemplate(templateKey, mergeData, { fallbackSubject, fallbackBody, relatedEntityId }, htmlOptions = {}) {
@@ -188,4 +192,10 @@ function publicInquiryMergeData({ lead = {}, payload = {}, action, label, name }
       status: action || ""
     }
   };
+}
+
+export async function recoverPublicInquiryAcknowledgments(){
+ const pending=(await query("SELECT * FROM leads WHERE public_ack_pending=true AND deleted_at IS NULL ORDER BY created_at LIMIT 25")).rows;
+ for(const lead of pending)await sendPublicInquiryEmails({lead,payload:{form_id:lead.form_id},action:'RECOVERED_ACKNOWLEDGMENT'});
+ return {checked:pending.length};
 }

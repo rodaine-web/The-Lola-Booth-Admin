@@ -9,6 +9,8 @@ import { AppError } from "../utils/errors.js";
 import { validate } from "../utils/validation.js";
 import { ingestProviderLead } from "../services/social-lead-service.js";
 import { sendPublicInquiryEmails } from "../services/public-form-email-service.js";
+import { requestInvoiceAccess, publicInvoiceSummary } from "../services/invoice-access-service.js";
+import { generatePaymentReceiptPdf } from "../services/document-service.js";
 import { generateInvoicePdf } from "../services/document-service.js";
 import { getInvoice } from "../services/invoice-service.js";
 import { createPaymentSession, publicPaymentOptions } from "../services/payment-service.js";
@@ -59,6 +61,13 @@ const inquirySchema = z.object({
   utm_term: z.string().trim().max(160).optional(),
   landing_page_url: z.string().trim().max(500).optional(),
   referrer_url: z.string().trim().max(500).optional(),
+  gclid: z.string().trim().max(200).optional(),
+  gbraid: z.string().trim().max(200).optional(),
+  wbraid: z.string().trim().max(200).optional(),
+  fbclid: z.string().trim().max(200).optional(),
+  ttclid: z.string().trim().max(200).optional(),
+  ga_client_id: z.string().trim().max(200).optional(),
+  ga_session_id: z.string().trim().max(200).optional(),
   marketing_email_opt_in: z.boolean().optional(),
   website: z.string().max(0).optional()
 });
@@ -205,15 +214,20 @@ publicRouter.post("/proposals/:token/decline", asyncHandler(async (req, res) => 
   res.json({ proposal: updated.rows[0] });
 }));
 
+publicRouter.post("/invoice-access", asyncHandler(async(req,res)=>{
+ const body=z.object({invoiceNumber:z.string().trim().min(1).max(80),email:z.string().trim().email().max(160)}).parse(req.body);
+ res.json(await requestInvoiceAccess(body));
+}));
+
 publicRouter.get("/invoices/:token", asyncHandler(async (req, res) => {
   const invoice = await getInvoice(req.params.token, { publicView: true });
   const status = invoice.status === "SENT" ? "VIEWED" : invoice.status;
   await query(
-    `UPDATE invoices SET status=$1, first_viewed_at=COALESCE(first_viewed_at, now()), last_viewed_at=now(), view_count=view_count+1, updated_at=now()
+    `UPDATE invoices SET status=CASE WHEN status='SENT' THEN $1 ELSE status END, first_viewed_at=COALESCE(first_viewed_at, now()), last_viewed_at=now(), view_count=view_count+1, updated_at=now()
      WHERE id=$2`,
     [status, invoice.id]
   );
-  res.json({ invoice: { ...invoice, status }, paymentOptions: await publicPaymentOptions({ ...invoice, status }) });
+  res.json({ invoice: publicInvoiceSummary({ ...invoice, status }), paymentOptions: await publicPaymentOptions({ ...invoice, status }) });
 }));
 
 publicRouter.post("/invoices/:token/payment-session", asyncHandler(async (req, res) => {
@@ -225,4 +239,14 @@ publicRouter.get("/invoices/:token/pdf", asyncHandler(async (req, res) => {
   const invoice = await getInvoice(req.params.token, { publicView: true });
   const buffer = await generateInvoicePdf(invoice);
   res.type("application/pdf").attachment(`LOLA-Invoice-${String(invoice.invoice_number || "document").replace(/[^a-z0-9._-]+/gi, "-")}.pdf`).send(buffer);
+}));
+
+publicRouter.get("/invoices/:token/receipts/:id/pdf",asyncHandler(async(req,res)=>{
+ const invoice=await getInvoice(req.params.token,{publicView:true});
+ const payment=(await query(`SELECT p.*,i.invoice_number,i.amount_outstanding AS invoice_balance,c.name AS client_name,e.event_name
+ FROM payments p JOIN payment_receipts r ON r.payment_id=p.id JOIN invoices i ON i.id=p.invoice_id
+ LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id
+ WHERE p.id=$1 AND p.invoice_id=$2 AND p.deleted_at IS NULL`,[z.string().uuid().parse(req.params.id),invoice.id])).rows[0];
+ if(!payment)throw new AppError("Receipt not found.",404,"RECEIPT_NOT_FOUND");
+ res.type('application/pdf').attachment(`LOLA-Receipt-${payment.id.slice(0,8)}.pdf`).send(await generatePaymentReceiptPdf(payment));
 }));

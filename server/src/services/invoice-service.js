@@ -13,7 +13,7 @@ import { getProposal, nextNumber } from "./proposal-service.js";
 const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 
 export async function getInvoice(idOrToken, { publicView = false } = {}) {
-  const where = publicView ? "i.secure_token=$1" : "i.id=$1";
+  const where = publicView ? "i.secure_token=$1 AND i.token_revoked_at IS NULL AND (i.token_expires_at IS NULL OR i.token_expires_at>now())" : "i.id=$1";
   const invoice = await query(
     `SELECT i.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone, e.event_name, e.event_type, e.event_date, e.venue_name, e.venue_address, e.city, e.state, e.guest_count, p.proposal_title, pkg.name AS package_name
      FROM invoices i
@@ -26,7 +26,7 @@ export async function getInvoice(idOrToken, { publicView = false } = {}) {
   );
   if (!invoice.rows[0]) throw notFound("Invoice");
   const items = await query("SELECT * FROM invoice_items WHERE invoice_id=$1 ORDER BY id", [invoice.rows[0].id]);
-  const payments = await query("SELECT * FROM payments WHERE invoice_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC, created_at DESC", [invoice.rows[0].id]);
+  const payments = await query("SELECT p.*, EXISTS(SELECT 1 FROM payment_receipts r WHERE r.payment_id=p.id) AS receipt_available FROM payments p WHERE invoice_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC, created_at DESC", [invoice.rows[0].id]);
   return normalizeInvoice({ ...invoice.rows[0], public_url: publicInvoiceUrl(invoice.rows[0]), items: items.rows, payments: payments.rows });
 }
 
@@ -223,5 +223,5 @@ function invoiceMergeData(invoice, invoiceUrl, amountDue) {
 }
 
 export function publicInvoiceUrl(invoice) {
-  return `${env.publicBaseUrl.replace(/\/$/, "")}/invoice/${invoice.secure_token}`;
+  return `${env.publicBaseUrl.replace(/\/$/, "")}/pay/${invoice.secure_token}`;
 }

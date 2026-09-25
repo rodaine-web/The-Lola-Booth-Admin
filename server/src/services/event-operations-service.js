@@ -24,7 +24,7 @@ const transitionTimestamps = {
 
 function isManager(user) {
   const roles = user?.roles || [];
-  return roles.includes("OWNER") || roles.includes("ADMIN") || roles.includes("EVENT_MANAGER");
+  return roles.includes("OWNER") || roles.includes("SUPER_ADMIN") || roles.includes("ADMIN") || roles.includes("EVENT_MANAGER");
 }
 
 function isAttendant(user) {
@@ -32,7 +32,7 @@ function isAttendant(user) {
 }
 
 export async function userCanAccessEvent(user, eventId) {
-  if (!isAttendant(user)) return true;
+  if (isManager(user) || user?.permissions?.includes("*") || user?.permissions?.includes("write:operations")) return true;
   const result = await query(
     `SELECT 1 FROM staff_assignments sa
      JOIN staff_profiles sp ON sp.id=sa.staff_profile_id
@@ -332,6 +332,9 @@ export async function acknowledgeAssignment(eventId, assignmentId, user, { statu
 
 export async function updateEquipmentLifecycle(eventId, assignmentId, action, body, user) {
   await assertEventAccess(user, eventId);
+  return transaction(async()=>{
+  const previous=(await query("SELECT * FROM equipment_assignments WHERE id=$1 AND event_id=$2 AND released_at IS NULL FOR UPDATE",[assignmentId,eventId])).rows[0];
+  if(!previous)throw notFound("Equipment assignment");
   const map = {
     checkout: { status: "CHECKED_OUT", at: "checked_out_at", by: "checked_out_by", condition: "condition_before", notes: "checkout_notes" },
     onsite: { status: "ON_SITE" },
@@ -339,6 +342,9 @@ export async function updateEquipmentLifecycle(eventId, assignmentId, action, bo
   };
   const config = map[action];
   if (!config) throw new AppError("Unsupported equipment action.", 400, "INVALID_EQUIPMENT_ACTION");
+  if(previous.lifecycle_status===config.status)return previous;
+  const allowed={checkout:['RESERVED'],onsite:['CHECKED_OUT','IN_TRANSIT'],return:['CHECKED_OUT','IN_TRANSIT','ON_SITE']};
+  if(!allowed[action].includes(previous.lifecycle_status))throw new AppError('Equipment action does not match its current state.',409,'EQUIPMENT_STATE_CHANGED');
   const result = await query(
     `WITH typed_input AS (SELECT $1::text, $2::uuid, $3::text, $4::text, $5::text, $6::uuid, $7::uuid)
      UPDATE equipment_assignments SET lifecycle_status=$1,
@@ -356,6 +362,7 @@ export async function updateEquipmentLifecycle(eventId, assignmentId, action, bo
   }
   await recordActivity({ actorUserId: user?.id, entityType: "event", entityId: eventId, action: `equipment_${action}`, summary: `Equipment ${action}` });
   return result.rows[0];
+  });
 }
 
 function needsMaintenance(condition) {

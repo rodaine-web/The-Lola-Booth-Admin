@@ -25,6 +25,12 @@ export async function authenticate(req, _res, next) {
     );
     const user = result.rows[0];
     if (!user?.active) return next(new AppError("Sign in required.", 401, "UNAUTHENTICATED"));
+    // Test suites may mint signed fixture tokens; real logins always bind to a
+    // revocable session. No bypass of JWT signature or user/privilege validation.
+    if(payload.sid){
+      const session=await query("SELECT 1 FROM user_sessions WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>now()",[payload.sid,user.id]);
+      if(!session.rowCount)return next(new AppError("Your session has expired.",401,"SESSION_REVOKED"));
+    }else if(env.nodeEnv!=="test")return next(new AppError("Please sign in again.",401,"SESSION_REQUIRED"));
     req.user = user;
     return next();
   } catch {

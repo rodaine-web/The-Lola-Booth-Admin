@@ -87,7 +87,7 @@ export const env = {
   linkedinApiVersion: process.env.LINKEDIN_API_VERSION || "202609",
   metaWebhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN || "",
   tiktokWebhookSecret: process.env.TIKTOK_WEBHOOK_SECRET || "",
-  emailFrom: process.env.EMAIL_FROM || "LOLA Booths <hello@lolabooths.com>",
+  emailFrom: process.env.EMAIL_FROM || "The LOLA Booth <info@thelolabooth.com>",
   formNotificationEmail: process.env.FORM_NOTIFICATION_EMAIL || "",
   microsoftTenantId: process.env.MICROSOFT_TENANT_ID || "",
   microsoftClientId: process.env.MICROSOFT_CLIENT_ID || "",

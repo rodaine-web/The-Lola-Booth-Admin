@@ -1,3 +1,4 @@
+import {enqueueLifecycle} from "./integration-jobs-service.js";
 import { query } from "../db/pool.js";
 
 export async function recordActivity({ actorUserId = null, entityType, entityId, action, summary, metadata = {} }) {
@@ -6,6 +7,7 @@ export async function recordActivity({ actorUserId = null, entityType, entityId,
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [actorUserId, entityType, entityId, action, summary, metadata]
   );
+  await enqueueLifecycle({action,entityType,entityId});
 }
 
 export async function logAutomationEvent({ triggerKey, entityType, entityId, payload = {} }) {

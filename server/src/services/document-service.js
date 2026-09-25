@@ -433,7 +433,7 @@ function drawInvoicePayment(doc, invoice, flow) {
   flow.y += 22;
   if (flow.y + 220 > flow.bottom) flow.nextPage();
   const y = flow.y;
-  const invoiceUrl = publicUrl("invoice", invoice.secure_token);
+  const invoiceUrl = publicUrl("pay", invoice.secure_token);
   const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", invoice.tax], ["TOTAL", invoice.total], ["PAID", invoice.amount_paid], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
   rows.forEach(([label, value], index) => {
     doc.font(index === 5 ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor(navy);
@@ -518,6 +518,7 @@ export async function generatePaymentReceiptPdf(payment) {
   doc.text(`Invoice: ${payment.invoice_number || ""}`);
   doc.text(`Payment Date: ${payment.payment_date || payment.paid_at || ""}`);
   doc.text(`Payment Method: ${payment.payment_method || payment.provider}`);
+  doc.text(`Provider Reference: ${payment.provider_payment_id || payment.reference_number || "Manual"}`);
   doc.text(`Amount: ${money(payment.amount)}`);
   doc.text(`Refunded: ${money(payment.refunded_amount || 0)}`);
   doc.text(`Remaining Balance: ${money(payment.invoice_balance || 0)}`);

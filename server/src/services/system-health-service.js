@@ -73,7 +73,8 @@ export async function getSystemHealth() {
   checks.push(await integrationCheck());
   checks.push(await retentionCheck());
 
-  const status = overallStatus(checks);
+  for (const item of checks) item.optional = item.name.startsWith("payments.") || ["sms", "integrations"].includes(item.name);
+  const status = overallStatus(checks.filter(item => !item.optional));
   await query("INSERT INTO system_health_snapshots (status, checks) VALUES ($1,$2)", [status, checks]).catch(() => null);
   return { status, generatedAt: new Date().toISOString(), checks };
 }
@@ -117,7 +118,7 @@ function paymentChecks() {
   return Object.values(providers).map((provider) => {
     if (!provider.configured) return check(`payments.${provider.provider.toLowerCase()}`, "DISCONNECTED", `${provider.provider} credentials are not configured.`, provider);
     if (!provider.webhookConfigured) return check(`payments.${provider.provider.toLowerCase()}`, "MISCONFIGURED", `${provider.provider} credentials exist but webhook verification is not configured.`, provider);
-    return check(`payments.${provider.provider.toLowerCase()}`, "HEALTHY", `${provider.provider} is configured for ${provider.mode}.`, provider);
+    return check(`payments.${provider.provider.toLowerCase()}`, "UNKNOWN", `${provider.provider} configuration is present for ${provider.mode}; provider acceptance is not verified.`, provider);
   });
 }
 
@@ -125,7 +126,8 @@ async function emailCheck() {
   if (env.emailProvider === "development") return check("email", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Email is using the development adapter and does not deliver externally.", { provider: env.emailProvider, from: env.emailFrom });
   try {
     const readiness = getEmailProviderReadiness();
-    return check("email", "HEALTHY", `${env.emailProvider} adapter is configured and active.`, readiness);
+    const evidence=(await query("SELECT max(sent_at) AS last_accepted FROM communications WHERE provider=$1 AND status IN ('SENT','SENT_TO_PROVIDER')",[env.emailProvider])).rows[0];
+    return check("email", evidence?.last_accepted ? "HEALTHY" : "UNKNOWN", evidence?.last_accepted ? "The configured provider previously accepted a message; inbox delivery is not certified." : "Email configuration is present; provider acceptance has not been verified.", {...readiness,lastAccepted:evidence?.last_accepted||null});
   } catch (error) {
     return check("email", "MISCONFIGURED", `${env.emailProvider} adapter is configured but not active.`, { error: error.message });
   }

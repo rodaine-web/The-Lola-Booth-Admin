@@ -243,10 +243,10 @@ async function revenueTrend([start, end], range) {
   const result = await query(
     `SELECT bucket, sum(booked_revenue)::numeric AS booked_revenue, sum(collected_revenue)::numeric AS collected_revenue
      FROM (
-       SELECT to_char(date_trunc('${bucket}', created_at), '${format}') AS bucket, total AS booked_revenue, 0::numeric AS collected_revenue
+       SELECT to_char(date_trunc('${bucket}', created_at AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')), '${format}') AS bucket, total AS booked_revenue, 0::numeric AS collected_revenue
        FROM bookings WHERE created_at >= $1 AND created_at < $2 AND deleted_at IS NULL
        UNION ALL
-       SELECT to_char(date_trunc('${bucket}', COALESCE(paid_at, payment_date::timestamptz, created_at)), '${format}') AS bucket, 0::numeric AS booked_revenue, amount - refunded_amount AS collected_revenue
+       SELECT to_char(date_trunc('${bucket}', COALESCE(paid_at, payment_date::timestamptz, created_at) AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')), '${format}') AS bucket, 0::numeric AS booked_revenue, amount - refunded_amount AS collected_revenue
        FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL
      ) trend GROUP BY bucket ORDER BY bucket`,
     [start, end]

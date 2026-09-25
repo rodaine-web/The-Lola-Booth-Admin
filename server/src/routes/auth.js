@@ -23,8 +23,8 @@ const setupPasswordSchema = z.object({
   password: z.string().min(8)
 });
 
-function signAccessToken(userId) {
-  return jwt.sign({}, env.jwtSecret, { subject: userId, expiresIn: env.jwtExpiresIn });
+function signAccessToken(userId,sessionId) {
+  return jwt.sign({sid:sessionId}, env.jwtSecret, { subject: userId, expiresIn: env.jwtExpiresIn });
 }
 
 function accountTokenHash(token) {
@@ -45,13 +45,13 @@ authRouter.post("/login", validate(loginSchema), asyncHandler(async (req, res) =
 
   const refreshToken = crypto.randomBytes(48).toString("hex");
   const refreshHash = await bcrypt.hash(refreshToken, 12);
-  await query(
+  const session=await query(
     `INSERT INTO user_sessions (user_id, refresh_token_hash, expires_at)
-     VALUES ($1, $2, now() + ($3 || ' days')::interval)`,
+     VALUES ($1, $2, now() + ($3 || ' days')::interval) RETURNING id`,
     [user.id, refreshHash, env.refreshTokenDays]
   );
 
-  res.json({ accessToken: signAccessToken(user.id), refreshToken });
+  res.json({ accessToken: signAccessToken(user.id,session.rows[0].id), refreshToken });
 }));
 
 authRouter.post("/refresh", asyncHandler(async (req, res) => {
@@ -60,7 +60,7 @@ authRouter.post("/refresh", asyncHandler(async (req, res) => {
   const sessions = await query("SELECT s.id, s.user_id, s.refresh_token_hash FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.revoked_at IS NULL AND s.expires_at > now() AND u.active=true AND u.deleted_at IS NULL");
   for (const session of sessions.rows) {
     if (await bcrypt.compare(refreshToken, session.refresh_token_hash)) {
-      return res.json({ accessToken: signAccessToken(session.user_id) });
+      return res.json({ accessToken: signAccessToken(session.user_id,session.id) });
     }
   }
   throw new AppError("Session expired.", 401, "UNAUTHENTICATED");

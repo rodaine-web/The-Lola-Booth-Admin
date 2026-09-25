@@ -1,3 +1,5 @@
+import {recoverPublicInquiryAcknowledgments} from "./services/public-form-email-service.js";
+import {processIntegrationJobs,queueDueReminders} from "./services/integration-jobs-service.js";
 import { logger } from "./config/logger.js";
 import { pool } from "./db/pool.js";
 import { processDueJobs } from "./services/automation-service.js";
@@ -9,7 +11,10 @@ async function tick() {
   if (stopping) return;
   try {
     await recordWorkerHeartbeat("automation-worker", { pid: process.pid });
+    await recoverPublicInquiryAcknowledgments();
+    await queueDueReminders();
     const result = await processDueJobs({ limit: 25 });
+    await processIntegrationJobs({limit:25});
     await recordWorkerProcessingResult("automation-worker", { success: true, processed: result.processed.length });
     if (result.processed.length) logger.info({ processed: result.processed.length }, "automation jobs processed");
   } catch (error) {
