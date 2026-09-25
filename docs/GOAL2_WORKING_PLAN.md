@@ -23,3 +23,17 @@ Current baseline commit: cf00d46; migration 026. No email sent for Goal 2 yet. W
 - Local authenticated contact/availability API tests persisted test-mode leads, queued exactly2messages each, rejected unapproved recipients, and deduplicated replay. No external sends.
 - Local mocked qualification worker: explicit selection, PENDING→PROCESSING→COMPLETED, no resend on next process, safe rejection/retry, ambiguous/stale claim holds passed. No external sends.
 - Hosted deployment, hosted Admin UAT, actual six-template sends +2owner messages, mailbox receipt, Microsoft trace/DNS checks remain pending.
+
+## Hosted preparation and approval checkpoint
+- Final local regression: 206 tests passed; Vite build passed.
+- Admin implementation committed as `ccd6db3` on `codex/goal2-staging-qualification`. It has NOT been pushed or deployed.
+- Website staging source commit `6b30e71`; staging PR https://github.com/rodaine-web/staging/pull/1 merged. This private repository is verified as the existing owner-controlled staging target.
+- Existing API verified APP_ENV=staging, EMAIL_PROVIDER=microsoft, STAGING_EMAIL_ENABLED=false. Applied additive migrations027/028 to the existing staging database; no legacy/public content rows changed. Hosted staging records have NOT been imported yet.
+- Configured API and Worker QA recipient allowlists to include the newly approved Microsoft inbox, with email still false and --skip-deploys. API QA owner inbox is configured separately from normal FORM_NOTIFICATION_EMAIL. These configuration changes take effect on the next deployment.
+- Public DNS read: MX Microsoft; SPF secureserver.net → spf-0.secureserver.net → spf.protection.outlook.com; both Microsoft DKIM CNAME targets resolve to keys; DMARC p=none. Application acceptance, delivery and inbox authentication results remain unverified.
+- Automatic approval review blocked `git push origin HEAD:main`: existing Admin repository is PUBLIC. A specific asynchronous user approval request is pending for publishing tested commit ccd6db3 to that destination and triggering STAGING deployment. Do not work around this rejection through another deployment path.
+- The new personal QA inbox addresses were removed from the unpublished commit before this public-destination push attempt; private recipient details stay in runtime configuration/task context.
+- No Goal 2 external messages sent. Email remains disabled; no production environment created. Resume hosted deployment/import/CMS UI and controlled six-template plus two-owner delivery tests only after the pending approval is answered.
+
+## Approved deployment preparation
+The owner explicitly approved pushing the Goal 2 code to the existing public Admin repository/main and updating the existing STAGING Admin/API/Worker. The earlier push block is resolved by this authorization. Fresh checks: 206 tests pass, build passes, release diff credential scan clean, and whitespace validation clean after normalizing generated preview JavaScript. Both services report staging with email/marketing/SMS disabled and no selected email jobs. API Stripe is TEST; worker has no Stripe key. This deployment phase does not enable email or run the controlled email qualification matrix.

@@ -16,4 +16,3 @@
     }
     document.getElementById('saveContact').addEventListener('click', downloadVCard);
     document.getElementById('saveContactBottom').addEventListener('click', downloadVCard);
-  
