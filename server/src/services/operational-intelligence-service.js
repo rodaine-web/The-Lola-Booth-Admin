@@ -1,4 +1,5 @@
-import {getEventOperations} from "./event-operations-service.js";
+import {getEventOperations,userCanAccessEvent} from "./event-operations-service.js";
+import {dashboardReadiness} from "../utils/dashboard-readiness.js";
 import { query as rawQuery } from "../db/pool.js";
 import { reportingQuery as query } from "./reporting-query.js";
 import { getBusinessDateRanges, toSqlRange } from "../utils/date-ranges.js";
@@ -167,7 +168,7 @@ async function dashboardLists([start, end], range, user) {
   const todayOnly = range === "today";
   const todayEvents = await eventRows(todayOnly ? "e.event_date >= $1::date AND e.event_date < $2::date" : "e.event_date >= $1::date AND e.event_date < $2::date", [start, end], 12);
   const upcomingEvents = await eventRows("e.event_date >= current_date AND e.event_date < current_date + interval '30 days'", [], 10);
-  const readinessDetails=await Promise.all(upcomingEvents.map(async event=>({...event,operational_readiness:(await getEventOperations(event.id,user)).readiness})));
+  const readinessDetails=await dashboardReadiness(upcomingEvents,user,{canAccess:userCanAccessEvent,readOperations:getEventOperations});
   const [tasks, attention, activity, weekly] = await Promise.all([
     query(`SELECT t.*, u.name AS owner_name, c.name AS client_name, e.event_name
       FROM tasks t LEFT JOIN users u ON u.id=t.assigned_user_id LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN events e ON e.id=t.event_id
