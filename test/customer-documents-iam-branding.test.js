@@ -47,7 +47,7 @@ test("proposal workflow supports generated and uploaded modes with custom sectio
 });
 
 test("documents and emails follow the screenshot-derived visual system and link-first URLs", () => {
-  for (const fragment of ["thin gold outer border", "P R O P O S A L", "Proposal Overview", "CONTINUED LINE ITEMS", "PAYMENT INFORMATION", "QRCode.create", "publicUrl\\(\"invoice\""]) {
+  for (const fragment of ["thin gold outer border", "P R O P O S A L", "Proposal Overview", "CONTINUED LINE ITEMS", "PAYMENT INFORMATION", "QRCode.create", "publicUrl\\(\"pay\""]) {
     assert.match(documentService, new RegExp(fragment));
   }
   assert.match(automationService, /Events&nbsp;&nbsp; \| &nbsp;&nbsp;Brand Activations/);

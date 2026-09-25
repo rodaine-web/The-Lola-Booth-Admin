@@ -24,3 +24,12 @@ test('event dates have human readable formatting without a timezone shift',()=>{
  assert.equal(inquiryEventDate('2027-12-16'),'December 16, 2027');
  assert.equal(inquiryEventDate(null),'TBD');
 });
+
+
+test('branded email uses one greeting while retaining the plain-text message',()=>{
+ const body='Hi Mia,\n\nYour invoice is ready.\nLOLA Booths';
+ const html=brandedEmailHtml(body);
+ assert.equal((html.match(/Hi Mia,/g)||[]).length,1);
+ assert.match(html,/Your invoice is ready/);
+ assert.equal(body.startsWith('Hi Mia,'),true);
+});

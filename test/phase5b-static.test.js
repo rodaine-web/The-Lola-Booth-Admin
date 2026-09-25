@@ -69,7 +69,7 @@ test("proposal, invoice, receipt, and email outputs use branded language", () =>
 
 test("public customer payment and acceptance states are branded", () => {
   assert.match(publicInvoice, /payment\"\) === \"success\"/);
-  assert.match(publicInvoice, /Payment received\./);
+  assert.match(publicInvoice, /Payment verified/);
   assert.match(publicProposal, /Let's make it official\./);
   assert.match(publicInvoice, /metric-strong/);
 });

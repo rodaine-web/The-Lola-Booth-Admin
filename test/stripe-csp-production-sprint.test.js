@@ -20,7 +20,7 @@ test("Stripe hosted checkout is server-side and does not require frontend publis
 
 test("Stripe payment sessions are scoped to trusted invoice amount and invoice idempotency", () => {
   const sessionSlice = paymentService.slice(paymentService.indexOf("export async function createPaymentSession"), paymentService.indexOf("export async function recordManualPayment"));
-  assert.match(paymentService, /const amount = money\(invoice\.amount_outstanding \|\| invoice\.balance_due\)/);
+  assert.match(paymentService, /const amount = invoiceBalance\(invoice\)/);
   assert.match(sessionSlice, /const key = `\$\{normalizedProvider\}:\$\{invoice\.id\}:\$\{cents\(options\.amountDue\)\}:/);
   assert.match(sessionSlice, /WHERE idempotency_key=\$1 AND invoice_id=\$2 AND provider=\$3/);
   assert.doesNotMatch(sessionSlice, /req\.body\.amount|body\.amountDue|amount_total: req/);
@@ -31,7 +31,7 @@ test("Stripe webhook keeps raw body before JSON parsing and verifies signatures"
   assert.match(paymentService, /validStripeSignature/);
   assert.match(paymentService, /crypto\.timingSafeEqual/);
   assert.match(paymentService, /INVALID_STRIPE_SIGNATURE/);
-  assert.match(paymentService, /ON CONFLICT \(provider, external_event_id\) DO NOTHING/);
+  assert.match(paymentService, /ON CONFLICT\s*\(provider,\s*external_event_id\) DO NOTHING/);
 });
 
 test("Stripe test sprint handles success, failure, and refund webhooks without duplicate payments", () => {

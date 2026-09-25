@@ -80,6 +80,6 @@ test('invoice QR decodes from the actual PDF rendering to the stable invoice URL
   await page.render({ canvasContext: context, viewport }).promise;
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
   const decoded = jsQR(pixels.data, canvas.width, canvas.height);
-  assert.equal(decoded?.data, `${env.publicBaseUrl.replace(/\/$/, '')}/invoice/qa-qr-token`);
+  assert.equal(decoded?.data, `${env.publicBaseUrl.replace(/\/$/, '')}/pay/qa-qr-token`);
   await loading.destroy();
 });

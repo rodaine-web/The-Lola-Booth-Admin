@@ -22,10 +22,10 @@ try {
  const superAdmin=(await db.query("INSERT INTO users(name,email,password_hash) VALUES('QA Super Admin','super@example.invalid','disabled') RETURNING id")).rows[0];
  await db.query("INSERT INTO user_roles SELECT $1,id FROM roles WHERE name='SUPER_ADMIN'",[superAdmin.id]);
  await db.query("INSERT INTO business_settings(business_name) SELECT 'LOLA QA' WHERE NOT EXISTS(SELECT 1 FROM business_settings)");
- process.env.DATABASE_URL=`postgresql://localhost:55439/${name}?host=/private/tmp`;process.env.JWT_SECRET=crypto.randomBytes(40).toString('hex');process.env.EMAIL_PROVIDER='development';process.env.SMS_PROVIDER='none';process.env.NODE_ENV='test';process.env.PORT='0';process.env.RATE_LIMIT_MAX='1000';process.env.LOCAL_STORAGE_ROOT='/private/tmp/'+name;
+ process.env.DATABASE_URL=`postgresql://localhost:55439/${name}?host=/private/tmp`;process.env.JWT_SECRET=crypto.randomBytes(40).toString('hex');process.env.EMAIL_PROVIDER='development';process.env.SMS_PROVIDER='none';process.env.NODE_ENV='test';process.env.PORT='0';process.env.RATE_LIMIT_MAX='5000';process.env.LOCAL_STORAGE_ROOT='/private/tmp/'+name;
  const {env}=await import('../config/env.js');env.databaseUrl=process.env.DATABASE_URL;env.port=0;env.emailProvider='development';env.jwtSecret=process.env.JWT_SECRET;
  ({server}=await import('../index.js'));({pool}=await import('../db/pool.js'));if(!server.listening)await new Promise(r=>server.once('listening',r));
- const base='http://127.0.0.1:'+server.address().port;env.clientOrigin=base;
+ const base='http://127.0.0.1:'+server.address().port;env.clientOrigin=base;env.publicBaseUrl=base;process.env.EMAIL_ASSET_BASE_URL=base;
  const token=id=>jwt.sign({},env.jwtSecret,{subject:id,expiresIn:'10m'});
  async function call(method,path,body,id=owner.id){const r=await fetch(base+'/api'+path,{method,headers:{'content-type':'application/json',...(id?{authorization:'Bearer '+token(id)}:{})},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json().catch(()=>null);return {status:r.status,data};}
  assert.equal((await call('GET','/users',null,null)).status,401);
@@ -52,6 +52,7 @@ try {
  assert.equal((await call('POST','/auth/refresh',{refreshToken:login.data.refreshToken},null)).status,200);
  assert.equal((await call('POST','/auth/logout',{refreshToken:login.data.refreshToken},null)).status,204);
  assert.equal((await call('POST','/auth/refresh',{refreshToken:login.data.refreshToken},null)).status,401);
+ assert.equal((await fetch(base+'/api/auth/me',{headers:{authorization:'Bearer '+login.data.accessToken}})).status,401);
  assert.equal((await call('POST','/auth/login',{email:'member@example.invalid',password:'incorrect-password'},null)).status,401);
  const expired=crypto.randomBytes(32).toString('hex');await db.query("INSERT INTO user_account_tokens(user_id,token_hash,token_type,expires_at) VALUES($1,$2,'PASSWORD_RESET',now()-interval '1 hour')",[id,crypto.createHash('sha256').update(expired).digest('hex')]);
  assert.equal((await call('POST','/auth/setup-password',{token:expired,password:'Expired-token-should-not-work'},null)).status,400);
@@ -226,10 +227,20 @@ try {
  assert.ok((await db.query('SELECT id FROM communications WHERE proposal_id=$1',[journeyProposal.data.id])).rowCount>0);
  assert.ok((await db.query('SELECT id FROM audit_logs WHERE entity_id=ANY($1::uuid[])',[[publicLead.id,journeyProposal.data.id,journeyInvoice.data.id]])).rowCount>=3);
  passed.push('Continuous inquiry → assigned lead → client/event → numbered proposal → development send → public acceptance → related draft invoice and communication/audit records');
+ let completionRoles=[];
+ if(process.argv.includes('--completion')){
+  const {verifyFinalLocalChecks}=await import('./verify-final-local-checks.js');
+  passed.push(...await verifyFinalLocalChecks({db,call,base,env,owner,invoiceId:journeyInvoice.data.id}));
+  const {verifyRoleAndOperations}=await import("./verify-role-and-operations.js");
+  const roleResult=await verifyRoleAndOperations({db,call,owner,token});passed.push(...roleResult.passed);completionRoles=roleResult.roles;
+ }
  if(process.argv.includes('--visual')){
+  if(!process.argv.includes('--journeys-only')){
   await db.query("UPDATE events SET event_date=current_date,status='CONFIRMED',operational_status='LIVE' WHERE id=$1",[event.data.id]);
   const {runLocalProductBrowser}=await import('./verify-local-product-browser.js');
   passed.push(...await runLocalProductBrowser({base,accessToken:token(owner.id),eventId:journeyConvert.data.event.id,proposalId:journeyProposal.data.id,invoiceId:journeyInvoice.data.id}));
+  }
+  if(completionRoles.length){const {verifyFinalLocalBrowser}=await import("./verify-final-local-browser.js");passed.push(...await verifyFinalLocalBrowser({base,roles:completionRoles,invoice:(await call("GET","/invoices/"+journeyInvoice.data.id)).data,db,call}));}
  }
- await fs.mkdir('audit-output/platform-hardening',{recursive:true});await fs.writeFile('audit-output/platform-hardening/local-dashboard.json',JSON.stringify((await call('GET','/dashboard?range=mtd')).data,null,2));await fs.writeFile('audit-output/platform-hardening/local-api-report.json',JSON.stringify({checkedAt:new Date().toISOString(),passed},null,2));console.log(JSON.stringify({passed},null,2));
+ await fs.mkdir('audit-output/platform-hardening',{recursive:true});await fs.writeFile('audit-output/platform-hardening/local-dashboard.json',JSON.stringify((await call('GET','/dashboard?range=mtd')).data,null,2));await fs.writeFile(process.argv.includes('--journeys-only')?'audit-output/admin-final/focused-api-report.json':'audit-output/platform-hardening/local-api-report.json',JSON.stringify({checkedAt:new Date().toISOString(),passed},null,2));console.log(JSON.stringify({passed},null,2));
 }finally{if(server)await new Promise(r=>server.close(r));if(pool)await pool.end();await db.end();await admin.query(`DROP DATABASE ${name}`);await admin.end();}
