@@ -33,6 +33,10 @@ async function request(path, options = {}, retry = true, responseType = "json") 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken })
     });
+    if (!refreshed.ok && refreshed.status !== 401) {
+      const error=new Error(refreshed.status===429 ? "Too many requests. Please wait a few minutes and try again." : "Session refresh is temporarily unavailable. Please try again.");
+      error.status=refreshed.status;throw error;
+    }
     if (refreshed.ok) {
       setTokens(await refreshed.json());
       return request(path, options, false, responseType);
@@ -41,7 +45,7 @@ async function request(path, options = {}, retry = true, responseType = "json") 
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    const error = new Error(payload.error?.message || (response.status === 404 ? "Record not found." : response.status === 403 ? "You do not have access to this area." : "The request could not be completed."));
+    const error = new Error(payload.error?.message || (response.status === 429 ? "Too many requests. Please wait a few minutes and try again." : response.status === 404 ? "Record not found." : response.status === 403 ? "You do not have access to this area." : "The request could not be completed."));
     error.status = response.status; error.code = payload.error?.code; error.requestId = payload.error?.requestId;
     if (response.status >= 500 && error.requestId) error.message += ` Reference: ${error.requestId}`;
     throw error;
@@ -62,6 +66,10 @@ async function download(path, filename, retry = true) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken })
     });
+    if (!refreshed.ok && refreshed.status !== 401) {
+      const error=new Error(refreshed.status===429 ? "Too many requests. Please wait a few minutes and try again." : "Session refresh is temporarily unavailable. Please try again.");
+      error.status=refreshed.status;throw error;
+    }
     if (refreshed.ok) {
       setTokens(await refreshed.json());
       return download(path, filename, false);
@@ -100,6 +108,10 @@ async function downloadPost(path, body, filename, retry = true) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken })
     });
+    if (!refreshed.ok && refreshed.status !== 401) {
+      const error=new Error(refreshed.status===429 ? "Too many requests. Please wait a few minutes and try again." : "Session refresh is temporarily unavailable. Please try again.");
+      error.status=refreshed.status;throw error;
+    }
     if (refreshed.ok) {
       setTokens(await refreshed.json());
       return downloadPost(path, body, filename, false);
@@ -128,6 +140,10 @@ async function text(path, retry = true) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken })
     });
+    if (!refreshed.ok && refreshed.status !== 401) {
+      const error=new Error(refreshed.status===429 ? "Too many requests. Please wait a few minutes and try again." : "Session refresh is temporarily unavailable. Please try again.");
+      error.status=refreshed.status;throw error;
+    }
     if (refreshed.ok) {
       setTokens(await refreshed.json());
       return text(path, false);

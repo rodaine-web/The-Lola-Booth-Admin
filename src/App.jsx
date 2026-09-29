@@ -40,9 +40,10 @@ const LiveOperations = lazy(() => import("./pages/LiveOperations.jsx"));
 const SystemHealth = lazy(() => import("./pages/SystemHealth.jsx"));
 
 function PrivateRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, authError, retryAuth } = useAuth();
   const location = useLocation();
   if (loading) return <main className="boot-screen">Opening Admin Portal...</main>;
+  if (authError) return <main className="boot-screen"><p role="alert">{authError}</p><button className="primary-action" onClick={retryAuth}>Try again</button></main>;
   if (!user) return <Navigate to="/login" replace />;
   if (user.roles?.includes("ATTENDANT") && !user.roles?.some((role) => ["OWNER", "ADMIN", "SUPER_ADMIN", "EVENT_MANAGER"].includes(role)) && !location.pathname.startsWith("/my-events") && !location.pathname.startsWith("/scan")) {
     return <Navigate to="/my-events" replace />;
