@@ -341,7 +341,8 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/admin.html"
     }
-  ]
+  ],
+  "buildCommand": "npm run build && mv dist/index.html dist/admin.html"
 }
