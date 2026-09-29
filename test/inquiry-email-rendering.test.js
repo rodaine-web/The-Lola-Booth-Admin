@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import {brandedEmailHtml,renderTemplate} from '../server/src/services/automation-service.js';
 import {inquiryEventDate} from '../server/src/services/public-form-email-service.js';
 
+test('invoice email keeps the document CTA and links payment to the LOLA page',()=>{
+ const url='https://admin.thelolabooth.com/invoice/qa-token';
+ const html=brandedEmailHtml('Your invoice is ready.',{ctaLabel:'View Your Invoice',ctaUrl:url,secondaryCta:{label:'Pay Invoice',url:`${url}#payment-options`}});
+ assert.match(html,/href="https:\/\/admin\.thelolabooth\.com\/invoice\/qa-token"[^>]*>View Your Invoice/);
+ assert.match(html,/href="https:\/\/admin\.thelolabooth\.com\/invoice\/qa-token#payment-options"[^>]*>Pay Invoice/);
+ assert.doesNotMatch(html,/checkout\.stripe\.com|paypal\.com/);
+ assert.doesNotMatch(brandedEmailHtml('A regular email'),/Pay Invoice|payment link/);
+});
+
 test('stored template newlines become real breaks without rewriting customer data',()=>{
  const text=renderTemplate('Name: {{client.name}}\\n\\nMessage: {{request.notes}}',{client:{name:'Alex'},request:{notes:'Keep literal \\n in my message'}});
  assert.equal(text,'Name: Alex\n\nMessage: Keep literal \\n in my message');

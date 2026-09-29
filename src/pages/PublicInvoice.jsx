@@ -21,6 +21,11 @@ export default function PublicInvoice() {
     catch(err){setError(err.message);}
   }
   useEffect(()=>{setInvoice(null);load();},[token]);
+  useEffect(() => {
+    if (invoice && window.location.hash === "#payment-options") {
+      document.getElementById("payment-options")?.scrollIntoView();
+    }
+  }, [invoice]);
   async function pay(provider){
     if(paymentLock.current)return;paymentLock.current=true;setBusy(provider);setError("");
     try{const res=await fetch(`${API_URL}/public/invoices/${token}/payment-session`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,idempotencyKey:paymentKeys.current[`${token}:${provider}`]??=(crypto.randomUUID())})});const data=await res.json();if(!res.ok)throw new Error(data.error?.message||'Checkout is unavailable. Please try again.');const url=new URL(data.checkoutUrl);if(url.protocol!=='https:'||!['checkout.stripe.com','www.paypal.com','www.sandbox.paypal.com'].includes(url.hostname))throw new Error('Invalid checkout destination.');window.location.assign(url.href);}catch(err){setError(err.message);}finally{setBusy('');paymentLock.current=false;}
@@ -57,8 +62,8 @@ export default function PublicInvoice() {
         <Metric label="Amount Due" value={formatMoney(amountDue)} />
         <Metric label="Status" value={invoice.status} />
       </section>
-      <section className="panel"><h2>Line Items</h2><DataTable rows={invoice.items} columns={["description", "quantity", "unit_price", "line_total"]} empty="No invoice items." /></section>
-      <section className="panel">
+      <section className="panel public-invoice-items"><h2>Line Items</h2><DataTable rows={invoice.items} columns={["description", "quantity", "unit_price", "line_total"]} empty="No invoice items." /></section>
+      <section className="panel" id="payment-options">
         <h2>Choose payment method</h2>
         <p className="note-text">Amount due: {formatMoney(paymentOptions?.amountDue ?? invoice.amount_outstanding ?? invoice.balance_due ?? 0)}. Flexible payment options may be available at checkout.</p>
         {paymentOptions?.providers?.length ? (

@@ -2,6 +2,7 @@ import { formatDateOnly, formatMoney } from "../utils/display.js";
 import { CheckCircle2, Download, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import ProposalPreview from "../components/ProposalPreview.jsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 
@@ -59,7 +60,7 @@ export default function PublicProposal() {
         <Metric label="Balance" value={formatMoney(pricing.balance || 0)} />
         <Metric label="Status" value={proposal.status} />
       </section>
-      <iframe className="document-preview" title="Proposal preview" src={`${API_URL}/public/proposals/${token}/preview`} />
+      <ProposalPreview key={token} token={token} />
       <section className="panel">
         <h2>Acceptance</h2>
         <p className="note-text">{payload.acceptanceWording}</p>

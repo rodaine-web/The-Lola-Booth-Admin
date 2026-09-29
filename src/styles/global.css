@@ -1407,6 +1407,14 @@ textarea {
   padding: 28px 0 48px;
 }
 .public-document .panel, .public-document .metric, .public-document .table-wrap { background: var(--white); }
+@media (max-width:600px) {
+  .public-invoice-items table { min-width:0; table-layout:fixed; }
+  .public-invoice-items th, .public-invoice-items td { padding:10px 4px; font-size:11px; overflow-wrap:anywhere; }
+  .public-invoice-items th:first-child { width:34%; }
+  .public-invoice-items th:nth-child(2) { width:14%; }
+  .public-invoice-items th:nth-child(n+3) { width:26%; }
+  .public-invoice-items td:nth-child(n+3) { white-space:nowrap; text-align:right; }
+}
 .public-brand {
   justify-content: space-between;
   min-height: 142px;

@@ -70,7 +70,7 @@ export function proposalHtml(proposal) {
     ["Guests", proposal.guest_count]
   ].filter(([, value]) => value);
   return `<!doctype html>
-  <html><head><meta charset="utf-8"><title>${proposal.proposal_number}</title>
+  <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${proposal.proposal_number}</title>
   <style>
   body{font-family:Georgia,"Times New Roman",serif;color:${navy};background:${brand.ivory};margin:0;line-height:1.55}
   main{background:${brand.white};margin:0 auto;max-width:940px;min-height:100vh}
@@ -81,6 +81,15 @@ export function proposalHtml(proposal) {
   .meta{color:${brand.muted};font-size:12px;text-transform:uppercase}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.field{border-top:1px solid ${brand.taupe};padding-top:10px}.field span{display:block;color:${brand.gold};font-size:11px;text-transform:uppercase}.field strong{display:block;font-weight:600;margin-top:4px}
   .section{border-top:1px solid ${brand.gold}}.proposal-overview{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:34px}.section-block{margin-bottom:28px}.section-heading{display:grid;grid-template-columns:auto auto 1fr;gap:14px;align-items:center}.section-heading span{font-size:16px;letter-spacing:6px}.section-heading i{height:1px;background:${brand.gold}}.side-card{border:1px solid ${brand.champagne};padding:34px;text-align:center;background:${brand.ivory}}.badge{display:inline-block;border:1px solid ${brand.gold};color:${brand.charcoal};padding:4px 9px;font-size:11px;text-transform:uppercase;margin-left:8px}.total{font-family:"Playfair Display",Georgia,serif;font-size:32px;color:${brand.charcoal};text-align:right}.next{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.next div{border-left:2px solid ${brand.gold};padding-left:12px;color:${brand.muted}}.next strong{display:block;color:${brand.charcoal};font-size:16px}
   table{width:100%;border-collapse:collapse;margin-top:14px}td,th{border-bottom:1px solid ${brand.taupe};padding:12px 8px;text-align:left}th{color:${brand.muted};font-size:11px;text-transform:uppercase}td:last-child,th:last-child{text-align:right}.summary{margin-left:auto;width:min(340px,100%)}.summary td{border:0;padding:5px 0}.summary tr:last-child td{border-top:1px solid ${brand.gold};padding-top:10px;font-weight:700}.footer{text-align:center;background:${brand.ivory};color:${brand.muted};font-size:13px}
+  @media screen and (max-width:600px){
+    *{box-sizing:border-box}body{overflow-wrap:anywhere}section{padding:24px 16px}
+    .cover{margin:16px;min-height:520px;padding:28px 16px}.primary-logo{margin:0 auto;max-width:100%}
+    h1{font-size:clamp(28px,9vw,48px);letter-spacing:4px;margin-top:24px}h2{font-size:30px}h3{letter-spacing:2px}
+    .lede{font-size:17px;letter-spacing:2px}.eyebrow{letter-spacing:3px}
+    .grid,.proposal-overview,.next{grid-template-columns:minmax(0,1fr)}.doc-header{flex-wrap:wrap;gap:12px}
+    .section-heading{grid-template-columns:auto minmax(0,1fr);gap:8px}.section-heading i{display:none}.side-card{padding:22px}
+    table{table-layout:fixed}td,th{padding:10px 4px;font-size:12px}td:first-child,th:first-child{width:40%}.total{font-size:26px}
+  }
   </style></head><body>
   <main>
   <section class="cover">${primaryLogo ? `<img class="primary-logo" src="${primaryLogo}" alt="The LOLA Booth">` : "<p class=\"eyebrow\">THE LOLA BOOTH</p>"}<div class="divider"></div><h1>Proposal</h1><p class="lede">Custom Experience Proposal</p><div class="divider"></div><div class="grid"><div class="field"><span>Prepared For</span><strong>${proposal.client_name || "Client"}</strong></div><div class="field"><span>Date</span><strong>${proposal.proposal_date || new Date().toISOString().slice(0, 10)}</strong></div><div class="field"><span>Event</span><strong>${proposal.event_name || proposal.event_type || "Event"}</strong></div><div class="field"><span>Proposal No.</span><strong>${proposal.proposal_number}</strong></div></div><p class="meta">${footerText}</p></section>

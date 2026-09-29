@@ -115,6 +115,15 @@ export default function App() {
         <Route path="system/data-review" element={<DataReview/>}/>
         <Route path="system/settings" element={<Settings />} />
       </Route>
+      <Route path="*" element={
+        <main className="public-document">
+          <p className="eyebrow">404</p>
+          <h1>Page not found</h1>
+          <p>This address is unavailable. Check the link or choose where to go next.</p>
+          <p><a href="/">Open Admin Portal</a></p>
+          <p><a href="/pay">Find your invoice</a></p>
+        </main>
+      } />
     </Routes>
     </Suspense>
   );

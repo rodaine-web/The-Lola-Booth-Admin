@@ -144,6 +144,7 @@ export async function sendInvoice(req, invoice) {
     kicker: "Your invoice is ready",
     ctaLabel: "View Your Invoice",
     ctaUrl: invoiceUrl,
+    secondaryCta: Number(amountDue) > 0 ? { label: "Pay Invoice", url: `${invoiceUrl}#payment-options` } : null,
     event: {
       date: invoice.event_date,
       venue: invoice.venue_name,
