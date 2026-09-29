@@ -2,8 +2,9 @@ import {query} from '../db/pool.js';
 import {isStaging,stagingEmailPolicy} from '../config/staging-safety.js';
 import {sendCommunication} from './automation-service.js';
 export function selectedQualificationJobs(config=process.env){
- if(!isStaging(config)||config.STAGING_EMAIL_ENABLED!=='true')return [];
- const ids=String(config.STAGING_EMAIL_JOB_IDS||'').split(',').map(x=>x.trim()).filter(Boolean);
+ const prefix=isStaging(config)?'STAGING':config.APP_ENV==='production'?'PRODUCTION':null;
+ if(!prefix||config[`${prefix}_EMAIL_ENABLED`]!=='true')return [];
+ const ids=String(config[`${prefix}_EMAIL_JOB_IDS`]||'').split(',').map(x=>x.trim()).filter(Boolean);
  if(ids.length>8||ids.some(x=>!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(x)))throw Error('Qualification allows at most eight explicit email job IDs.');
  return [...new Set(ids)];
 }

@@ -618,7 +618,7 @@ export async function createCommunicationDraft(input = {}, user = {}) {
 }
 
 export async function sendCommunication(id, user = {}, { workerClaim = false, qualificationClaim = false } = {}) {
-  if(isStaging()&&!qualificationClaim&&(await query('SELECT 1 FROM staging_email_qualification_jobs WHERE communication_id=$1',[id])).rowCount)throw new AppError('This QA message is controlled by its qualification job.',409,'STAGING_JOB_REQUIRED');
+  if(stagingJobsPaused()&&!qualificationClaim&&(await query('SELECT 1 FROM staging_email_qualification_jobs WHERE communication_id=$1',[id])).rowCount)throw new AppError('This QA message is controlled by its qualification job.',409,'STAGING_JOB_REQUIRED');
   const result = await transaction(async (client) => {
     const communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!communication) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
@@ -1042,7 +1042,7 @@ async function executeAutomationJob(client, job) {
 }
 
 export async function processDueJobs({ limit = 25 } = {}) {
-  if(stagingJobsPaused())throw new AppError('Staging bulk automation is paused.',409,'STAGING_AUTOMATIONS_PAUSED');
+  if(stagingJobsPaused())throw new AppError('Automatic job processing is paused in this environment.',409,'STAGING_AUTOMATIONS_PAUSED');
   const processed = [];
   await transaction(async (client) => {
     await recoverStaleProcessingJobs(client);

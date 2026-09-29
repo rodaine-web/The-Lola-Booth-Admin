@@ -124,6 +124,7 @@ function paymentChecks() {
 }
 
 async function emailCheck() {
+  if(env.emailProvider==='disabled'||(process.env.APP_ENV==='production'&&process.env.PRODUCTION_EMAIL_ENABLED!=='true')) return check('email','DISABLED','Production email is intentionally paused.',{provider:env.emailProvider});
   if(isStaging()&&process.env.STAGING_EMAIL_ENABLED!=='true'){try{getEmailProviderReadiness();return check("email","DISABLED","Staging sends paused; adapter configuration validated. Inbox qualification pending.",{provider:env.emailProvider});}catch{return check("email","MISCONFIGURED","Staging email provider configuration incomplete.");}}
   if (env.emailProvider === "development") return check("email", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Email is using the development adapter and does not deliver externally.", { provider: env.emailProvider, from: env.emailFrom });
   try {
@@ -169,7 +170,7 @@ async function workerCheck() {
   const ageSeconds = Math.round((Date.now() - new Date(heartbeat.last_heartbeat_at).getTime()) / 1000);
   if (ageSeconds > 300) return check("worker", "DOWN", "Automation worker heartbeat is down.", { lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds, lastSuccess: heartbeat.last_successful_communication_processing_at, lastFailure: heartbeat.last_failed_communication_processing_at, error: heartbeat.last_processing_error });
   if (ageSeconds > 180) return check("worker", "STALE", "Automation worker heartbeat is stale.", { lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds, lastSuccess: heartbeat.last_successful_communication_processing_at, lastFailure: heartbeat.last_failed_communication_processing_at, error: heartbeat.last_processing_error });
-  return check("worker", "HEALTHY", heartbeat.metadata?.jobsPaused?"Staging worker heartbeat is current; automatic jobs are paused.":"Automation worker heartbeat is current.", { build:heartbeat.metadata, lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds, lastSuccess: heartbeat.last_successful_communication_processing_at, lastFailure: heartbeat.last_failed_communication_processing_at, error: heartbeat.last_processing_error });
+  return check("worker", "HEALTHY", heartbeat.metadata?.jobsPaused?"Worker heartbeat is current; automatic jobs are paused.":"Automation worker heartbeat is current.", { build:heartbeat.metadata, lastHeartbeatAt: heartbeat.last_heartbeat_at, ageSeconds, lastSuccess: heartbeat.last_successful_communication_processing_at, lastFailure: heartbeat.last_failed_communication_processing_at, error: heartbeat.last_processing_error });
 }
 
 async function jobBacklogCheck() {

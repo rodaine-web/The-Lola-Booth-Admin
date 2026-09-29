@@ -93,7 +93,7 @@ function customerConfirmationBody({ lead = {}, payload = {} }) {
 export async function sendPublicInquiryEmails({ lead, payload, action, sendEmailImpl = sendEmail, ownerRecipient }) {
   if(action === "IDEMPOTENT_REPLAY") return;
   // Paused environments must not accumulate a backlog for a future worker enablement.
-  if (sendEmailImpl === sendEmail && (process.env.EMAIL_PROVIDER === 'disabled' || (process.env.APP_ENV === 'staging' && process.env.STAGING_EMAIL_ENABLED !== 'true'))) return;
+  if (sendEmailImpl === sendEmail && (process.env.EMAIL_PROVIDER === 'disabled' || (process.env.APP_ENV === 'staging' && process.env.STAGING_EMAIL_ENABLED !== 'true') || (process.env.APP_ENV === 'production' && process.env.PRODUCTION_EMAIL_ENABLED !== 'true'))) return;
   // Persist email work before responding; the worker owns delivery and retry visibility.
   const deliver = sendEmailImpl === sendEmail ? async message => {
     const result = await query(

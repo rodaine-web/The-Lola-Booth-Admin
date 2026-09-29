@@ -8,13 +8,13 @@ import { pool } from "./db/pool.js";
 import { processDueJobs } from "./services/automation-service.js";
 import { recordWorkerHeartbeat, recordWorkerProcessingResult } from "./services/system-health-service.js";
 
-await assertDatabaseIdentity(pool);
+const databaseSystemId = await assertDatabaseIdentity(pool);
 let stopping = false;
 
 async function tick() {
   if (stopping) return;
   try {
-    await recordWorkerHeartbeat("automation-worker", { pid: process.pid, ...buildInfo(), jobsPaused:stagingJobsPaused() });
+    await recordWorkerHeartbeat("automation-worker", { pid: process.pid, ...buildInfo(), jobsPaused:stagingJobsPaused(), databaseSystemId });
     if(stagingJobsPaused()){const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:true,processed:result.processed.length,qualificationOnly:true});return;}
     await recoverPublicInquiryAcknowledgments();
     await queueDueReminders();
