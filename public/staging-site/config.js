@@ -1,1 +1,1 @@
-window.LOLA_CONFIG = { environment: "staging", cmsChannel: "STAGING", apiBase: "https://api.thelolabooth.com", formsEnabled: true };
+window.LOLA_CONFIG = { environment: "staging", cmsChannel: "STAGING", apiBase: "https://stagingapi.thelolabooth.com", formsEnabled: true };

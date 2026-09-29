@@ -1,3 +1,6 @@
+import {pool} from './db/pool.js';
+import {assertDatabaseIdentity} from './config/database-identity.js';
+import {originAllowed} from '../../shared/environment-isolation.js';
 import {buildInfo} from './config/staging-safety.js';
 import crypto from "node:crypto";
 import { safeRequestLog } from "./utils/request-log.js";
@@ -17,13 +20,14 @@ import { getSetupStatus } from "./services/setup-service.js";
 import { asyncHandler } from "./utils/async-handler.js";
 import { AppError } from "./utils/errors.js";
 
+await assertDatabaseIdentity(pool);
 const app = express();
 
 app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || origin === env.clientOrigin || env.publicInquiryAllowedOrigins.includes(origin)) return callback(null, true);
+    if (originAllowed(process.env.APP_ENV, origin, [env.clientOrigin, ...env.publicInquiryAllowedOrigins])) return callback(null, true);
     return callback(new AppError("Requests are not allowed from this origin.", 403, "CORS_REJECTED"));
   },
   credentials: true

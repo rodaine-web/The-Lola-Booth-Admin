@@ -163,7 +163,7 @@ adminRouter.use((req,_res,next)=>{
   if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)&&freezesPublicMutation(req.path,req.body))return next(new AppError('Public website V1 is frozen. Use the STAGING CMS channel.',409,'PUBLIC_CONTENT_FROZEN'));
   next();
 });
-adminRouter.use('/website/staging',stagingCmsRouter);
+adminRouter.use('/website/staging',(req,res,next)=>isStaging()?next():next(new AppError('Staging CMS is unavailable in this environment.',404,'NOT_FOUND')),stagingCmsRouter);
 
 const eventStatuses = ["INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "READY", "IN_PROGRESS", "COMPLETED", "CANCELLED", "DRAFT", "PENDING_CONTRACT", "PENDING_DEPOSIT"];
 const leadStatuses = ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_DRAFT", "PROPOSAL_SENT", "FOLLOW_UP", "WON", "LOST", "ARCHIVED"];
@@ -1537,6 +1537,11 @@ adminRouter.post("/payment-schedules", requirePermission("write:finance"), async
   });
   await writeAudit({ req, action: "payment_schedule_created", entity: "payment_schedule", entityId: schedule.id, after: schedule });
   res.status(201).json(schedule);
+}));
+
+adminRouter.get('/lookups/event-types', requirePermission('read:sales'), asyncHandler(async (_req,res) => {
+  const result = await query("SELECT id,name FROM website_event_types WHERE deleted_at IS NULL AND status='PUBLISHED' ORDER BY display_order,name");
+  res.json({data:result.rows});
 }));
 
 const cmsTypes = ["pageItems", "mediaMappings", "hero", "gallery", "content", "testimonials", "faqs", "eventTypes"];

@@ -31,7 +31,7 @@ const PaymentDetail = lazy(() => import("./pages/PaymentDetail.jsx"));
 const PublicProposal = lazy(() => import("./pages/PublicProposal.jsx"));
 const PublicInvoice = lazy(() => import("./pages/PublicInvoice.jsx"));
 const Integrations = lazy(() => import("./pages/Integrations.jsx"));
-const WebsiteCms = lazy(() => import("./pages/StagingCms.jsx"));
+const WebsiteCms = lazy(() => import.meta.env.VITE_APP_ENV === "production" ? import("./pages/WebsiteCms.jsx") : import("./pages/StagingCms.jsx"));
 const Communications = lazy(() => import("./pages/Communications.jsx"));
 const MyEvents = lazy(() => import("./pages/MyEvents.jsx"));
 const PublicDelivery = lazy(() => import("./pages/PublicDelivery.jsx"));

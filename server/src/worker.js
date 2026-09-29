@@ -1,3 +1,4 @@
+import {assertDatabaseIdentity} from './config/database-identity.js';
 import {processStagingQualificationJobs} from './services/staging-email-qualification-service.js';
 import {buildInfo,stagingJobsPaused} from './config/staging-safety.js';
 import {recoverPublicInquiryAcknowledgments} from "./services/public-form-email-service.js";
@@ -7,6 +8,7 @@ import { pool } from "./db/pool.js";
 import { processDueJobs } from "./services/automation-service.js";
 import { recordWorkerHeartbeat, recordWorkerProcessingResult } from "./services/system-health-service.js";
 
+await assertDatabaseIdentity(pool);
 let stopping = false;
 
 async function tick() {

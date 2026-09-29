@@ -1,3 +1,4 @@
+import EventTypeSelect from '../components/EventTypeSelect.jsx';
 import {useDialogFocus} from "../utils/use-dialog-focus.js";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { useEffect, useMemo, useState } from "react";
@@ -54,7 +55,7 @@ export default function Leads() {
         </select>
         <input aria-label="Campaign" value={campaign} onChange={(event) => setCampaign(event.target.value)} placeholder="Campaign..." />
       </div>
-      {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="New lead"><form className="modal" onSubmit={createLead} aria-describedby={error?'lead-form-error':undefined}><h2>New Lead</h2>{error&&<p role="alert" id="lead-form-error">{error}</p>}<div className="form-grid">{[['first_name','First name','text'],['last_name','Last name','text'],['email','Email','email'],['phone','Phone','tel'],['event_date','Event date','date'],['event_type','Event type','text']].map(([key,label,type])=><label key={key}>{label}<input required type={type} value={draft[key]||''} onChange={e=>setDraft({...draft,[key]:e.target.value})}/></label>)}</div><button disabled={saving}>Create Lead</button><button type="button" onClick={()=>setCreating(false)}>Cancel</button></form></div>}
+      {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="New lead"><form className="modal" onSubmit={createLead} aria-describedby={error?'lead-form-error':undefined}><h2>New Lead</h2>{error&&<p role="alert" id="lead-form-error">{error}</p>}<div className="form-grid">{[['first_name','First name','text'],['last_name','Last name','text'],['email','Email','email'],['phone','Phone','tel'],['event_date','Event date','date'],['event_type','Event type','text']].map(([key,label,type])=><label key={key}>{label}{key==='event_type'?<EventTypeSelect required value={draft[key]||''} onChange={value=>setDraft({...draft,[key]:value})}/>:<input required type={type} value={draft[key]||''} onChange={e=>setDraft({...draft,[key]:e.target.value})}/>}</label>)}</div><button disabled={saving}>Create Lead</button><button type="button" onClick={()=>setCreating(false)}>Cancel</button></form></div>}
       {view === "table" ? <DataTable rows={leads} columns={columns} empty="No new inquiries." getRowHref={(lead) => `/sales/leads/${lead.id}`} /> : <Kanban leads={leads} />}
     </main>
   );

@@ -1,3 +1,4 @@
+import EventTypeSelect from '../components/EventTypeSelect.jsx';
 import {useDialogFocus} from "../utils/use-dialog-focus.js";
 import AsyncState from "../components/AsyncState.jsx";
 import { useEffect, useState } from "react";
@@ -102,7 +103,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
               {fields.map(([name, label, type = "text", config = {}]) => (
                 <label key={name} className={type === "textarea" ? "wide" : ""}>
                   {label}
-                  {name.endsWith("media_id") ? <MediaSelect label={label} value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "lines" ? (
+                  {name === "event_type" ? <EventTypeSelect value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))} required/> : name.endsWith("media_id") ? <MediaSelect label={label} value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "lines" ? (
                     <textarea aria-label={label} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
                   ) : type === "select" ? (
                     <select aria-label={label} value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>

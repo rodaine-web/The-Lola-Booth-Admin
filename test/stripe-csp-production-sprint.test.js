@@ -49,7 +49,7 @@ test("Stripe test sprint handles success, failure, and refund webhooks without d
 });
 
 test("Admin CSP remains narrow and does not whitelist unused Google or Stripe browser resources", () => {
-  assert.match(csp, /connect-src 'self' https:\/\/api\.thelolabooth\.com/);
+  assert.match(csp, /connect-src 'self' https:\/\/stagingapi\.thelolabooth\.com/);
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(csp, /script-src 'self'/);
   assert.match(csp, /style-src 'self'/);

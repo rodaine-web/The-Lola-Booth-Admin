@@ -28,6 +28,7 @@ import {
 } from "../services/website-cms-service.js";
 
 export const publicRouter = Router();
+publicRouter.use('/staging',(_req,_res,next)=>isStaging()?next():next(new AppError('Staging routes are unavailable in this environment.',404,'NOT_FOUND')));
 
 publicRouter.use(rateLimit({
   windowMs: env.rateLimitWindowMs,
@@ -83,7 +84,16 @@ publicRouter.post("/inquiries", (req, _res, next) => {
   if (req.body.website) return next(new AppError("Thanks, but we could not accept this inquiry.", 400, "SPAM_DETECTED"));
   return next();
 }, validate(inquirySchema), asyncHandler(async (req, res) => {
-  const result = await ingestProviderLead({ provider: "WEBSITE", payload: { ...req.body, referrer_url: req.body.referrer_url || req.headers.referer || null } });
+  const payload = {...req.body, referrer_url: req.body.referrer_url || req.headers.referer || null};
+  if (isStaging()) {
+    payload.marketing_email_opt_in = false;
+    for (const [field,type] of [['preferredExperienceId','experiences'],['preferredPackageId','packages']]) if (payload[field]) {
+      const record = (await query("SELECT payload FROM website_channel_records WHERE id=$1 AND channel='STAGING' AND cms_type=$2 AND status='PUBLISHED'", [payload[field],type])).rows[0];
+      if (!record?.payload.source_catalog_id) throw new AppError('Choose an available staging catalog item.',422,'STAGING_SELECTION_INVALID');
+      payload[field] = record.payload.source_catalog_id;
+    }
+  }
+  const result = await ingestProviderLead({provider: "WEBSITE", payload, testMode: isStaging(), skipAutomations: isStaging()});
 
   await sendPublicInquiryEmails({
     lead: result.lead,

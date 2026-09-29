@@ -1,8 +1,10 @@
+import {assertEnvironmentIsolation} from '../../../shared/environment-isolation.js';
 import {assertStagingConfiguration} from './staging-safety.js';
 import dotenv from "dotenv";
 
 dotenv.config();
 assertStagingConfiguration();
+assertEnvironmentIsolation(process.env);
 
 const required = ["DATABASE_URL", "JWT_SECRET"];
 

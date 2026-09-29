@@ -1,3 +1,4 @@
+import {documentOrigin} from '../utils/public-document-url.js';
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -236,7 +237,7 @@ export async function createOrSendGalleryDelivery(eventId, body, user) {
     }
     return row;
   });
-  const deliveryUrl = `${publicBaseUrl}/delivery/${delivery.token}`;
+  const deliveryUrl = `${documentOrigin()}/delivery/${delivery.token}`;
   if (body.send !== false && event.client_email) {
     const rendered = await renderBusinessTemplate("gallery_delivery_email", {
       client: { first_name: event.client_name?.split(" ")[0] || "there", name: event.client_name, email: event.client_email },
