@@ -265,7 +265,7 @@ export async function previewEmailTemplate(id, data = sampleMergeData()) {
   if (!unresolved.length) {
     subject = renderTemplate(subjectTemplate, data);
     body = renderTemplate(bodyTemplate, data);
-    html = brandedEmailHtml(body);
+    html = brandedEmailHtml(body, emailPreviewOptions(template.template_key || template.key, data));
   }
   return {
     subject,
@@ -276,6 +276,14 @@ export async function previewEmailTemplate(id, data = sampleMergeData()) {
     unresolvedVariables: unresolved,
     canSend: unresolved.length === 0
   };
+}
+
+export function emailPreviewOptions(key, data) {
+  const normalized=String(key||'').toUpperCase();
+  if (['PROPOSAL_DELIVERY','PROPOSAL_SENT'].includes(normalized)) return {ctaLabel:'VIEW PROPOSAL',ctaUrl:data.proposal?.public_url || data.proposal?.url || data.proposal_url};
+  if (['INVOICE_DELIVERY','DEPOSIT_INVOICE_SENT'].includes(normalized)) return {ctaLabel:'VIEW INVOICE & PAY',ctaUrl:data.invoice?.public_url || data.invoice?.url || data.invoice_url};
+  if (['PAYMENT_CONFIRMATION','PAYMENT_RECEIPT','PAYMENT_RECEIVED'].includes(normalized)) return {ctaLabel:'VIEW PAYMENT DETAILS',ctaUrl:data.payment?.receipt_url || data.invoice?.public_url || data.invoice?.url};
+  return {};
 }
 
 export function sampleMergeData(origin = documentOrigin()) {
