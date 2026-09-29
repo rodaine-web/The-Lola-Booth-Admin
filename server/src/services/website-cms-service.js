@@ -1,3 +1,4 @@
+import {projectPageContent} from '../../../shared/public-cms-projection.js';
 import path from "node:path";
 import { projectWebsitePackage } from "./website-pricing.js";
 import { query, transaction } from "../db/pool.js";
@@ -314,7 +315,7 @@ export async function publicSitePayload({ preview = false } = {}) {
     mediaMappings: mediaMappings.rows.map(row=>({...row,image:mediaUrl(row.media_id)})),
     defaults: websiteContentDefaults(),
     settings: settings.rows[0] || {},
-    content: Object.fromEntries(content.rows.map((row) => [row.content_key, row])),
+    content: projectPageContent(content.rows, pageItems.rows, mediaMappings.rows),
     heroSlides: hero.rows.map(projectHero),
     packages: packages.rows.map((row) => projectWebsitePackage(row, { showStartingPrice: settings.rows[0]?.show_starting_price !== false })),
     experiences: experiences.rows.map(projectExperience),
