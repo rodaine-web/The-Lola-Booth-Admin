@@ -279,6 +279,8 @@ export async function previewEmailTemplate(id, data = sampleMergeData()) {
 
 export function sampleMergeData(origin = documentOrigin()) {
   return {
+    subject: "Your event with The Lola Booth",
+    body: "Thank you for considering The Lola Booth. This is an email preview.",
     first_name: "Mia",
     client_name: "Mia Chen",
     event_type: "Wedding",
@@ -298,8 +300,8 @@ export function sampleMergeData(origin = documentOrigin()) {
     client: { first_name: "Mia", last_name: "Chen", name: "Mia Chen", email: "mia@example.com", phone: "(555) 010-1001" },
     lead: { id: "sample-lead", source: "WEBSITE", duplicate_of_id: "" },
     event: { id: "sample-event", name: "Mia + Jordan Wedding", type: "Wedding", date: "2026-10-24", venue: "The Mason Dallas", guest_count: "150", url: `${origin}/my-events/sample` },
-    proposal: { id: "sample-proposal", number: "PROP-1001", url: `${origin}/proposal/sample`, expires_at: "2026-10-10", package_name: "Luxe Booth", total: "$1,099.00" },
-    invoice: { id: "sample-invoice", number: "LOLA-1001", url: `${origin}/pay/sample`, amount_due: "$329.70", balance_due: "$769.30", due_date: "2026-10-10" },
+    proposal: { id: "sample-proposal", number: "PROP-1001", url: `${origin}/proposal/sample`, public_url: `${origin}/proposal/sample`, expires_at: "2026-10-10", package_name: "Luxe Booth", total: "$1,099.00" },
+    invoice: { id: "sample-invoice", number: "LOLA-1001", url: `${origin}/pay/sample`, public_url: `${origin}/pay/sample`, amount_due: "$329.70", balance_due: "$769.30", due_date: "2026-10-10" },
     payment: { id: "sample-payment", amount: "$329.70", receipt_url: `${origin}/pay/sample` },
     package: { name: "Luxe Booth", total: "$1,099.00" },
     gallery: { url: "https://gallery.example/lola" },
