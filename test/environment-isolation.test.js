@@ -41,3 +41,10 @@ test('published CMS slots reach the existing public website contract without mix
   assert.equal(rows[0].body.copy,undefined);
   assert.equal(projectPageContent(rows,[],[])['page.home'].body.copy,undefined);
 });
+
+test('unpublished managed page slots suppress legacy fallback without leaking draft text', () => {
+  const rows=[{content_key:'page.home',body:{copy:{'home.001':{html:'Legacy text'}}}}];
+  const result=projectPageContent(rows,[],[],[{page_slug:'home',slot_key:'home.001',html:'Private draft',href:'https://draft.invalid'}]);
+  assert.deepEqual(result['page.home'].body.copy['home.001'],{html:''});
+  assert.equal(rows[0].body.copy['home.001'].html,'Legacy text');
+});

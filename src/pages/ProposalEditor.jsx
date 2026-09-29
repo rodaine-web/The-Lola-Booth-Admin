@@ -1,3 +1,4 @@
+import {selectProposalPackage,selectProposalExperience} from '../../shared/proposal-catalog.js';
 import { ArrowDown, ArrowLeft, ArrowUp, FileUp, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -126,8 +127,8 @@ export default function ProposalEditor() {
             <section className="panel">
               <h2>Services / Pricing</h2>
               <div className="form-grid">
-                <label>Package<RelationshipSelect resource="packages" value={form.package_id} placeholder="Package" onChange={(value) => setField("package_id", value)} /></label>
-                <label>Experience<RelationshipSelect resource="experiences" value={form.experience_id} placeholder="Experience" onChange={(value) => setField("experience_id", value)} /></label>
+                <label>Package<RelationshipSelect resource="packages" value={form.package_id} placeholder="Package" filters={{experience_id:form.experience_id}} onChange={(_value,pack) => setForm(current=>selectProposalPackage(current,pack))} /></label>
+                <label>Experience<RelationshipSelect resource="experiences" value={form.experience_id} placeholder="Experience" onChange={(value) => setForm(current=>selectProposalExperience(current,value))} /></label>
                 <label>Package amount<input type="number" value={form.package_amount || ""} onChange={(event) => setField("package_amount", event.target.value)} /></label>
                 <label>Experience surcharge<input type="number" value={form.experience_surcharge || ""} onChange={(event) => setField("experience_surcharge", event.target.value)} /></label>
                 <label>Travel<input type="number" value={form.travel || ""} onChange={(event) => setField("travel", event.target.value)} /></label>
@@ -138,11 +139,12 @@ export default function ProposalEditor() {
                 <label>Deposit value<input type="number" value={form.deposit_value || ""} onChange={(event) => setField("deposit_value", event.target.value)} /></label>
               </div>
               <div className="inline-form">
-                <RelationshipSelect resource="addons" value={addon.addon_id} placeholder="Add-on" onChange={(value) => setAddon((current) => ({ ...current, addon_id: value }))} />
+                <RelationshipSelect resource="addons" value={addon.addon_id} placeholder="Add-on" onChange={(value,option) => setAddon((current) => ({ ...current, addon_id: value, description:option?.label, pricing_type:option?.pricing_type, unit_price:option?.pricing_type === "CUSTOM" ? "" : option?.price }))} />
+                {addon.pricing_type === "CUSTOM" && <input aria-label="Agreed add-on price" type="number" min="0.01" step="0.01" placeholder="Agreed price" value={addon.unit_price || ""} onChange={event=>setAddon(current=>({...current,unit_price:event.target.value}))}/> }
                 <input aria-label="Add-on quantity" type="number" min="1" value={addon.quantity} onChange={(event) => setAddon((current) => ({ ...current, quantity: event.target.value }))} />
-                <button type="button" className="primary-action" disabled={!addon.addon_id} onClick={() => { setForm((current) => ({ ...current, addons: [...current.addons, addon] })); setAddon({ addon_id: "", quantity: 1 }); }}><Plus size={16} />Add</button>
+                <button type="button" className="primary-action" disabled={!addon.addon_id || (addon.pricing_type === "CUSTOM" && !(Number(addon.unit_price)>0))} onClick={() => { setForm((current) => ({ ...current, addons: [...current.addons, addon] })); setAddon({ addon_id: "", quantity: 1 }); }}><Plus size={16} />Add</button>
               </div>
-              <div className="line-list">{form.addons.map((item, index) => <div key={`${item.addon_id}-${index}`}><span>Add-on {index + 1} · Qty {item.quantity}</span><button type="button" aria-label="Remove add-on" onClick={() => setForm((current) => ({ ...current, addons: current.addons.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
+              <div className="line-list">{form.addons.map((item, index) => <div key={`${item.addon_id}-${index}`}><span>{item.description || `Add-on ${index + 1}`} · Qty {item.quantity}</span><button type="button" aria-label="Remove add-on" onClick={() => setForm((current) => ({ ...current, addons: current.addons.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
               <div className="inline-form custom-line-form">
                 <input aria-label="Custom service" placeholder="Custom service" value={customLine.description} onChange={(event) => setCustomLine((current) => ({ ...current, description: event.target.value }))} />
                 <input aria-label="Description" placeholder="Description" value={customLine.detail} onChange={(event) => setCustomLine((current) => ({ ...current, detail: event.target.value }))} />

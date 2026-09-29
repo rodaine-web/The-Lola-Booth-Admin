@@ -285,7 +285,7 @@ export async function updateSiteSettings(req) {
 
 export async function publicSitePayload({ preview = false } = {}) {
   const statusFilter = preview ? "status <> 'ARCHIVED'" : "status='PUBLISHED'";
-  const [settings, content, hero, packages, experiences, eventTypes, gallery, testimonials, faqs, pageItems, mediaMappings] = await Promise.all([
+  const [settings, content, hero, packages, experiences, eventTypes, gallery, testimonials, faqs, pageItems, mediaMappings, hiddenPageItems] = await Promise.all([
     query("SELECT business_name, business_email, contact_email, phone, website, service_area, instagram_url, tiktok_url, facebook_url, pinterest_url, copyright_text, brand_line, site_title, default_meta_description, canonical_domain, social_share_title, social_share_description, show_starting_price FROM business_settings LIMIT 1"),
     query(`SELECT content_key, title, body, seo_title, seo_description, status, updated_at, published_at FROM website_content WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY content_key`),
     query(`SELECT h.id, h.alt_text, h.caption, h.headline, h.subheadline, h.cta_label, h.cta_url, h.display_order, h.focal_x, h.focal_y, h.publish_start, h.publish_end,
@@ -308,14 +308,15 @@ export async function publicSitePayload({ preview = false } = {}) {
       FROM testimonials WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY is_featured DESC, display_order, created_at DESC`),
     query(`SELECT id, question, answer, category, display_order FROM faqs WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order, question`),
     query(`SELECT id,page_slug,slot_key,html,href,display_order,status FROM website_page_items WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order,slot_key`),
-    query(`SELECT id,asset_key,media_id,display_order,status FROM website_media_mappings WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order,asset_key`)
+    query(`SELECT id,asset_key,media_id,display_order,status FROM website_media_mappings WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order,asset_key`),
+    preview ? Promise.resolve({rows:[]}) : query("SELECT page_slug,slot_key FROM website_page_items WHERE deleted_at IS NOT NULL OR status <> 'PUBLISHED'")
   ]);
   return {
     pageItems: pageItems.rows,
     mediaMappings: mediaMappings.rows.map(row=>({...row,image:mediaUrl(row.media_id)})),
     defaults: websiteContentDefaults(),
     settings: settings.rows[0] || {},
-    content: projectPageContent(content.rows, pageItems.rows, mediaMappings.rows),
+    content: projectPageContent(content.rows, pageItems.rows, mediaMappings.rows, hiddenPageItems.rows),
     heroSlides: hero.rows.map(projectHero),
     packages: packages.rows.map((row) => projectWebsitePackage(row, { showStartingPrice: settings.rows[0]?.show_starting_price !== false })),
     experiences: experiences.rows.map(projectExperience),

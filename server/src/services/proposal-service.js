@@ -1,3 +1,4 @@
+import {proposalCatalogError} from '../../../shared/proposal-catalog.js';
 import { documentOrigin } from "../utils/public-document-url.js";
 import crypto from "node:crypto";
 import { env } from "../config/env.js";
@@ -46,6 +47,8 @@ export async function buildProposalSnapshot(input) {
   const experience = exp.rows[0] || {};
   const addonIds = (input.addons || []).map((item) => item.addon_id).filter(Boolean);
   const addons = addonIds.length ? await query("SELECT * FROM addons WHERE id = ANY($1::uuid[])", [addonIds]) : { rows: [] };
+  const catalogError = proposalCatalogError(input, pack, addons.rows);
+  if (catalogError) throw new AppError(catalogError,422,"CATALOG_SELECTION_INVALID");
   const addonRows = input.addons || [];
   const packageAmount = money(input.package_amount ?? pack.starting_price);
   const experienceAmount = money(input.experience_surcharge ?? 0);

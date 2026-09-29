@@ -1209,7 +1209,13 @@ adminRouter.get("/pickers/events", requirePermission("read:events"), asyncHandle
 }));
 
 adminRouter.get("/pickers/packages", requirePermission("read:content"), asyncHandler(async (req, res) => {
-  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, starting_price AS subtitle FROM packages WHERE deleted_at IS NULL AND active=true AND (name ILIKE $1 OR description ILIKE $1) ORDER BY display_order, name LIMIT 25");
+  const experienceId = req.query.experience_id ? uuid.parse(req.query.experience_id) : null;
+  const {rows} = await query(`SELECT p.id, p.name AS label, p.starting_price, p.pricing_mode, p.experience_id,
+    COALESCE(e.name || ' · ', '') || CASE WHEN p.pricing_mode='CUSTOM' THEN 'Request Pricing' ELSE '$' || p.starting_price::text END AS subtitle
+    FROM packages p LEFT JOIN experiences e ON e.id=p.experience_id
+    WHERE p.deleted_at IS NULL AND p.active=true AND (p.name ILIKE $1 OR p.description ILIKE $1 OR e.name ILIKE $1)
+    AND ($2::uuid IS NULL OR p.experience_id=$2) ORDER BY e.display_order,p.display_order,p.name LIMIT 50`,
+    [`%${String(req.query.q||'').slice(0,100)}%`,experienceId]);
   res.json({ data: rows });
 }));
 
@@ -1219,7 +1225,7 @@ adminRouter.get("/pickers/experiences", requirePermission("read:content"), async
 }));
 
 adminRouter.get("/pickers/addons", requirePermission("read:content"), asyncHandler(async (req, res) => {
-  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, price AS subtitle, pricing_type FROM addons WHERE deleted_at IS NULL AND active=true AND (name ILIKE $1 OR description ILIKE $1) ORDER BY display_order, name LIMIT 25");
+  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, price, CASE WHEN pricing_type='CUSTOM' THEN 'Request Pricing' ELSE '$' || price::text END AS subtitle, pricing_type FROM addons WHERE deleted_at IS NULL AND active=true AND (name ILIKE $1 OR description ILIKE $1) ORDER BY display_order, name LIMIT 25");
   res.json({ data: rows });
 }));
 

@@ -1,7 +1,7 @@
 // Keep the existing website payload contract while the CMS edits individual slots.
-export function projectPageContent(rows, pageItems, mediaMappings) {
+export function projectPageContent(rows, pageItems, mediaMappings, hiddenPageItems = []) {
   const content = Object.fromEntries(rows.map(row => [row.content_key, {...row, body: structuredClone(row.body || {})}]));
-  for (const item of pageItems) {
+  for (const item of [...hiddenPageItems.map(item => ({...item, html:'', href:null})), ...pageItems]) {
     const key = `page.${item.page_slug}`;
     const page = content[key] ||= {content_key:key, status:'PUBLISHED', body:{}};
     page.body.copy ||= {};
