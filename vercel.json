@@ -37,12 +37,312 @@
           "value": "default-src 'self'; connect-src 'self' https://api.thelolabooth.com; img-src 'self' data: blob: https://api.thelolabooth.com; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' blob: https://api.thelolabooth.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"
         }
       ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
     }
   ],
   "rewrites": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/index.html"
+    },
+    {
+      "source": "/about.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/about.html"
+    },
+    {
+      "source": "/about",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/about.html"
+    },
+    {
+      "source": "/app.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/app.js"
+    },
+    {
+      "source": "/availability.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/availability.html"
+    },
+    {
+      "source": "/availability",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/availability.html"
+    },
+    {
+      "source": "/config.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/config.js"
+    },
+    {
+      "source": "/connect.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/connect.html"
+    },
+    {
+      "source": "/connect",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/connect.html"
+    },
+    {
+      "source": "/contact.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/contact.html"
+    },
+    {
+      "source": "/contact",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/contact.html"
+    },
+    {
+      "source": "/experiences.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/experiences.html"
+    },
+    {
+      "source": "/experiences",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/experiences.html"
+    },
+    {
+      "source": "/faq.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/faq.html"
+    },
+    {
+      "source": "/faq",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/faq.html"
+    },
+    {
+      "source": "/favicon.png",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/favicon.png"
+    },
+    {
+      "source": "/gallery-qa.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/gallery-qa.html"
+    },
+    {
+      "source": "/gallery-qa",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/gallery-qa.html"
+    },
+    {
+      "source": "/index.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/index.html"
+    },
+    {
+      "source": "/packages.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/packages.html"
+    },
+    {
+      "source": "/packages",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/packages.html"
+    },
+    {
+      "source": "/page-connect-1.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/page-connect-1.js"
+    },
+    {
+      "source": "/page-packages-1.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/page-packages-1.js"
+    },
+    {
+      "source": "/privacy.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/privacy.html"
+    },
+    {
+      "source": "/privacy",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/privacy.html"
+    },
+    {
+      "source": "/styles.css",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/styles.css"
+    },
+    {
+      "source": "/terms.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/terms.html"
+    },
+    {
+      "source": "/terms",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/terms.html"
+    },
+    {
+      "source": "/assets/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/assets/:path*"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/admin.html"
     }
-  ]
+  ],
+  "buildCommand": "npm run build && mv dist/index.html dist/admin.html"
 }
