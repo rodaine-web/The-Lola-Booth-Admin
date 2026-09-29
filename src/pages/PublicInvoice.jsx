@@ -39,7 +39,7 @@ export default function PublicInvoice() {
 
   return (
     <main className="public-document">
-      <div className="brand large public-brand"><img className="brand-logo brand-logo-public-stacked" src="/brand/LOLA_Primary_Dark_Transparent.png" alt="The LOLA Booth" /><div><strong>LOLA Booths</strong><span>Good people. Better photos.</span></div></div>
+      <div className="brand large public-brand"><img className="brand-logo brand-logo-public-stacked" src={`${import.meta.env.BASE_URL}brand/LOLA_Primary_Dark_Transparent.png`} alt="The LOLA Booth" /><div><strong>LOLA Booths</strong><span>Good people. Better photos.</span></div></div>
       <div className="public-heading">
         <p className="eyebrow">{invoice.invoice_number}</p>
         <h1>Invoice</h1>

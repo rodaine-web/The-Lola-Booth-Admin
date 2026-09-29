@@ -75,5 +75,5 @@ export default function PublicProposal() {
   );
 }
 
-function PublicShell({ children }) { return <main className="public-document"><div className="brand large public-brand"><img className="brand-logo brand-logo-public-stacked" src="/brand/LOLA_Primary_Dark_Transparent.png" alt="The LOLA Booth" /><div><strong>LOLA Booths</strong><span>Good people. Better photos.</span></div></div>{children}</main>; }
+function PublicShell({ children }) { return <main className="public-document"><div className="brand large public-brand"><img className="brand-logo brand-logo-public-stacked" src={`${import.meta.env.BASE_URL}brand/LOLA_Primary_Dark_Transparent.png`} alt="The LOLA Booth" /><div><strong>LOLA Booths</strong><span>Good people. Better photos.</span></div></div>{children}</main>; }
 function Metric({ label, value }) { return <article className="metric"><span>{label}</span><strong>{value}</strong></article>; }

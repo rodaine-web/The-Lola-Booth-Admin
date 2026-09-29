@@ -63,7 +63,7 @@ export default function Layout() {
         </div>
         <button className="navigation-toggle" aria-expanded={navigationOpen} aria-controls="admin-navigation" onClick={() => setNavigationOpen(!navigationOpen)}>{navigationOpen ? "Close navigation" : "Menu"}</button>
         <nav id="admin-navigation" className={navigationOpen ? "navigation-open" : ""} aria-label="Main navigation">
-          {sections.map((section) => {
+          {sections.filter(section => import.meta.env.VITE_CMS_ENABLED !== "false" || section.label !== "Website").map((section) => {
             const visibleItems = section.items.filter((item) => can(item.permission));
             if (!visibleItems.length) return null;
             const Icon = section.icon;
@@ -76,6 +76,7 @@ export default function Layout() {
               </details>
             );
           })}
+          {import.meta.env.VITE_CMS_ENABLED === "false" && <a href="https://thelolabooth.com" target="_blank" rel="noreferrer">Open website ↗</a>}
         </nav>
       </aside>
       <div className="workspace">

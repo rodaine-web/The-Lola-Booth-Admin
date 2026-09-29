@@ -87,6 +87,7 @@ export default function App() {
         <Route path="finance/invoices/:id/edit" element={<InvoiceEditor />} />
         <Route path="finance/invoices/new" element={<InvoiceEditor />} />
         <Route path="finance/invoices/:id" element={<InvoiceDetail />} />
+        {import.meta.env.VITE_CMS_ENABLED !== "false" ? <>
         <Route path="website/page-items" element={<WebsiteCms section="pageItems" />} />
         <Route path="website/media-mappings" element={<WebsiteCms section="mediaMappings" />} />
         <Route path="website/connection" element={<WebsiteDiagnostics />} />
@@ -100,6 +101,7 @@ export default function App() {
         <Route path="website/faq" element={<WebsiteCms section="faqs" />} />
         <Route path="website/media-library" element={<WebsiteCms section="media" />} />
         <Route path="website/site-settings" element={<WebsiteCms section="settings" />} />
+        </> : <Route path="website/*" element={<main className="page"><h1>Website</h1><p>Website management is not enabled in this release.</p><a href="https://thelolabooth.com" target="_blank" rel="noreferrer">Open website</a></main>} />}
         <Route path="content/packages" element={<ResourcePage title="Packages" endpoint="/packages" columns={["name", "starting_price", "most_popular", "active"]} fields={packageFields} />} />
         <Route path="content/experiences" element={<ResourcePage title="Experiences" endpoint="/experiences" columns={["name", "base_price", "default_duration", "active"]} fields={experienceFields} />} />
         <Route path="content/addons" element={<ResourcePage title="Add-ons" endpoint="/addons" columns={["name", "price", "pricing_type", "active"]} fields={addonFields} />} />
