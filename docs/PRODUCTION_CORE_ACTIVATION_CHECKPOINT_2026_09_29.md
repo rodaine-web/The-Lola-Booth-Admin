@@ -22,7 +22,7 @@ This is an in-progress checkpoint, not launch qualification.
 
 - Outlook Web authenticated as The Lola Booth; Entra authenticated in tenant `90f8e551-dcbf-4385-9c68-6776a65a5d2a`.
 - Owner confirmed newly created app “The Lola Booth”, client ID `b92a32a6-35d5-4bbe-b451-48902decf188`, is the production app. Do not substitute the staging application.
-- Mail.Send application permission and dedicated production client secret remain unverified/unconfigured. Latest UI showed only delegated User.Read/openid. No admin consent granted by the agent.
+- Mail.Send application permission was added and admin consent granted after explicit owner approval on this retry. The UI confirms Granted for thelolabooth com. A dedicated client secret is still absent (Client secrets: 0); its creation form is prepared for owner handoff. Production tenant ID, client ID, sender and FORM_NOTIFICATION_EMAIL are prepared on API and worker with --skip-deploys. Email remains disabled.
 - Owner asked to create the secret and enter it directly into production Railway, not chat.
 - Stripe TEST dashboard authenticated; production key/webhook are not configured. Do not reuse staging key. Pending owner choice: dedicated sandbox with sk_test or dedicated restricted TEST key requiring code validation support.
 - Webhook route: `https://api.thelolabooth.com/api/webhooks/stripe`.
@@ -32,10 +32,10 @@ This is an in-progress checkpoint, not launch qualification.
 ## Backup/restore constraints
 
 - Earlier CLI inspection: Postgres PITR disabled, archive bucket not wired, snapshot list empty, schedule list empty. Reverify after any owner changes.
-- Managed backup request failed OAUTH_INSUFFICIENT_GRANT. No backup was created by this request.
+- Managed backup request failed OAUTH_INSUFFICIENT_GRANT again on retry. Authenticated Railway UI identifies the underlying product gate: backup creation and PITR require Pro. Both production Postgres and API document volume show No Backups. No subscription upgrade or backup creation was performed.
 - Owner explicitly requires Railway managed restore only. Do not export backups locally, create a temporary database login, copy production database credentials to a restore target, or perform an alternative logical restore.
 - Automatic approval review rejected local dump export and a separate-target proposal that would expose the full-access production DB credential. Both were blocked before execution; no dump or restore target was created.
-- Production API volume remains separate, mounted /app/storage/uploads, 5 GB. Actual volume backup retention and restore capability are not yet verified.
+- Production API volume remains separate, mounted /app/storage/uploads, 5 GB. Authenticated volume Backups page confirms no backups and Pro-plan requirement. No retention is configured/verified and no restore has been performed.
 - System Health is DEGRADED due to unverified storage durability; API, database, environment, worker, communications and backlog healthy. Email intentionally DISABLED; Stripe and PayPal disconnected; optional providers do not determine core aggregate failure.
 - Temporary Railway SSH key lola-production-core-temporary was registered for identity checks and successfully removed afterward.
 
@@ -47,7 +47,7 @@ This is an in-progress checkpoint, not launch qualification.
 | Worker heartbeat | PASS | HEALTHY; jobsPaused=true; actual production DB ID and revision recorded | Continue monitoring during scheduled test |
 | Scheduled email | BLOCKED | Email disabled, no selected job IDs | Configure dedicated Microsoft adapter, then permit one exact job |
 | Worker restart | BLOCKED | No completed scheduled QA message yet | Complete one message then restart and compare records |
-| Microsoft adapter | BLOCKED | Production app identified; no verified Mail.Send consent/secret | Complete dedicated provider configuration |
+| Microsoft adapter | BLOCKED | Mail.Send application consent verified; client secret absent | Owner creates client secret and saves it in Railway; then validate adapter |
 | Inbox receipt | BLOCKED | Outlook session available; no production QA mail sent | Verify every controlled delivery in actual inbox |
 | Inbound email | BLOCKED | No new Gmail inbound test sent | Send one approved Gmail test and verify Outlook + trace |
 | Message Trace | BLOCKED | No production test message trace collected | Verify at least one production delivery and inbound trace |
@@ -67,9 +67,9 @@ This is an in-progress checkpoint, not launch qualification.
 | Receipt | BLOCKED | No QA payment | Verify exactly one branded secure receipt |
 | Reconciliation | BLOCKED | No QA payment | Check list/detail/public/pay/receipt values |
 | Payment confirmation | BLOCKED | No QA payment or email | Verify one controlled receipt acknowledgment |
-| Postgres backup | BLOCKED | PITR off; no listed snapshots/schedules; create denied by OAuth grant | Owner restores Railway managed backup permission |
+| Postgres backup | BLOCKED | PITR off; no backups; authenticated dashboard requires Pro for backups/PITR | Owner decides on Railway Pro upgrade; then enable and verify managed backups |
 | Restore drill | BLOCKED | Owner requires managed Railway restore only | Restore to separate non-production target, never over production |
-| Storage backup | BLOCKED | Writable separate volume; backup retention unverified | Verify managed volume backup configuration |
+| Storage backup | BLOCKED | Separate volume; authenticated dashboard confirms No Backups and Pro requirement | Resolve Pro-plan gate and configure managed volume backups |
 | Storage recovery | BLOCKED | No provider restore performed | Restore synthetic file in separate temporary context and checksum |
 | System Health | PASS WITH WARNING | API/DB/worker healthy, storage honestly DEGRADED | Resolve backup/restore before qualification |
 | Tests | PASS | 228/228 full suite; 52/52 targeted suite | Re-run after further code changes |
@@ -120,3 +120,6 @@ MARKETING INTEGRATIONS: DISABLED
 Keep the Railway volume for documents and small operational uploads only after its managed backup retention and separate-target restore have been demonstrated. This includes proposal PDFs, invoice PDFs, receipts, CMS media, uploaded proposals and run sheets. A writable mount alone does not prove recovery after deletion/corruption; current recovery remains unqualified. Reference: [Railway volumes](https://docs.railway.com/volumes/reference).
 
 For future high-volume LOLA Gallery, plan object storage with private buckets, signed delivery URLs, environment-specific credentials, lifecycle rules and a tested recovery policy. S3 versioning can preserve prior object versions after overwrite/deletion; explicitly enable and test it. [S3 versioning](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html). R2 is another candidate for large unstructured media and bucket-scoped access; assess its retention/recovery features independently instead of assuming feature parity. [R2 documentation](https://developers.cloudflare.com/r2/). No storage migration was performed or authorized during this activation.
+
+
+Retry evidence: `microsoft-mail-send-granted.png`, `microsoft-secret-handoff.png`, `railway-managed-backup-plan-gate.png`, `railway-storage-backup-plan-gate.png`, `provider-config-recheck.json`, `managed-backup-retry.json`. No code change or new QA emails/payments during this retry. Previous 228 full-suite / 52 targeted test results remain the latest code validation.
