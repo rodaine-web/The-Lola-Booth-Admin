@@ -17,14 +17,15 @@ export const futureAutomationJobTypes = ["CREATE_TASK", "ASSIGN_LEAD", "CHANGE_L
 const staleProcessingMinutes = 10;
 
 export const allowedTemplateVariables = [
+  "subject", "body", "proposal.public_url", "invoice.public_url",
   "first_name", "client_name", "event_type", "event_date", "venue", "proposal_number",
   "proposal_url", "invoice_number", "invoice_url", "amount_due", "due_date",
   "remaining_balance", "gallery_url", "business_email", "business_phone", "review_url",
   "client.first_name", "client.last_name", "client.name", "client.email", "client.phone",
   "lead.id", "lead.source", "lead.duplicate_of_id",
   "event.id", "event.name", "event.type", "event.date", "event.venue", "event.guest_count", "event.url",
-  "proposal.id", "proposal.number", "proposal.url", "proposal.expires_at", "proposal.package_name", "proposal.total",
-  "invoice.id", "invoice.number", "invoice.url", "invoice.amount_due", "invoice.balance_due", "invoice.due_date",
+  "proposal.id", "proposal.number", "proposal.url", "proposal.public_url", "proposal.expires_at", "proposal.package_name", "proposal.total",
+  "invoice.id", "invoice.number", "invoice.url", "invoice.public_url", "invoice.amount_due", "invoice.balance_due", "invoice.due_date",
   "payment.id", "payment.amount", "payment.receipt_url",
   "package.name", "package.total",
   "gallery.url",
@@ -42,8 +43,8 @@ export const allowedTemplateVariables = [
 export const templateVariableCatalog = [
   ["Client", ["client.first_name", "client.last_name", "client.name", "client.email", "client.phone"]],
   ["Event", ["event.id", "event.name", "event.type", "event.date", "event.venue", "event.guest_count", "event.url"]],
-  ["Proposal", ["proposal.id", "proposal.number", "proposal.url", "proposal.expires_at", "proposal.package_name", "proposal.total"]],
-  ["Invoice", ["invoice.id", "invoice.number", "invoice.url", "invoice.amount_due", "invoice.balance_due", "invoice.due_date"]],
+  ["Proposal", ["proposal.id", "proposal.number", "proposal.url", "proposal.public_url", "proposal.expires_at", "proposal.package_name", "proposal.total"]],
+  ["Invoice", ["invoice.id", "invoice.number", "invoice.url", "invoice.public_url", "invoice.amount_due", "invoice.balance_due", "invoice.due_date"]],
   ["Payment", ["payment.id", "payment.amount", "payment.receipt_url"]],
   ["Package", ["package.name", "package.total"]],
   ["Gallery", ["gallery.url"]],
