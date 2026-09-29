@@ -8,6 +8,7 @@ export default defineConfig(({mode}) => {
   const config = {...loadEnv(mode, process.cwd()), ...process.env};
   assertApiBase(config.VITE_APP_ENV, config.VITE_API_URL);
   return {
+  base: "/customer-documents/",
   define:{__BUILD_REVISION__:JSON.stringify(buildRevision)},
   plugins: [react(),{name:'build-evidence',generateBundle(){this.emitFile({type:'asset',fileName:'build-info.json',source:JSON.stringify({revision:buildRevision,builtAt:new Date().toISOString()})});}}],
   build: {

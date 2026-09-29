@@ -50,6 +50,10 @@
   ],
   "rewrites": [
     {
+      "source": "/customer-documents/:path*",
+      "destination": "/:path*"
+    },
+    {
       "source": "/",
       "has": [
         {
