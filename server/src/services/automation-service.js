@@ -1,3 +1,4 @@
+import {documentOrigin} from '../utils/public-document-url.js';
 import {stagingJobsPaused,isStaging} from '../config/staging-safety.js';
 import { query, transaction } from "../db/pool.js";
 import { logger } from "../config/logger.js";
@@ -276,7 +277,7 @@ export async function previewEmailTemplate(id, data = sampleMergeData()) {
   };
 }
 
-function sampleMergeData() {
+export function sampleMergeData(origin = documentOrigin()) {
   return {
     first_name: "Mia",
     client_name: "Mia Chen",
@@ -284,31 +285,31 @@ function sampleMergeData() {
     event_date: "2026-10-24",
     venue: "The Mason Dallas",
     proposal_number: "PROP-1001",
-    proposal_url: "https://lolabooths.com/proposal/sample",
+    proposal_url: `${origin}/proposal/sample`,
     invoice_number: "LOLA-1001",
-    invoice_url: "https://lolabooths.com/invoice/sample",
+    invoice_url: `${origin}/pay/sample`,
     amount_due: "$329.70",
     due_date: "2026-10-10",
     remaining_balance: "$769.30",
     gallery_url: "https://gallery.example/lola",
-    business_email: "hello@lolabooths.com",
-    business_phone: "(555) 010-LOLA",
+    business_email: "info@thelolabooth.com",
+    business_phone: "773-240-2744",
     review_url: "https://example.com/review",
     client: { first_name: "Mia", last_name: "Chen", name: "Mia Chen", email: "mia@example.com", phone: "(555) 010-1001" },
     lead: { id: "sample-lead", source: "WEBSITE", duplicate_of_id: "" },
-    event: { id: "sample-event", name: "Mia + Jordan Wedding", type: "Wedding", date: "2026-10-24", venue: "The Mason Dallas", guest_count: "150", url: "https://lolabooths.com/my-events/sample" },
-    proposal: { id: "sample-proposal", number: "PROP-1001", url: "https://lolabooths.com/proposal/sample", expires_at: "2026-10-10", package_name: "Luxe Booth", total: "$1,099.00" },
-    invoice: { id: "sample-invoice", number: "LOLA-1001", url: "https://lolabooths.com/invoice/sample", amount_due: "$329.70", balance_due: "$769.30", due_date: "2026-10-10" },
-    payment: { id: "sample-payment", amount: "$329.70", receipt_url: "https://lolabooths.com/receipt/sample" },
+    event: { id: "sample-event", name: "Mia + Jordan Wedding", type: "Wedding", date: "2026-10-24", venue: "The Mason Dallas", guest_count: "150", url: `${origin}/my-events/sample` },
+    proposal: { id: "sample-proposal", number: "PROP-1001", url: `${origin}/proposal/sample`, expires_at: "2026-10-10", package_name: "Luxe Booth", total: "$1,099.00" },
+    invoice: { id: "sample-invoice", number: "LOLA-1001", url: `${origin}/pay/sample`, amount_due: "$329.70", balance_due: "$769.30", due_date: "2026-10-10" },
+    payment: { id: "sample-payment", amount: "$329.70", receipt_url: `${origin}/pay/sample` },
     package: { name: "Luxe Booth", total: "$1,099.00" },
     gallery: { url: "https://gallery.example/lola" },
-    business: { email: "hello@lolabooths.com", phone: "(555) 010-LOLA", review_url: "https://example.com/review" },
-    user: { name: "LOLA Admin", email: "admin@lolabooths.com" },
+    business: { email: "info@thelolabooth.com", phone: "773-240-2744", review_url: "https://example.com/review" },
+    user: { name: "LOLA Admin", email: "info@thelolabooth.com" },
     refund: { amount: "$50.00", reason: "Client adjustment" },
-    agreement: { url: "https://lolabooths.com/agreement/sample", status: "Pending Signature" },
-    approval: { url: "https://lolabooths.com/approvals/sample", version: "1", notes: "Please approve the layout.", status: "PENDING_APPROVAL" },
+    agreement: { url: `${origin}/agreement/sample`, status: "Pending Signature" },
+    approval: { url: `${origin}/approvals/sample`, version: "1", notes: "Please approve the layout.", status: "PENDING_APPROVAL" },
     production: { call_time: "15:00", requirements: "Power within 25 feet", venue_address: "123 Main St, Dallas, TX", day_of_contact: "Jordan (555) 010-2002", experience: "Digital Booth", equipment: "Booth, backdrop, props", setup_instructions: "Load in through the west entrance." },
-    request: { notes: "Please send a transparent logo.", type: "Brand Assets", submitted_at: "2026-09-14T12:00:00.000Z", source_page: "https://lolabooths.com/contact", status: "CREATED_LEAD" },
+    request: { notes: "Please send a transparent logo.", type: "Brand Assets", submitted_at: "2026-09-14T12:00:00.000Z", source_page: `${origin}/contact`, status: "CREATED_LEAD" },
     review: { url: "https://example.com/review" },
     staff: { first_name: "Avery", name: "Avery Brooks", email: "avery@example.com", role: "Lead Attendant" }
   };
