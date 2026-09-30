@@ -1,3 +1,4 @@
+import {proposalVisualHtml} from "./proposal-visual-service.js";
 import { documentOrigin } from "../utils/public-document-url.js";
 import { normalizeInvoice } from "../../../shared/invoice-balance.js";
 import fs from "node:fs";
@@ -96,6 +97,7 @@ export function proposalHtml(proposal) {
   <section class="doc-header">${horizontalLogo ? `<img class="horizontal-logo" src="${horizontalLogo}" alt="The LOLA Booth">` : "<strong>THE LOLA BOOTH</strong>"}<p class="meta">${proposal.proposal_number}<br>Good people. Better photos.</p></section>
   ${proposal.proposal_source === "UPLOADED" ? `<section><h2>${proposal.proposal_title || "Uploaded Proposal"}</h2><p>This proposal was prepared outside LOLA and attached to this secure customer link.</p><p><a href="${proposalUrl}/pdf">Download PDF</a></p></section>` : ""}
   <section><h2>Proposal Overview</h2><p class="eyebrow">A Modern Photo Experience For Life's Most Meaningful Moments</p><div class="proposal-overview"><div>${sections.map((section, index) => `<div class="section-block"><div class="section-heading"><span>${String(index + 1).padStart(2, "0")}.</span><h3>${section.title}</h3><i></i></div><div>${sanitizeContent(section.body)}</div>${section.items?.length ? `<ul>${section.items.map((item) => `<li>${sanitizeContent(item)}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div><aside class="side-card"><p class="eyebrow">Event Proposal For</p><h3>${proposal.client_name || "Client"}</h3><div class="divider"></div>${eventRows.slice(1).map(([label, value]) => `<p><span class="eyebrow">${label}</span><br>${value}</p>`).join("")}<p><span class="eyebrow">Total Investment</span><br>${money(pricing.total)}</p></aside></div></section>
+  ${proposalVisualHtml(proposal)}
   <section class="section"><h2>Your Investment</h2><table><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>${lineItems.map((item) => `<tr><td>${item.description}</td><td>${item.quantity}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`).join("")}</tbody></table><table class="summary"><tbody><tr><td>Subtotal</td><td>${money(pricing.subtotal || pricing.total)}</td></tr><tr><td>Discount</td><td>${money(pricing.discount)}</td></tr><tr><td>Tax</td><td>${money(pricing.tax)}</td></tr><tr><td>Total</td><td>${money(pricing.total)}</td></tr><tr><td>Deposit</td><td>${money(pricing.deposit_amount)}</td></tr><tr><td>Balance</td><td>${money(pricing.balance)}</td></tr></tbody></table><p class="total">Amount Due ${money(pricing.deposit_amount || pricing.total)}</p></section>
   <section class="footer"><h2>Let's make it official.</h2><p>Good people. Better photos.<br>THE LOLA BOOTH</p></section>
   </main></body></html>`;
@@ -126,6 +128,7 @@ export async function generateProposalPdf(proposal) {
   drawProposalCover(doc, proposal);
   doc.addPage();
   addProposalOverview(doc, proposal);
+  addProposalVisualPages(doc, proposal);
   doc.end();
   return done;
 }
@@ -514,27 +517,30 @@ function proposalSections(proposal) {
 }
 
 export async function generatePaymentReceiptPdf(payment) {
-  const chunks = [];
-  const doc = new PDFDocument({ size: "LETTER", margin: 48 });
-  doc.on("data", (chunk) => chunks.push(chunk));
-  const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
-  drawBrandPage(doc, `Receipt ${payment.id.slice(0, 8).toUpperCase()}`, `${payment.client_name || ""} · ${money(payment.amount)}`, { asset: "primaryDark", label: "RECEIPT" });
-  doc.addPage();
-  doc.font("Times-Roman").fontSize(22).fillColor(brand.charcoal).text("Payment Receipt");
-  doc.moveDown().font("Helvetica").fontSize(11).fillColor(brand.charcoal);
-  doc.text(`Receipt #: ${payment.id.slice(0, 8).toUpperCase()}`);
-  doc.text(`Client: ${payment.client_name || ""}`);
-  doc.text(`Event: ${payment.event_name || ""}`);
-  doc.text(`Invoice: ${payment.invoice_number || ""}`);
-  doc.text(`Payment Date: ${payment.payment_date || payment.paid_at || ""}`);
-  doc.text(`Payment Method: ${payment.payment_method || payment.provider}`);
-  doc.text(`Provider Reference: ${payment.provider_payment_id || payment.reference_number || "Manual"}`);
-  doc.text(`Amount: ${money(payment.amount)}`);
-  doc.text(`Refunded: ${money(payment.refunded_amount || 0)}`);
-  doc.text(`Remaining Balance: ${money(payment.invoice_balance || 0)}`);
-  doc.moveDown().fillColor(brand.gold).font("Helvetica-Bold").text("Good people. Better photos.");
-  doc.end();
-  return done;
+  const receipt = payment.thisPayment !== undefined ? payment : {
+    number: `R-${payment.id.slice(0,8).toUpperCase()}`, client:payment.client_name, event:payment.event_name,
+    invoiceNumber:payment.invoice_number, paymentDate:payment.paid_at||payment.payment_date, method:payment.payment_method||payment.provider,
+    reference:payment.provider_payment_id||payment.reference_number||'Manual payment', thisPayment:Number(payment.amount),
+    refunded:Number(payment.refunded_amount||0), balanceDue:Number(payment.invoice_balance||0), currency:payment.currency||'USD'
+  };
+  const chunks=[];const doc=new PDFDocument({size:'LETTER',margin:48});
+  doc.on('data',chunk=>chunks.push(chunk));const done=new Promise((resolve,reject)=>{doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject);});
+  const fmt=value=>new Intl.NumberFormat('en-US',{style:'currency',currency:receipt.currency||'USD'}).format(Number(value||0));
+  doc.rect(0,0,612,792).fill(brand.ivory);doc.rect(34,34,544,724).fill(brand.white);
+  if(logoPath('primaryDark'))doc.image(logoPath('primaryDark'),231,54,{fit:[150,100],align:'center'});
+  doc.font('Helvetica').fontSize(9).fillColor(brand.gold).text('PAYMENT RECEIPT',48,170,{width:516,align:'center',characterSpacing:2});
+  doc.font('Times-Roman').fontSize(30).fillColor(brand.charcoal).text(receipt.refunded?'Payment & refund record':'Thank you for your payment.',48,195,{width:516,align:'center'});
+  doc.font('Helvetica').fontSize(10).fillColor(brand.muted).text(`${receipt.number}  |  ${receipt.invoiceNumber||'Payment record'}`,48,237,{width:516,align:'center'});
+  doc.moveTo(60,264).lineTo(552,264).strokeColor(brand.gold).stroke();
+  let y=278;
+  const details=[['CLIENT',receipt.client],['EVENT',receipt.event],['PAYMENT DATE',String(receipt.paymentDate||'').slice(0,10)],['EVENT DATE',receipt.eventDate],['METHOD / PROVIDER',[receipt.method,receipt.provider].filter(Boolean).join(' · ')],['REFERENCE',receipt.reference],['CURRENCY',receipt.currency],...(receipt.refunded?[['REFUND DATE',receipt.refundDate||'Not recorded']]:[]),...(receipt.balanceDue>0?[['DUE DATE',receipt.dueDate||'See invoice']]:[])].filter(([,value])=>value);
+  for(let i=0;i<details.length;i+=2){let rowHeight=40;for(const [column,[label,value]]of details.slice(i,i+2).entries()){const x=60+column*256;doc.font('Helvetica').fontSize(8).fillColor(brand.muted).text(label,x,y,{width:236});doc.font('Helvetica').fontSize(10).fillColor(brand.charcoal).text(String(value),x,y+13,{width:236});rowHeight=Math.max(rowHeight,doc.heightOfString(String(value),{width:236})+24);}y+=rowHeight;}
+  y+=13;doc.moveTo(60,y).lineTo(552,y).strokeColor(brand.taupe).stroke();y+=18;
+  const rows=[['Invoice total',receipt.invoiceTotal],['Previously paid (net)',receipt.previouslyPaid],['This payment',receipt.thisPayment],...(receipt.refunded?[['Refunded from this payment',receipt.refunded]]:[]),['Total paid to date (net)',receipt.totalPaid],['Remaining balance',receipt.balanceDue]];
+  for(const [label,value]of rows){if(value===undefined)continue;const strong=['This payment','Remaining balance'].includes(label);doc.font(strong?'Helvetica-Bold':'Helvetica').fontSize(strong?12:10).fillColor(brand.charcoal).text(label,60,y,{width:320});doc.text(fmt(value),380,y,{width:172,align:'right'});y+=23;}
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(receipt.status==='PAID'?'#326448':brand.gold).text((receipt.status||'PAYMENT RECORDED').replaceAll('_',' '),60,y+8,{width:492,align:'center'});
+  doc.font('Times-Italic').fontSize(14).fillColor(brand.gold).text('Good people. Better photos.',60,709,{width:492,align:'center'});doc.font('Helvetica').fontSize(8).fillColor(brand.muted).text('thelolabooth.com  |  info@thelolabooth.com',60,733,{width:492,align:'center'});
+  doc.end();return done;
 }
 
 export async function storeDocument({ buffer, filename, mimeType }) {
@@ -549,4 +555,12 @@ function heading(text) {
 
 function strip(value) {
   return sanitizeContent(value).replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n");
+}
+
+function addProposalVisualPages(doc,proposal){
+ for(const section of proposal.visual_sections||[]){
+  doc.addPage();doc.rect(0,0,612,792).fill(brand.ivory);doc.rect(30,30,552,732).fill(brand.white);if(logoPath('horizontalDark'))doc.image(logoPath('horizontalDark'),48,48,{width:125});doc.moveTo(48,86).lineTo(564,86).strokeColor(brand.gold).stroke();doc.font('Helvetica').fontSize(9).fillColor(brand.gold).text('YOUR LOLA EXPERIENCE',48,104);doc.font('Times-Roman').fontSize(27).fillColor(brand.charcoal).text(section.title,48,128,{width:516});
+  if(section.body){doc.moveDown(.7).font('Helvetica').fontSize(11).text(section.body,{width:516,lineGap:4});}
+  for(const image of section.images||[]){if(doc.y>450){doc.addPage();doc.y=48;}const y=doc.y+20;doc.image(Buffer.from(image.dataUri.split(',')[1],'base64'),48,y,{fit:[516,260],align:'center'});doc.y=y+275;}
+ }
 }

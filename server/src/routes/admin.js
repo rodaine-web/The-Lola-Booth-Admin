@@ -1,3 +1,5 @@
+import {getReceiptView} from "../services/receipt-service.js";
+import {proposalVisualSchema} from "../services/proposal-visual-service.js";
 import {reviewData,classifyData} from "../services/data-review-service.js";
 import {revenueRecords} from "../services/revenue-records-service.js";
 import {auditChanges,redactAudit} from "../../../shared/audit-summary.js";
@@ -421,6 +423,7 @@ async function pickerRows(search, sql) {
 }
 
 const proposalSchema = z.object({
+  visual_sections: proposalVisualSchema.optional(),
   lead_id: uuid.optional().nullable(),
   client_id: uuid.optional().nullable(),
   event_id: uuid.optional().nullable(),
@@ -1308,6 +1311,8 @@ adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(p
       [merged.lead_id || null, merged.client_id || snapshot.client.id || null, merged.event_id || null, merged.package_id || null, merged.experience_id || null, merged.status || before.status, merged.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, req.params.id]
     );
     if (!result.rows[0]) throw notFound("Proposal");
+    await client.query("UPDATE proposals SET visual_sections=$2 WHERE id=$1",[result.rows[0].id,JSON.stringify(snapshot.visualSections)]);
+    result.rows[0].visual_sections=snapshot.visualSections;
     await createProposalVersion(client, result.rows[0], req.user.id);
     return result.rows[0];
   });
@@ -1324,6 +1329,8 @@ adminRouter.post("/proposals/:id/duplicate", requirePermission("write:sales"), a
        VALUES ($1,$2,$3,$4,$5,$6,$7,encode(gen_random_bytes(24),'hex'),'DRAFT',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
       [proposalNumber, original.lead_id, original.client_id, original.event_id, req.user.id, original.package_id, original.experience_id, original.notes, original.total, original.valid_through, JSON.stringify(original.content), JSON.stringify(original.pricing_snapshot), JSON.stringify(original.line_items_snapshot), original.document_template_key, JSON.stringify(original.editable_sections || []), original.proposal_source || "GENERATED", original.proposal_title, original.proposal_date, original.external_document_storage_key, original.external_document_filename, original.external_document_mime_type, original.external_document_size_bytes]
     );
+    await client.query("UPDATE proposals SET visual_sections=$2 WHERE id=$1",[inserted.rows[0].id,JSON.stringify(original.visual_sections||[])]);
+    inserted.rows[0].visual_sections=original.visual_sections||[];
     await createProposalVersion(client, inserted.rows[0], req.user.id);
     return inserted.rows[0];
   });
@@ -1339,7 +1346,7 @@ adminRouter.post("/proposals/:id/archive", requirePermission("write:sales"), asy
 }));
 
 adminRouter.get("/proposals/:id/preview", requirePermission("read:sales"), asyncHandler(async (req, res) => {
-  res.type("html").send(proposalPreviewHtml(await getProposal(req.params.id)));
+  res.type("html").send(await proposalPreviewHtml(await getProposal(req.params.id)));
 }));
 
 adminRouter.get("/proposals/:id/pdf", requirePermission("read:sales"), asyncHandler(async (req, res) => {
@@ -1503,7 +1510,7 @@ adminRouter.get("/payments/:id", requirePermission("read:finance"), asyncHandler
 adminRouter.get("/payments/:id/receipt.pdf", requirePermission("read:finance"), asyncHandler(async (req, res) => {
   const payment = await getPayment(req.params.id);
   const invoice = payment.invoice_id ? await getInvoice(payment.invoice_id) : {};
-  const buffer = await generatePaymentReceiptPdf({ ...payment, invoice_balance: invoice.amount_outstanding || invoice.balance_due || 0 });
+  const buffer = await generatePaymentReceiptPdf(payment.invoice_id ? await getReceiptView(invoice,payment.id) : payment);
   res.type("application/pdf").attachment(`receipt-${payment.id.slice(0, 8)}.pdf`).send(buffer);
 }));
 
@@ -2532,3 +2539,7 @@ adminRouter.post('/invoices/:id/reissue-access',requirePermission('write:finance
  if(!row)throw new AppError('Invoice not found.',404,'NOT_FOUND');
  await writeAudit({req,action:'invoice_access_reissued',entity:'invoice',entityId:row.id});res.json({id:row.id});
 }));
+
+adminRouter.get('/proposal-assets',requirePermission('write:sales'),asyncHandler(async(_req,res)=>{const rows=await query("SELECT id,filename,alt_text,mime_type FROM media_library WHERE deleted_at IS NULL AND visibility<>'ARCHIVED' AND permission_state='APPROVED' AND mime_type IN('image/jpeg','image/png') ORDER BY created_at DESC LIMIT 200");res.json({data:rows.rows});}));
+adminRouter.post('/proposal-assets',requirePermission('write:sales'),asyncHandler(async(req,res)=>{const b=z.object({filename:z.string().min(1).max(160),mimeType:z.enum(['image/jpeg','image/png']),data:z.string().min(1).max(14*1024*1024)}).parse(req.body);const media=await uploadMedia({...req,body:{...b,visibility:'PRIVATE',permissionState:'APPROVED',mediaType:'IMAGE',tags:['proposal-visual']}});await writeAudit({req,action:'proposal_asset_uploaded',entity:'media_library',entityId:media.id});res.status(201).json({id:media.id,filename:media.filename});}));
+adminRouter.get('/proposal-assets/:id/file',requirePermission('write:sales'),asyncHandler(async(req,res)=>{const row=(await query("SELECT storage_key,mime_type FROM media_library WHERE id=$1 AND deleted_at IS NULL AND permission_state='APPROVED' AND mime_type IN('image/jpeg','image/png')",[z.string().uuid().parse(req.params.id)])).rows[0];if(!row)throw notFound('Asset');res.set('Cache-Control','private, no-store').type(row.mime_type).send(await getStorageProvider().get(row.storage_key));}));

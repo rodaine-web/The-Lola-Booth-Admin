@@ -66,7 +66,7 @@ test("frontend replaces raw proposal and invoice placeholders with dedicated wor
 });
 
 test("LOLA logo branding is applied to admin chrome and generated documents", () => {
-  assert.match(layout, /\/brand\/LOLA_Primary_Dark_Transparent\.png/);
+  assert.match(layout, /\/brand\/LOLA_Primary_Light_Transparent\.png/);
   assert.match(layout, /brand-logo-admin-stacked/);
   assert.match(documentService, /LOLA_Primary_Dark_Transparent\.png/);
   assert.match(documentService, /ImageRun/);

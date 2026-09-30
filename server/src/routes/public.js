@@ -1,3 +1,4 @@
+import {getReceiptView} from "../services/receipt-service.js";
 import {authenticate,requirePermission} from '../middleware/auth.js';
 import {isStaging,stagingEmailPolicy} from '../config/staging-safety.js';
 import { Router } from "express";
@@ -221,7 +222,7 @@ publicRouter.get("/proposals/:token", asyncHandler(async (req, res) => {
 
 publicRouter.get("/proposals/:token/preview", asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.token, { publicView: true });
-  res.type("html").send(proposalPreviewHtml(proposal));
+  res.type("html").send(await proposalPreviewHtml(proposal));
 }));
 
 publicRouter.get("/proposals/:token/pdf", asyncHandler(async (req, res) => {
@@ -283,10 +284,8 @@ publicRouter.get("/invoices/:token/pdf", asyncHandler(async (req, res) => {
 
 publicRouter.get("/invoices/:token/receipts/:id/pdf",asyncHandler(async(req,res)=>{
  const invoice=await getInvoice(req.params.token,{publicView:true});
- const payment=(await query(`SELECT p.*,i.invoice_number,i.amount_outstanding AS invoice_balance,c.name AS client_name,e.event_name
- FROM payments p JOIN payment_receipts r ON r.payment_id=p.id JOIN invoices i ON i.id=p.invoice_id
- LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id
- WHERE p.id=$1 AND p.invoice_id=$2 AND p.deleted_at IS NULL`,[z.string().uuid().parse(req.params.id),invoice.id])).rows[0];
- if(!payment)throw new AppError("Receipt not found.",404,"RECEIPT_NOT_FOUND");
- res.type('application/pdf').attachment(`LOLA-Receipt-${payment.id.slice(0,8)}.pdf`).send(await generatePaymentReceiptPdf(payment));
+ const receipt=await getReceiptView(invoice,z.string().uuid().parse(req.params.id));
+ res.set('Cache-Control','private, no-store').type('application/pdf').attachment(`LOLA-Receipt-${receipt.number}.pdf`).send(await generatePaymentReceiptPdf(receipt));
 }));
+
+publicRouter.get('/invoices/:token/receipts/:id',asyncHandler(async(req,res)=>{const invoice=await getInvoice(req.params.token,{publicView:true});res.set({'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'}).json(await getReceiptView(invoice,z.string().uuid().parse(req.params.id)));}));

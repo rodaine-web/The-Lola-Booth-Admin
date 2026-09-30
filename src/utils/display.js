@@ -20,9 +20,9 @@ export const formatBusinessDateTime = (value,options={}) => formatTimestamp(valu
 export function businessToday(now=new Date()) { const parts=new Intl.DateTimeFormat('en-CA',{timeZone:BUSINESS_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);return ['year','month','day'].map(k=>parts.find(p=>p.type===k).value).join('-'); }
 export function statusTone(status) {
  const key=String(status||'').toUpperCase();
- if(['HEALTHY','COMPLETE','COMPLETED','PAID','READY','AVAILABLE','SUCCESS','SUCCESSFUL','CONNECTED','ACTIVE','PUBLISHED','SENT_TO_PROVIDER','ACCEPTED'].includes(key))return 'success';
- if(['FAILED','ERROR','OVERDUE','BLOCKED','INCIDENT','UNHEALTHY','CONFLICT','OUT_OF_SERVICE','MAINTENANCE','DOWN','ISSUE_REPORTED'].includes(key))return 'danger';
- if(['WARNING','ATTENTION','NEEDS_ATTENTION','PARTIAL','PENDING','INVITED','DUE_SOON','NOT_READY','RESERVED','NEEDS_CHECK','DEGRADED','STALE','PENDING_APPROVAL','PENDING_VERIFICATION','TEST_READY','SCHEDULED'].includes(key))return 'warning';
+ if(['DELIVERED','VISIBLE','HEALTHY','COMPLETE','COMPLETED','PAID','READY','AVAILABLE','SUCCESS','SUCCESSFUL','CONNECTED','ACTIVE','PUBLISHED','SENT_TO_PROVIDER','ACCEPTED'].includes(key))return 'success';
+ if(['REVOKED','FAILED','ERROR','OVERDUE','BLOCKED','INCIDENT','UNHEALTHY','CONFLICT','OUT_OF_SERVICE','MAINTENANCE','DOWN','ISSUE_REPORTED'].includes(key))return 'danger';
+ if(['PROCESSING','READY_FOR_REVIEW','WARNING','ATTENTION','NEEDS_ATTENTION','PARTIAL','PENDING','INVITED','DUE_SOON','NOT_READY','RESERVED','NEEDS_CHECK','DEGRADED','STALE','PENDING_APPROVAL','PENDING_VERIFICATION','TEST_READY','SCHEDULED'].includes(key))return 'warning';
  if(['NEW','IN_PROGRESS','CONFIRMED','SENT','VIEWED','EN_ROUTE','ON_SITE','SETTING_UP','LIVE'].includes(key))return 'info';
  return 'neutral';
 }

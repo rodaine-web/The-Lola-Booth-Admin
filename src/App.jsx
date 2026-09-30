@@ -9,6 +9,8 @@ import Layout from "./components/Layout.jsx";
 import Login from "./pages/Login.jsx";
 import SetupPassword from "./pages/SetupPassword.jsx";
 
+const GalleryAdmin = lazy(() => import("./pages/GalleryAdmin.jsx"));
+const PublicGallery = lazy(() => import("./pages/PublicGallery.jsx"));
 const WebsiteDiagnostics = lazy(() => import("./pages/WebsiteDiagnostics.jsx"));
 const Users = lazy(() => import("./pages/Users.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
@@ -29,6 +31,7 @@ const InvoiceDetail = lazy(() => import("./pages/InvoiceDetail.jsx"));
 const Payments = lazy(() => import("./pages/Payments.jsx"));
 const PaymentDetail = lazy(() => import("./pages/PaymentDetail.jsx"));
 const PublicProposal = lazy(() => import("./pages/PublicProposal.jsx"));
+const PublicReceipt = lazy(() => import("./pages/PublicReceipt.jsx"));
 const PublicInvoice = lazy(() => import("./pages/PublicInvoice.jsx"));
 const Integrations = lazy(() => import("./pages/Integrations.jsx"));
 const WebsiteCms = lazy(() => import.meta.env.VITE_APP_ENV === "production" ? import("./pages/WebsiteCms.jsx") : import("./pages/StagingCms.jsx"));
@@ -58,9 +61,12 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
       <Route path="/proposal/:token" element={<PublicProposal />} />
+      <Route path="/receipt/:token/:id" element={<PublicReceipt />} />
       <Route path="/pay" element={<InvoiceLookup />} />
           <Route path="/pay/:token" element={<PublicInvoice />} />
           <Route path="/invoice/:token" element={<PublicInvoice />} />
+      <Route path="/gallery" element={<PublicGallery />} />
+      <Route path="/gallery/:type/:token" element={<PublicGallery />} />
       <Route path="/delivery/:token" element={<PublicDelivery />} />
       <Route path="/my-events" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
       <Route path="/my-events/:eventId" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
@@ -109,7 +115,8 @@ export default function App() {
         <Route path="operations/live" element={<LiveOperations />} />
         <Route path="operations/tasks" element={<ResourcePage title="Tasks" endpoint="/tasks" columns={["title", "owner_name", "event_name", "client_name", "due_date", "priority", "status"]} fields={taskFields} />} />
         <Route path="operations/files" element={<ResourcePage title="Files" endpoint="/files" phase="Metadata model ready" columns={["filename", "category", "storage_provider", "created_at"]} />} />
-        <Route path="operations/galleries" element={<ResourcePage title="Galleries" endpoint="/galleries" phase="Manual URL records" columns={["gallery_name", "gallery_url", "delivery_date", "status"]} />} />
+        <Route path="operations/galleries" element={<GalleryAdmin />} />
+        <Route path="operations/galleries/:id" element={<GalleryAdmin />} />
         <Route path="insights/analytics" element={<Analytics />} />
         <Route path="system/users" element={<Users />} />
         <Route path="system/integrations" element={<Integrations />} />

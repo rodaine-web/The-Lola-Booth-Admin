@@ -78,7 +78,7 @@ test("manual communication and user management routes include RBAC protections",
 });
 
 test("admin branding uses the approved logo and Admin Portal label only", () => {
-  assert.match(layout, /LOLA_Primary_Dark_Transparent\.png/);
+  assert.match(layout, /LOLA_Primary_Light_Transparent\.png/);
   assert.match(layout, /Admin Portal/);
   assert.doesNotMatch(layout, /LOLA Admin/);
   assert.doesNotMatch(layout, /Private operations/);

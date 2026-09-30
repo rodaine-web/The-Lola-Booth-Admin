@@ -193,6 +193,7 @@ export default function EventDetail() {
             <DataTable rows={event.operations?.incidents || []} columns={["severity", "type", "quick_issue", "description", "status"]} empty="No incidents." />{(event.operations?.incidents||[]).filter(item=>!['RESOLVED','CLOSED'].includes(item.status)).map(item=><button key={item.id} onClick={()=>action(()=>api.patch(`/events/${id}/incidents/${item.id}`,{status:'RESOLVED',resolution_notes:incident.description||'Resolved by operations manager'}),"Incident resolved.")}>Resolve {item.description}</button>)}
           </Panel>
           <Panel title="Gallery / Completion">
+            <Link className="primary-action" to={`/operations/galleries?eventId=${id}`}>Manage private gallery</Link>
             <Field label="Gallery" value={event.gallery_status} />
             <div className="button-row">
               <button onClick={() => action(() => api.patch(`/events/${id}/gallery`, { status: "PROCESSING" }), "Gallery marked processing.")}>Processing</button>

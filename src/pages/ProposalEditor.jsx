@@ -1,3 +1,4 @@
+import ProposalVisualEditor from "../components/ProposalVisualEditor.jsx";
 import {selectProposalPackage,selectProposalExperience} from '../../shared/proposal-catalog.js';
 import { ArrowDown, ArrowLeft, ArrowUp, FileUp, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -179,6 +180,7 @@ export default function ProposalEditor() {
           </>
         )}
 
+        {mode === "create" && <ProposalVisualEditor value={form.visual_sections||[]} onChange={value=>setField("visual_sections",value)}/>}
         <section className="panel">
           <h2>Terms / Notes</h2>
           <div className="form-grid">

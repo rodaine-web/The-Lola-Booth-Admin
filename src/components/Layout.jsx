@@ -13,7 +13,7 @@ const originalSections = [
   { label: "Finance", icon: CircleDollarSign, items: [{ label: "Payments", to: "/finance/payments", permission: "read:finance" }, { label: "Invoices", to: "/finance/invoices", permission: "read:finance" }] },
   { label: "Website", icon: Sparkles, items: [{label:"CMS Connection",to:"/website/connection",permission:"read:website"},{label:"Page Items",to:"/website/page-items",permission:"read:website"},{label:"Website Images",to:"/website/media-mappings",permission:"read:website"},{ label: "Page SEO", to: "/website/homepage", permission: "read:website" }, { label: "Hero Slides", to: "/website/hero-slides", permission: "read:website" }, { label: "Gallery", to: "/website/gallery", permission: "read:website" }, { label: "Packages", to: "/website/packages", permission: "read:website" }, { label: "Experiences", to: "/website/experiences", permission: "read:website" }, { label: "Event Types", to: "/website/events", permission: "read:website" }, { label: "Testimonials", to: "/website/testimonials", permission: "read:website" }, { label: "FAQ", to: "/website/faq", permission: "read:website" }, { label: "Media Library", to: "/website/media-library", permission: "read:website" }, { label: "SEO / Site Settings", to: "/website/site-settings", permission: "read:website" }] },
   { label: "Catalog", icon: Package, items: [{ label: "Add-ons", to: "/content/addons", permission: "read:content" }] },
-  { label: "Operations", icon: ClipboardList, items: [{ label: "Live", to: "/operations/live", permission: "read:dashboard" }, { label: "Tasks", to: "/operations/tasks", permission: "read:tasks" }, { label: "Files", to: "/operations/files", permission: "read:tasks" }, { label: "Client Galleries", to: "/operations/galleries", permission: "read:tasks" }] },
+  { label: "Operations", icon: ClipboardList, items: [{ label: "Live", to: "/operations/live", permission: "read:dashboard" }, { label: "Tasks", to: "/operations/tasks", permission: "read:tasks" }, { label: "Files", to: "/operations/files", permission: "read:tasks" }, { label: "Galleries", to: "/operations/galleries", permission: "read:events" }] },
   { label: "Insights", icon: BarChart3, items: [{ label: "Analytics", to: "/insights/analytics", permission: "read:analytics" }] },
   { label: "System", icon: Shield, items: [{ label: "Users", to: "/system/users", permission: "view:users" }, { label: "Integrations", to: "/system/integrations", permission: "read:integrations" }, { label: "Health", to: "/system/health", permission: "read:settings", icon: HeartPulse }, { label: "Audit Log", to: "/system/audit-log", permission: "read:audit" }, { label: "Settings", to: "/system/settings", permission: "read:settings" }] }
 ];
@@ -24,7 +24,7 @@ const sections = [
  {label:'Dashboard',icon:Gauge,items:pick(['/'])},
  {label:'Sales',icon:BriefcaseBusiness,items:pick(['/sales/leads','/sales/clients','/sales/proposals','/finance/invoices','/finance/payments','/content/addons'])},
  {label:'Events',icon:CalendarDays,items:pick(['/events/events','/events/calendar','/operations/tasks'])},
- {label:'Operations',icon:ClipboardList,items:pick(['/operations/live','/events/staff','/events/equipment'])},
+ {label:'Operations',icon:ClipboardList,items:pick(['/operations/live','/events/staff','/events/equipment','/operations/galleries'])},
  {label:'Communications',icon:BriefcaseBusiness,items:pick(['/sales/communications'])},
  {label:'Website',icon:Sparkles,items:originalSections.find(s=>s.label==='Website').items},
  {label:'Reporting',icon:BarChart3,items:pick(['/insights/analytics'])},
@@ -56,7 +56,7 @@ export default function Layout() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-logo brand-logo-admin-stacked" src="/brand/LOLA_Primary_Dark_Transparent.png" alt="The LOLA Booth" />
+          <img className="brand-logo brand-logo-admin-stacked" src="/brand/LOLA_Primary_Light_Transparent.png" alt="The LOLA Booth" />
           <div>
             <span>Admin Portal</span><EnvironmentBadge/>
           </div>

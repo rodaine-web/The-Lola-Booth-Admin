@@ -29,7 +29,7 @@ test("approved LOLA brand package assets are available and mapped", () => {
 });
 
 test("admin and public surfaces use approved logo variants", () => {
-  assert.match(layout, /LOLA_Primary_Dark_Transparent\.png/);
+  assert.match(layout, /LOLA_Primary_Light_Transparent\.png/);
   assert.match(layout, /brand-logo-admin-stacked/);
   assert.match(login, /LOLA_Primary_Dark_Transparent\.png/);
   assert.match(publicProposal, /LOLA_Primary_Dark_Transparent\.png/);
@@ -79,5 +79,6 @@ test("website logo rule prioritizes stacked logo for public headers and document
   assert.doesNotMatch(publicInvoice, /LOLA_Horizontal_Dark_Transparent\.png/);
   assert.match(css, /brand-logo-public-stacked/);
   assert.match(documentService, /asset: "primaryDark", label: "INVOICE"/);
-  assert.match(documentService, /asset: "primaryDark", label: "RECEIPT"/);
+  assert.match(documentService, /logoPath\('primaryDark'\)/);
+  assert.match(documentService, /PAYMENT RECEIPT/);
 });

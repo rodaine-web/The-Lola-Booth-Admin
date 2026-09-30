@@ -1,3 +1,4 @@
+import {useAuth} from "../context/AuthContext.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDisplay, formatMoney } from "../utils/display.js";
 import { useEffect, useState } from "react";
@@ -5,6 +6,8 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { api } from "../api/client.js";
 
 export default function Analytics() {
+  const {can}=useAuth();const [galleryActivity,setGalleryActivity]=useState(null);
+  useEffect(()=>{if(import.meta.env.VITE_APP_ENV!=="production"&&can("read:events"))api.get("/gallery-admin/analytics").then(r=>setGalleryActivity(r.data)).catch(()=>setGalleryActivity(null));},[]);
   const [data, setData] = useState(null);
   const [error,setError]=useState(""),[range,setRange]=useState("mtd"),[revision,setRevision]=useState(0);
 
@@ -29,6 +32,7 @@ export default function Analytics() {
           <article className="kpi" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatDisplay(value,key)}</strong></article>
         ))}
       </section>
+      {galleryActivity&&<section className="panel"><h2>Private gallery activity</h2><p className="note-text">Last 30 days · aggregate activity without guest identities</p><div className="gallery-summary">{galleryActivity.map(row=><article key={row.action}><span>{row.action.replaceAll("_"," ")}</span><strong>{row.count}</strong></article>)}</div></section>}
       <section className="chart-grid">
         <Chart title="Revenue by Month" data={data.revenueByMonth} x="month" y="revenue" />
         <Chart title="Bookings by Package" data={data.bookingsByPackage} x="name" y="bookings" />

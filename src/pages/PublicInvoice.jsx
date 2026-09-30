@@ -78,7 +78,7 @@ export default function PublicInvoice() {
           <p className="note-text">{paymentOptions?.offlinePaymentInstructions || "Online checkout is not configured for this invoice."}</p>
         )}
       </section>}
-      {invoice.payments?.some(p=>p.receipt_available)&&<section className="panel"><h2>Receipts</h2>{invoice.payments.filter(p=>p.receipt_available).map(p=><p key={p.id}><a href={`${API_URL}/public/invoices/${token}/receipts/${p.id}/pdf`}>Download receipt · {formatMoney(p.amount)} · {formatDateOnly(p.payment_date)}</a></p>)}</section>}
+      {invoice.payments?.some(p=>p.receipt_available)&&<section className="panel"><h2>Receipts</h2>{invoice.payments.filter(p=>p.receipt_available).map(p=><p key={p.id}><a href={`/receipt/${token}/${p.id}`}>View receipt · {formatMoney(p.amount)} · {formatDateOnly(p.payment_date)}</a></p>)}</section>}
       <a className="primary-action public-download" href={`${API_URL}/public/invoices/${token}/pdf`}><Download size={16} />Download PDF</a>
     </main>
   );

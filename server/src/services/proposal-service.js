@@ -1,3 +1,4 @@
+import {validateProposalVisuals,hydrateProposalVisuals} from "./proposal-visual-service.js";
 import {proposalCatalogError} from '../../../shared/proposal-catalog.js';
 import { documentOrigin } from "../utils/public-document-url.js";
 import crypto from "node:crypto";
@@ -32,6 +33,7 @@ export async function nextNumber(client, column, prefixColumn, fallbackPrefix) {
 }
 
 export async function buildProposalSnapshot(input) {
+  const visualSections = await validateProposalVisuals(input.visual_sections || []);
   const [settings, client, event, pkg, exp, documentTemplate] = await Promise.all([
     query("SELECT * FROM business_settings LIMIT 1"),
     input.client_id ? query("SELECT * FROM clients WHERE id=$1", [input.client_id]) : { rows: [] },
@@ -101,6 +103,7 @@ export async function buildProposalSnapshot(input) {
   });
 
   return {
+    visualSections,
     client: customer,
     event: ev,
     package: pack,
@@ -147,6 +150,8 @@ export async function createProposal(req) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'GENERATED',$18,$19) RETURNING *`,
       [proposalNumber, req.body.lead_id || null, req.body.client_id || snapshot.client.id || null, req.body.event_id || null, req.user.id, req.body.package_id || null, req.body.experience_id || null, crypto.randomBytes(24).toString("hex"), req.body.status || "DRAFT", req.body.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate]
     );
+    await client.query('UPDATE proposals SET visual_sections=$2 WHERE id=$1',[inserted.rows[0].id,JSON.stringify(snapshot.visualSections)]);
+    inserted.rows[0].visual_sections=snapshot.visualSections;
     await createProposalVersion(client, inserted.rows[0], req.user.id);
     return inserted.rows[0];
   });
@@ -178,6 +183,8 @@ export async function createUploadedProposal(req) {
        RETURNING *`,
       [proposalNumber, body.lead_id || null, body.client_id || snapshot.client.id || null, body.event_id || null, req.user.id, crypto.randomBytes(24).toString("hex"), body.status || "DRAFT", body.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, stored.storageKey, stored.filename, stored.sizeBytes]
     );
+    await client.query('UPDATE proposals SET visual_sections=$2 WHERE id=$1',[inserted.rows[0].id,JSON.stringify(snapshot.visualSections)]);
+    inserted.rows[0].visual_sections=snapshot.visualSections;
     await createProposalVersion(client, inserted.rows[0], req.user.id);
     return { ...inserted.rows[0], document: stored };
   });
@@ -226,7 +233,8 @@ export async function proposalPdfBuffer(proposal, type = "pdf") {
   if (type !== "docx" && proposal.proposal_source === "UPLOADED" && proposal.external_document_storage_key) {
     return getStorageProvider().get(proposal.external_document_storage_key);
   }
-  return type === "docx" ? generateProposalDocx(proposal) : generateProposalPdf(proposal);
+  const visualProposal = await hydrateProposalVisuals(proposal);
+  return type === "docx" ? generateProposalDocx(visualProposal) : generateProposalPdf(visualProposal);
 }
 
 export async function sendProposal(req, proposal) {
@@ -292,8 +300,8 @@ export async function sendProposal(req, proposal) {
   return { email, document: doc };
 }
 
-export function proposalPreviewHtml(proposal) {
-  return proposalHtml(proposal);
+export async function proposalPreviewHtml(proposal) {
+  return proposalHtml(await hydrateProposalVisuals(proposal));
 }
 
 function round(value) {
