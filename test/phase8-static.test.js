@@ -60,7 +60,7 @@ test("webhooks persist provider events and avoid fake provider support", () => {
 test("website inquiry endpoint uses the Phase 8 ingestion pipeline with UTMs", () => {
   assert.match(publicRoutes, /ingestProviderLead/);
   assert.match(publicRoutes, /provider: "WEBSITE"/);
-  assert.match(publicRoutes, /utm_campaign/);
+  assert.match(fs.readFileSync(new URL("../server/src/services/public-form-schema.js", import.meta.url), "utf8"), /utm_campaign/);
   assert.match(publicRoutes, /inquiryStatus/);
   assert.doesNotMatch(publicRoutes, /leadId: lead\.id/);
 });

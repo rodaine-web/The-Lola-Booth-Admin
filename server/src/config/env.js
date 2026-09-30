@@ -46,6 +46,8 @@ export const envCatalog = [
   { key: "LOCAL_STORAGE_ROOT", class: "PROVIDER_SPECIFIC", required: false, default: "storage/uploads" },
   { key: "EMAIL_PROVIDER", class: "PROVIDER_SPECIFIC", required: false, default: "development" },
   { key: "SMS_PROVIDER", class: "PROVIDER_SPECIFIC", required: false, default: "none" },
+  { key: "FORM_OWNER_NOTIFICATIONS_ENABLED", class: "OPTIONAL", required: false },
+  { key: "FORM_OWNER_NOTIFICATIONS_SINCE", class: "OPTIONAL", required: false },
   { key: "FORM_NOTIFICATION_EMAIL", class: "PROVIDER_SPECIFIC", required: false },
   { key: "MICROSOFT_TENANT_ID", class: "PROVIDER_SPECIFIC", required: (process.env.EMAIL_PROVIDER || "").toLowerCase() === "microsoft" },
   { key: "MICROSOFT_CLIENT_ID", class: "PROVIDER_SPECIFIC", required: (process.env.EMAIL_PROVIDER || "").toLowerCase() === "microsoft" },

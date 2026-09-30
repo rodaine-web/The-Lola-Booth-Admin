@@ -84,8 +84,8 @@ export class MicrosoftEmailProvider {
     return payload.access_token;
   }
 
-  async send({ to, cc, bcc, subject, body, html, text, replyTo, attachments = [] }) {
-    ({to,cc,bcc,subject}=stagingEmailPolicy({to,cc,bcc,subject}));
+  async send({ to, cc, bcc, subject, body, html, text, replyTo, attachments = [], formOwnerNotification = false }) {
+    ({to,cc,bcc,subject}=stagingEmailPolicy({to,cc,bcc,subject,formOwnerNotification}));
     const token = await this.getAccessToken();
     const message = {
       subject,
@@ -248,8 +248,8 @@ export function getEmailProviderReadiness(config = env, providerOptions = {}) {
   throw new AppError(`Email provider ${config.emailProvider} is configured but no adapter is active yet.`, 500, "EMAIL_PROVIDER_UNSUPPORTED");
 }
 
-export async function sendEmail({ to, cc, bcc, subject, body, html, text, replyTo, attachments = [] }) {
-  ({to,cc,bcc,subject}=stagingEmailPolicy({to,cc,bcc,subject}));
+export async function sendEmail({ to, cc, bcc, subject, body, html, text, replyTo, attachments = [], formOwnerNotification = false }) {
+  ({to,cc,bcc,subject}=stagingEmailPolicy({to,cc,bcc,subject,formOwnerNotification}));
   if (!env.emailProvider || env.emailProvider === "development") {
     return {
       provider: "development",
@@ -267,7 +267,7 @@ export async function sendEmail({ to, cc, bcc, subject, body, html, text, replyT
   }
 
   const provider = createProvider();
-  if (provider) return provider.send({ to, cc, bcc, subject, body, html, text, replyTo, attachments });
+  if (provider) return provider.send({ to, cc, bcc, subject, body, html, text, replyTo, attachments, formOwnerNotification });
 
   throw new Error(`Email provider ${env.emailProvider} is configured but no adapter is active yet.`);
 }

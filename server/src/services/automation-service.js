@@ -639,7 +639,8 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
       bcc: communication.bcc,
       subject: communication.rendered_subject || communication.subject,
       body: communication.rendered_body,
-      html: communication.rendered_html
+      html: communication.rendered_html,
+      formOwnerNotification: communication.trigger_key === "PUBLIC_FORM" && /^public-form:[a-f0-9-]+:owner$/.test(communication.idempotency_key || "")
     });
     } catch (error) {
       const unknown=error.details?.outcomeUnknown===true;

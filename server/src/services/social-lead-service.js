@@ -1,3 +1,4 @@
+import {publicFormKind} from "./public-form-schema.js";
 import {attributionFrom,captureAttribution} from "./integration-jobs-service.js";
 import {emailIntegrationStatus} from "./integration-status.js";
 import crypto from "crypto";
@@ -129,6 +130,7 @@ export function normalizeWebsiteLead(payload = {}) {
     provider: "WEBSITE",
     payload: {
       ...payload,
+      message: publicFormKind(payload)==="CONTACT" ? [payload.topic, payload.message].filter(Boolean).join("\n\n") : payload.message,
       first_name: payload.firstName || payload.first_name,
       last_name: payload.lastName || payload.last_name,
       event_date: payload.eventDate || payload.event_date,
@@ -142,10 +144,10 @@ export function normalizeWebsiteLead(payload = {}) {
       preferred_package_id: payload.preferredPackageId || payload.preferred_package_id,
       referral_source: payload.referralSource || payload.referral_source,
       form_id: payload.form_id || "public-inquiry",
-      external_lead_id: payload.external_lead_id || crypto.createHash("sha256").update(JSON.stringify(safePayload(payload))).digest("hex").slice(0, 24),
+      external_lead_id: payload.external_lead_id || crypto.createHash("sha256").update(JSON.stringify(payload.submissionId ? {...safePayload(payload),submissionId:payload.submissionId} : safePayload(payload))).digest("hex").slice(0, 24),
       source_subtype: "WEBSITE"
     },
-    sourceSubtype: "WEBSITE",
+    sourceSubtype: publicFormKind(payload)==="CONTACT" ? "CONTACT" : "BOOKING",
     testMode: Boolean(payload.test_mode)
   });
 }

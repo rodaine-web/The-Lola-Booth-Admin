@@ -155,7 +155,7 @@
     if(status===400&&code==='SPAM_DETECTED')return 'We could not send that message. Please refresh the page and try again.';
     if(status===400)return 'Please check the highlighted details and try again.';
     if(status===401)return 'Sign in to the staging Admin portal in this browser before submitting a QA inquiry.';
-    if(status===403||code==='CORS_REJECTED')return 'This booking form is not enabled for this website yet. Please email info@thelolabooth.com.';
+    if(status===403||code==='CORS_REJECTED')return 'This form is not enabled for this website yet. Please email info@thelolabooth.com.';
     if(status===429)return 'Too many requests came through at once. Please wait a minute and try again.';
     if(status>=500)return 'LOLA could not receive your inquiry right now. Please email info@thelolabooth.com.';
     return data.error?.message||'We could not send your inquiry right now. Please try again.';
@@ -166,6 +166,8 @@
 
   function formPayload(form){
     const fd=new FormData(form), obj={};
+    obj.formKind=form.dataset.formKind||"BOOKING";
+    obj.submissionId=form.dataset.submissionId||(form.dataset.submissionId=crypto.randomUUID());
     for(const [key,value] of fd.entries()){
       if(['marketing_email_opt_in','interestedIn','budgetRange','estimatedGuestCount'].includes(key))continue;
       if(value!==''&&value!=null)obj[key]=value;
@@ -195,7 +197,7 @@
     if(!stagingApiReady || window.LOLA_CONFIG?.formsEnabled !== true){if(status){status.className='form-status';status.textContent='Staging preview: submissions are disabled until the staging API is connected.';}return;}
     if(!form.reportValidity())return;
     const btn=qs('button[type="submit"]',form), original=btn?.textContent; if(btn){btn.disabled=true;btn.textContent='Sending…'}; if(status){status.className='form-status';status.textContent='';}
-    try{ const r=await fetch(API_BASE+'/api/public/inquiries',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(formPayload(form))}); const data=await r.json().catch(()=>({})); if(!r.ok){if([400,422].includes(r.status)&&data.error?.details?.fieldErrors)showFieldErrors(form,data.error.details.fieldErrors); throw new Error(friendlyInquiryError(r.status,data));} if(status){status.className='form-status success';status.textContent=(data.code==='POSSIBLE_DUPLICATE')?'Thanks, we already have a recent inquiry from you. The LOLA team will follow up soon.':(data.message||'Thank you. Your inquiry was received and the LOLA team will be in touch soon.');} form.reset(); status?.scrollIntoView({behavior:'smooth',block:'nearest'});
+    try{ const r=await fetch(API_BASE+'/api/public/inquiries',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(formPayload(form))}); const data=await r.json().catch(()=>({})); if(!r.ok){if([400,422].includes(r.status)&&data.error?.details?.fieldErrors)showFieldErrors(form,data.error.details.fieldErrors); throw new Error(friendlyInquiryError(r.status,data));} if(status){status.className='form-status success';status.textContent=(data.code==='POSSIBLE_DUPLICATE')?'Thanks, we already have a recent inquiry from you. The LOLA team will follow up soon.':(data.message||'Thank you. Your inquiry was received and the LOLA team will be in touch soon.');} form.reset(); delete form.dataset.submissionId; status?.scrollIntoView({behavior:'smooth',block:'nearest'});
     }catch(err){if(status){status.className='form-status error';status.textContent=err.message||'We couldn’t send your inquiry right now. Please try again.';}}
     finally{if(btn){btn.disabled=false;btn.textContent=original;}}
   }));

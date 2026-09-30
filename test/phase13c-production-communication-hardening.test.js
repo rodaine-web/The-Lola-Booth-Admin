@@ -67,7 +67,8 @@ test("remaining business emails render through centralized templates with fallba
   assert.match(fieldOps, /renderBusinessTemplate\("staff_brief_email"/);
   assert.match(fieldOps, /renderBusinessTemplate\("gallery_delivery_email"/);
   assert.match(fieldOps, /renderCommunicationTemplateByKey\(templateKey/);
-  assert.match(publicForm, /renderPublicInquiryTemplate\("public_inquiry_owner_notification"/);
+  assert.match(publicForm, /contact_message_owner_notification/);
+  assert.match(publicForm, /public_inquiry_owner_notification/);
   assert.match(publicForm, /renderPublicInquiryTemplate\("public_inquiry_customer_confirmation"/);
   assert.match(publicForm, /renderCommunicationTemplateByKey\(templateKey/);
   assert.match(notifications, /renderCommunicationTemplateByKey\(email\.templateKey \|\| "notification_email_default"/);

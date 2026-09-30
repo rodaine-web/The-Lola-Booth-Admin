@@ -1,3 +1,5 @@
+import {formOwnerNotificationsEnabled} from "../config/staging-safety.js";
+import {publicFormKind} from "./public-form-schema.js";
 import { query } from "../db/pool.js";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
@@ -9,21 +11,17 @@ function compact(value) {
   return String(value);
 }
 
-function senderAddress(value = "") {
-  const match = String(value).match(/<([^>]+)>/);
-  return match ? match[1] : String(value).trim();
-}
-
 function notificationRecipient() {
-  return env.formNotificationEmail || senderAddress(env.emailFrom);
+  return env.formNotificationEmail || "info@thelolabooth.com";
 }
 
 function formLabel(payload = {}) {
+  if(publicFormKind(payload)==="CONTACT")return "Contact Message";
   const source = String(payload.form_id || payload.formId || payload.sourcePage || payload.landing_page_url || "").toLowerCase();
   if (source.includes("contact")) return "Contact Message";
   if (source.includes("newsletter")) return "Newsletter Signup";
   if (source.includes("referral")) return "Referral";
-  return "Website Inquiry";
+  return "Booking Request";
 }
 
 function submissionName(lead = {}, payload = {}) {
@@ -51,7 +49,9 @@ function ownerNotificationBody({ lead = {}, payload = {}, action }) {
     ["Name", submissionName(lead, payload)],
     ["Email", lead.email || payload.email],
     ["Phone", lead.phone || payload.phone],
-    ["Event date", inquiryEventDate(lead.event_date || payload.eventDate)],
+    ["Organization", lead.company || payload.company],
+    ["Topic", payload.topic],
+    ["Event date", publicFormKind(payload)==="CONTACT" ? null : inquiryEventDate(lead.event_date || payload.eventDate)],
     ["Event type", lead.event_type || payload.eventType],
     ["Guest count", lead.guest_count || payload.guestCount],
     ["Preferred package", lead.preferred_package_id || payload.preferredPackageId],
@@ -69,8 +69,9 @@ function ownerNotificationBody({ lead = {}, payload = {}, action }) {
 }
 
 function customerConfirmationBody({ lead = {}, payload = {} }) {
+  if(publicFormKind(payload)==="CONTACT")return `Hi ${lead.first_name || payload.firstName || "there"},\n\nThank you for contacting The LOLA Booth. We received your message and our team will get back to you soon.\n\n${payload.topic ? "Topic: "+payload.topic+"\n" : ""}Your message: ${payload.message || lead.message || ""}\n\nThis is a message acknowledgment, not a booking confirmation.\n\nThe LOLA Booth`;
   const details = linesFrom([
-    ["Event date", inquiryEventDate(lead.event_date || payload.eventDate)],
+    ["Event date", publicFormKind(payload)==="CONTACT" ? null : inquiryEventDate(lead.event_date || payload.eventDate)],
     ["Event type", lead.event_type || payload.eventType],
     ["Guest count", lead.guest_count || payload.guestCount],
     ["Message", lead.message || payload.message]
@@ -93,7 +94,10 @@ function customerConfirmationBody({ lead = {}, payload = {} }) {
 export async function sendPublicInquiryEmails({ lead, payload, action, sendEmailImpl = sendEmail, ownerRecipient }) {
   if(action === "IDEMPOTENT_REPLAY") return;
   // Paused environments must not accumulate a backlog for a future worker enablement.
-  if (sendEmailImpl === sendEmail && (process.env.EMAIL_PROVIDER === 'disabled' || (process.env.APP_ENV === 'staging' && process.env.STAGING_EMAIL_ENABLED !== 'true') || (process.env.APP_ENV === 'production' && process.env.PRODUCTION_EMAIL_ENABLED !== 'true'))) return;
+  const generalMailPaused = process.env.EMAIL_PROVIDER === 'disabled' || (process.env.APP_ENV === 'staging' && process.env.STAGING_EMAIL_ENABLED !== 'true') || (process.env.APP_ENV === 'production' && process.env.PRODUCTION_EMAIL_ENABLED !== 'true');
+  const ownerOnly = sendEmailImpl === sendEmail && generalMailPaused && formOwnerNotificationsEnabled();
+  if(sendEmailImpl === sendEmail && generalMailPaused && !ownerOnly)return;
+  if(ownerOnly && new Date(lead.created_at).getTime()<Date.parse(process.env.FORM_OWNER_NOTIFICATIONS_SINCE))return;
   // Persist email work before responding; the worker owns delivery and retry visibility.
   const deliver = sendEmailImpl === sendEmail ? async message => {
     const result = await query(
@@ -102,14 +106,14 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
       [lead?.id || null,message.to,message.subject,message.body.slice(0,500),message.body,message.html || brandedEmailHtml(message.body),`public-form:${lead.id}:${message.purpose}`]);
     return result.rows[0];
   } : sendEmailImpl;
-  const ownerTo = ownerRecipient || notificationRecipient();
+  const ownerTo = ownerOnly ? "info@thelolabooth.com" : ownerRecipient || notificationRecipient();
   const name = submissionName(lead, payload);
   const label = formLabel(payload);
   const mergeData = publicInquiryMergeData({ lead, payload, action, label, name });
   const ownerFallback = { fallbackSubject: `New LOLA ${label} - ${name}`, fallbackBody: ownerNotificationBody({ lead, payload, action }), relatedEntityId: lead?.id || null };
   const ownerOptions = { firstName: "LOLA team", kicker: `New ${label}`, closing: "Review this inquiry in the Admin portal and follow up with the customer." };
   const ownerRendered = sendEmailImpl === sendEmail
-    ? await renderPublicInquiryTemplate("public_inquiry_owner_notification", mergeData, ownerFallback, ownerOptions)
+    ? await renderPublicInquiryTemplate(label === "Contact Message" ? "contact_message_owner_notification" : "public_inquiry_owner_notification", mergeData, ownerFallback, ownerOptions)
     : { subject: ownerFallback.fallbackSubject, body: ownerFallback.fallbackBody, html: brandedEmailHtml(ownerFallback.fallbackBody, ownerOptions) };
 
   const deliveries = [
@@ -125,9 +129,9 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
     })
   ];
 
-  if (lead?.email || payload?.email) {
-    const customerFallback = { fallbackSubject: "We received your LOLA inquiry", fallbackBody: customerConfirmationBody({ lead, payload }), relatedEntityId: lead?.id || null };
-    const customerTemplateKey = label === "Contact Message" ? "CONTACT_CONFIRMATION" : "BOOKING_INQUIRY_CONFIRMATION";
+  if (!ownerOnly && (lead?.email || payload?.email)) {
+    const customerFallback = { fallbackSubject: label === "Contact Message" ? "We received your message — The LOLA Booth" : "We received your LOLA booking request", fallbackBody: customerConfirmationBody({ lead, payload }), relatedEntityId: lead?.id || null };
+    const customerTemplateKey = label === "Contact Message" ? "CONTACT_MESSAGE_CONFIRMATION" : "BOOKING_INQUIRY_CONFIRMATION";
     const legacyCustomerTemplateKey = "public_inquiry_customer_confirmation";
     const customerRendered = sendEmailImpl === sendEmail
       ? await renderPublicInquiryTemplate(customerTemplateKey, mergeData, customerFallback, {
@@ -135,7 +139,7 @@ export async function sendPublicInquiryEmails({ lead, payload, action, sendEmail
         kicker: label === "Contact Message" ? "Thank you for reaching out!" : "Your booking inquiry has been received!",
         ctaLabel: "Explore LOLA Experiences",
         ctaUrl: `${env.publicBaseUrl}/experiences`,
-        event: {
+        event: label === "Contact Message" ? undefined : {
           date: inquiryEventDate(lead.event_date || payload.eventDate),
           venue: lead.venue_name || payload.venueName || [payload.city, payload.state].filter(Boolean).join(", "),
           type: lead.event_type || payload.eventType,
@@ -196,8 +200,8 @@ function publicInquiryMergeData({ lead = {}, payload = {}, action, label, name }
   };
 }
 
-export async function recoverPublicInquiryAcknowledgments(){
- const pending=(await query("SELECT * FROM leads WHERE public_ack_pending=true AND deleted_at IS NULL ORDER BY created_at LIMIT 25")).rows;
+export async function recoverPublicInquiryAcknowledgments({since=null}={}){
+ const pending=(await query("SELECT * FROM leads WHERE public_ack_pending=true AND deleted_at IS NULL AND ($1::timestamptz IS NULL OR created_at >= $1) ORDER BY created_at LIMIT 25",[since])).rows;
  for(const lead of pending)await sendPublicInquiryEmails({lead,payload:{form_id:lead.form_id},action:'RECOVERED_ACKNOWLEDGMENT'});
  return {checked:pending.length};
 }

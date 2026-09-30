@@ -74,7 +74,7 @@ test("manual communication and user management routes include RBAC protections",
   assert.match(appRoutes, /path="\/setup-password"/);
   assert.match(setupPasswordPage, /Set password/);
   assert.match(publicFormEmail, /BOOKING_INQUIRY_CONFIRMATION/);
-  assert.match(publicFormEmail, /CONTACT_CONFIRMATION/);
+  assert.match(publicFormEmail, /CONTACT_MESSAGE_CONFIRMATION/);
 });
 
 test("admin branding uses the approved logo and Admin Portal label only", () => {

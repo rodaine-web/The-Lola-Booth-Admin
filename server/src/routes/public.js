@@ -1,3 +1,4 @@
+import {inquirySchema,publicFormKind} from "../services/public-form-schema.js";
 import {getReceiptView} from "../services/receipt-service.js";
 import {authenticate,requirePermission} from '../middleware/auth.js';
 import {isStaging,stagingEmailPolicy} from '../config/staging-safety.js';
@@ -39,43 +40,7 @@ publicRouter.use(rateLimit({
   legacyHeaders: false
 }));
 
-const inquirySchema = z.object({
-  form_id: z.string().max(80).optional(),
-  firstName: z.string().trim().min(1).max(80),
-  lastName: z.string().trim().min(1).max(80),
-  email: z.string().trim().email().max(160).transform((value) => value.toLowerCase()),
-  phone: z.string().trim().min(7).max(40),
-  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  eventStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  eventEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  eventType: z.string().trim().min(2).max(80),
-  guestCount: z.coerce.number().int().positive().optional(),
-  venueName: z.string().trim().max(160).optional(),
-  venueAddress: z.string().trim().max(240).optional(),
-  city: z.string().trim().min(1).max(100),
-  state: z.string().trim().min(2).max(40),
-  zip: z.string().trim().min(3).max(20).optional(),
-  preferredExperienceId: z.string().uuid().optional(),
-  preferredPackageId: z.string().uuid().optional(),
-  referralSource: z.string().trim().max(120).optional(),
-  message: z.string().trim().max(3000).optional(),
-  utm_source: z.string().trim().max(120).optional(),
-  utm_medium: z.string().trim().max(120).optional(),
-  utm_campaign: z.string().trim().max(160).optional(),
-  utm_content: z.string().trim().max(160).optional(),
-  utm_term: z.string().trim().max(160).optional(),
-  landing_page_url: z.string().trim().max(500).optional(),
-  referrer_url: z.string().trim().max(500).optional(),
-  gclid: z.string().trim().max(200).optional(),
-  gbraid: z.string().trim().max(200).optional(),
-  wbraid: z.string().trim().max(200).optional(),
-  fbclid: z.string().trim().max(200).optional(),
-  ttclid: z.string().trim().max(200).optional(),
-  ga_client_id: z.string().trim().max(200).optional(),
-  ga_session_id: z.string().trim().max(200).optional(),
-  marketing_email_opt_in: z.boolean().optional(),
-  website: z.string().max(0).optional()
-});
+
 
 publicRouter.post("/inquiries", (req, _res, next) => {
   const origin = req.headers.origin;
@@ -94,7 +59,7 @@ publicRouter.post("/inquiries", (req, _res, next) => {
       payload[field] = record.payload.source_catalog_id;
     }
   }
-  const result = await ingestProviderLead({provider: "WEBSITE", payload, testMode: isStaging(), skipAutomations: isStaging()});
+  const result = await ingestProviderLead({provider: "WEBSITE", payload, testMode: isStaging(), skipAutomations: isStaging() || publicFormKind(payload)==="CONTACT"});
 
   await sendPublicInquiryEmails({
     lead: result.lead,
@@ -102,7 +67,7 @@ publicRouter.post("/inquiries", (req, _res, next) => {
     action: result.action
   }).catch(error => req.log?.error({code:error.code,leadId:result.lead?.id}, "Inquiry persisted but email queueing failed"));
   res.status(201).json({
-    message: "Thank you. Your inquiry was received and the LOLA team will be in touch soon.",
+    message: publicFormKind(payload)==="CONTACT" ? "Thank you. Your message was received. The LOLA team will get back to you soon." : "Thank you. Your booking request was received. We will review availability and send next steps; your date is not reserved yet.",
     inquiryStatus: result.action
   });
 }));

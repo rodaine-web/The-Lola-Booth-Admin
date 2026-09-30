@@ -3,18 +3,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 
 <title>Contact | The LOLA Booth</title>
-<meta name="description" content="Contact The LOLA Booth for event questions, booking inquiries, weddings, celebrations, corporate events, and custom brand activations.">
+<meta name="description" content="Contact The LOLA Booth for general questions, partnership opportunities, press inquiries, and help with an existing booking.">
 
 
 <meta property="og:title" content="Contact | The LOLA Booth">
-<meta property="og:description" content="Tell us what you're planning. Contact The LOLA Booth for event questions, booking inquiries, and custom photo booth experiences.">
+<meta property="og:description" content="Contact The LOLA Booth for questions, partnership opportunities, and other inquiries.">
 <meta property="og:url" content="https://thelolabooth.com/contact">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://thelolabooth.com/assets/hero-3.jpg">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Contact | The LOLA Booth">
-<meta name="twitter:description" content="Tell us what you're planning. Contact The LOLA Booth for event questions, booking inquiries, and custom photo booth experiences.">
+<meta name="twitter:description" content="Contact The LOLA Booth for questions, partnership opportunities, and other inquiries.">
 <meta name="twitter:image" content="https://thelolabooth.com/assets/hero-3.jpg">
 
 <script type="application/ld+json">
@@ -43,7 +43,7 @@
       "@id":"https://thelolabooth.com/contact#webpage",
       "url":"https://thelolabooth.com/contact",
       "name":"Contact | The LOLA Booth",
-      "description":"Contact The LOLA Booth for event questions, booking inquiries, weddings, celebrations, corporate events, and custom brand activations.",
+      "description":"Contact The LOLA Booth for general questions, partnership opportunities, press inquiries, and help with an existing booking.",
       "isPartOf":{"@id":"https://thelolabooth.com/#website"},
       "about":{"@id":"https://thelolabooth.com/#organization"}
     }
@@ -370,8 +370,8 @@
 <section class="contact-hero" data-cms-contact-section="hero">
 <div class="container">
   <p class="eyebrow" data-cms-copy="contact.017">Contact</p>
-  <h1 class="display" data-cms-copy="contact.018">Tell us what you’re planning.</h1>
-  <p class="muted" data-cms-copy="contact.019">Have a question, planning something unusual, or need a custom experience? Start here and the LOLA team will point you in the right direction.</p>
+  <h1 class="display" data-cms-copy="contact.018">How can we help?</h1>
+  <p class="muted" data-cms-copy="contact.019">Questions, partnership opportunities, press inquiries, or something else? Send the LOLA team a message. For event availability and a personalized quote, use our booking form.</p>
 </div>
 </section>
 
@@ -381,7 +381,7 @@
     <article class="contact-path">
       <span class="num" data-cms-copy="contact.102">01</span>
       <h2 data-cms-copy="contact.020">General Question</h2>
-      <p data-cms-copy="contact.021">Need help choosing an experience, understanding a package, or figuring out what works for your event?</p>
+      <p data-cms-copy="contact.021">Ask about our services, an existing booking, or anything else you would like to know.</p>
       <a href="#contact-form" data-cms-copy="contact.022">Send us a message →</a>
     </article>
 
@@ -394,9 +394,9 @@
 
     <article class="contact-path">
       <span class="num" data-cms-copy="contact.104">03</span>
-      <h2 data-cms-copy="contact.026">Corporate or Brand Activation</h2>
-      <p data-cms-copy="contact.027">Planning a launch, conference, employee event, sponsored activation, or multi-day experience?</p>
-      <a href="#corporate-contact" data-cms-copy="contact.028">Start a custom project →</a>
+      <h2 data-cms-copy="contact.026">Partnership Opportunities</h2>
+      <p data-cms-copy="contact.027">Interested in working with LOLA as a venue, planner, brand, or creative partner? We would love to hear from you.</p>
+      <a href="#corporate-contact" data-cms-copy="contact.028">Talk about a partnership →</a>
     </article>
   </div>
 </div>
@@ -407,8 +407,8 @@
 
   <aside class="contact-sidebar">
     <p class="eyebrow" data-cms-copy="contact.029">Let’s Talk</p>
-    <h2 data-cms-copy="contact.030">Tell us enough to get started.</h2>
-    <p data-cms-copy="contact.031">Share the basics and we’ll follow up with availability, recommendations, and next steps. If you are not sure which experience fits, that is completely fine.</p>
+    <h2 data-cms-copy="contact.030">Start a conversation.</h2>
+    <p data-cms-copy="contact.031">Tell us how we can help. No event date, venue, or package selection is needed to send a message.</p>
 
     <div class="contact-info">
       <div class="contact-info-card">
@@ -435,120 +435,25 @@
 
   <div class="contact-form-wrap">
     <div class="contact-form-head">
-      <p class="eyebrow" data-cms-copy="contact.036">Event Inquiry</p>
-      <h2 data-cms-copy="contact.037">What are we celebrating?</h2>
+      <p class="eyebrow" data-cms-copy="contact.036">Send a Message</p>
+      <h2 data-cms-copy="contact.037">What would you like to talk about?</h2>
       <p data-cms-copy="contact.038">Fields marked with * are required.</p>
     </div>
 
-    <!-- IMPORTANT:
-         This form preserves the existing CMS/API hooks and field names used by app.js.
-         Do not remove data-lola-inquiry, data-event-type-select, data-experience-select,
-         the honeypot field, or data-form-status without updating the backend integration. -->
-    <form class="form" data-lola-inquiry="true" novalidate="novalidate">
+    <form class="form" data-lola-inquiry="true" data-form-kind="CONTACT" data-form-id="contact" novalidate>
       <div class="form-grid">
-
-        <div>
-          <label for="contact-first">First Name *</label>
-          <input id="contact-first" maxlength="80" name="firstName" required="">
-        </div>
-
-        <div>
-          <label for="contact-last">Last Name *</label>
-          <input id="contact-last" maxlength="80" name="lastName" required="">
-        </div>
-
-        <div>
-          <label for="contact-email">Email *</label>
-          <input id="contact-email" maxlength="160" name="email" required="" type="email">
-        </div>
-
-        <div>
-          <label for="contact-phone">Phone *</label>
-          <input id="contact-phone" maxlength="40" name="phone" required="" type="tel">
-        </div>
-
-        <div>
-          <label for="contact-date">Event Date *</label>
-          <input id="contact-date" name="eventDate" required="" type="date">
-        </div>
-
-        <div>
-          <label for="contact-type">Event Type *</label>
-          <select data-event-type-select="" id="contact-type" name="eventType" required="">
-            <option value="">Select event type</option>
-            <option>Wedding</option>
-            <option>Birthday</option>
-            <option>Corporate Event</option>
-            <option>Brand Activation</option>
-            <option>Bridal Shower</option>
-            <option>Baby Shower</option>
-            <option>Graduation</option>
-            <option>Private Event</option>
-            <option>Other</option>
-          </select>
-        </div>
-
-        <div>
-          <label for="contact-city">City *</label>
-          <input id="contact-city" maxlength="100" name="city" required="">
-        </div>
-
-        <div>
-          <label for="contact-state">State *</label>
-          <input id="contact-state" maxlength="40" name="state" placeholder="e.g. IL" required="">
-        </div>
-
-        <div>
-          <label for="contact-exp">Primary Experience</label>
-          <select data-experience-select="" id="contact-exp" name="preferredExperienceId">
-            <option value="">Not sure yet</option>
-          </select>
-          <div class="form-note">Choose an experience, or let us recommend one.</div>
-        </div>
-
-        <div>
-          <label for="contact-venue">Venue</label>
-          <input id="contact-venue" maxlength="160" name="venueName" placeholder="If known">
-        </div>
-
-        <div>
-          <label for="contact-guests">Estimated Guest Count</label>
-          <input id="contact-guests" min="1" max="5000" name="guestCount" type="number" placeholder="e.g. 150">
-        </div>
-
-        <div>
-          <label for="contact-budget">Budget Range</label>
-          <select id="contact-budget" name="budgetRange">
-            <option value="">Prefer not to say</option>
-            <option value="under-750">Under $750</option>
-            <option value="750-1250">$750–$1,250</option>
-            <option value="1250-2000">$1,250–$2,000</option>
-            <option value="2000-3500">$2,000–$3,500</option>
-            <option value="3500-plus">$3,500+</option>
-          </select>
-        </div>
+        <div><label for="contact-first">First name *</label><input id="contact-first" name="firstName" maxlength="80" autocomplete="given-name" required></div>
+        <div><label for="contact-last">Last name *</label><input id="contact-last" name="lastName" maxlength="80" autocomplete="family-name" required></div>
+        <div><label for="contact-email">Email *</label><input id="contact-email" name="email" type="email" maxlength="160" autocomplete="email" required></div>
+        <div><label for="contact-phone">Phone (optional)</label><input id="contact-phone" name="phone" type="tel" minlength="7" maxlength="40" autocomplete="tel"></div>
+        <div><label for="contact-company">Organization (optional)</label><input id="contact-company" name="company" maxlength="160" autocomplete="organization"></div>
+        <div><label for="contact-topic">Topic *</label><select id="contact-topic" name="topic" required><option value="">Choose a topic</option><option>General inquiry</option><option>Partnership opportunity</option><option>Press or media</option><option>Existing booking question</option><option>Other</option></select></div>
       </div>
-
-      <div style="margin-top:18px">
-        <label>Interested In</label>
-        <div class="check-grid">
-          <label class="check-option"><input type="checkbox" name="interestedIn" value="glam"><span data-cms-copy="contact.105">The Glam</span></label>
-          <label class="check-option"><input type="checkbox" name="interestedIn" value="360"><span data-cms-copy="contact.106">The 360 Booth</span></label>
-          <label class="check-option"><input type="checkbox" name="interestedIn" value="vogue"><span data-cms-copy="contact.107">The Vogue</span></label>
-          <label class="check-option"><input type="checkbox" name="interestedIn" value="audio-guest-book"><span data-cms-copy="contact.108">The Audio Guest Book</span></label>
-        </div>
-        <div class="form-note">Optional. Select any that interest you.</div>
-      </div>
-
-      <div style="margin-top:18px">
-        <label for="contact-message">Tell us about your event</label>
-        <textarea id="contact-message" maxlength="2500" name="message" placeholder="Tell us about the event, the mood, any must-haves, or anything unusual we should know."></textarea>
-      </div>
-
+      <div style="margin-top:18px"><label for="contact-message">Your message *</label><textarea id="contact-message" name="message" maxlength="2500" required placeholder="Tell us about your question or opportunity."></textarea></div>
+      <p class="form-note">Planning an event? <a href="availability.html">Request availability and a quote</a> using our booking form.</p>
       <input aria-hidden="true" autocomplete="off" class="hp-field" name="website" tabindex="-1">
-
-      <button class="btn dark" style="margin-top:18px" type="submit">Send Inquiry →</button>
-      <div aria-live="polite" class="form-status" data-form-status=""></div>
+      <button class="btn dark" style="margin-top:18px" type="submit">Send Message →</button>
+      <div aria-live="polite" class="form-status" data-form-status></div>
     </form>
   </div>
 
@@ -559,33 +464,33 @@
 <div class="container">
   <div class="next-steps-head">
     <p class="eyebrow" data-cms-copy="contact.039">What Happens Next</p>
-    <h2 data-cms-copy="contact.040">Simple from inquiry to event day.</h2>
-    <p data-cms-copy="contact.041">Once we have the details, we can move quickly without making you repeat yourself.</p>
+    <h2 data-cms-copy="contact.040">A conversation starts here.</h2>
+    <p data-cms-copy="contact.041">We will review your message and connect you with the right person.</p>
   </div>
 
   <div class="steps-grid">
     <article class="step-card">
       <span class="step-num" data-cms-copy="contact.109">01</span>
       <h3 data-cms-copy="contact.042">You send the details</h3>
-      <p data-cms-copy="contact.043">Tell us the date, location, event type, and what you have in mind.</p>
+      <p data-cms-copy="contact.043">Choose a topic and tell us how we can help.</p>
     </article>
 
     <article class="step-card">
       <span class="step-num" data-cms-copy="contact.110">02</span>
-      <h3 data-cms-copy="contact.044">We review availability</h3>
-      <p data-cms-copy="contact.045">We check the date, equipment, staffing, logistics, and the experience that best fits.</p>
+      <h3 data-cms-copy="contact.044">We read your message</h3>
+      <p data-cms-copy="contact.045">Our team reviews your question or partnership idea.</p>
     </article>
 
     <article class="step-card">
       <span class="step-num" data-cms-copy="contact.111">03</span>
-      <h3 data-cms-copy="contact.046">You receive next steps</h3>
-      <p data-cms-copy="contact.047">We send the appropriate package, proposal, or custom recommendation for your event.</p>
+      <h3 data-cms-copy="contact.046">We get back to you</h3>
+      <p data-cms-copy="contact.047">We reply using the email address you provide.</p>
     </article>
 
     <article class="step-card">
       <span class="step-num" data-cms-copy="contact.112">04</span>
-      <h3 data-cms-copy="contact.048">Your date gets secured</h3>
-      <p data-cms-copy="contact.049">Once the booking documents and required 30% down payment are completed, we move into event preparation.</p>
+      <h3 data-cms-copy="contact.048">Continue the conversation</h3>
+      <p data-cms-copy="contact.049">Share any additional details with our team. Sending a message does not create or reserve a booking.</p>
     </article>
   </div>
 </div>
@@ -594,11 +499,11 @@
 <section class="corporate-contact" id="corporate-contact" data-cms-contact-section="corporate">
 <div class="container corporate-grid">
   <div>
-    <p class="eyebrow" style="color:#d6b47a" data-cms-copy="contact.050">Corporate &amp; Brand Activations</p>
-    <h2 data-cms-copy="contact.051">Need more than a standard booth package?</h2>
-    <p data-cms-copy="contact.052">We can build custom branded experiences for conferences, launches, employee events, sponsored activations, galas, and multi-day projects. Tell us the campaign, guest count, venue, goals, and scope and we’ll build around it.</p>
+    <p class="eyebrow" style="color:#d6b47a" data-cms-copy="contact.050">Partnerships &amp; Collaborations</p>
+    <h2 data-cms-copy="contact.051">Let’s work together.</h2>
+    <p data-cms-copy="contact.052">Venues, event planners, creative teams, and brands: tell us about your organization and the opportunity you have in mind.</p>
   </div>
-  <a class="btn gold" href="#contact-form" data-cms-copy="contact.053">Start a Custom Inquiry →</a>
+  <a class="btn gold" href="#contact-form" data-cms-copy="contact.053">Send a Partnership Inquiry →</a>
 </div>
 </section>
 
@@ -635,9 +540,9 @@
 <section class="cta">
 <div class="container cta-inner">
   <p class="eyebrow" data-cms-copy="contact.066">READY WHEN YOU ARE</p>
-  <h2 class="display" data-cms-copy="contact.067">Let’s Make It Official.</h2>
-  <p data-cms-copy="contact.068">Check your date, tell us what you’re planning, and let’s create something unforgettable together.</p>
-  <a class="btn gold" href="availability.html" data-cms-copy="contact.069">Book Now →</a>
+  <h2 class="display" data-cms-copy="contact.067">Have a question?</h2>
+  <p data-cms-copy="contact.068">Send a message about our services, a partnership, or anything else. We are here to help.</p>
+  <a class="btn gold" href="#contact-form" data-cms-copy="contact.069">Contact the Team →</a>
 </div>
 </section>
 

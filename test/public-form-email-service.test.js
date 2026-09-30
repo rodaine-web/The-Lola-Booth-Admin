@@ -32,9 +32,9 @@ test("public form email helper sends owner and customer emails without throwing"
   });
 
   assert.equal(sent.length, 2);
-  assert.match(sent[0].subject, /New LOLA Website Inquiry - LOLA E2E Test/);
-  assert.match(sent[0].body, /Form type: Website Inquiry/);
+  assert.match(sent[0].subject, /New LOLA Booking Request - LOLA E2E Test/);
+  assert.match(sent[0].body, /Form type: Booking Request/);
   assert.match(sent[0].body, /UTM campaign: qa/);
   assert.equal(sent[1].to, "qa@example.com");
-  assert.equal(sent[1].subject, "We received your LOLA inquiry");
+  assert.equal(sent[1].subject, "We received your LOLA booking request");
 });

@@ -7,10 +7,19 @@ export function assertStagingConfiguration(config=process.env){
  if(config.SMS_PROVIDER&&config.SMS_PROVIDER!=='none')throw new Error('Staging external SMS must remain disabled.');
  for(const key of ['GA4_ENABLED','META_EVENTS_ENABLED','TIKTOK_EVENTS_ENABLED'])if(config[key]==='true')throw new Error(`${key} must remain false in staging.`);
 }
+export function formOwnerNotificationsEnabled(config=process.env){
+ return ['staging','production'].includes(config.APP_ENV)&&config.FORM_OWNER_NOTIFICATIONS_ENABLED==='true'&&Number.isFinite(Date.parse(config.FORM_OWNER_NOTIFICATIONS_SINCE||''));
+}
 export function stagingEmailPolicy(message,config=process.env){
  const production=config.APP_ENV==='production';
  if(!isStaging(config)&&!production)return message;
  const prefix=production?'PRODUCTION':'STAGING';
+ if(message.formOwnerNotification===true && formOwnerNotificationsEnabled(config)){
+  const recipients=[message.to,message.cc,message.bcc].flatMap(v=>Array.isArray(v)?v:String(v||'').split(',')).map(v=>String(v).trim().toLowerCase()).filter(Boolean);
+  if(recipients.length!==1||recipients[0]!=='info@thelolabooth.com')throw new AppError('Form notifications can only go to the LOLA owner mailbox.',403,'FORM_OWNER_RECIPIENT_BLOCKED');
+  const tag=production?'[LOLA FORM] ':'[LOLA STAGING FORM] ';
+  return {...message,subject:String(message.subject||'').startsWith(tag)?message.subject:tag+(message.subject||'')};
+ }
  if(config[`${prefix}_EMAIL_ENABLED`]!=='true')throw new AppError(`${prefix} email is paused pending controlled qualification.`,409,`${prefix}_EMAIL_PAUSED`);
  const allow=new Set(String(config[`${prefix}_EMAIL_ALLOWLIST`]||'').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean));
  const recipients=[message.to,message.cc,message.bcc].flatMap(v=>Array.isArray(v)?v:String(v||'').split(',')).map(v=>String(v).trim().toLowerCase()).filter(Boolean);
