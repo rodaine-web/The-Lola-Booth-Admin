@@ -1,3 +1,4 @@
+import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {proposalVisualHtml} from "./proposal-visual-service.js";
 import { documentOrigin } from "../utils/public-document-url.js";
 import { normalizeInvoice } from "../../../shared/invoice-balance.js";
@@ -60,7 +61,7 @@ export function proposalHtml(proposal) {
   const horizontalLogo = logoDataUri("horizontalDark");
   const lineItems = proposal.line_items_snapshot || [];
   const sections = proposalSections(proposal);
-  const proposalUrl = publicUrl("proposal", proposal.secure_token);
+  const proposalUrl = secureDocumentUrl(documentOrigin(), "proposal", proposal);
   const eventRows = [
     ["Client", proposal.client_name],
     ["Event", proposal.event_name || proposal.event_type],
@@ -95,7 +96,7 @@ export function proposalHtml(proposal) {
   <main>
   <section class="cover">${primaryLogo ? `<img class="primary-logo" src="${primaryLogo}" alt="The LOLA Booth">` : "<p class=\"eyebrow\">THE LOLA BOOTH</p>"}<div class="divider"></div><h1>Proposal</h1><p class="lede">Custom Experience Proposal</p><div class="divider"></div><div class="grid"><div class="field"><span>Prepared For</span><strong>${proposal.client_name || "Client"}</strong></div><div class="field"><span>Date</span><strong>${proposal.proposal_date || new Date().toISOString().slice(0, 10)}</strong></div><div class="field"><span>Event</span><strong>${proposal.event_name || proposal.event_type || "Event"}</strong></div><div class="field"><span>Proposal No.</span><strong>${proposal.proposal_number}</strong></div></div><p class="meta">${footerText}</p></section>
   <section class="doc-header">${horizontalLogo ? `<img class="horizontal-logo" src="${horizontalLogo}" alt="The LOLA Booth">` : "<strong>THE LOLA BOOTH</strong>"}<p class="meta">${proposal.proposal_number}<br>Good people. Better photos.</p></section>
-  ${proposal.proposal_source === "UPLOADED" ? `<section><h2>${proposal.proposal_title || "Uploaded Proposal"}</h2><p>This proposal was prepared outside LOLA and attached to this secure customer link.</p><p><a href="${proposalUrl}/pdf">Download PDF</a></p></section>` : ""}
+  ${proposal.proposal_source === "UPLOADED" && proposalUrl ? `<section><h2>${proposal.proposal_title || "Uploaded Proposal"}</h2><p>This proposal was prepared outside LOLA and attached to this secure customer link.</p><p><a href="${proposalUrl}/pdf">Download PDF</a></p></section>` : ""}
   <section><h2>Proposal Overview</h2><p class="eyebrow">A Modern Photo Experience For Life's Most Meaningful Moments</p><div class="proposal-overview"><div>${sections.map((section, index) => `<div class="section-block"><div class="section-heading"><span>${String(index + 1).padStart(2, "0")}.</span><h3>${section.title}</h3><i></i></div><div>${sanitizeContent(section.body)}</div>${section.items?.length ? `<ul>${section.items.map((item) => `<li>${sanitizeContent(item)}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div><aside class="side-card"><p class="eyebrow">Event Proposal For</p><h3>${proposal.client_name || "Client"}</h3><div class="divider"></div>${eventRows.slice(1).map(([label, value]) => `<p><span class="eyebrow">${label}</span><br>${value}</p>`).join("")}<p><span class="eyebrow">Total Investment</span><br>${money(pricing.total)}</p></aside></div></section>
   ${proposalVisualHtml(proposal)}
   <section class="section"><h2>Your Investment</h2><table><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>${lineItems.map((item) => `<tr><td>${item.description}</td><td>${item.quantity}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`).join("")}</tbody></table><table class="summary"><tbody><tr><td>Subtotal</td><td>${money(pricing.subtotal || pricing.total)}</td></tr><tr><td>Discount</td><td>${money(pricing.discount)}</td></tr><tr><td>Tax</td><td>${money(pricing.tax)}</td></tr><tr><td>Total</td><td>${money(pricing.total)}</td></tr><tr><td>Deposit</td><td>${money(pricing.deposit_amount)}</td></tr><tr><td>Balance</td><td>${money(pricing.balance)}</td></tr></tbody></table><p class="total">Amount Due ${money(pricing.deposit_amount || pricing.total)}</p></section>
@@ -446,18 +447,22 @@ function drawInvoicePayment(doc, invoice, flow) {
   flow.y += 22;
   if (flow.y + 220 > flow.bottom) flow.nextPage();
   const y = flow.y;
-  const invoiceUrl = publicUrl("pay", invoice.secure_token);
+  const invoiceUrl = secureDocumentUrl(documentOrigin(), "pay", invoice);
   const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", invoice.tax], ["TOTAL", invoice.total], ["PAID", invoice.amount_paid], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
   rows.forEach(([label, value], index) => {
     doc.font(index === 5 ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor(navy);
     doc.text(label, 382, y + index * 24, { width: 95, lineBreak: false, characterSpacing: 0 });
     doc.text(money(value), 477, y + index * 24, { width: 87, align: "right", lineBreak: false });
   });
+  if (invoiceUrl) {
   doc.rect(38, y, 250, 76).strokeColor(brand.champagne).stroke();
   doc.font("Helvetica").fontSize(12).text("PAY ONLINE", 50, y + 14, { width: 226, align: "center", characterSpacing: 3, lineBreak: false });
   doc.font("Times-Roman").fontSize(8).text(invoiceUrl, 50, y + 38, { width: 226, align: "center", characterSpacing: 0, link: invoiceUrl });
   drawQrCode(doc, invoiceUrl, 80, y + 92, 84);
   doc.font("Helvetica").fontSize(8).fillColor(navy).text("SCAN TO PAY", 72, y + 184, { width: 100, align: "center", characterSpacing: 1, lineBreak: false });
+  } else {
+    doc.font("Helvetica").fontSize(10).text("Public access not available. Please contact The LOLA Booth.", 50, y + 14, {width:226});
+  }
   flow.y = y + 212;
   drawFlowText(doc, flow, "Thank you for trusting The Lola Booth with your special event.", "Times-Italic", 11);
 }
@@ -490,10 +495,6 @@ function drawQrCode(doc, value, x, y, size) {
     doc.rect(x - 4, y - 4, size + 8, size + 8).strokeColor(brand.champagne).stroke();
     doc.font("Helvetica").fontSize(8).fillColor(navy).text("QR unavailable", x, y + size / 2 - 4, { width: size, align: "center", lineBreak: false });
   }
-}
-
-function publicUrl(kind, token) {
-  return `${documentOrigin()}/${kind}/${token || ""}`;
 }
 
 function formatDate(value) {

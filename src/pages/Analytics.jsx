@@ -1,3 +1,4 @@
+import { GALLERY_ENABLED } from "../utils/features.js";
 import {useAuth} from "../context/AuthContext.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDisplay, formatMoney } from "../utils/display.js";
@@ -7,7 +8,7 @@ import { api } from "../api/client.js";
 
 export default function Analytics() {
   const {can}=useAuth();const [galleryActivity,setGalleryActivity]=useState(null);
-  useEffect(()=>{if(import.meta.env.VITE_APP_ENV!=="production"&&can("read:events"))api.get("/gallery-admin/analytics").then(r=>setGalleryActivity(r.data)).catch(()=>setGalleryActivity(null));},[]);
+  useEffect(()=>{if(GALLERY_ENABLED&&can("read:events"))api.get("/gallery-admin/analytics").then(r=>setGalleryActivity(r.data)).catch(()=>setGalleryActivity(null));},[]);
   const [data, setData] = useState(null);
   const [error,setError]=useState(""),[range,setRange]=useState("mtd"),[revision,setRevision]=useState(0);
 

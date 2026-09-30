@@ -1,3 +1,4 @@
+import { secureDocumentUrl } from "../../../shared/document-access.js";
 import { documentOrigin } from "../utils/public-document-url.js";
 import { normalizeInvoice } from "../../../shared/invoice-balance.js";
 import crypto from "node:crypto";
@@ -125,6 +126,7 @@ export async function generateAndStoreInvoice(invoice) {
 }
 
 export async function sendInvoice(req, invoice) {
+  if (!publicInvoiceUrl(invoice)) throw new AppError("Public access not available. Generate secure access before sending.", 409, "DOCUMENT_ACCESS_UNAVAILABLE");
   const doc = await generateAndStoreInvoice(invoice);
   const amountDue = invoice.amount_outstanding ?? invoice.balance_due;
   const invoiceUrl = publicInvoiceUrl(invoice);
@@ -225,5 +227,5 @@ function invoiceMergeData(invoice, invoiceUrl, amountDue) {
 }
 
 export function publicInvoiceUrl(invoice) {
-  return `${documentOrigin()}/pay/${invoice.secure_token}`;
+  return secureDocumentUrl(documentOrigin(), "pay", invoice);
 }

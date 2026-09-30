@@ -1,3 +1,4 @@
+import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {getReceiptView} from "./receipt-service.js";
 import {enqueueLifecycle} from './integration-jobs-service.js';
 import { documentOrigin } from "../utils/public-document-url.js";
@@ -223,17 +224,18 @@ async function recordProviderPayment(input) {
   await query("INSERT INTO payment_receipts(payment_id,invoice_id) VALUES($1,$2) ON CONFLICT(payment_id) DO NOTHING",[payment.id,input.invoiceId]);
   const customer=(await query("SELECT name,email FROM clients WHERE id=$1",[payment.client_id])).rows[0];
   if(customer?.email){
-    const url=`${documentOrigin()}/pay/${invoice.rows[0].secure_token}`;
-    const invoiceUrl=`${documentOrigin()}/invoice/${invoice.rows[0].secure_token}`;
-    const receiptUrl=`${documentOrigin()}/receipt/${invoice.rows[0].secure_token}/${payment.id}`;
+    const url=secureDocumentUrl(documentOrigin(), "pay", invoice.rows[0]);
+    const invoiceUrl=secureDocumentUrl(documentOrigin(), "invoice", invoice.rows[0]);
+    const receiptBase=secureDocumentUrl(documentOrigin(), "receipt", invoice.rows[0]);
+    const receiptUrl=receiptBase ? `${receiptBase}/${payment.id}` : null;
     const reconciled=(await query("SELECT * FROM invoices WHERE id=$1",[input.invoiceId])).rows[0];
     const receipt=await getReceiptView(reconciled,payment.id);
     const fmt=value=>new Intl.NumberFormat("en-US",{style:"currency",currency:payment.currency||"USD"}).format(value);
     const subject=`Payment confirmation — ${invoice.rows[0].invoice_number}`;
-    const body=`Thank you, ${customer.name}.\nWe received ${fmt(receipt.thisPayment)} for invoice ${receipt.invoiceNumber}.\nPayment date: ${String(receipt.paymentDate).slice(0,10)}\nInvoice total: ${fmt(receipt.invoiceTotal)}\nPreviously paid: ${fmt(receipt.previouslyPaid)}\nThis payment: ${fmt(receipt.thisPayment)}\nTotal paid: ${fmt(receipt.totalPaid)}\nRemaining balance: ${fmt(receipt.balanceDue)}\n${receipt.balanceDue===0?"Paid in full.":"A balance remains on your invoice."}\nView your receipt: ${receiptUrl}\nView your invoice: ${invoiceUrl}`;
+    const body=`Thank you, ${customer.name}.\nWe received ${fmt(receipt.thisPayment)} for invoice ${receipt.invoiceNumber}.\nPayment date: ${String(receipt.paymentDate).slice(0,10)}\nInvoice total: ${fmt(receipt.invoiceTotal)}\nPreviously paid: ${fmt(receipt.previouslyPaid)}\nThis payment: ${fmt(receipt.thisPayment)}\nTotal paid: ${fmt(receipt.totalPaid)}\nRemaining balance: ${fmt(receipt.balanceDue)}\n${receipt.balanceDue===0?"Paid in full.":"A balance remains on your invoice."}${receiptUrl ? `\nView your receipt: ${receiptUrl}\nView your invoice: ${invoiceUrl}` : "\nContact The LOLA Booth for a copy of your receipt."}`;
     await query(`INSERT INTO communications(client_id,event_id,invoice_id,type,channel,direction,recipient,subject,rendered_subject,rendered_body,rendered_html,status,send_mode,scheduled_at,idempotency_key,trigger_key)
       VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$7,'SCHEDULED','SCHEDULED',now(),$8,'PAYMENT_CONFIRMATION')
-      ON CONFLICT(idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,[payment.client_id,payment.event_id,input.invoiceId,customer.email,subject,body,brandedEmailHtml(body,{kicker:"Payment received",ctaLabel:"View Your Receipt",ctaUrl:receiptUrl,secondaryCta:receipt.balanceDue>0?{label:"Pay Remaining Balance",url}:undefined}),`payment-confirmation:${payment.id}`]);
+      ON CONFLICT(idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,[payment.client_id,payment.event_id,input.invoiceId,customer.email,subject,body,brandedEmailHtml(body,{kicker:"Payment received",ctaLabel:"View Your Receipt",ctaUrl:receiptUrl,secondaryCta:url&&receipt.balanceDue>0?{label:"Pay Remaining Balance",url}:undefined}),`payment-confirmation:${payment.id}`]);
   }
   await writeAudit({req:{},action:"payment_succeeded",entity:"payment",entityId:payment.id,after:{invoice_id:input.invoiceId,amount:payment.amount,currency:payment.currency,provider:payment.provider}});
   await enqueueLifecycle({action:'payment_succeeded',entityType:'payment',entityId:payment.id});

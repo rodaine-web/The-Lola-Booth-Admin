@@ -1,3 +1,4 @@
+import { documentAccessState } from "../../shared/document-access.js";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { Archive, ArrowLeft, Copy, Download, FileText, Mail, ReceiptText } from "lucide-react";
@@ -42,6 +43,7 @@ export default function ProposalDetail() {
   if (error && !proposal) return <main className="page"><AsyncState error={error} noun="proposal" onRetry={()=>{setError("");load();}}/></main>;
   if (!proposal) return <main className="page"><div className="empty-state">Loading proposal...</div></main>;
 
+  const accessAvailable = documentAccessState(proposal) === "AVAILABLE";
   return (
     <main className="page">
       <div className="detail-back"><Link to="/sales/proposals"><ArrowLeft size={16} />Back to proposals</Link></div>
@@ -53,8 +55,8 @@ export default function ProposalDetail() {
         </div>
         <div className="detail-actions">
           {can("write:sales") && ["DRAFT", "READY"].includes(proposal.status) && proposal.proposal_source !== "UPLOADED" && <Link className="primary-action" to={`/sales/proposals/${id}/edit`}>Edit proposal</Link>}
-          {proposal.public_url && <a href={proposal.public_url} target="_blank" rel="noreferrer">Public proposal</a>}
-          <button disabled={busy} className="primary-action" onClick={() => action(() => api.post(`/proposals/${id}/send`, {}), "Proposal submitted to the email provider.")}><Mail size={16} />Send</button>
+          {accessAvailable && proposal.public_url && <a href={proposal.public_url} target="_blank" rel="noreferrer">Public proposal</a>}
+          <button disabled={busy || !accessAvailable} className="primary-action" onClick={() => action(() => api.post(`/proposals/${id}/send`, {}), "Proposal submitted to the email provider.")}><Mail size={16} />Send</button>
           <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/pdf`, `${proposal.proposal_number}.pdf`), "PDF generated.")}><Download size={16} />PDF</button>
           <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/docx`, `${proposal.proposal_number}.docx`), "DOCX generated.")}><FileText size={16} />DOCX</button>
           <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/duplicate`, {}), "Proposal duplicated.")}><Copy size={16} />Duplicate</button>
@@ -63,6 +65,7 @@ export default function ProposalDetail() {
         </div>
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      {!accessAvailable && <section className="panel"><p role="status">Public access not available.</p>{can("write:sales") && <button disabled={busy} onClick={()=>action(()=>api.post(`/proposals/${id}/ensure-access`,{}),"Secure access generated.")}>Generate Secure Access</button>}</section>}
       <section className="detail-summary">
         <Metric label="Valid Through" value={proposal.valid_through ? formatDateOnly(proposal.valid_through) : "Unset"} />
         <Metric label="Sent" value={proposal.sent_at ? new Date(proposal.sent_at).toLocaleDateString() : "Not sent"} />

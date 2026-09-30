@@ -1,3 +1,4 @@
+import { GALLERY_ENABLED } from "../utils/features.js";
 import EnvironmentBadge from "./EnvironmentBadge.jsx";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, BriefcaseBusiness, CalendarDays, CircleDollarSign, ClipboardList, Gauge, HeartPulse, LogOut, Package, Search, Shield, Sparkles } from "lucide-react";
@@ -64,7 +65,7 @@ export default function Layout() {
         <button className="navigation-toggle" aria-expanded={navigationOpen} aria-controls="admin-navigation" onClick={() => setNavigationOpen(!navigationOpen)}>{navigationOpen ? "Close navigation" : "Menu"}</button>
         <nav id="admin-navigation" className={navigationOpen ? "navigation-open" : ""} aria-label="Main navigation">
           {sections.filter(section => import.meta.env.VITE_CMS_ENABLED !== "false" || section.label !== "Website").map((section) => {
-            const visibleItems = section.items.filter((item) => can(item.permission));
+            const visibleItems = section.items.filter((item) => can(item.permission) && (GALLERY_ENABLED || item.to !== "/operations/galleries"));
             if (!visibleItems.length) return null;
             const Icon = section.icon;
             return (

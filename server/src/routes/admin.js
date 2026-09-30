@@ -1,3 +1,6 @@
+import { secureDocumentUrl } from "../../../shared/document-access.js";
+import { documentOrigin } from "../utils/public-document-url.js";
+import { recoverDocumentAccess } from "../services/document-access-service.js";
 import {getReceiptView} from "../services/receipt-service.js";
 import {proposalVisualSchema} from "../services/proposal-visual-service.js";
 import {reviewData,classifyData} from "../services/data-review-service.js";
@@ -1295,7 +1298,7 @@ adminRouter.post("/proposals/upload", requireAnyPermission("proposals.upload", "
 adminRouter.get("/proposals/:id", requirePermission("read:sales"), asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.id);
   const versions = await query("SELECT id, version_number, created_at, created_by FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC", [req.params.id]);
-  res.json({ ...proposal, editable_input: proposalEditInput(proposal), public_url: `${env.publicBaseUrl.replace(/\/$/, "")}/proposal/${proposal.secure_token}`, versions: versions.rows });
+  res.json({ ...proposal, editable_input: proposalEditInput(proposal), public_url: secureDocumentUrl(documentOrigin(), "proposal", proposal), versions: versions.rows });
 }));
 
 adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(proposalSchema.partial()), asyncHandler(async (req, res) => {
@@ -2543,3 +2546,9 @@ adminRouter.post('/invoices/:id/reissue-access',requirePermission('write:finance
 adminRouter.get('/proposal-assets',requirePermission('write:sales'),asyncHandler(async(_req,res)=>{const rows=await query("SELECT id,filename,alt_text,mime_type FROM media_library WHERE deleted_at IS NULL AND visibility<>'ARCHIVED' AND permission_state='APPROVED' AND mime_type IN('image/jpeg','image/png') ORDER BY created_at DESC LIMIT 200");res.json({data:rows.rows});}));
 adminRouter.post('/proposal-assets',requirePermission('write:sales'),asyncHandler(async(req,res)=>{const b=z.object({filename:z.string().min(1).max(160),mimeType:z.enum(['image/jpeg','image/png']),data:z.string().min(1).max(14*1024*1024)}).parse(req.body);const media=await uploadMedia({...req,body:{...b,visibility:'PRIVATE',permissionState:'APPROVED',mediaType:'IMAGE',tags:['proposal-visual']}});await writeAudit({req,action:'proposal_asset_uploaded',entity:'media_library',entityId:media.id});res.status(201).json({id:media.id,filename:media.filename});}));
 adminRouter.get('/proposal-assets/:id/file',requirePermission('write:sales'),asyncHandler(async(req,res)=>{const row=(await query("SELECT storage_key,mime_type FROM media_library WHERE id=$1 AND deleted_at IS NULL AND permission_state='APPROVED' AND mime_type IN('image/jpeg','image/png')",[z.string().uuid().parse(req.params.id)])).rows[0];if(!row)throw notFound('Asset');res.set('Cache-Control','private, no-store').type(row.mime_type).send(await getStorageProvider().get(row.storage_key));}));
+
+for (const [kind, permission] of [["invoices", "write:finance"], ["proposals", "write:sales"]]) {
+  adminRouter.post(`/${kind}/:id/ensure-access`, requirePermission(permission), asyncHandler(async (req, res) => {
+    res.json(await recoverDocumentAccess(kind, z.string().uuid().parse(req.params.id), req));
+  }));
+}

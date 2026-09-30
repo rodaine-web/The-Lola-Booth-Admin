@@ -1,3 +1,4 @@
+import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {validateProposalVisuals,hydrateProposalVisuals} from "./proposal-visual-service.js";
 import {proposalCatalogError} from '../../../shared/proposal-catalog.js';
 import { documentOrigin } from "../utils/public-document-url.js";
@@ -238,6 +239,7 @@ export async function proposalPdfBuffer(proposal, type = "pdf") {
 }
 
 export async function sendProposal(req, proposal) {
+  if (!publicProposalUrl(proposal)) throw new AppError("Public access not available. Generate secure access before sending.", 409, "DOCUMENT_ACCESS_UNAVAILABLE");
   const doc = await generateAndStoreProposal(proposal, "pdf");
   const proposalUrl = publicProposalUrl(proposal);
   const mergeData = proposalMergeData(proposal, proposalUrl);
@@ -325,7 +327,7 @@ export function userDocumentFilename(kind, number, extension = "pdf") {
 }
 
 export function publicProposalUrl(proposal) {
-  return `${documentOrigin()}/proposal/${proposal.secure_token}`;
+  return secureDocumentUrl(documentOrigin(), "proposal", proposal);
 }
 
 function proposalEmailEvent(proposal) {

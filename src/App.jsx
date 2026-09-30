@@ -1,3 +1,4 @@
+import { GALLERY_ENABLED } from "./utils/features.js";
 import DataReview from "./pages/DataReview.jsx";
 import InvoiceLookup from "./pages/InvoiceLookup.jsx";
 import AuditLog from "./pages/AuditLog.jsx";
@@ -65,8 +66,8 @@ export default function App() {
       <Route path="/pay" element={<InvoiceLookup />} />
           <Route path="/pay/:token" element={<PublicInvoice />} />
           <Route path="/invoice/:token" element={<PublicInvoice />} />
-      <Route path="/gallery" element={<PublicGallery />} />
-      <Route path="/gallery/:type/:token" element={<PublicGallery />} />
+      {GALLERY_ENABLED && <><Route path="/gallery" element={<PublicGallery />} />
+      <Route path="/gallery/:type/:token" element={<PublicGallery />} /></>}
       <Route path="/delivery/:token" element={<PublicDelivery />} />
       <Route path="/my-events" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
       <Route path="/my-events/:eventId" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
@@ -115,8 +116,8 @@ export default function App() {
         <Route path="operations/live" element={<LiveOperations />} />
         <Route path="operations/tasks" element={<ResourcePage title="Tasks" endpoint="/tasks" columns={["title", "owner_name", "event_name", "client_name", "due_date", "priority", "status"]} fields={taskFields} />} />
         <Route path="operations/files" element={<ResourcePage title="Files" endpoint="/files" phase="Metadata model ready" columns={["filename", "category", "storage_provider", "created_at"]} />} />
-        <Route path="operations/galleries" element={<GalleryAdmin />} />
-        <Route path="operations/galleries/:id" element={<GalleryAdmin />} />
+        {GALLERY_ENABLED && <><Route path="operations/galleries" element={<GalleryAdmin />} />
+        <Route path="operations/galleries/:id" element={<GalleryAdmin />} /></>}
         <Route path="insights/analytics" element={<Analytics />} />
         <Route path="system/users" element={<Users />} />
         <Route path="system/integrations" element={<Integrations />} />

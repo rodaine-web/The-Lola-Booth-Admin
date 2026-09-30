@@ -1,3 +1,4 @@
+import { documentAccessState } from "../../shared/document-access.js";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, Copy, Download, Mail, Plus, XCircle } from "lucide-react";
@@ -54,6 +55,8 @@ export default function InvoiceDetail() {
   if (error && !invoice) return <main className="page"><AsyncState error={error} noun="invoice" onRetry={()=>{setError("");load();}}/></main>;
   if (!invoice) return <main className="page"><div className="empty-state">Loading invoice...</div></main>;
 
+  const accessAvailable = documentAccessState(invoice) === "AVAILABLE";
+
   return (
     <main className="page">
       <div className="detail-back"><Link to="/finance/invoices"><ArrowLeft size={16} />Back to invoices</Link></div>
@@ -64,9 +67,9 @@ export default function InvoiceDetail() {
           <p className="lede">{invoice.event_name || "No event"} · {invoice.status} · Outstanding {formatMoney(invoice.amount_outstanding ?? invoice.balance_due ?? 0)}</p>
         </div>
         <div className="detail-actions">
-          {invoice.public_url && <a href={invoice.public_url} target="_blank" rel="noreferrer">Public invoice</a>}
+          {accessAvailable && invoice.public_url && <a href={invoice.public_url} target="_blank" rel="noreferrer">Public invoice</a>}
           {canEdit && invoice.status === "DRAFT" && Number(invoice.amount_paid || 0) === 0 && <Link className="primary-action" to={`/finance/invoices/${id}/edit`}>Edit draft</Link>}
-          <button className="primary-action" onClick={() => action(() => api.post(`/invoices/${id}/send`, {}), "Invoice submitted to the email provider.")}><Mail size={16} />Send</button>
+          <button disabled={!accessAvailable} className="primary-action" onClick={() => action(() => api.post(`/invoices/${id}/send`, {}), "Invoice submitted to the email provider.")}><Mail size={16} />Send</button>
           <button onClick={() => action(() => api.download(`/invoices/${id}/pdf`, `${invoice.invoice_number}.pdf`), "PDF generated.")}><Download size={16} />PDF</button>
           <button onClick={() => action(() => api.post(`/invoices/${id}/duplicate`, {}), "Invoice duplicated.")}><Copy size={16} />Duplicate</button>
           <button onClick={() => action(() => api.post(`/invoices/${id}/void`, {}), "Invoice voided.")}><XCircle size={16} />Void</button>
@@ -74,7 +77,10 @@ export default function InvoiceDetail() {
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       {invoice.data_quality==='INCOMPLETE_HISTORICAL'&&<p className="toast" role="status">Historical invoice: line-item detail is missing. Original amounts are preserved; do not reconstruct charges without source records.</p>}
-      <section className="panel"><h2>Secure payment access</h2><p>{invoice.token_revoked_at?'This invoice link is revoked.':'The invoice PDF QR opens its unique secure LOLA payment page.'}</p><div className="button-row"><a href={invoice.public_url} target="_blank" rel="noreferrer">Open payment page</a><button onClick={()=>action(()=>api.post(`/invoices/${id}/revoke-access`,{}),'Invoice access revoked.')}>Revoke link</button><button onClick={()=>action(()=>api.post(`/invoices/${id}/reissue-access`,{}),'New secure link issued. Regenerate the PDF to use the new QR.')}>Reissue secure link</button></div><p className="note-text">Reissuing invalidates the previous QR and document link. It does not cancel a checkout already opened at a payment provider.</p></section>
+      <section className="panel"><h2>Secure payment access</h2>
+        {accessAvailable ? <><p>The invoice PDF QR opens its unique secure LOLA payment page.</p><div className="button-row"><a href={invoice.public_url} target="_blank" rel="noreferrer">Open payment page</a>{canEdit && <><button onClick={()=>action(()=>api.post(`/invoices/${id}/revoke-access`,{}),'Invoice access revoked.')}>Revoke link</button><button onClick={()=>action(()=>api.post(`/invoices/${id}/reissue-access`,{}),'New secure link issued. Regenerate the PDF to use the new QR.')}>Reissue secure link</button></>}</div></> : <><p role="status">Public access not available ({documentAccessState(invoice).toLowerCase()}).</p>{canEdit && <button onClick={()=>action(()=>api.post(`/invoices/${id}/ensure-access`,{}),'Secure access generated. Regenerate the PDF to use the new QR.')}>Generate Secure Access</button>}</>}
+        <p className="note-text">Generating or reissuing access does not cancel a checkout already opened at a payment provider.</p>
+      </section>
       <section className="detail-summary">
         <Metric label="Total" value={formatMoney(invoice.total || 0)} />
         <Metric label="Paid" value={formatMoney(invoice.amount_paid || 0)} />

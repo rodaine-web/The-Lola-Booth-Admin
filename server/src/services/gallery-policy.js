@@ -1,3 +1,4 @@
+import { galleryEnabled } from "../../../shared/features.js";
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { AppError } from "../utils/errors.js";
@@ -9,12 +10,7 @@ export const unavailable = () =>
     "GALLERY_UNAVAILABLE",
   );
 export function assertGalleryEnvironment(config = process.env) {
-  if (
-    config.APP_ENV === "production" ||
-    !["staging", "development", "test"].includes(
-      config.APP_ENV || config.NODE_ENV,
-    )
-  )
+  if (!galleryEnabled(config))
     throw new AppError(
       "Gallery preview is not enabled in this environment.",
       404,

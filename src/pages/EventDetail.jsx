@@ -1,3 +1,4 @@
+import { GALLERY_ENABLED } from "../utils/features.js";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { ArrowLeft, CheckCircle2, ClipboardList, Download, MessageSquare, Plus, TriangleAlert } from "lucide-react";
@@ -192,7 +193,8 @@ export default function EventDetail() {
             </div>
             <DataTable rows={event.operations?.incidents || []} columns={["severity", "type", "quick_issue", "description", "status"]} empty="No incidents." />{(event.operations?.incidents||[]).filter(item=>!['RESOLVED','CLOSED'].includes(item.status)).map(item=><button key={item.id} onClick={()=>action(()=>api.patch(`/events/${id}/incidents/${item.id}`,{status:'RESOLVED',resolution_notes:incident.description||'Resolved by operations manager'}),"Incident resolved.")}>Resolve {item.description}</button>)}
           </Panel>
-          <Panel title="Gallery / Completion">
+          <Panel title={GALLERY_ENABLED ? "Gallery / Completion" : "Completion"}>
+            {GALLERY_ENABLED && <>
             <Link className="primary-action" to={`/operations/galleries?eventId=${id}`}>Manage private gallery</Link>
             <Field label="Gallery" value={event.gallery_status} />
             <div className="button-row">
@@ -202,6 +204,7 @@ export default function EventDetail() {
               <button onClick={() => action(() => api.post(`/events/${id}/gallery-delivery/revoke`, {}), "Gallery delivery revoked.")}>Revoke Delivery</button>
               {event.gallery_url && <a className="inline-link" href={event.gallery_url}>Preview Gallery</a>}
             </div>
+            </>}
             <Field label="Incomplete Checklist" value={event.operations?.completion?.incomplete_checklist_count} />
             <Field label="Equipment Not Returned" value={event.operations?.completion?.equipment_not_returned_count} />
             <Field label="Open Incidents" value={event.operations?.completion?.open_incident_count} />
