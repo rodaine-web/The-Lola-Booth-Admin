@@ -12,7 +12,7 @@ Full test suite: 264 passed, zero failed, zero skipped, with the database-backed
 
 | Area | Status | Evidence | Remaining issue |
 |---|---|---|---|
-| Gallery data model | PASS | Unique event album; typed grants; same-album composite assignment foreign keys; forward migrations 029/030 | Hosted migration verification follows deployment |
+| Gallery data model | PASS | Unique event album; typed grants; same-album composite assignment foreign keys; forward migrations 029/030 | Staging migrations 029 and 030 verified in deployment logs |
 | Album access | PASS | SQL-backed full approved album authorization tests | Hosted storage qualification |
 | Personal access | PASS | Only assigned visible media; cannot switch to album route; many-to-many tests | Hosted storage qualification |
 | QR | PASS | Generated QR decoded in tests to typed secure URL | Scan hosted QA grant after bucket setup |
@@ -34,7 +34,7 @@ Full test suite: 264 passed, zero failed, zero skipped, with the database-backed
 | Partial balance | PASS | $1,500 invoice / $500 payment / $1,000 balance, HTTP and model tests | None locally |
 | Paid in full | PASS | Model tests and explicit layout simulation; no payment CTA when paid | No new hosted Checkout run in this sprint |
 | Refund display | PASS | Refund amount/date and original payment history retained; model tests and layout simulation | No real refund executed |
-| Tests | PASS | 264/264, zero skipped | Rerun after final edits |
+| Tests | PASS | 264/264, zero skipped | Final committed candidate rerun: 264 passed, zero skipped |
 | Build | PASS WITH MINOR ISSUE | Staging build passes | Existing bundle size warning |
 | Visual QA | PARTIAL | Gallery/Admin/customer/lightbox/receipt/proposal screenshot and PDF pack | Staging private storage and owner acceptance outstanding |
 
@@ -50,10 +50,30 @@ Local disk storage is explicitly test/development only. V1 accepts JPEG/PNG/GIF;
 
 Staging deployment status is recorded below after verification. No production deployment is part of this candidate. Staging email stays disabled and worker automation processing stays paused; gallery email drafts and send guards are tested locally. Actual Microsoft gallery delivery requires a separately controlled staging qualification send.
 
-Verdict pending hosted verification: **GALLERY + ADMIN EXPERIENCE READY WITH CONDITIONS**.
+Current verdict: **GALLERY + ADMIN EXPERIENCE READY WITH CONDITIONS**.
 
 PRODUCTION DEPLOYMENT: **NOT AUTHORIZED**
 
 GALLERY STORAGE: **NOT READY**
 
 FIESTA INTEGRATION: **ARCHITECTURE READY**
+
+
+## Verified staging deployment
+
+Candidate revision: `072140b16fae2c0841deef6a3ebb6e351f084258`.
+
+| Component | Revision / evidence | Status |
+|---|---|---|
+| Staging Admin | `/build-info.json` reports 072140b; Vercel deployment 98ciYhjh5Lvd2R9Uqa9YjhzFwW73 | PASS |
+| Staging API | `/api/health` HTTP 200, environment staging, revision 072140b; Railway deployment a7407ce3-b0ba-4e44-8d00-ca262694b362 | PASS |
+| Staging worker | Railway deployment 8bc361fb-5ee5-4954-92a5-f43faea7896f SUCCESS, startup logged; candidate APP_REVISION 072140b | PASS; authenticated heartbeat check pending |
+| Staging database | API startup logs explicitly applied 029 and 030 and completed migrations | PASS |
+| Customer gallery entry | `https://staging.thelolabooth.com/gallery` renders; invalid code produces generic unavailable message | PASS |
+| Capability URL response headers | Gallery route: no-store and no-referrer | PASS |
+| Staging authenticated checks | Fresh Admin session requested | BLOCKED pending owner sign-in |
+| Production API / Admin | Both still report a55a1ad767558765b9f134bdb464033033c7b029 | Unchanged |
+
+The first staging health probe ran during container startup and returned 502; the completed API returned 200. Staging email remains disabled; the staging worker's existing environment guard always pauses general job processing. No hosted galleries or customer records were created during this deployment. No production deployment or external email was performed.
+
+Owner review: staging Admin `https://stagingadmin.thelolabooth.com`; public entry `https://staging.thelolabooth.com/gallery`. Local evidence index: `audit-output/gallery-experience/index.html`. Private staging bucket setup remains necessary to qualify populated hosted gallery flows.
