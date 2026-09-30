@@ -73,7 +73,7 @@ export const inquirySchema = baseInquirySchema
   .superRefine((value, ctx) => {
     const required =
       publicFormKind(value) === "CONTACT"
-        ? ["topic", "message"]
+        ? (value.formKind === "CONTACT" ? ["topic", "message"] : [])
         : ["phone", "eventDate", "eventType", "city", "state"];
     for (const field of required)
       if (!value[field])
@@ -103,6 +103,7 @@ export const inquirySchema = baseInquirySchema
     } = value;
     return {
       ...contact,
+      topic: contact.topic || "General inquiry",
       formKind: "CONTACT",
       form_id: "contact",
       marketing_email_opt_in: false,

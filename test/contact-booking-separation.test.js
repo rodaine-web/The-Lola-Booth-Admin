@@ -110,3 +110,12 @@ test("retry replay does not notify owner or customer again", async () => {
   });
   assert.equal(sent, 0);
 });
+
+
+test("approved legacy Contact payload remains compatible without booking semantics", () => {
+  const contact = inquirySchema.parse({firstName:"Legacy",lastName:"QA",email:"qa@example.com",form_id:"contact",eventDate:"2027-10-10",eventType:"Other",city:"Chicago",state:"IL"});
+  assert.equal(contact.formKind,"CONTACT");
+  assert.equal(contact.topic,"General inquiry");
+  assert.equal(contact.eventDate,undefined);
+  assert.equal(contact.eventType,undefined);
+});
