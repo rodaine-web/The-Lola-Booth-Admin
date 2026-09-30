@@ -153,7 +153,7 @@ export async function handleStripeWebhook(rawBody, signature) {
       await recordProviderPayment({
         provider: "STRIPE",
         providerPaymentId: object.payment_intent || object.id,
-        providerSessionId: object.id,
+        providerSessionId: event.type.startsWith("checkout.") ? object.id : null,
         invoiceId: object.metadata?.invoice_id,
         clientId: object.metadata?.client_id,
         eventId: object.metadata?.event_id,
@@ -193,7 +193,15 @@ async function recordProviderPayment(input) {
   const invoice = await query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [input.invoiceId]);
   if (!invoice.rows[0]) throw notFound("Invoice");
   const prior = (await query("SELECT * FROM payments WHERE provider=$1 AND provider_payment_id=$2",[input.provider,input.providerPaymentId])).rows[0];
-  if (prior) return prior;
+  if (prior) {
+    // Checkout and PaymentIntent notifications can arrive in either order.
+    // Complete the matching attempt even when the payment already exists.
+    if (input.providerSessionId) {
+      await query("UPDATE payment_attempts SET status='SUCCEEDED', provider_reference=$4, updated_at=now() WHERE invoice_id=$1 AND provider=$2 AND provider_session_id=$3", [input.invoiceId, input.provider, input.providerSessionId, input.providerPaymentId]);
+      await query("UPDATE payments SET provider_session_id=$2 WHERE id=$1 AND provider_session_id IS DISTINCT FROM $2", [prior.id, input.providerSessionId]);
+    }
+    return prior;
+  }
   const attempt = (await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND (provider_session_id=$3 OR provider_reference=$4 OR status='PENDING') ORDER BY created_at DESC LIMIT 1",[input.invoiceId,input.provider,input.providerSessionId,input.providerPaymentId])).rows[0];
   if (!attempt || cents(attempt.amount)!==cents(input.amount) || attempt.currency!==input.currency || input.amount<=0 || input.amount>invoiceBalance(invoice.rows[0])) throw new AppError("Payment does not match the server invoice checkout.",409,"PAYMENT_MISMATCH");
   input.clientId=invoice.rows[0].client_id;
@@ -206,7 +214,7 @@ async function recordProviderPayment(input) {
        RETURNING *`,
       [input.invoiceId, input.eventId || invoice.rows[0].event_id, input.clientId || invoice.rows[0].client_id, input.provider, input.providerPaymentId, input.providerSessionId || null, input.amount, input.currency, input.paymentMethod]
     );
-    await client.query("UPDATE payment_attempts SET status='SUCCEEDED', updated_at=now() WHERE invoice_id=$1 AND provider=$2 AND (provider_session_id=$3 OR provider_reference=$4)", [input.invoiceId, input.provider, input.providerSessionId || null, input.providerPaymentId || null]);
+    await client.query("UPDATE payment_attempts SET status='SUCCEEDED', provider_reference=$2, updated_at=now() WHERE id=$1", [attempt.id, input.providerPaymentId]);
     return result.rows[0];
   });
   await reconcileInvoice(input.invoiceId, { action: "payment_succeeded" });

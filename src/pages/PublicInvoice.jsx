@@ -63,7 +63,7 @@ export default function PublicInvoice() {
         <Metric label="Status" value={invoice.status} />
       </section>
       <section className="panel public-invoice-items"><h2>Line Items</h2><DataTable rows={invoice.items} columns={["description", "quantity", "unit_price", "line_total"]} empty="No invoice items." /></section>
-      <section className="panel" id="payment-options">
+      {amountDue <= 0 ? <section className="panel" id="payment-options"><h2>No payment due</h2><p>This invoice has no outstanding balance.</p></section> : <section className="panel" id="payment-options">
         <h2>Choose payment method</h2>
         <p className="note-text">Amount due: {formatMoney(paymentOptions?.amountDue ?? invoice.amount_outstanding ?? invoice.balance_due ?? 0)}. Flexible payment options may be available at checkout.</p>
         {paymentOptions?.providers?.length ? (
@@ -77,7 +77,7 @@ export default function PublicInvoice() {
         ) : (
           <p className="note-text">{paymentOptions?.offlinePaymentInstructions || "Online checkout is not configured for this invoice."}</p>
         )}
-      </section>
+      </section>}
       {invoice.payments?.some(p=>p.receipt_available)&&<section className="panel"><h2>Receipts</h2>{invoice.payments.filter(p=>p.receipt_available).map(p=><p key={p.id}><a href={`${API_URL}/public/invoices/${token}/receipts/${p.id}/pdf`}>Download receipt · {formatMoney(p.amount)} · {formatDateOnly(p.payment_date)}</a></p>)}</section>}
       <a className="primary-action public-download" href={`${API_URL}/public/invoices/${token}/pdf`}><Download size={16} />Download PDF</a>
     </main>
