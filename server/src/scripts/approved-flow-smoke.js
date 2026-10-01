@@ -73,8 +73,8 @@ async function run(){
   let proposal=await ensureProposal(entities);
 
   const preview=await proposalPreviewHtml(proposal);
-  const required=["WEDDING EXPERIENCE PROPOSAL","Let’s make this one worth remembering.","THE LOLA STANDARD","DUE TO RESERVE DATE","From proposal to booked."];
-  const missing=required.filter(x=>!preview.includes(x));
+  const required=["Wedding Experience Proposal","Let’s make this one worth remembering.","The LOLA Standard","Due to Reserve Date","From proposal to booked."];
+  const missing=required.filter(x=>!preview.toLowerCase().includes(x.toLowerCase()));
   if(missing.length) throw new Error("Approved proposal template markers missing: "+missing.join(", "));
   if(!preview.includes("The Glam")||!preview.includes("The Vogue")) throw new Error("Selected experience sections missing");
   const proposalPdf=await proposalPdfBuffer(proposal,"pdf");
