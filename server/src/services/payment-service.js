@@ -44,9 +44,18 @@ export async function publicPaymentOptions(invoice) {
   const s = settings.rows[0] || {};
   const status = providerStatus();
   const payable = isInvoicePayable(invoice);
+  const balance = invoiceBalance(invoice);
+  const configuredMinimum = money(invoice.pricing_snapshot?.amount_due_now || balance);
+  const depositRemaining = Math.max(0, configuredMinimum - money(invoice.amount_paid || 0));
+  const amountDue = depositRemaining > 0 ? Math.min(depositRemaining, balance) : balance;
   return {
     payable,
-    amountDue: invoiceBalance(invoice),
+    amountDue,
+    fullAmount: balance,
+    minimumAmount: depositRemaining > 0 ? amountDue : Math.min(1, balance),
+    paymentMode: invoice.pricing_snapshot?.payment_mode || "BALANCE_DUE",
+    allowPayInFull: invoice.pricing_snapshot?.allow_pay_in_full !== false,
+    allowCustomAmount: invoice.pricing_snapshot?.allow_custom_amount !== false,
     currency: invoice.currency || s.currency || "USD",
     providers: [
       ...(payable && s.stripe_enabled && status.stripe.enabled && ["TEST_READY", "LIVE_READY"].includes(status.stripe.readiness) ? [{ provider: "STRIPE", label: "Card / wallet checkout" }] : []),
@@ -56,21 +65,31 @@ export async function publicPaymentOptions(invoice) {
   };
 }
 
-export async function createPaymentSession({ token, provider, idempotencyKey }) {
+export async function createPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey }) {
   const invoice = await loadInvoiceByToken(token);
   if (!isInvoicePayable(invoice)) throw new AppError("This invoice is not payable.", 409, "INVOICE_NOT_PAYABLE");
   const normalizedProvider = String(provider || "").toUpperCase();
   if (!["STRIPE", "PAYPAL"].includes(normalizedProvider)) throw new AppError("Unsupported payment provider.", 400, "UNSUPPORTED_PROVIDER");
   const options = await publicPaymentOptions(invoice);
   if (!options.providers.some((item) => item.provider === normalizedProvider)) throw new AppError("This payment provider is not configured.", 409, "PAYMENT_PROVIDER_UNAVAILABLE");
-  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,options.amountDue])).rows[0];
+  let selectedAmount = options.amountDue;
+  if (amountChoice === "FULL") {
+    if (!options.allowPayInFull) throw new AppError("Pay in full is not available for this invoice.",409,"PAYMENT_OPTION_UNAVAILABLE");
+    selectedAmount = options.fullAmount;
+  }
+  if (amountChoice === "CUSTOM") {
+    if (!options.allowCustomAmount) throw new AppError("Custom payment amounts are not available for this invoice.",409,"PAYMENT_OPTION_UNAVAILABLE");
+    selectedAmount = money(customAmount);
+    if (!Number.isFinite(selectedAmount) || selectedAmount < options.minimumAmount || selectedAmount > options.fullAmount) throw new AppError(`Choose an amount between ${options.minimumAmount.toFixed(2)} and ${options.fullAmount.toFixed(2)}.`,422,"INVALID_PAYMENT_AMOUNT");
+  }
+  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount])).rows[0];
   if(pending)return safeSession(pending,normalizedProvider);
-  const key = `${normalizedProvider}:${invoice.id}:${cents(options.amountDue)}:${idempotencyKey || "default"}`;
+  const key = `${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}`;
   const existing = await query("SELECT * FROM payment_attempts WHERE idempotency_key=$1 AND invoice_id=$2 AND provider=$3 LIMIT 1", [key, invoice.id, normalizedProvider]);
   if (existing.rows[0] && existing.rows[0].status === "PENDING" && Date.now()-new Date(existing.rows[0].created_at).getTime()<23*3600000) return safeSession(existing.rows[0], normalizedProvider);
   if (existing.rows[0]) throw new AppError("This checkout has ended. Please refresh and try again.", 409, "CHECKOUT_ENDED");
-  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency);
-  return createPaypalOrder(invoice, key, options.currency);
+  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice);
+  return createPaypalOrder(invoice, key, options.currency, selectedAmount, amountChoice);
 }
 
 export async function recordManualPayment(req) {
@@ -282,8 +301,7 @@ async function recordProviderRefund(input) {
   return refund;
 }
 
-async function createStripeCheckout(invoice, key, currency) {
-  const amount = invoiceBalance(invoice);
+async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT") {
   const params = new URLSearchParams({
     mode: "payment",
     success_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success`,
@@ -306,12 +324,11 @@ async function createStripeCheckout(invoice, key, currency) {
   });
   const data = await response.json();
   if (!response.ok) throw new AppError(safeProviderMessage(data.error?.message), 502, "STRIPE_SESSION_FAILED");
-  await insertAttempt({ invoice, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING" });
+  await insertAttempt({ invoice, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice });
   return { provider: "STRIPE", checkoutUrl: data.url, sessionId: data.id, amount, currency };
 }
 
-async function createPaypalOrder(invoice, key, currency) {
-  const amount = invoiceBalance(invoice);
+async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT") {
   const token = await paypalAccessToken();
   const response = await fetch(`${paypalBaseUrl()}/v2/checkout/orders`, {
     method: "POST",
@@ -325,16 +342,16 @@ async function createPaypalOrder(invoice, key, currency) {
   const data = await response.json();
   if (!response.ok) throw new AppError(safeProviderMessage(data.message), 502, "PAYPAL_ORDER_FAILED");
   const checkoutUrl = data.links?.find((link) => link.rel === "approve")?.href;
-  await insertAttempt({ invoice, provider: "PAYPAL", key, amount, currency, providerSessionId: data.id, checkoutUrl, status: "PENDING" });
+  await insertAttempt({ invoice, provider: "PAYPAL", key, amount, currency, providerSessionId: data.id, checkoutUrl, status: "PENDING", amountChoice });
   return { provider: "PAYPAL", checkoutUrl, sessionId: data.id, amount, currency };
 }
 
-async function insertAttempt({ invoice, provider, key, amount, currency, providerSessionId, checkoutUrl, status }) {
+async function insertAttempt({ invoice, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT" }) {
   await query(
     `INSERT INTO payment_attempts (invoice_id, client_id, event_id, proposal_id, provider, provider_reference, provider_session_id, checkout_url, amount, currency, status, idempotency_key, metadata)
      VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number })]
+    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number, amount_choice: amountChoice })]
   );
 }
 

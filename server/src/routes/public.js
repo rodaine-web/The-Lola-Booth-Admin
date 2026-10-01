@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { recordActivity } from "../services/activity-service.js";
+import { createNotification } from "../services/notification-service.js";
 import { query } from "../db/pool.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { AppError } from "../utils/errors.js";
@@ -209,7 +210,8 @@ publicRouter.post("/proposals/:token/accept", asyncHandler(async (req, res) => {
   );
   if (!updated.rows[0]) throw new AppError("This proposal has already been updated. Refresh to see its current status.",409,"PROPOSAL_STATE_CHANGED");
   await recordActivity({ entityType: "proposal", entityId: proposal.id, action: "proposal_accepted", summary: `Proposal ${proposal.proposal_number} accepted by ${body.acceptedByName}` });
-  res.json({ proposal: updated.rows[0] });
+  await createNotification({ roleTarget: "OWNER_ADMIN", category: "SALES", severity: "HIGH", title: `Proposal ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted ${proposal.proposal_number}. Next step: create and send the deposit invoice.`, entityType: "proposal", entityId: proposal.id, actionUrl: `/sales/proposals/${proposal.id}`, metadata: { nextStep: "CREATE_DEPOSIT_INVOICE", acceptedBy: body.acceptedByName }, email: { enabled: true, subject: `LOLA: ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted the proposal. Create and send the deposit invoice from the Admin portal.` } }).catch(error => req.log?.warn({ code:error.code }, "Proposal acceptance notification failed"));
+  res.json({ proposal: updated.rows[0], nextStep: { action: "CREATE_DEPOSIT_INVOICE", label: "Create and send deposit invoice" } });
 }));
 
 publicRouter.post("/proposals/:token/decline", asyncHandler(async (req, res) => {
@@ -237,8 +239,8 @@ publicRouter.get("/invoices/:token", asyncHandler(async (req, res) => {
 }));
 
 publicRouter.post("/invoices/:token/payment-session", asyncHandler(async (req, res) => {
-  const body = z.object({ provider: z.enum(["STRIPE", "PAYPAL"]), idempotencyKey: z.string().trim().max(200).optional() }).parse(req.body);
-  res.status(201).json(await createPaymentSession({ token: req.params.token, provider: body.provider, idempotencyKey: body.idempotencyKey }));
+  const body = z.object({ provider: z.enum(["STRIPE", "PAYPAL"]), amountChoice: z.enum(["DEPOSIT","FULL","CUSTOM"]).default("DEPOSIT"), customAmount: z.coerce.number().positive().optional(), idempotencyKey: z.string().trim().max(200).optional() }).parse(req.body);
+  res.status(201).json(await createPaymentSession({ token: req.params.token, provider: body.provider, amountChoice: body.amountChoice, customAmount: body.customAmount, idempotencyKey: body.idempotencyKey }));
 }));
 
 publicRouter.get("/invoices/:token/pdf", asyncHandler(async (req, res) => {
