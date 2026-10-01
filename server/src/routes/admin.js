@@ -1380,10 +1380,9 @@ adminRouter.get("/proposals/:id/preview", requirePermission("read:sales"), async
 
 adminRouter.get("/proposals/:id/pdf", requirePermission("read:sales"), asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.id);
-  const document = await generateAndStoreProposal(proposal, "pdf");
-  await recordGeneratedFile({ req, document, entityType: "proposal", entity: proposal });
   const buffer = await proposalPdfBuffer(proposal, "pdf");
-  res.type("application/pdf").attachment(document.filename).send(buffer);
+  const filename = `LOLA-Proposal-${String(proposal.proposal_number || "document").replace(/[^a-z0-9._-]+/gi, "-")}.pdf`;
+  res.type("application/pdf").attachment(filename).send(buffer);
 }));
 
 adminRouter.get("/proposals/:id/docx", requirePermission("read:sales"), asyncHandler(async (req, res) => {
