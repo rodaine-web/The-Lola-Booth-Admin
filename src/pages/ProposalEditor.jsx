@@ -21,15 +21,19 @@ export default function ProposalEditor() {
   const [mode, setMode] = useState("create");
   const [addon, setAddon] = useState({ addon_id: "", quantity: 1 });
   const [customLine, setCustomLine] = useState({ description: "", detail: "", quantity: 1, unit_price: "" });
+  const [experienceOptions, setExperienceOptions] = useState([]);
   const [upload, setUpload] = useState({ filename: "", pdf_base64: "" });
   const [form, setForm] = useState({
     lead_id: params.get("leadId") || "",
     client_id: params.get("clientId") || "",
     event_id: params.get("eventId") || "",
     proposal_title: "Custom Experience Proposal",
+    proposal_type: "PRIVATE_EVENT",
     proposal_date: new Date().toISOString().slice(0, 10),
     package_id: "",
     experience_id: "",
+    selected_experiences: [],
+    proposal_visuals: {},
     status: "DRAFT",
     deposit_type: "PERCENTAGE",
     deposit_value: 30,
@@ -41,6 +45,9 @@ export default function ProposalEditor() {
   const [saving,setSaving]=useState(false);
 
   useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
+  useEffect(() => {
+    api.get("/experiences?pageSize=100").then((result) => setExperienceOptions(result?.data || result || [])).catch(() => setExperienceOptions([]));
+  }, []);
 
   useEffect(() => {
     if (form.event_id && !form.client_id) {
@@ -52,6 +59,32 @@ export default function ProposalEditor() {
 
   function setField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function toggleExperience(experience) {
+    setForm((current) => {
+      const selected = current.selected_experiences || [];
+      const exists = selected.some((item) => item.experience_id === experience.id);
+      const next = exists
+        ? selected.filter((item) => item.experience_id !== experience.id)
+        : [...selected, {
+            experience_id: experience.id,
+            name: experience.name,
+            package_name: "",
+            price: Number(experience.base_price || 0),
+            headline: "",
+            description: experience.proposal_description || experience.description || "",
+            visuals: {}
+          }];
+      return { ...current, selected_experiences: next, experience_id: next[0]?.experience_id || current.experience_id || "" };
+    });
+  }
+
+  function updateSelectedExperience(index, patch) {
+    setForm((current) => ({
+      ...current,
+      selected_experiences: (current.selected_experiences || []).map((item, i) => i === index ? { ...item, ...patch } : item)
+    }));
   }
 
   function updateSection(index, patch) {
@@ -108,6 +141,13 @@ export default function ProposalEditor() {
             <label>Lead<RelationshipSelect resource="leads" value={form.lead_id} placeholder="Lead" onChange={(value) => setField("lead_id", value)} /></label>
             <label>Client<RelationshipSelect resource="clients" value={form.client_id} placeholder="Client" onChange={(value) => setField("client_id", value)} /></label>
             <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={(value) => setField("event_id", value)} /></label>
+            <label>Proposal type<select value={form.proposal_type || "PRIVATE_EVENT"} onChange={(event) => setField("proposal_type", event.target.value)}>
+              <option value="WEDDING">Wedding</option>
+              <option value="PRIVATE_EVENT">Private Event</option>
+              <option value="CORPORATE">Corporate</option>
+              <option value="BRAND_ACTIVATION">Brand Activation</option>
+              <option value="CUSTOM">Custom</option>
+            </select></label>
             <label>Proposal title<input value={form.proposal_title || ""} onChange={(event) => setField("proposal_title", event.target.value)} /></label>
             <label>Proposal date<input type="date" value={form.proposal_date || ""} onChange={(event) => setField("proposal_date", event.target.value)} /></label>
             <label>Expiration date<input type="date" value={form.valid_through || ""} onChange={(event) => setField("valid_through", event.target.value)} /></label>
@@ -125,6 +165,36 @@ export default function ProposalEditor() {
 
         {mode === "create" && (
           <>
+            <section className="panel">
+              <h2>Selected Experiences</h2>
+              <p className="lede">Every selected experience becomes its own visual section in the client proposal.</p>
+              <div className="proposal-experience-picker">
+                {experienceOptions.map((experience) => {
+                  const selected = (form.selected_experiences || []).some((item) => item.experience_id === experience.id);
+                  return <button type="button" key={experience.id} className={selected ? "proposal-experience-choice selected" : "proposal-experience-choice"} onClick={() => toggleExperience(experience)}>
+                    <strong>{experience.name}</strong><span>{selected ? "Selected" : "Add to proposal"}</span>
+                  </button>;
+                })}
+              </div>
+              <div className="proposal-experience-editors">
+                {(form.selected_experiences || []).map((item, index) => (
+                  <article className="proposal-experience-editor" key={item.experience_id || index}>
+                    <div className="section-toolbar">
+                      <strong>{item.name || `Experience ${index + 1}`}</strong>
+                      <button type="button" aria-label="Remove experience" onClick={() => toggleExperience({ id: item.experience_id })}><Trash2 size={14} /></button>
+                    </div>
+                    <div className="form-grid">
+                      <label>Display name<input value={item.name || ""} onChange={(event) => updateSelectedExperience(index, { name: event.target.value })} /></label>
+                      <label>Package name<input value={item.package_name || ""} onChange={(event) => updateSelectedExperience(index, { package_name: event.target.value })} /></label>
+                      <label>Price<input type="number" min="0" step="0.01" value={item.price ?? ""} onChange={(event) => updateSelectedExperience(index, { price: event.target.value })} /></label>
+                      <label>Headline<input value={item.headline || ""} onChange={(event) => updateSelectedExperience(index, { headline: event.target.value })} /></label>
+                      <label className="wide">Description<textarea value={item.description || ""} onChange={(event) => updateSelectedExperience(index, { description: event.target.value })} /></label>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
             <section className="panel">
               <h2>Services / Pricing</h2>
               <div className="form-grid">
