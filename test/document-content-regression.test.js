@@ -25,7 +25,7 @@ test('proposal PDFs retain every custom section, late bullet, and long paragraph
   }));
   const pages = await readPdf(await generateProposalPdf({ ...proposal, editable_sections: sections }));
   const text = pages.map(p => p.text).join(' ');
-  assert.ok(pages.length > 2);
+  assert.ok(pages.length >= 6);
   for (let i = 0; i < 12; i++) {
     assert.ok(text.includes(`BULLET_MARKER_${i}`), `missing bullet ${i}`);
     if (i !== 5) assert.ok(text.includes(`BODY_MARKER_${i}`), `missing body ${i}`);

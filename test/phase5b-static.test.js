@@ -49,13 +49,12 @@ test("brand settings and CSS expose the Phase 5B visual system", () => {
 
 test("proposal, invoice, receipt, and email outputs use branded language", () => {
   for (const snippet of [
-    "EVENT PROPOSAL",
-    "Your event. Their favorite memory.",
-    "Your LOLA Experience",
-    "Your Package",
+    "WEDDING EXPERIENCE PROPOSAL",
+    "Let’s make this one worth remembering.",
+    "THE LOLA STANDARD",
     "Your Investment",
-    "What Happens Next",
-    "Let's make it official.",
+    "DUE TO RESERVE DATE",
+    "From proposal to booked.",
     "LOLA_Horizontal_Dark_Transparent.png",
     "LOLA_Primary_Dark_Transparent.png",
     "LOLA_LB_Monogram_Gold.png"

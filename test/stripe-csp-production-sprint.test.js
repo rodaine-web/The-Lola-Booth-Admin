@@ -18,10 +18,13 @@ test("Stripe hosted checkout is server-side and does not require frontend publis
   assert.doesNotMatch(publicInvoice, /Stripe\(|loadStripe|js\.stripe\.com/);
 });
 
-test("Stripe payment sessions are scoped to trusted invoice amount and invoice idempotency", () => {
+test("Stripe payment sessions are scoped to trusted invoice payment choices and invoice idempotency", () => {
   const sessionSlice = paymentService.slice(paymentService.indexOf("export async function createPaymentSession"), paymentService.indexOf("export async function recordManualPayment"));
-  assert.match(paymentService, /const amount = invoiceBalance\(invoice\)/);
-  assert.match(sessionSlice, /const key = `\$\{normalizedProvider\}:\$\{invoice\.id\}:\$\{cents\(options\.amountDue\)\}:/);
+  assert.match(paymentService, /amountChoice = "DEPOSIT"/);
+  assert.match(sessionSlice, /selectedAmount = options\.amountDue/);
+  assert.match(sessionSlice, /selectedAmount = options\.fullAmount/);
+  assert.match(sessionSlice, /selectedAmount < options\.minimumAmount \|\| selectedAmount > options\.fullAmount/);
+  assert.match(sessionSlice, /cents\(selectedAmount\)/);
   assert.match(sessionSlice, /WHERE idempotency_key=\$1 AND invoice_id=\$2 AND provider=\$3/);
   assert.doesNotMatch(sessionSlice, /req\.body\.amount|body\.amountDue|amount_total: req/);
 });

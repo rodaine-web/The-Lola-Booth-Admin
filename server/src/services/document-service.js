@@ -647,21 +647,31 @@ function addNextStepsPage(doc, proposal) {
 }
 
 function addProposalSectionAppendix(doc, proposal) {
-  const sections=proposal.editable_sections||[];
-  let page=proposalSelectedExperiences(proposal).length+6;
-  for(const section of sections){
-    doc.addPage(); addPdfHeader(doc,proposal.proposal_number);
-    doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text(String(section.title||"DETAIL").toUpperCase(),42,178,{characterSpacing:1.5});
-    doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(13).text(strip(section.body||""),42,215,{width:520,lineGap:4});
-    let y=doc.y+18;
-    for(const item of section.items||[]){
-      if(y>650){addPdfFooter(doc,page++);doc.addPage();addPdfHeader(doc,proposal.proposal_number);y=180;}
-      doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(9).text("✓",48,y);
-      doc.fillColor(brand.charcoal).font("Helvetica").fontSize(9).text(strip(item),64,y,{width:480});
-      y=doc.y+12;
+  const sections = proposal.editable_sections || [];
+  let page = proposalSelectedExperiences(proposal).length + 6;
+  const flow = {
+    x: 42, y: 182, width: 528, bottom: 674,
+    nextPage() {
+      addPdfFooter(doc, page++);
+      doc.addPage();
+      addPdfHeader(doc, proposal.proposal_number);
+      this.y = 182;
     }
-    addPdfFooter(doc,page++);
+  };
+  for (const [index, section] of sections.entries()) {
+    const title = `${String(index + 1).padStart(2, "0")}. ${String(section.title || "DETAIL").toUpperCase()}`;
+    if (flow.y + 38 > flow.bottom) flow.nextPage();
+    drawFlowText(doc, flow, title, "Helvetica-Bold", 10, brand.gold);
+    flow.y += 10;
+    drawFlowText(doc, flow, strip(section.body || ""), "Times-Roman", 10, brand.charcoal);
+    flow.y += 8;
+    for (const item of section.items || []) {
+      drawFlowText(doc, flow, `✓ ${strip(item)}`, "Helvetica", 9, brand.charcoal);
+      flow.y += 5;
+    }
+    flow.y += 16;
   }
+  addPdfFooter(doc, page);
 }
 
 function strip(value) {
