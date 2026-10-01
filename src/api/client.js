@@ -1,4 +1,13 @@
-const API_URL = import.meta.env?.VITE_API_URL || "/api";
+function resolveApiUrl() {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host === "stagingadmin.thelolabooth.com") return "https://stagingapi.thelolabooth.com/api";
+    if (host === "admin.thelolabooth.com") return "https://api.thelolabooth.com/api";
+  }
+  return import.meta.env?.VITE_API_URL || "/api";
+}
+
+const API_URL = resolveApiUrl();
 
 let accessToken = localStorage.getItem("lola_access_token");
 let refreshToken = localStorage.getItem("lola_refresh_token");
