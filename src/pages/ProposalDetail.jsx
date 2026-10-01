@@ -3,13 +3,14 @@ import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
 import { Archive, ArrowLeft, Copy, Download, FileText, Mail, ReceiptText } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import DocumentPreview from "../components/DocumentPreview.jsx";
 import { api } from "../api/client.js";
 
 export default function ProposalDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { can } = useAuth();
   const [proposal, setProposal] = useState(null);
   const [error, setError] = useState("");
@@ -40,6 +41,17 @@ export default function ProposalDetail() {
     } finally {setBusy(false);}
   }
 
+  async function createDepositInvoice() {
+    if (busy) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const invoice = await api.post(`/proposals/${id}/create-invoice`, { depositOnly: true });
+      navigate(`/finance/invoices/${invoice.id}`);
+    } catch (err) {
+      setError(err.message);
+    } finally { setBusy(false); }
+  }
+
   if (error && !proposal) return <main className="page"><AsyncState error={error} noun="proposal" onRetry={()=>{setError("");load();}}/></main>;
   if (!proposal) return <main className="page"><div className="empty-state">Loading proposal...</div></main>;
 
@@ -61,10 +73,11 @@ export default function ProposalDetail() {
           <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/docx`, `${proposal.proposal_number}.docx`), "DOCX generated.")}><FileText size={16} />DOCX</button>
           <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/duplicate`, {}), "Proposal duplicated.")}><Copy size={16} />Duplicate</button>
           <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/archive`, {}), "Proposal archived.")}><Archive size={16} />Archive</button>
-          <button className="primary-action" disabled={busy||proposal.status !== "ACCEPTED"} onClick={() => action(() => api.post(`/proposals/${id}/create-invoice`, { depositOnly: true }), "Deposit invoice created.")}><ReceiptText size={16} />Deposit Invoice</button>
+          <button className="primary-action" disabled={busy||proposal.status !== "ACCEPTED"} onClick={createDepositInvoice}><ReceiptText size={16} />Create Deposit Invoice</button>
         </div>
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      {proposal.status === "ACCEPTED" && <section className="panel"><h2>Proposal accepted</h2><p><strong>Next step:</strong> create the deposit invoice, review it, then send the secure payment link to the client.</p><button className="primary-action" disabled={busy} onClick={createDepositInvoice}><ReceiptText size={16} />Create Deposit Invoice & Continue</button></section>}
       {!accessAvailable && <section className="panel"><p role="status">Public access not available.</p>{can("write:sales") && <button disabled={busy} onClick={()=>action(()=>api.post(`/proposals/${id}/ensure-access`,{}),"Secure access generated.")}>Generate Secure Access</button>}</section>}
       <section className="detail-summary">
         <Metric label="Valid Through" value={proposal.valid_through ? formatDateOnly(proposal.valid_through) : "Unset"} />

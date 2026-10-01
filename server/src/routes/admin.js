@@ -1458,16 +1458,17 @@ adminRouter.patch("/invoices/:id", requirePermission("write:finance"), validate(
 
 adminRouter.get("/invoices/:id/pdf", requirePermission("read:finance"), asyncHandler(async (req, res) => {
   const invoice = await getInvoice(req.params.id);
-  const document = await generateAndStoreInvoice(invoice);
-  await recordGeneratedFile({ req, document, entityType: "invoice", entity: invoice });
   const buffer = await generateInvoicePdf(invoice);
-  res.type("application/pdf").attachment(document.filename).send(buffer);
+  const filename = `LOLA-Invoice-${String(invoice.invoice_number || "document").replace(/[^a-z0-9._-]+/gi, "-")}.pdf`;
+  res.type("application/pdf").attachment(filename).send(buffer);
 }));
 
 adminRouter.post("/invoices/:id/send", requirePermission("write:finance"), asyncHandler(async (req, res) => {
   const invoice = await getInvoice(req.params.id);
   const result = await sendInvoice(req, invoice);
-  await recordGeneratedFile({ req, document: result.document, entityType: "invoice", entity: invoice });
+  if (result.document?.storageKey) {
+    await recordGeneratedFile({ req, document: result.document, entityType: "invoice", entity: invoice });
+  }
   await writeAudit({ req, action: "invoice_sent", entity: "invoice", entityId: invoice.id, before: invoice });
   res.json(result);
 }));

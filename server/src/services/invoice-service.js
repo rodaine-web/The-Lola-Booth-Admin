@@ -33,6 +33,10 @@ export async function getInvoice(idOrToken, { publicView = false } = {}) {
 }
 
 export async function createInvoice(req) {
+  if (req.body.proposal_id && req.body.depositOnly) {
+    const existing = await query("SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status <> 'VOID' AND COALESCE(pricing_snapshot->>'payment_mode','')='DEPOSIT_REQUEST' ORDER BY created_at DESC LIMIT 1", [req.body.proposal_id]);
+    if (existing.rows[0]) return existing.rows[0];
+  }
   const invoice = await transaction(async (client) => {
     const settings = await client.query("SELECT * FROM business_settings LIMIT 1");
     let source = {};
@@ -48,10 +52,10 @@ export async function createInvoice(req) {
         discount: 0
       }));
     }
-    if (req.body.depositOnly && source.pricing_snapshot) {
-      items = [{ description: `Deposit for ${source.proposal_number}`, quantity: 1, unit_price: source.pricing_snapshot.deposit_amount, taxable: false, tax_rate: 0, discount: 0 }];
-    }
     const totals = calculateInvoiceTotals(items);
+    const amountDueNow = req.body.depositOnly && source.pricing_snapshot
+      ? money(Math.min(Number(source.pricing_snapshot.deposit_amount || 0), Number(totals.total || 0)))
+      : money(totals.total);
     const invoiceNumber = await nextNumber(client, "next_invoice_number", "invoice_prefix", "LOLA-INV");
     const dueDate = req.body.due_date || new Date(Date.now() + Number(settings.rows[0]?.invoice_default_due_days || 7) * 86400000).toISOString().slice(0, 10);
     const documentTemplateKey = req.body.document_template_key || (req.body.corporate_billing ? "corporate_invoice" : "standard_invoice");
@@ -68,7 +72,7 @@ export async function createInvoice(req) {
     const invoice = await client.query(
       `INSERT INTO invoices (invoice_number, proposal_id, client_id, event_id, status, subtotal, discount, tax, total, amount_paid, balance_due, amount_outstanding, due_date, notes, terms, secure_token, pricing_snapshot, document_template_key, corporate_billing)
        VALUES ($1,$2,$3,$4,'DRAFT',$5,$6,$7,$8,0,$8,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || settings.rows[0]?.invoice_default_notes, req.body.terms || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify(totals), documentTemplateKey, JSON.stringify(corporateBilling)]
+      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling)]
     );
     for (const item of totals.items) {
       await client.query(
@@ -127,8 +131,18 @@ export async function generateAndStoreInvoice(invoice) {
 
 export async function sendInvoice(req, invoice) {
   if (!publicInvoiceUrl(invoice)) throw new AppError("Public access not available. Generate secure access before sending.", 409, "DOCUMENT_ACCESS_UNAVAILABLE");
-  const doc = await generateAndStoreInvoice(invoice);
-  const amountDue = invoice.amount_outstanding ?? invoice.balance_due;
+  const pdfBuffer = await generateInvoicePdf(invoice);
+  const doc = {
+    filename: `LOLA-Invoice-${String(invoice.invoice_number || "document").replace(/[^a-z0-9._-]+/gi, "-")}.pdf`,
+    mimeType: "application/pdf",
+    sizeBytes: pdfBuffer.length,
+    buffer: pdfBuffer,
+    storageProvider: null,
+    storageKey: null
+  };
+  const minimumDue = Number(invoice.pricing_snapshot?.amount_due_now || 0);
+  const alreadyPaid = Number(invoice.amount_paid || 0);
+  const amountDue = minimumDue > alreadyPaid ? money(minimumDue - alreadyPaid) : money(invoice.amount_outstanding ?? invoice.balance_due);
   const invoiceUrl = publicInvoiceUrl(invoice);
   const mergeData = invoiceMergeData(invoice, invoiceUrl, amountDue);
   let rendered = null;
