@@ -82,9 +82,10 @@ async function ensureTestProposal(userId) {
   const glam = (await query("SELECT * FROM experiences WHERE deleted_at IS NULL AND active=true AND lower(name) LIKE '%glam%' ORDER BY display_order NULLS LAST, created_at LIMIT 1")).rows[0];
   if (!glam) throw new Error("Glam experience not found");
 
-  let client = await query("SELECT * FROM clients WHERE deleted_at IS NULL AND lower(email)=lower($1) AND name=$2 LIMIT 1", [TARGET, "QA Smoke Test Client"]);
+  const testClientEmail = "qa-smoke-proposal-20261001@thelolabooth.com";
+  let client = await query("SELECT * FROM clients WHERE deleted_at IS NULL AND lower(email)=lower($1) LIMIT 1", [testClientEmail]);
   if (!client.rows[0]) {
-    client = await query("INSERT INTO clients (name,email,client_type,referral_source) VALUES ($1,$2,'INDIVIDUAL','SYSTEM_TEST') RETURNING *", ["QA Smoke Test Client", TARGET]);
+    client = await query("INSERT INTO clients (name,email,client_type,referral_source) VALUES ($1,$2,'INDIVIDUAL','SYSTEM_TEST') RETURNING *", ["QA Smoke Test Client", testClientEmail]);
   }
 
   let event = await query("SELECT * FROM events WHERE deleted_at IS NULL AND client_id=$1 AND event_name=$2 LIMIT 1", [client.rows[0].id, "QA SMOKE TEST - DO NOT FULFILL"]);
