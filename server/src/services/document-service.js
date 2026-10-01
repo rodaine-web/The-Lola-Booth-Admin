@@ -546,7 +546,7 @@ export async function generatePaymentReceiptPdf(payment) {
 
 export async function storeDocument({ buffer, filename, mimeType }) {
   const storage = getStorageProvider();
-  const stored = await storage.put({ buffer, filename });
+  const stored = await storage.put({ buffer, filename, mimeType });
   return { ...stored, filename, mimeType, sizeBytes: buffer.length };
 }
 
