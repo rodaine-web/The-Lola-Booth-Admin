@@ -32,6 +32,27 @@ function providerWithFetch(fetchImpl, overrides = {}) {
   });
 }
 
+async function withNeutralEmailPolicy(fn) {
+  const previous = {
+    APP_ENV: process.env.APP_ENV,
+    NODE_ENV: process.env.NODE_ENV,
+    STAGING_EMAIL_ENABLED: process.env.STAGING_EMAIL_ENABLED,
+    PRODUCTION_EMAIL_ENABLED: process.env.PRODUCTION_EMAIL_ENABLED
+  };
+  process.env.APP_ENV = "test";
+  process.env.NODE_ENV = "test";
+  delete process.env.STAGING_EMAIL_ENABLED;
+  delete process.env.PRODUCTION_EMAIL_ENABLED;
+  try {
+    return await fn();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 function microsoftReadinessConfig(overrides = {}) {
   return {
     emailProvider: "microsoft",
@@ -113,8 +134,8 @@ test("Microsoft provider requests an app-only Graph token and caches it", async 
     return response(202);
   });
 
-  await provider.send({ to: "client@example.com", subject: "Hello", body: "Text body" });
-  await provider.send({ to: "client@example.com", subject: "Hello again", body: "Text body" });
+  await withNeutralEmailPolicy(() => provider.send({ to: "client@example.com", subject: "Hello", body: "Text body" }));
+  await withNeutralEmailPolicy(() => provider.send({ to: "client@example.com", subject: "Hello again", body: "Text body" }));
 
   const tokenCalls = calls.filter((call) => call.url.includes("/oauth2/v2.0/token"));
   const sendCalls = calls.filter((call) => call.url.includes("/sendMail"));
@@ -129,7 +150,7 @@ test("Microsoft provider treats Graph 202 sendMail as successful acceptance", as
     ? response(200, { access_token: "token-1", expires_in: 3600 })
     : response(202));
 
-  const result = await provider.send({ to: "client@example.com", subject: "Accepted", body: "Text body" });
+  const result = await withNeutralEmailPolicy(() => provider.send({ to: "client@example.com", subject: "Accepted", body: "Text body" }));
 
   assert.equal(result.provider, "microsoft");
   assert.equal(result.status, "SENT");
@@ -143,7 +164,7 @@ test("Microsoft provider sends cc, bcc, reply-to, HTML, and file attachments", a
     return url.includes("/token") ? response(200, { access_token: "token-1", expires_in: 3600 }) : response(202);
   });
 
-  await provider.send({
+  await withNeutralEmailPolicy(() => provider.send({
     to: "client@example.com",
     cc: "planner@example.com",
     bcc: ["archive@example.com"],
@@ -151,7 +172,7 @@ test("Microsoft provider sends cc, bcc, reply-to, HTML, and file attachments", a
     subject: "Documents",
     html: "<p>Your proposal is ready.</p>",
     attachments: [{ filename: "proposal.pdf", mimeType: "application/pdf", storageKey: "proposal.pdf" }]
-  });
+  }));
 
   const sendCall = calls.find((call) => call.url.includes("/sendMail"));
   const payload = JSON.parse(sendCall.options.body);
@@ -169,7 +190,7 @@ test("Microsoft provider reports token failures without exposing token details",
   const provider = providerWithFetch(async () => response(401, { error: "invalid_client", access_token: "secret" }));
 
   await assert.rejects(
-    () => provider.send({ to: "client@example.com", subject: "Hello", body: "Text body" }),
+    () => withNeutralEmailPolicy(() => provider.send({ to: "client@example.com", subject: "Hello", body: "Text body" })),
     (error) => error.code === "MICROSOFT_TOKEN_FAILED" && error.details.status === 401
   );
 });
@@ -191,7 +212,7 @@ test("Microsoft provider surfaces 403, 429, and 500 send errors", async () => {
       : response(status, { retryAfter: "30" }));
 
     await assert.rejects(
-      () => provider.send({ to: "client@example.com", subject: "Hello", body: "Text body" }),
+      () => withNeutralEmailPolicy(() => provider.send({ to: "client@example.com", subject: "Hello", body: "Text body" })),
       (error) => error.code === code && error.details.status === status
     );
   }
@@ -201,7 +222,7 @@ test("Microsoft provider validates required provider configuration", async () =>
   const provider = providerWithFetch(async () => response(202), { clientSecret: "" });
 
   await assert.rejects(
-    () => provider.send({ to: "client@example.com", subject: "Hello", body: "Text body" }),
+    () => withNeutralEmailPolicy(() => provider.send({ to: "client@example.com", subject: "Hello", body: "Text body" })),
     (error) => error.code === "EMAIL_PROVIDER_MISCONFIGURED" && error.message.includes("MICROSOFT_CLIENT_SECRET")
   );
 });
@@ -212,6 +233,7 @@ test("env check requires Microsoft settings only when EMAIL_PROVIDER=microsoft",
     encoding: "utf8",
     env: {
       ...process.env,
+      APP_ENV: "production",
       NODE_ENV: "production",
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lola_admin",
       JWT_SECRET: "x".repeat(40),
