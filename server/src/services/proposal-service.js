@@ -289,7 +289,15 @@ export async function proposalPdfBuffer(proposal, type = "pdf") {
 
 export async function sendProposal(req, proposal) {
   if (!publicProposalUrl(proposal)) throw new AppError("Public access not available. Generate secure access before sending.", 409, "DOCUMENT_ACCESS_UNAVAILABLE");
-  const doc = await generateAndStoreProposal(proposal, "pdf");
+  const pdfBuffer = await proposalPdfBuffer(proposal, "pdf");
+  const doc = {
+    filename: userDocumentFilename("Proposal", proposal.proposal_number, "pdf"),
+    mimeType: "application/pdf",
+    sizeBytes: pdfBuffer.length,
+    buffer: pdfBuffer,
+    storageProvider: null,
+    storageKey: null
+  };
   const proposalUrl = publicProposalUrl(proposal);
   const mergeData = proposalMergeData(proposal, proposalUrl);
   let rendered = null;
