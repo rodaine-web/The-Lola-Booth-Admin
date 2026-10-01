@@ -14,6 +14,7 @@ import { normalizeInvoice, invoiceBalanceSql } from "../../../shared/invoice-bal
 import { assertManagedUser, assertGrantablePermissions, assignUserPermissions } from '../services/user-access-service.js';
 import { Router } from "express";
 import { env } from "../config/env.js";
+import { logger } from "../config/logger.js";
 import { proposalEditInput } from "../services/proposal-edit-input.js";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
@@ -1782,9 +1783,35 @@ adminRouter.post("/users", requirePermission("create:users"), asyncHandler(async
     subject: "Your LOLA Admin invitation",
     body: `You have been invited to LOLA Admin. Set your password here: ${setupUrl}`,
     html: brandedEmailHtml("You have been invited to LOLA Admin. Use the secure link below to set your password.", { firstName: body.first_name || body.name.split(" ")[0], ctaLabel: "Set Password", ctaUrl: setupUrl })
-  }).then(() => ({ok:true})).catch(() => ({ok:false}));
-  await writeAudit({ req, action: "user_invited", entity: "user", entityId: created.id, after: { ...created, roles: body.roles, email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED" } });
-  res.status(201).json({ ...created, roles: body.roles, deliveryError: !delivery.ok });
+  }).then((result) => ({ ok: true, result })).catch((error) => {
+    logger.error({
+      err: error,
+      action: "user_invitation_send",
+      userId: created.id,
+      recipient: body.email,
+      code: error?.code,
+      statusCode: error?.statusCode
+    }, "LOLA Admin invitation email delivery failed");
+    return { ok: false, errorCode: error?.code || "EMAIL_SEND_FAILED" };
+  });
+  await writeAudit({
+    req,
+    action: delivery.ok ? "user_invited" : "user_invitation_delivery_failed",
+    entity: "user",
+    entityId: created.id,
+    after: {
+      ...created,
+      roles: body.roles,
+      email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      email_error_code: delivery.ok ? null : delivery.errorCode
+    }
+  });
+  res.status(201).json({
+    ...created,
+    roles: body.roles,
+    deliveryError: !delivery.ok,
+    deliveryErrorCode: delivery.ok ? null : delivery.errorCode
+  });
 }));
 
 adminRouter.patch("/users/:id", requirePermission("edit:users"), asyncHandler(async (req, res) => {
@@ -1863,9 +1890,32 @@ adminRouter.post("/users/:id/resend-invitation", requirePermission("invitations.
     subject: "Your LOLA Admin invitation",
     body: `You have been invited to LOLA Admin. Set your password here: ${setupUrl}`,
     html: brandedEmailHtml("You have been invited to LOLA Admin. Use the secure link below to set your password.", { firstName: user.first_name || user.name.split(" ")[0], ctaLabel: "Set Password", ctaUrl: setupUrl })
-  }).then(() => ({ok:true})).catch(() => ({ok:false}));
-  await writeAudit({ req, action: delivery.ok ? "user_invitation_resent" : "user_invitation_delivery_failed", entity: "user", entityId: user.id });
-  res.status(201).json({ ok: true, deliveryError: !delivery.ok });
+  }).then((result) => ({ ok: true, result })).catch((error) => {
+    logger.error({
+      err: error,
+      action: "user_invitation_resend",
+      userId: user.id,
+      recipient: user.email,
+      code: error?.code,
+      statusCode: error?.statusCode
+    }, "LOLA Admin invitation resend email delivery failed");
+    return { ok: false, errorCode: error?.code || "EMAIL_SEND_FAILED" };
+  });
+  await writeAudit({
+    req,
+    action: delivery.ok ? "user_invitation_resent" : "user_invitation_delivery_failed",
+    entity: "user",
+    entityId: user.id,
+    after: {
+      email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      email_error_code: delivery.ok ? null : delivery.errorCode
+    }
+  });
+  res.status(201).json({
+    ok: true,
+    deliveryError: !delivery.ok,
+    deliveryErrorCode: delivery.ok ? null : delivery.errorCode
+  });
 }));
 
 adminRouter.post("/users/:id/password-reset", requirePermission("password_resets.send"), asyncHandler(async (req, res) => {
@@ -1875,9 +1925,40 @@ adminRouter.post("/users/:id/password-reset", requirePermission("password_resets
   const { token, tokenHash } = createAccountToken();
   await query(`INSERT INTO user_account_tokens (user_id, token_hash, token_type, expires_at, created_by) VALUES ($1,$2,'PASSWORD_RESET',now() + interval '2 hours',$3)`, [user.id, tokenHash, req.user.id]);
   const resetUrl = setupPasswordUrl(token);
-  const delivery = await sendEmail({ to: user.email, subject: "Reset your LOLA Admin password", body: `Reset your password: ${resetUrl}`, html: brandedEmailHtml("A LOLA Admin password reset was requested. Use the secure link below to set a new password.", { firstName: user.name.split(" ")[0], ctaLabel: "Reset Password", ctaUrl: resetUrl }) }).then(() => ({ok:true})).catch(() => ({ok:false}));
-  await writeAudit({ req, action: delivery.ok ? "password_reset_sent" : "password_reset_delivery_failed", entity: "user", entityId: user.id });
-  res.status(201).json({ ok: true, deliveryError: !delivery.ok });
+  const delivery = await sendEmail({
+    to: user.email,
+    subject: "Reset your LOLA Admin password",
+    body: `Reset your password: ${resetUrl}`,
+    html: brandedEmailHtml(
+      "A LOLA Admin password reset was requested. Use the secure link below to set a new password.",
+      { firstName: user.name.split(" ")[0], ctaLabel: "Reset Password", ctaUrl: resetUrl }
+    )
+  }).then((result) => ({ ok: true, result })).catch((error) => {
+    logger.error({
+      err: error,
+      action: "user_password_reset_send",
+      userId: user.id,
+      recipient: user.email,
+      code: error?.code,
+      statusCode: error?.statusCode
+    }, "LOLA Admin password reset email delivery failed");
+    return { ok: false, errorCode: error?.code || "EMAIL_SEND_FAILED" };
+  });
+  await writeAudit({
+    req,
+    action: delivery.ok ? "password_reset_sent" : "password_reset_delivery_failed",
+    entity: "user",
+    entityId: user.id,
+    after: {
+      email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      email_error_code: delivery.ok ? null : delivery.errorCode
+    }
+  });
+  res.status(201).json({
+    ok: true,
+    deliveryError: !delivery.ok,
+    deliveryErrorCode: delivery.ok ? null : delivery.errorCode
+  });
 }));
 adminRouter.get("/media-library", ...listRoute("media_library", ["filename", "alt_text", "storage_key"], "read:website"));
 adminRouter.get("/website-content", ...listRoute("website_content", ["content_key", "title", "seo_title"], "read:website"));
