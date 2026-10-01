@@ -344,6 +344,36 @@
       "destination": "/staging-site/assets/:path*"
     },
     {
+      "source": "/proposal/:token",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/proposal.html?token=:token"
+    },
+    {
+      "source": "/proposals/:token",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/proposal.html?token=:token"
+    },
+    {
+      "source": "/pay/:token",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/pay.html?token=:token"
+    },
+    {
       "source": "/(.*)",
       "destination": "/admin.html"
     }
