@@ -5,7 +5,7 @@ import { Archive, ArrowLeft, Copy, Download, FileText, Mail, ReceiptText } from 
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import DocumentPreview from "../components/DocumentPreview.jsx";
+import AdminProposalPreview from "../components/AdminProposalPreview.jsx";
 import { api } from "../api/client.js";
 
 export default function ProposalDetail() {
@@ -73,7 +73,7 @@ export default function ProposalDetail() {
         <Metric label="Accepted By" value={proposal.accepted_by_name || "Not accepted"} />
       </section>
       <section className="panel"><h2>Version history</h2>{proposal.versions?.length ? <ul>{proposal.versions.map(version => <li key={version.id}>Version {version.version_number} · {new Date(version.created_at).toLocaleString()}</li>)}</ul> : <p>No saved versions.</p>}</section>
-      <DocumentPreview path={`/proposals/${id}/pdf`} title="Proposal preview" />
+      <AdminProposalPreview id={id} />
     </main>
   );
 }
