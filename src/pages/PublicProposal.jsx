@@ -39,10 +39,16 @@ export default function PublicProposal() {
 
   return (
     <PublicShell>
-      <div className="public-heading">
-        <p className="eyebrow">{proposal.proposal_number}</p>
-        <h1>Proposal for {proposal.client_name || "your event"}</h1>
-        <p className="lede">{proposal.event_name || proposal.event_type} · {proposal.event_date ? formatDateOnly(proposal.event_date) : "Date TBD"}</p>
+      <div className="public-proposal-toolbar">
+        <div>
+          <p className="eyebrow">{proposal.proposal_number}</p>
+          <strong>{proposal.client_name || "Your LOLA Proposal"}</strong>
+          <span>{proposal.event_name || proposal.event_type} · {proposal.event_date ? formatDateOnly(proposal.event_date) : "Date TBD"}</span>
+        </div>
+        <div className="public-proposal-toolbar-actions">
+          <a href={`${API_URL}/public/proposals/${token}/pdf`}><Download size={15} />Download PDF</a>
+          <a href={`mailto:info@thelolabooth.com?subject=${encodeURIComponent(`Question about ${proposal.proposal_number}`)}`}>Ask a Question</a>
+        </div>
       </div>
       {(notice || error) && <div role={error?"alert":"status"} className={error ? "toast error" : "toast"}>{notice || error}</div>}
       {proposal.status === "ACCEPTED" && (
@@ -54,23 +60,26 @@ export default function PublicProposal() {
           </div>
         </section>
       )}
-      <section className="detail-summary">
-        <Metric label="Total" value={formatMoney(pricing.total || proposal.total || 0)} />
-        <Metric label="Deposit" value={formatMoney(pricing.deposit_amount || 0)} />
-        <Metric label="Balance" value={formatMoney(pricing.balance || 0)} />
-        <Metric label="Status" value={proposal.status} />
-      </section>
       <ProposalPreview key={token} token={token} />
-      <section className="panel">
-        <h2>Acceptance</h2>
+      <section className="panel public-proposal-acceptance">
+        <h2>Ready to make it official?</h2>
+        <div className="public-proposal-totals">
+          <Metric label="Proposal Total" value={formatMoney(pricing.total || proposal.total || 0)} />
+          <Metric label="Due Today" value={formatMoney(pricing.deposit_amount || 0)} />
+          <Metric label="Remaining Balance" value={formatMoney(pricing.balance || 0)} />
+        </div>
         <p className="note-text">{payload.acceptanceWording}</p>
         <div className="inline-form note-form">
           <input aria-label="Your full name" value={acceptedByName} onChange={(event) => setAcceptedByName(event.target.value)} placeholder="Your full name" />
           <button className="primary-action" disabled={busy || !acceptedByName.trim() || proposal.status === "ACCEPTED"} onClick={() => decide("accept", { acceptedByName })}><CheckCircle2 size={16} />Accept</button>
           <button disabled={busy || proposal.status === "ACCEPTED"} onClick={() => decide("decline")}><XCircle size={16} />Decline</button>
-          <a className="primary-action" href={`${API_URL}/public/proposals/${token}/pdf`}><Download size={16} />PDF</a>
+          <a href={`mailto:info@thelolabooth.com?subject=${encodeURIComponent(`Question about ${proposal.proposal_number}`)}`}>Ask a Question</a>
         </div>
       </section>
+      <div className="public-proposal-sticky">
+        <div><span>Proposal total</span><strong>{formatMoney(pricing.total || proposal.total || 0)}</strong></div>
+        <a href="#proposal-acceptance" onClick={(event) => { event.preventDefault(); document.querySelector(".public-proposal-acceptance")?.scrollIntoView({ behavior: "smooth" }); }}>Accept Proposal</a>
+      </div>
     </PublicShell>
   );
 }
