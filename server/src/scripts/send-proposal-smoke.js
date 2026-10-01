@@ -25,10 +25,17 @@ async function run() {
   );
   if (!owner.rows[0]) throw new Error("No active user available for test ownership");
 
-  const client = await query(
-    "INSERT INTO clients (name,email,client_type,referral_source) VALUES ($1,$2,'INDIVIDUAL','SYSTEM_TEST') RETURNING *",
-    ["LOLA Proposal Test", TARGET]
+  const testClientEmail = "proposal-test-20261001@thelolabooth.com";
+  let client = await query(
+    "SELECT * FROM clients WHERE deleted_at IS NULL AND lower(email)=lower($1) LIMIT 1",
+    [testClientEmail]
   );
+  if (!client.rows[0]) {
+    client = await query(
+      "INSERT INTO clients (name,email,client_type,referral_source) VALUES ($1,$2,'INDIVIDUAL','SYSTEM_TEST') RETURNING *",
+      ["LOLA Proposal Test", testClientEmail]
+    );
+  }
 
   const event = await query(
     `INSERT INTO events (event_name,client_id,event_type,event_date,experience_id,status,internal_notes)
