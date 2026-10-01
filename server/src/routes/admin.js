@@ -1396,7 +1396,9 @@ adminRouter.get("/proposals/:id/docx", requirePermission("read:sales"), asyncHan
 adminRouter.post("/proposals/:id/send", requirePermission("write:sales"), asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.id);
   const result = await sendProposal(req, proposal);
-  await recordGeneratedFile({ req, document: result.document, entityType: "proposal", entity: proposal });
+  if (result.document?.storageKey) {
+    await recordGeneratedFile({ req, document: result.document, entityType: "proposal", entity: proposal });
+  }
   await recordActivity({actorUserId:req.user.id,entityType:"proposal",entityId:proposal.id,action:"proposal_sent",summary:"Proposal sent to email provider"});
   await writeAudit({ req, action: "proposal_sent", entity: "proposal", entityId: proposal.id, before: proposal });
   res.json(result);
