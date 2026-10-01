@@ -48,6 +48,25 @@ export async function buildProposalSnapshot(input) {
   const ev = event.rows[0] || {};
   const pack = pkg.rows[0] || {};
   const experience = exp.rows[0] || {};
+  const selectedInput = Array.isArray(input.selected_experiences) ? input.selected_experiences : [];
+  const selectedIds = selectedInput.map((item) => item?.experience_id).filter(Boolean);
+  const selectedExperienceRows = selectedIds.length
+    ? (await query("SELECT * FROM experiences WHERE id = ANY($1::uuid[])", [selectedIds])).rows
+    : [];
+  const selectedExperiences = selectedInput.map((item, index) => {
+    const catalog = selectedExperienceRows.find((row) => row.id === item.experience_id) || {};
+    return {
+      experience_id: item.experience_id || catalog.id || null,
+      key: item.key || proposalExperienceKey(item.name || catalog.name || `experience-${index + 1}`),
+      name: item.name || catalog.name || `Experience ${index + 1}`,
+      package_name: item.package_name || "",
+      price: money(item.price ?? item.unit_price ?? catalog.base_price ?? 0),
+      headline: item.headline || "",
+      description: item.description || catalog.proposal_description || catalog.description || "",
+      features: Array.isArray(item.features) ? item.features : [],
+      visuals: item.visuals || {}
+    };
+  });
   const addonIds = (input.addons || []).map((item) => item.addon_id).filter(Boolean);
   const addons = addonIds.length ? await query("SELECT * FROM addons WHERE id = ANY($1::uuid[])", [addonIds]) : { rows: [] };
   const catalogError = proposalCatalogError(input, pack, addons.rows);
@@ -74,9 +93,19 @@ export async function buildProposalSnapshot(input) {
       taxable: item.taxable !== false
     };
   });
+  const selectedExperienceLines = selectedExperiences.map((item) => ({
+    type: "EXPERIENCE_SELECTED",
+    experience_id: item.experience_id,
+    description: [item.name, item.package_name].filter(Boolean).join(" - "),
+    detail: item.description || "",
+    quantity: 1,
+    unit_price: item.price,
+    line_total: item.price
+  }));
   const lines = [
-    ...((input.package_id || packageAmount > 0 || pack.name) ? [{ type: "PACKAGE", package_id: input.package_id, description: input.package_name || pack.name || "Package", detail: input.package_description || pack.proposal_description || "", quantity: 1, unit_price: packageAmount, line_total: packageAmount }] : []),
-    ...(experienceAmount ? [{ type: "EXPERIENCE", experience_id: input.experience_id, description: `${experience.name || "Experience"} surcharge`, quantity: 1, unit_price: experienceAmount, line_total: experienceAmount }] : []),
+    ...(!selectedExperiences.length && (input.package_id || packageAmount > 0 || pack.name) ? [{ type: "PACKAGE", package_id: input.package_id, description: input.package_name || pack.name || "Package", detail: input.package_description || pack.proposal_description || "", quantity: 1, unit_price: packageAmount, line_total: packageAmount }] : []),
+    ...(!selectedExperiences.length && experienceAmount ? [{ type: "EXPERIENCE", experience_id: input.experience_id, description: `${experience.name || "Experience"} surcharge`, quantity: 1, unit_price: experienceAmount, line_total: experienceAmount }] : []),
+    ...selectedExperienceLines,
     ...addonItems,
     ...customLines,
     ...(money(input.travel) ? [{ type: "TRAVEL", description: "Travel", quantity: 1, unit_price: money(input.travel), line_total: money(input.travel) }] : []),
@@ -138,7 +167,10 @@ export async function buildProposalSnapshot(input) {
       balance: round(total - depositAmount),
       balance_due_date: input.balance_due_date || null
     },
-    validThrough: input.valid_through || new Date(Date.now() + Number(s.proposal_default_validity_days || 14) * 86400000).toISOString().slice(0, 10)
+    validThrough: input.valid_through || new Date(Date.now() + Number(s.proposal_default_validity_days || 14) * 86400000).toISOString().slice(0, 10),
+    proposalType: input.proposal_type || "PRIVATE_EVENT",
+    selectedExperiences,
+    proposalVisuals: input.proposal_visuals || {}
   };
 }
 
@@ -147,9 +179,9 @@ export async function createProposal(req) {
   const result = await transaction(async (client) => {
     const proposalNumber = req.body.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
     const inserted = await client.query(
-      `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'GENERATED',$18,$19) RETURNING *`,
-      [proposalNumber, req.body.lead_id || null, req.body.client_id || snapshot.client.id || null, req.body.event_id || null, req.user.id, req.body.package_id || null, req.body.experience_id || null, crypto.randomBytes(24).toString("hex"), req.body.status || "DRAFT", req.body.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate]
+      `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, proposal_type, selected_experiences, proposal_visuals)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'GENERATED',$18,$19,$20,$21,$22) RETURNING *`,
+      [proposalNumber, req.body.lead_id || null, req.body.client_id || snapshot.client.id || null, req.body.event_id || null, req.user.id, req.body.package_id || null, req.body.experience_id || null, crypto.randomBytes(24).toString("hex"), req.body.status || "DRAFT", req.body.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals)]
     );
     await client.query('UPDATE proposals SET visual_sections=$2 WHERE id=$1',[inserted.rows[0].id,JSON.stringify(snapshot.visualSections)]);
     inserted.rows[0].visual_sections=snapshot.visualSections;
@@ -218,7 +250,24 @@ export async function getProposal(idOrToken, { publicView = false } = {}) {
     [idOrToken]
   );
   if (!result.rows[0]) throw notFound("Proposal");
-  return result.rows[0];
+  const proposal = result.rows[0];
+  if (publicView && proposal.proposal_snapshot && typeof proposal.proposal_snapshot === "object") {
+    const snapshot = proposal.proposal_snapshot;
+    return {
+      ...proposal,
+      proposal_type: snapshot.proposal_type ?? proposal.proposal_type,
+      selected_experiences: snapshot.selected_experiences ?? proposal.selected_experiences,
+      proposal_visuals: snapshot.proposal_visuals ?? proposal.proposal_visuals,
+      visual_sections: snapshot.visual_sections ?? proposal.visual_sections,
+      content: snapshot.content ?? proposal.content,
+      pricing_snapshot: snapshot.pricing_snapshot ?? proposal.pricing_snapshot,
+      line_items_snapshot: snapshot.line_items_snapshot ?? proposal.line_items_snapshot,
+      proposal_title: snapshot.proposal_title ?? proposal.proposal_title,
+      proposal_date: snapshot.proposal_date ?? proposal.proposal_date,
+      valid_through: snapshot.valid_through ?? proposal.valid_through
+    };
+  }
+  return proposal;
 }
 
 export async function generateAndStoreProposal(proposal, type) {
@@ -262,7 +311,24 @@ export async function sendProposal(req, proposal) {
   });
   const email = await sendEmail({ to: req.body.recipient || proposal.client_email, subject, body, html, attachments: [doc] });
   await transaction(async (client) => {
-    await client.query("UPDATE proposals SET status='SENT', sent_at=now(), updated_at=now() WHERE id=$1", [proposal.id]);
+    await client.query(
+      `UPDATE proposals
+       SET status='SENT', sent_at=now(), updated_at=now(),
+           proposal_snapshot=jsonb_build_object(
+             'proposal_type',proposal_type,
+             'selected_experiences',selected_experiences,
+             'proposal_visuals',proposal_visuals,
+             'visual_sections',visual_sections,
+             'content',content,
+             'pricing_snapshot',pricing_snapshot,
+             'line_items_snapshot',line_items_snapshot,
+             'proposal_title',proposal_title,
+             'proposal_date',proposal_date,
+             'valid_through',valid_through
+           )
+       WHERE id=$1`,
+      [proposal.id]
+    );
     await client.query(
       `INSERT INTO proposal_deliveries (proposal_id, recipient_email, delivery_method, status, sent_at)
        VALUES ($1,$2,'EMAIL',$3,now())`,
@@ -412,4 +478,13 @@ function proposalMergeData(proposal, proposalUrl) {
       total: `$${Number(proposal.total || 0).toFixed(2)}`
     }
   };
+}
+
+function proposalExperienceKey(value = "") {
+  const normalized = String(value).toLowerCase();
+  if (normalized.includes("360")) return "360";
+  if (normalized.includes("vogue")) return "vogue";
+  if (normalized.includes("audio")) return "audio";
+  if (normalized.includes("glam")) return "glam";
+  return normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "experience";
 }
