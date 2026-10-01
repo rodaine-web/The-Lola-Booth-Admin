@@ -88,7 +88,7 @@ export function proposalHtml(proposal) {
     .cover{margin:16px;min-height:520px;padding:28px 16px}.primary-logo{margin:0 auto;max-width:100%}
     h1{font-size:clamp(28px,9vw,48px);letter-spacing:4px;margin-top:24px}h2{font-size:30px}h3{letter-spacing:2px}
     .lede{font-size:17px;letter-spacing:2px}.eyebrow{letter-spacing:3px}
-    .grid,.proposal-overview,.next{grid-template-columns:minmax(0,1fr)}.doc-header{flex-wrap:wrap;gap:12px}
+    .grid,.proposal-overview,.next,.experience-hero,.visual-story,.feature-checks{grid-template-columns:minmax(0,1fr)}.doc-header{flex-wrap:wrap;gap:12px}
     .section-heading{grid-template-columns:auto minmax(0,1fr);gap:8px}.section-heading i{display:none}.side-card{padding:22px}
     table{table-layout:fixed}td,th{padding:10px 4px;font-size:12px}td:first-child,th:first-child{width:40%}.total{font-size:26px}
   }
@@ -98,6 +98,7 @@ export function proposalHtml(proposal) {
   <section class="doc-header">${horizontalLogo ? `<img class="horizontal-logo" src="${horizontalLogo}" alt="The LOLA Booth">` : "<strong>THE LOLA BOOTH</strong>"}<p class="meta">${proposal.proposal_number}<br>Good people. Better photos.</p></section>
   ${proposal.proposal_source === "UPLOADED" && proposalUrl ? `<section><h2>${proposal.proposal_title || "Uploaded Proposal"}</h2><p>This proposal was prepared outside LOLA and attached to this secure customer link.</p><p><a href="${proposalUrl}/pdf">Download PDF</a></p></section>` : ""}
   <section><h2>Proposal Overview</h2><p class="eyebrow">A Modern Photo Experience For Life's Most Meaningful Moments</p><div class="proposal-overview"><div>${sections.map((section, index) => `<div class="section-block"><div class="section-heading"><span>${String(index + 1).padStart(2, "0")}.</span><h3>${section.title}</h3><i></i></div><div>${sanitizeContent(section.body)}</div>${section.items?.length ? `<ul>${section.items.map((item) => `<li>${sanitizeContent(item)}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div><aside class="side-card"><p class="eyebrow">Event Proposal For</p><h3>${proposal.client_name || "Client"}</h3><div class="divider"></div>${eventRows.slice(1).map(([label, value]) => `<p><span class="eyebrow">${label}</span><br>${value}</p>`).join("")}<p><span class="eyebrow">Total Investment</span><br>${money(pricing.total)}</p></aside></div></section>
+  ${selectedExperienceProposalHtml(proposal)}
   ${proposalVisualHtml(proposal)}
   <section class="section"><h2>Your Investment</h2><table><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>${lineItems.map((item) => `<tr><td>${item.description}</td><td>${item.quantity}</td><td>${money(item.unit_price)}</td><td>${money(item.line_total)}</td></tr>`).join("")}</tbody></table><table class="summary"><tbody><tr><td>Subtotal</td><td>${money(pricing.subtotal || pricing.total)}</td></tr><tr><td>Discount</td><td>${money(pricing.discount)}</td></tr><tr><td>Tax</td><td>${money(pricing.tax)}</td></tr><tr><td>Total</td><td>${money(pricing.total)}</td></tr><tr><td>Deposit</td><td>${money(pricing.deposit_amount)}</td></tr><tr><td>Balance</td><td>${money(pricing.balance)}</td></tr></tbody></table><p class="total">Amount Due ${money(pricing.deposit_amount || pricing.total)}</p></section>
   <section class="footer"><h2>Let's make it official.</h2><p>Good people. Better photos.<br>THE LOLA BOOTH</p></section>
@@ -129,6 +130,7 @@ export async function generateProposalPdf(proposal) {
   drawProposalCover(doc, proposal);
   doc.addPage();
   addProposalOverview(doc, proposal);
+  addSelectedExperiencePages(doc, proposal);
   addProposalVisualPages(doc, proposal);
   doc.end();
   return done;
@@ -552,6 +554,119 @@ export async function storeDocument({ buffer, filename, mimeType }) {
 
 function heading(text) {
   return new Paragraph({ children: [new TextRun({ text, bold: true, size: 32 })], spacing: { before: 240, after: 120 } });
+}
+
+
+function selectedExperienceProposalHtml(proposal) {
+  const experiences = proposalSelectedExperiences(proposal);
+  if (!experiences.length) return "";
+  const corporate = ["CORPORATE","BRAND_ACTIVATION"].includes(proposal.proposal_type);
+  const overview = corporate
+    ? `<section class="proposal-type-band"><p class="eyebrow">COMMERCIAL EXPERIENCE</p><h2>Built around the event objective.</h2><p>Each selected experience is shown visually so the client can understand the equipment, interaction, customization and final output before approving the scope.</p></section>`
+    : `<section class="proposal-type-band"><p class="eyebrow">${proposal.proposal_type === "WEDDING" ? "WEDDING EXPERIENCE" : "EVENT EXPERIENCE"}</p><h2>Let's make this one worth remembering.</h2><p>Every selected LOLA experience is presented as part of one coordinated guest journey.</p></section>`;
+  return overview + experiences.map((item,index)=>selectedExperienceSection(proposal,item,index)).join("");
+}
+
+function proposalSelectedExperiences(proposal) {
+  const selected = Array.isArray(proposal.selected_experiences) ? proposal.selected_experiences.filter(Boolean) : [];
+  if (selected.length) return selected;
+  const content = proposal.content || {};
+  const name = content.experienceName || proposal.experience_name;
+  return name ? [{ name, package_name: content.packageName || proposal.package_name || "", description: content.experienceDescription || "", features: [], visuals: {} }] : [];
+}
+
+function selectedExperienceKey(item={}) {
+  const value=String(item.key||item.name||"").toLowerCase();
+  if(value.includes("360")) return "360";
+  if(value.includes("vogue")) return "vogue";
+  if(value.includes("audio")) return "audio";
+  return "glam";
+}
+
+function selectedExperienceDefaults(key) {
+  const origin="https://thelolabooth.com/assets";
+  return {
+    glam:{hero:`${origin}/glam.jpg`,equipment:`${origin}/glam.jpg`,interaction:`${origin}/hero-v2-2.jpg`,customization:`${origin}/hero-v2-4.jpg`,output:`${origin}/glam.jpg`},
+    "360":{hero:`${origin}/booth360.jpg`,equipment:`${origin}/booth3601.jpg`,interaction:`${origin}/booth360.jpg`,customization:`${origin}/hero-v2-3.jpg`,output:`${origin}/booth3601.jpg`},
+    vogue:{hero:`${origin}/vogue.jpg`,equipment:`${origin}/vogue1.jpg`,interaction:`${origin}/vogue.jpg`,customization:`${origin}/vogue1.jpg`,output:`${origin}/vogue.jpg`},
+    audio:{hero:`${origin}/audio.jpg`,equipment:`${origin}/audio.jpg`,interaction:`${origin}/audio.jpg`,customization:`${origin}/audio.jpg`,output:`${origin}/audio.jpg`}
+  }[key] || {};
+}
+
+function selectedExperienceVisual(proposal,item,slot) {
+  const key=selectedExperienceKey(item);
+  const defaults=selectedExperienceDefaults(key);
+  return item.visuals?.[slot] || proposal.proposal_visuals?.[key]?.[slot] || defaults[slot] || "";
+}
+
+function selectedExperienceFeatures(key,item) {
+  if(Array.isArray(item.features)&&item.features.length) return item.features;
+  return {
+    glam:["Unlimited portrait sessions","Black-and-white or color capture","Custom welcome screen","Custom photo overlay","Instant digital sharing","Professional LOLA attendant","Delivery, setup & breakdown"],
+    "360":["360 video capture","Unlimited sessions during service window","Custom video overlay","Custom video end card","Instant digital delivery","Professional attendant","Delivery, setup & breakdown"],
+    vogue:["Full-size Vogue installation","Custom cover creative","Unlimited guest sessions","Professional attendant","Guest posing support","Digital content delivery","Delivery, setup & breakdown"],
+    audio:["Vintage-style audio phone","Guest message prompt","Unlimited recordings during event","Event signage","Audio file handoff","Delivery, setup & breakdown"]
+  }[key] || [];
+}
+
+function selectedExperienceSection(proposal,item,index) {
+  const key=selectedExperienceKey(item);
+  const title=item.name||"LOLA Experience";
+  const headline=item.headline||({glam:"Clean. Classic. Beautifully you.","360":"Turn moments into motion.",vogue:"Make your guests the cover story.",audio:"Some memories are better heard."}[key]);
+  const description=item.description||"A premium LOLA experience designed around your event.";
+  const features=selectedExperienceFeatures(key,item);
+  const stories=key==="glam"
+    ? [["equipment","The Booth"],["customization","Customization"],["output","Guest Output"]]
+    : key==="360"
+      ? [["equipment","The Platform"],["interaction","Guest Experience"],["output","Video Treatment"]]
+      : key==="vogue"
+        ? [["equipment","The Installation"],["customization","Cover Creative"],["output","Editorial Output"]]
+        : [["equipment","The Phone"],["customization","Prompt & Signage"],["output","Post-event Delivery"]];
+  return `<section class="experience-showcase ${index%2?"alt":""}"><div class="experience-title"><div><p class="eyebrow">EXPERIENCE ${String(index+1).padStart(2,"0")}</p><h2>${escapeProposalValue(title)}</h2></div>${item.package_name?`<span class="experience-pill">${escapeProposalValue(item.package_name)}</span>`:""}</div><div class="experience-hero"><img src="${safeProposalUrl(selectedExperienceVisual(proposal,item,"hero"))}" alt="${escapeProposalValue(title)}"><div><h3>${escapeProposalValue(headline)}</h3><p>${escapeProposalValue(description)}</p><div class="feature-checks">${features.map(feature=>`<div class="feature-check">${escapeProposalValue(feature)}</div>`).join("")}</div></div></div><div class="visual-story">${stories.map(([slot,label])=>`<article><img src="${safeProposalUrl(selectedExperienceVisual(proposal,item,slot))}" alt="${escapeProposalValue(label)}"><h4>${escapeProposalValue(label)}</h4><p>Preview how this part of the experience can look and feel for the event.</p></article>`).join("")}</div></section>`;
+}
+
+function escapeProposalValue(value) {
+  return String(value||"").replace(/[&<>"']/g,(char)=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[char]));
+}
+function safeProposalUrl(value) {
+  const url=String(value||"").trim();
+  return /^https:\/\//i.test(url) ? url.replace(/["'<>]/g,"") : "";
+}
+
+function proposalPdfDefaultAsset(key) {
+  const root=path.resolve(__dirname,"../../../public/brand/proposals");
+  const names={glam:"glam.jpg","360":"360.jpg",vogue:"vogue.jpg",audio:"audio.jpg"};
+  return path.join(root,names[key]||"glam.jpg");
+}
+
+function addSelectedExperiencePages(doc,proposal) {
+  for(const [index,item] of proposalSelectedExperiences(proposal).entries()) {
+    const key=selectedExperienceKey(item);
+    doc.addPage();
+    doc.rect(0,0,doc.page.width,doc.page.height).fill(brand.ivory);
+    drawOuterBorder(doc);
+    const logo=logoPath("primaryDark");
+    if(logo) doc.image(logo,48,44,{width:140});
+    doc.fillColor(brand.gold).font("Helvetica").fontSize(8).text(`EXPERIENCE ${String(index+1).padStart(2,"0")}`,48,160,{characterSpacing:2});
+    doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(32).text(item.name||"LOLA Experience",48,185,{width:500});
+    if(item.package_name) doc.fillColor(brand.gold).font("Helvetica").fontSize(8).text(String(item.package_name).toUpperCase(),48,228,{characterSpacing:1.2});
+    const image=proposalPdfDefaultAsset(key);
+    if(fs.existsSync(image)) doc.image(image,48,270,{fit:[240,235],align:"center",valign:"center"});
+    const headline=item.headline||({glam:"Clean. Classic. Beautifully you.","360":"Turn moments into motion.",vogue:"Make your guests the cover story.",audio:"Some memories are better heard."}[key]);
+    doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(18).text(headline,320,278,{width:235});
+    doc.fillColor(brand.muted).font("Helvetica").fontSize(9).text(item.description||"",320,318,{width:235,lineGap:3});
+    const features=selectedExperienceFeatures(key,item);
+    let y=520;
+    doc.fillColor(brand.gold).font("Helvetica").fontSize(8).text("INCLUDED",48,y,{characterSpacing:2});
+    y+=22;
+    features.slice(0,10).forEach((feature,i)=>{
+      const x=i<5?48:310;
+      const rowY=y+(i%5)*29;
+      doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(9).text("✓",x,rowY);
+      doc.fillColor(brand.charcoal).font("Helvetica").fontSize(8.5).text(feature,x+15,rowY,{width:230});
+    });
+    addPdfFooter(doc,index+3);
+  }
 }
 
 function strip(value) {
