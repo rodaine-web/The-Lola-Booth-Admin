@@ -5,8 +5,12 @@ const baseInquirySchema = z.object({
   topic: z
     .enum([
       "General inquiry",
+      "Request a quote",
       "Partnership opportunity",
+      "Corporate / brand collaboration",
+      "Vendor / venue partnership",
       "Press or media",
+      "Careers / employment",
       "Existing booking question",
       "Other",
     ])
