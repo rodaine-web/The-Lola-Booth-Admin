@@ -11,7 +11,8 @@ for p in source.iterdir():
  if p.is_file() and (p.suffix in ['.html','.js','.css','.png','.ico'] or p.name in ['robots.txt','sitemap.xml','package.json','package-lock.json']):shutil.copy2(p,root/p.name)
 manifest=[]
 for p in sorted(root.glob('*.html')):
- if p.name=='404.html':continue
+ if p.name=='404.html':
+  p.write_text(re.sub(r'<script\b[^>]*>.*?</script>',lambda m:'' if re.search(r'googletagmanager\.com|\bgtag\s*\(|\bfbq\s*\(|\bttq\.',m.group(),re.I) else m.group(),p.read_text(),flags=re.S|re.I));continue
  with urllib.request.urlopen('https://thelolabooth.com/'+p.name,timeout=20) as r:
   if r.status!=200:raise RuntimeError('Baseline unavailable '+p.name)
   data=r.read()
