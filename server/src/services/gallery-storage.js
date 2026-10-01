@@ -10,11 +10,20 @@ import {
 } from "@aws-sdk/client-s3";
 import { AppError } from "../utils/errors.js";
 import { assertGalleryEnvironment } from "./gallery-policy.js";
+import { azureBlobStorage } from "./azure-blob-storage.js";
 export function galleryStorage(config = process.env) {
   assertGalleryEnvironment(config);
   const environment = config.APP_ENV || config.NODE_ENV;
   const provider = config.GALLERY_STORAGE_PROVIDER || "unconfigured";
   const prefix = `${environment}/private-gallery/`;
+  if (provider === "azure") {
+    const blob = azureBlobStorage(config, "gallery");
+    return {
+      provider: "azure", ready: true, check: blob.check,
+      put: (buffer, mime) => blob.put(prefix + crypto.randomUUID(), buffer, mime),
+      get: (key) => blob.stream(key),
+    };
+  }
   const valid = (key) => {
     if (
       !key.startsWith(prefix) ||

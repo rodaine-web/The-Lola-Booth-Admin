@@ -1,4 +1,5 @@
 import {buildInfo,isStaging} from '../config/staging-safety.js';
+import { azureBlobStorage } from './azure-blob-storage.js';
 import fs from "node:fs/promises";
 import {constants} from "node:fs";
 import { env, productionReadinessIssues } from "../config/env.js";
@@ -88,6 +89,11 @@ function smsCheck() {
 }
 
 export async function storageCheck(config=env) {
+  if (config.storageProvider === "azure") {
+    try { const details = await azureBlobStorage(process.env, "documents").check();
+      return check("storage", "HEALTHY", "Private Azure document container is reachable. Recovery drill remains separately qualified.", {...details, durabilityVerified:false});
+    } catch { return check("storage", "MISCONFIGURED", "Private Azure document storage is unavailable or incorrectly configured."); }
+  }
   if (config.storageProvider === "local") {
     try {
       const stat=await fs.stat(config.localStorageRoot);
