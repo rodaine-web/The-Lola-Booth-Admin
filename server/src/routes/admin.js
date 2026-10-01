@@ -451,6 +451,19 @@ const proposalSchema = z.object({
   deposit_type: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   deposit_value: z.coerce.number().optional().nullable(),
   balance_due_date: z.string().optional().nullable(),
+  proposal_type: z.enum(["WEDDING","PRIVATE_EVENT","CORPORATE","BRAND_ACTIVATION","CUSTOM"]).optional(),
+  selected_experiences: z.array(z.object({
+    experience_id: uuid.optional().nullable(),
+    key: z.string().optional().nullable(),
+    name: z.string().optional().nullable(),
+    package_name: z.string().optional().nullable(),
+    price: z.coerce.number().min(0).optional().nullable(),
+    headline: z.string().optional().nullable(),
+    description: z.string().optional().nullable(),
+    features: z.array(z.string()).optional(),
+    visuals: z.record(z.string(), z.string()).optional()
+  }).passthrough()).optional(),
+  proposal_visuals: z.record(z.string(), z.any()).optional(),
   addons: z.array(z.object({
     addon_id: uuid,
     quantity: z.coerce.number().positive().default(1),
@@ -1290,6 +1303,19 @@ adminRouter.post("/proposals/upload", requireAnyPermission("proposals.upload", "
   proposal_number: z.string().optional(),
   proposal_title: z.string().optional(),
   proposal_date: z.string().optional(),
+  proposal_type: z.enum(["WEDDING","PRIVATE_EVENT","CORPORATE","BRAND_ACTIVATION","CUSTOM"]).optional(),
+  selected_experiences: z.array(z.object({
+    experience_id: uuid.optional().nullable(),
+    key: z.string().optional().nullable(),
+    name: z.string().optional().nullable(),
+    package_name: z.string().optional().nullable(),
+    price: z.coerce.number().min(0).optional().nullable(),
+    headline: z.string().optional().nullable(),
+    description: z.string().optional().nullable(),
+    features: z.array(z.string()).optional(),
+    visuals: z.record(z.string(), z.string()).optional()
+  }).passthrough()).optional(),
+  proposal_visuals: z.record(z.string(), z.any()).optional(),
   total_investment: z.coerce.number().optional().nullable()
 })), asyncHandler(async (req, res) => {
   res.status(201).json(await createUploadedProposal(req));
@@ -1309,9 +1335,9 @@ adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(p
   const snapshot = await buildProposalSnapshot(merged);
   const updated = await transaction(async (client) => {
     const result = await client.query(
-      `UPDATE proposals SET lead_id=$1, client_id=$2, event_id=$3, package_id=$4, experience_id=$5, status=$6, notes=$7, total=$8, valid_through=$9, content=$10, pricing_snapshot=$11, line_items_snapshot=$12, document_template_key=$13, editable_sections=$14, proposal_title=$15, proposal_date=$16, updated_at=now()
-       WHERE id=$17 AND deleted_at IS NULL RETURNING *`,
-      [merged.lead_id || null, merged.client_id || snapshot.client.id || null, merged.event_id || null, merged.package_id || null, merged.experience_id || null, merged.status || before.status, merged.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, req.params.id]
+      `UPDATE proposals SET lead_id=$1, client_id=$2, event_id=$3, package_id=$4, experience_id=$5, status=$6, notes=$7, total=$8, valid_through=$9, content=$10, pricing_snapshot=$11, line_items_snapshot=$12, document_template_key=$13, editable_sections=$14, proposal_title=$15, proposal_date=$16, proposal_type=$17, selected_experiences=$18, proposal_visuals=$19, updated_at=now()
+       WHERE id=$20 AND deleted_at IS NULL RETURNING *`,
+      [merged.lead_id || null, merged.client_id || snapshot.client.id || null, merged.event_id || null, merged.package_id || null, merged.experience_id || null, merged.status || before.status, merged.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals), req.params.id]
     );
     if (!result.rows[0]) throw notFound("Proposal");
     await client.query("UPDATE proposals SET visual_sections=$2 WHERE id=$1",[result.rows[0].id,JSON.stringify(snapshot.visualSections)]);
@@ -1328,9 +1354,9 @@ adminRouter.post("/proposals/:id/duplicate", requirePermission("write:sales"), a
   const duplicated = await transaction(async (client) => {
     const proposalNumber = await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
     const inserted = await client.query(
-      `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, external_document_storage_key, external_document_filename, external_document_mime_type, external_document_size_bytes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,encode(gen_random_bytes(24),'hex'),'DRAFT',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
-      [proposalNumber, original.lead_id, original.client_id, original.event_id, req.user.id, original.package_id, original.experience_id, original.notes, original.total, original.valid_through, JSON.stringify(original.content), JSON.stringify(original.pricing_snapshot), JSON.stringify(original.line_items_snapshot), original.document_template_key, JSON.stringify(original.editable_sections || []), original.proposal_source || "GENERATED", original.proposal_title, original.proposal_date, original.external_document_storage_key, original.external_document_filename, original.external_document_mime_type, original.external_document_size_bytes]
+      `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, external_document_storage_key, external_document_filename, external_document_mime_type, external_document_size_bytes, proposal_type, selected_experiences, proposal_visuals, proposal_snapshot)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,encode(gen_random_bytes(24),'hex'),'DRAFT',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING *`,
+      [proposalNumber, original.lead_id, original.client_id, original.event_id, req.user.id, original.package_id, original.experience_id, original.notes, original.total, original.valid_through, JSON.stringify(original.content), JSON.stringify(original.pricing_snapshot), JSON.stringify(original.line_items_snapshot), original.document_template_key, JSON.stringify(original.editable_sections || []), original.proposal_source || "GENERATED", original.proposal_title, original.proposal_date, original.external_document_storage_key, original.external_document_filename, original.external_document_mime_type, original.external_document_size_bytes, original.proposal_type || "PRIVATE_EVENT", JSON.stringify(original.selected_experiences || []), JSON.stringify(original.proposal_visuals || {}), null]
     );
     await client.query("UPDATE proposals SET visual_sections=$2 WHERE id=$1",[inserted.rows[0].id,JSON.stringify(original.visual_sections||[])]);
     inserted.rows[0].visual_sections=original.visual_sections||[];
