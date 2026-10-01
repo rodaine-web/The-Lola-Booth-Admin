@@ -29,6 +29,23 @@ test("contact accepts a message without booking details and drops injected event
   assert.equal(lead.company, "QA Studio");
   assert.match(lead.message, /Partnership opportunity/);
 });
+test("contact accepts all approved reason-for-contact options", () => {
+  for (const topic of [
+    "General inquiry",
+    "Request a quote",
+    "Partnership opportunity",
+    "Corporate / brand collaboration",
+    "Vendor / venue partnership",
+    "Press or media",
+    "Careers / employment",
+    "Existing booking question",
+    "Other",
+  ]) {
+    const result = inquirySchema.safeParse({ ...contact, topic });
+    assert.equal(result.success, true, topic);
+  }
+});
+
 test("contact requires a topic and message; booking still requires event logistics", () => {
   assert.equal(
     inquirySchema.safeParse({ ...contact, message: "" }).success,
