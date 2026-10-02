@@ -19,9 +19,16 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   const [inlineClientOpen,setInlineClientOpen]=useState(false);
   const [inlineClientSaving,setInlineClientSaving]=useState(false);
   const [inlineClient,setInlineClient]=useState({first_name:"",last_name:"",email:"",phone:""});
+  const [multiOptions,setMultiOptions]=useState({packages:[],experiences:[]});
   useDialogFocus(Boolean(editing),()=>setEditing(null));
 
   useEffect(()=>{setEditing(null);setForm({});setStatusFilter("");},[endpoint]);
+  useEffect(()=>{
+    if(endpoint!=="/events") return;
+    Promise.all([api.get("/pickers/packages?q="),api.get("/pickers/experiences?q=")])
+      .then(([packages,experiences])=>setMultiOptions({packages:packages.data||[],experiences:experiences.data||[]}))
+      .catch(()=>setMultiOptions({packages:[],experiences:[]}));
+  },[endpoint]);
   useEffect(() => {
     let active=true; setLoading(true); setError("");
     api.get(`${endpoint}?search=${encodeURIComponent(search)}&status=${statusFilter}&sort_by=${sort}&overdue=${overdue}`)
@@ -38,13 +45,14 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? false : ""])));
     if (endpoint === "/experiences") setForm(current=>({...current,website_status:"DRAFT",active:true}));
     if (endpoint === "/packages") setForm(current => ({ ...current, pricing_mode: "STARTING", website_status: "DRAFT", currency: "USD", active: true }));
+    if (endpoint === "/events") setForm(current=>({...current,package_ids:[],experience_ids:[]}));
     setEditing({ mode: "create" });
     setError("");
     setNotice("");
   }
 
   function openEdit(row) {
-    setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(row[name]) : type === "lines" ? (row[name] || []).join("\n") : row[name] ?? ""])));
+    setForm({...Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(row[name]) : type === "lines" ? (row[name] || []).join("\n") : row[name] ?? ""])),package_ids:row.package_ids||[],experience_ids:row.experience_ids||[]});
     setEditing({ mode: "edit", id: row.id });
     setError("");
     setNotice("");
@@ -168,6 +176,18 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
                 </label>
               ))}
             </div>
+            {endpoint === "/events" && <section className="panel wide">
+              <h3>Event experiences and packages</h3>
+              <p className="note-text">Select every experience and package included in this event. The first selected item remains the primary selection for legacy reporting.</p>
+              <fieldset>
+                <legend>Experiences</legend>
+                {multiOptions.experiences.map(option=><label className="check-row" key={option.id}><input type="checkbox" checked={(form.experience_ids||[]).includes(option.id)} onChange={(event)=>setForm(current=>{const next=event.target.checked?[...(current.experience_ids||[]),option.id]:(current.experience_ids||[]).filter(id=>id!==option.id);return {...current,experience_ids:next,experience_id:next[0]||null};})}/><span>{option.label}</span></label>)}
+              </fieldset>
+              <fieldset>
+                <legend>Packages</legend>
+                {multiOptions.packages.map(option=><label className="check-row" key={option.id}><input type="checkbox" checked={(form.package_ids||[]).includes(option.id)} onChange={(event)=>setForm(current=>{const next=event.target.checked?[...(current.package_ids||[]),option.id]:(current.package_ids||[]).filter(id=>id!==option.id);return {...current,package_ids:next,package_id:next[0]||null};})}/><span>{option.label}{option.subtitle ? " · " + option.subtitle : ""}</span></label>)}
+              </fieldset>
+            </section>}
             {endpoint === "/events" && inlineClientOpen && <section className="panel wide">
               <h3>Create client without leaving this event</h3>
               <div className="form-grid">
