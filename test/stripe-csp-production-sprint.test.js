@@ -34,7 +34,9 @@ test("Stripe webhook keeps raw body before JSON parsing and verifies signatures"
   assert.match(paymentService, /validStripeSignature/);
   assert.match(paymentService, /crypto\.timingSafeEqual/);
   assert.match(paymentService, /INVALID_STRIPE_SIGNATURE/);
-  assert.match(paymentService, /ON CONFLICT\s*\(provider,\s*external_event_id\) DO NOTHING/);
+  assert.match(paymentService, /ON CONFLICT\s*\(provider,\s*external_event_id\) DO UPDATE SET/);
+  assert.match(paymentService, /row\.status === "PROCESSED"/);
+  assert.match(paymentService, /status IN \('RECEIVED','FAILED','FAILED_NEEDS_REVIEW'\)/);
 });
 
 test("Stripe test sprint handles success, failure, and refund webhooks without duplicate payments", () => {
