@@ -239,11 +239,11 @@ export default function ProposalEditor() {
             <label>First name<input required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
             <label>Last name<input required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
             <label>Email<input required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
-            <label>Phone<input value={inlineClient.phone} onChange={(event)=>setInlineClient(current=>({...current,phone:event.target.value}))}/></label>
+            <label>Phone<input required type="tel" value={inlineClient.phone} onChange={(event)=>setInlineClient(current=>({...current,phone:event.target.value}))}/></label>
           </div>
           <div className="button-row">
             <button type="button" onClick={()=>setInlineClientOpen(false)}>Cancel</button>
-            <button type="button" className="primary-action" disabled={inlineClientSaving||!inlineClient.first_name||!inlineClient.last_name||!inlineClient.email} onClick={createInlineClient}>{inlineClientSaving?"Creating…":"Create client & use"}</button>
+            <button type="button" className="primary-action" disabled={inlineClientSaving||!inlineClient.first_name||!inlineClient.last_name||!inlineClient.email||String(inlineClient.phone||"").replace(/\D/g,"").length<7} onClick={createInlineClient}>{inlineClientSaving?"Creating…":"Create client & use"}</button>
           </div>
         </section>}
 
