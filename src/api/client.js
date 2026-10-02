@@ -55,7 +55,7 @@ async function request(path, options = {}, retry = true, responseType = "json") 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     const error = new Error(payload.error?.message || (response.status === 429 ? "Too many requests. Please wait a few minutes and try again." : response.status === 404 ? "Record not found." : response.status === 403 ? "You do not have access to this area." : "The request could not be completed."));
-    error.status = response.status; error.code = payload.error?.code; error.requestId = payload.error?.requestId;
+    error.status = response.status; error.code = payload.error?.code; error.requestId = payload.error?.requestId; error.details = payload.error?.details || null;
     if (response.status >= 500 && error.requestId) error.message += ` Reference: ${error.requestId}`;
     throw error;
   }
