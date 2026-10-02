@@ -132,11 +132,11 @@ async function paymentChecks() {
     const name = `payments.${provider.provider.toLowerCase()}`;
     const businessEnabled = provider.provider === "STRIPE" ? Boolean(settings.stripe_enabled) : provider.provider === "PAYPAL" ? Boolean(settings.paypal_enabled) : false;
     if (!provider.configured) {
-      results.push(check(name, "DISCONNECTED", `${provider.provider} credentials are not configured.`, provider));
+      results.push(check(name, "DISCONNECTED", `${provider.provider} credentials are not configured.`, { ...provider, businessEnabled }));
       continue;
     }
     if (!provider.webhookConfigured) {
-      results.push(check(name, "MISCONFIGURED", `${provider.provider} credentials exist but webhook verification is not configured.`, provider));
+      results.push(check(name, "MISCONFIGURED", `${provider.provider} credentials exist but webhook verification is not configured.`, { ...provider, businessEnabled }));
       continue;
     }
     const webhook = (await query(
