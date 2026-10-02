@@ -1813,7 +1813,7 @@ adminRouter.post("/users", requirePermission("create:users"), asyncHandler(async
     last_name: z.string().optional().nullable(),
     phone: z.string().optional().nullable(),
     business_role: z.string().optional().nullable(),
-    roles: z.array(z.string()).min(1).default(["ATTENDANT"]),
+    roles: z.array(z.string()).min(1, "Select at least one role."),
     permissions: z.array(z.string()).default([])
   }).parse(req.body);
   await assertAssignableRoles(req, body.roles);
