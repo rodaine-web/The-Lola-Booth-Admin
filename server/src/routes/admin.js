@@ -2555,8 +2555,8 @@ adminRouter.get("/analytics", requirePermission("read:analytics"), asyncHandler(
       (SELECT COALESCE(sum(balance_due),0)::text FROM bookings) AS outstanding_balance,
       (SELECT COALESCE(avg(total),0)::text FROM bookings) AS average_booking_value`),
     reportingQuery("SELECT to_char(created_at, 'YYYY-MM') AS month, sum(total)::text AS revenue FROM bookings GROUP BY 1 ORDER BY 1"),
-    reportingQuery("SELECT p.name, count(*)::int AS bookings FROM events e JOIN packages p ON p.id=e.package_id GROUP BY p.name ORDER BY bookings DESC"),
-    reportingQuery("SELECT x.name, count(*)::int AS bookings FROM events e JOIN experiences x ON x.id=e.experience_id GROUP BY x.name ORDER BY bookings DESC"),
+    reportingQuery("SELECT p.name, count(DISTINCT ep.event_id)::int AS bookings FROM event_packages ep JOIN events e ON e.id=ep.event_id AND e.deleted_at IS NULL JOIN packages p ON p.id=ep.package_id GROUP BY p.name ORDER BY bookings DESC, p.name"),
+    reportingQuery("SELECT x.name, count(DISTINCT ee.event_id)::int AS bookings FROM event_experiences ee JOIN events e ON e.id=ee.event_id AND e.deleted_at IS NULL JOIN experiences x ON x.id=ee.experience_id GROUP BY x.name ORDER BY bookings DESC, x.name"),
     reportingQuery("SELECT COALESCE(referral_source, lead_source, 'Unknown') AS source, count(*)::int AS leads, count(*) FILTER (WHERE status='WON')::int AS won FROM leads GROUP BY 1 ORDER BY leads DESC")
   ]);
   const [phase8, phase9] = await Promise.all([sourceQualityAnalytics(), operationsAnalytics()]);
