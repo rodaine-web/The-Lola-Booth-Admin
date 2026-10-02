@@ -94,8 +94,8 @@ export default function EventDetail() {
       <section className="detail-summary">
         <Metric label="Payment" value={event.payment_status || "Not booked"} />
         <Metric label="Outstanding" value={formatMoney(event.balance_due || 0)} />
-        <Metric label="Experience" value={event.experience_name || "Not selected"} />
-        <Metric label="Package" value={event.package_name || "Not selected"} />
+        <Metric label="Experiences" value={event.experiences?.length ? event.experiences.map((item) => item.name).join(", ") : event.experience_name || "Not selected"} />
+        <Metric label="Packages" value={event.packages?.length ? event.packages.map((item) => item.name).join(", ") : event.package_name || "Not selected"} />
         <Metric label="Operational" value={event.operational_status?.replaceAll("_", " ") || "PREPARING"} />
         <Metric label="Readiness" value={`${event.operations?.readiness?.score ?? 0}%`} />
       </section>
