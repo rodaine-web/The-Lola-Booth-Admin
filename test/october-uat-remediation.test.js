@@ -103,7 +103,7 @@ test("October UAT: System Health refresh shows progress, completion, and timesta
 
 test("October UAT: Communications uses Templates terminology and responsive template UI", () => {
   const communications = source("src/pages/Communications.jsx");
-  const css = source("src/styles.css");
+  const css = source("src/styles/global.css");
   assert.match(communications, /"Templates"/);
   assert.doesNotMatch(communications, /<h[12][^>]*>Email Templates<\/h[12]>/);
   assert.match(css, /template-card|template-grid|templates/i);
