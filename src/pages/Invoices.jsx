@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
-const statuses = ["", "DRAFT", "SENT", "VIEWED", "PARTIALLY_PAID", "PAID", "OVERDUE", "VOID", "REFUNDED"];
+const statuses = ["", "DRAFT", "SENT", "VIEWED", "PARTIALLY_PAID", "PARTIAL", "PAID", "OVERDUE", "VOID", "REFUNDED"];
 
 export default function Invoices() {
   const [urlParams, setUrlParams] = useSearchParams();
