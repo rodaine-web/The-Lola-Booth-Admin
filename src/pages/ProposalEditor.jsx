@@ -23,6 +23,12 @@ export default function ProposalEditor() {
   const [customLine, setCustomLine] = useState({ description: "", detail: "", quantity: 1, unit_price: "" });
   const [experienceOptions, setExperienceOptions] = useState([]);
   const [upload, setUpload] = useState({ filename: "", pdf_base64: "" });
+  const [inlineClientOpen,setInlineClientOpen]=useState(false);
+  const [inlineEventOpen,setInlineEventOpen]=useState(false);
+  const [inlineClientSaving,setInlineClientSaving]=useState(false);
+  const [inlineEventSaving,setInlineEventSaving]=useState(false);
+  const [inlineClient,setInlineClient]=useState({first_name:"",last_name:"",email:"",phone:""});
+  const [inlineEvent,setInlineEvent]=useState({event_name:"",event_type:"",event_date:"",start_time:"",end_time:"",venue_name:"",venue_address:"",city:"",state:"",zip:""});
   const [form, setForm] = useState({
     lead_id: params.get("leadId") || "",
     client_id: params.get("clientId") || "",
@@ -126,6 +132,48 @@ export default function ProposalEditor() {
     });
   }
 
+  async function createInlineClient() {
+    if (inlineClientSaving) return;
+    setInlineClientSaving(true);
+    setError("");
+    try {
+      const created = await api.post("/clients", inlineClient);
+      setForm((current) => ({ ...current, client_id: created.id }));
+      setInlineClientOpen(false);
+      setInlineClient({first_name:"",last_name:"",email:"",phone:""});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setInlineClientSaving(false);
+    }
+  }
+
+  async function createInlineEvent() {
+    if (inlineEventSaving) return;
+    if (!form.client_id) {
+      setError("Choose or create a client before creating an event.");
+      return;
+    }
+    setInlineEventSaving(true);
+    setError("");
+    try {
+      const created = await api.post("/events", {
+        ...inlineEvent,
+        client_id: form.client_id,
+        package_id: form.package_id || null,
+        experience_id: form.experience_id || null,
+        status: "TENTATIVE"
+      });
+      setForm((current) => ({ ...current, event_id: created.id }));
+      setInlineEventOpen(false);
+      setInlineEvent({event_name:"",event_type:"",event_date:"",start_time:"",end_time:"",venue_name:"",venue_address:"",city:"",state:"",zip:""});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setInlineEventSaving(false);
+    }
+  }
+
   async function chooseFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -164,8 +212,12 @@ export default function ProposalEditor() {
           <h2>Proposal</h2>
           <div className="form-grid">
             <label>Lead<RelationshipSelect resource="leads" value={form.lead_id} placeholder="Lead" onChange={(value) => { setField("lead_id", value); hydrateFromLead(value); }} /></label>
-            <label>Client<RelationshipSelect resource="clients" value={form.client_id} placeholder="Client" onChange={(value) => setField("client_id", value)} /></label>
-            <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={(value) => setField("event_id", value)} /></label>
+            <label>Client<RelationshipSelect resource="clients" value={form.client_id} placeholder="Client" onChange={(value) => setField("client_id", value)} />
+              {!id && <button type="button" onClick={()=>setInlineClientOpen(value=>!value)}>{inlineClientOpen?"Cancel new client":"Create new client"}</button>}
+            </label>
+            <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={(value) => setField("event_id", value)} />
+              {!id && <button type="button" onClick={()=>setInlineEventOpen(value=>!value)}>{inlineEventOpen?"Cancel new event":"Create new event"}</button>}
+            </label>
             <label>Proposal type<select value={form.proposal_type || "PRIVATE_EVENT"} onChange={(event) => setField("proposal_type", event.target.value)}>
               <option value="WEDDING">Wedding</option>
               <option value="PRIVATE_EVENT">Private Event</option>
@@ -179,6 +231,42 @@ export default function ProposalEditor() {
             <label>Status<select value={form.status} onChange={(event) => setField("status", event.target.value)}>{["DRAFT", "READY"].map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
         </section>
+
+        {!id && inlineClientOpen && <section className="panel">
+          <h2>Create Client</h2>
+          <p className="lede">Create the client here and continue building the proposal without leaving this page.</p>
+          <div className="form-grid">
+            <label>First name<input required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
+            <label>Last name<input required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
+            <label>Email<input required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
+            <label>Phone<input value={inlineClient.phone} onChange={(event)=>setInlineClient(current=>({...current,phone:event.target.value}))}/></label>
+          </div>
+          <div className="button-row">
+            <button type="button" onClick={()=>setInlineClientOpen(false)}>Cancel</button>
+            <button type="button" className="primary-action" disabled={inlineClientSaving||!inlineClient.first_name||!inlineClient.last_name||!inlineClient.email} onClick={createInlineClient}>{inlineClientSaving?"Creating…":"Create client & use"}</button>
+          </div>
+        </section>}
+
+        {!id && inlineEventOpen && <section className="panel">
+          <h2>Create Event</h2>
+          <p className="lede">Create and link the event here. A client must be selected first.</p>
+          <div className="form-grid">
+            <label>Event title<input required value={inlineEvent.event_name} onChange={(event)=>setInlineEvent(current=>({...current,event_name:event.target.value}))}/></label>
+            <label>Event type<input required value={inlineEvent.event_type} onChange={(event)=>setInlineEvent(current=>({...current,event_type:event.target.value}))}/></label>
+            <label>Event date<input required type="date" value={inlineEvent.event_date} onChange={(event)=>setInlineEvent(current=>({...current,event_date:event.target.value}))}/></label>
+            <label>Start time<input required type="time" value={inlineEvent.start_time} onChange={(event)=>setInlineEvent(current=>({...current,start_time:event.target.value}))}/></label>
+            <label>End time<input required type="time" value={inlineEvent.end_time} onChange={(event)=>setInlineEvent(current=>({...current,end_time:event.target.value}))}/></label>
+            <label>Venue<input value={inlineEvent.venue_name} onChange={(event)=>setInlineEvent(current=>({...current,venue_name:event.target.value}))}/></label>
+            <label>Address<input value={inlineEvent.venue_address} onChange={(event)=>setInlineEvent(current=>({...current,venue_address:event.target.value}))}/></label>
+            <label>City<input value={inlineEvent.city} onChange={(event)=>setInlineEvent(current=>({...current,city:event.target.value}))}/></label>
+            <label>State<input value={inlineEvent.state} onChange={(event)=>setInlineEvent(current=>({...current,state:event.target.value}))}/></label>
+            <label>ZIP<input value={inlineEvent.zip} onChange={(event)=>setInlineEvent(current=>({...current,zip:event.target.value}))}/></label>
+          </div>
+          <div className="button-row">
+            <button type="button" onClick={()=>setInlineEventOpen(false)}>Cancel</button>
+            <button type="button" className="primary-action" disabled={inlineEventSaving||!form.client_id||!inlineEvent.event_name||!inlineEvent.event_type||!inlineEvent.event_date||!inlineEvent.start_time||!inlineEvent.end_time} onClick={createInlineEvent}>{inlineEventSaving?"Creating…":"Create event & use"}</button>
+          </div>
+        </section>}
 
         {mode === "upload" && (
           <section className="panel">
