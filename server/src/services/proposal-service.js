@@ -384,12 +384,20 @@ export async function getProposal(idOrToken, { publicView = false } = {}) {
   const where = publicView ? "p.secure_token=$1" : "p.id=$1";
   const result = await query(
     `SELECT p.*, c.name AS client_name, c.email AS client_email, e.event_name, e.event_type, e.event_date, e.start_time, e.end_time, e.venue_name,
-      pkg.name AS package_name, x.name AS experience_name
+      pkg.name AS package_name, x.name AS experience_name,
+      linked_invoice.id AS linked_invoice_id, linked_invoice.invoice_number AS linked_invoice_number, linked_invoice.status AS linked_invoice_status
      FROM proposals p
      LEFT JOIN clients c ON c.id=p.client_id
      LEFT JOIN events e ON e.id=p.event_id
      LEFT JOIN packages pkg ON pkg.id=p.package_id
      LEFT JOIN experiences x ON x.id=p.experience_id
+     LEFT JOIN LATERAL (
+       SELECT i.id, i.invoice_number, i.status
+       FROM invoices i
+       WHERE i.proposal_id=p.id AND i.deleted_at IS NULL AND i.status <> 'VOID'
+       ORDER BY i.created_at DESC
+       LIMIT 1
+     ) linked_invoice ON true
      WHERE ${where} AND p.deleted_at IS NULL`,
     [idOrToken]
   );
