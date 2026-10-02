@@ -5,6 +5,8 @@ import { documentOrigin } from "../utils/public-document-url.js";
 import crypto from "node:crypto";
 import { invoiceBalance } from "../../../shared/invoice-balance.js";
 import { brandedEmailHtml } from "./automation-service.js";
+import { sendEmail } from "./email-service.js";
+import { createNotification } from "./notification-service.js";
 import { env } from "../config/env.js";
 import { query, transaction } from "../db/pool.js";
 import { AppError, notFound } from "../utils/errors.js";
@@ -223,8 +225,28 @@ async function recordProviderPayment(input) {
     }
     return prior;
   }
-  const attempt = (await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND (provider_session_id=$3 OR provider_reference=$4 OR status='PENDING') ORDER BY created_at DESC LIMIT 1",[input.invoiceId,input.provider,input.providerSessionId,input.providerPaymentId])).rows[0];
-  if (!attempt || cents(attempt.amount)!==cents(input.amount) || attempt.currency!==input.currency || input.amount<=0 || input.amount>invoiceBalance(invoice.rows[0])) throw new AppError("Payment does not match the server invoice checkout.",409,"PAYMENT_MISMATCH");
+  let attempt = null;
+  if (input.providerSessionId) {
+    attempt = (await query(
+      "SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND provider_session_id=$3 ORDER BY created_at DESC LIMIT 1",
+      [input.invoiceId,input.provider,input.providerSessionId]
+    )).rows[0];
+  }
+  if (!attempt && input.providerPaymentId) {
+    attempt = (await query(
+      "SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND provider_reference=$3 ORDER BY created_at DESC LIMIT 1",
+      [input.invoiceId,input.provider,input.providerPaymentId]
+    )).rows[0];
+  }
+  if (!attempt) {
+    attempt = (await query(
+      "SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND status='PENDING' AND amount=$3 AND currency=$4 ORDER BY created_at DESC LIMIT 1",
+      [input.invoiceId,input.provider,input.amount,input.currency]
+    )).rows[0];
+  }
+  if (!attempt || cents(attempt.amount)!==cents(input.amount) || String(attempt.currency).toUpperCase()!==String(input.currency).toUpperCase() || input.amount<=0 || input.amount>invoiceBalance(invoice.rows[0])) {
+    throw new AppError("Payment does not match the server invoice checkout.",409,"PAYMENT_MISMATCH");
+  }
   input.clientId=invoice.rows[0].client_id;
   input.eventId=invoice.rows[0].event_id;
   const payment = await transaction(async (client) => {
@@ -242,23 +264,93 @@ async function recordProviderPayment(input) {
   await applyBookingConfirmationPolicy(payment.event_id);
   await query("INSERT INTO payment_receipts(payment_id,invoice_id) VALUES($1,$2) ON CONFLICT(payment_id) DO NOTHING",[payment.id,input.invoiceId]);
   const customer=(await query("SELECT name,email FROM clients WHERE id=$1",[payment.client_id])).rows[0];
+  const reconciled=(await query("SELECT * FROM invoices WHERE id=$1",[input.invoiceId])).rows[0];
+  const receipt=await getReceiptView(reconciled,payment.id);
+  const fmt=value=>new Intl.NumberFormat("en-US",{style:"currency",currency:payment.currency||"USD"}).format(value);
+  const receiptBase=secureDocumentUrl(documentOrigin(), "receipt", invoice.rows[0]);
+  const receiptUrl=receiptBase ? `${receiptBase}/${payment.id}` : null;
+  const invoiceUrl=secureDocumentUrl(documentOrigin(), "invoice", invoice.rows[0]);
+  const payUrl=secureDocumentUrl(documentOrigin(), "pay", invoice.rows[0]);
+
   if(customer?.email){
-    const url=secureDocumentUrl(documentOrigin(), "pay", invoice.rows[0]);
-    const invoiceUrl=secureDocumentUrl(documentOrigin(), "invoice", invoice.rows[0]);
-    const receiptBase=secureDocumentUrl(documentOrigin(), "receipt", invoice.rows[0]);
-    const receiptUrl=receiptBase ? `${receiptBase}/${payment.id}` : null;
-    const reconciled=(await query("SELECT * FROM invoices WHERE id=$1",[input.invoiceId])).rows[0];
-    const receipt=await getReceiptView(reconciled,payment.id);
-    const fmt=value=>new Intl.NumberFormat("en-US",{style:"currency",currency:payment.currency||"USD"}).format(value);
     const subject=`Payment confirmation — ${invoice.rows[0].invoice_number}`;
     const body=`Thank you, ${customer.name}.\nWe received ${fmt(receipt.thisPayment)} for invoice ${receipt.invoiceNumber}.\nPayment date: ${String(receipt.paymentDate).slice(0,10)}\nInvoice total: ${fmt(receipt.invoiceTotal)}\nPreviously paid: ${fmt(receipt.previouslyPaid)}\nThis payment: ${fmt(receipt.thisPayment)}\nTotal paid: ${fmt(receipt.totalPaid)}\nRemaining balance: ${fmt(receipt.balanceDue)}\n${receipt.balanceDue===0?"Paid in full.":"A balance remains on your invoice."}${receiptUrl ? `\nView your receipt: ${receiptUrl}\nView your invoice: ${invoiceUrl}` : "\nContact The LOLA Booth for a copy of your receipt."}`;
-    await query(`INSERT INTO communications(client_id,event_id,invoice_id,type,channel,direction,recipient,subject,rendered_subject,rendered_body,rendered_html,status,send_mode,scheduled_at,idempotency_key,trigger_key)
-      VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$7,'SCHEDULED','SCHEDULED',now(),$8,'PAYMENT_CONFIRMATION')
-      ON CONFLICT(idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,[payment.client_id,payment.event_id,input.invoiceId,customer.email,subject,body,brandedEmailHtml(body,{kicker:"Payment received",ctaLabel:"View Your Receipt",ctaUrl:receiptUrl,secondaryCta:url&&receipt.balanceDue>0?{label:"Pay Remaining Balance",url}:undefined}),`payment-confirmation:${payment.id}`]);
+    await sendRecordedPaymentEmail({
+      payment,
+      invoice: reconciled,
+      to: customer.email,
+      subject,
+      body,
+      html: brandedEmailHtml(body,{kicker:"Payment received",ctaLabel:"View Your Receipt",ctaUrl:receiptUrl,secondaryCta:payUrl&&receipt.balanceDue>0?{label:"Pay Remaining Balance",url:payUrl}:undefined}),
+      idempotencyKey:`payment-confirmation:${payment.id}`,
+      triggerKey:"PAYMENT_CONFIRMATION"
+    });
   }
+
+  const ownerSubject=`Payment received — ${invoice.rows[0].invoice_number}`;
+  const ownerBody=`${customer?.name || "A client"} paid ${fmt(receipt.thisPayment)} toward invoice ${receipt.invoiceNumber}. Remaining balance: ${fmt(receipt.balanceDue)}.`;
+  const ownerEmail=env.formNotificationEmail || (await query("SELECT business_email FROM business_settings LIMIT 1")).rows[0]?.business_email || null;
+  if(ownerEmail){
+    await sendRecordedPaymentEmail({
+      payment,
+      invoice: reconciled,
+      to: ownerEmail,
+      subject: ownerSubject,
+      body: ownerBody,
+      html: brandedEmailHtml(ownerBody,{kicker:"Payment received",ctaLabel:"Open Invoice",ctaUrl:invoiceUrl}),
+      idempotencyKey:`payment-owner-notification:${payment.id}`,
+      triggerKey:"PAYMENT_RECEIVED_INTERNAL"
+    });
+  }
+  await createNotification({
+    roleTarget:"OWNER_ADMIN",
+    category:"PAYMENTS",
+    severity:"HIGH",
+    title:ownerSubject,
+    body:ownerBody,
+    entityType:"payment",
+    entityId:payment.id,
+    actionUrl:`/finance/payments/${payment.id}`,
+    metadata:{invoiceId:input.invoiceId,amount:payment.amount,currency:payment.currency}
+  }).catch(()=>null);
   await writeAudit({req:{},action:"payment_succeeded",entity:"payment",entityId:payment.id,after:{invoice_id:input.invoiceId,amount:payment.amount,currency:payment.currency,provider:payment.provider}});
   await enqueueLifecycle({action:'payment_succeeded',entityType:'payment',entityId:payment.id});
   return payment;
+}
+
+async function sendRecordedPaymentEmail({payment, invoice, to, subject, body, html, idempotencyKey, triggerKey}) {
+  const existing=(await query("SELECT * FROM communications WHERE idempotency_key=$1 AND deleted_at IS NULL LIMIT 1",[idempotencyKey])).rows[0];
+  if(existing?.status==="SENT_TO_PROVIDER") return existing;
+  let communication=existing;
+  if(!communication){
+    communication=(await query(
+      `INSERT INTO communications(client_id,event_id,invoice_id,type,channel,direction,recipient,subject,rendered_subject,message_summary,rendered_body,rendered_html,status,send_mode,idempotency_key,trigger_key)
+       VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$6,$7,'PROCESSING','SEND_NOW',$8,$9)
+       RETURNING *`,
+      [payment.client_id,payment.event_id,invoice.id,to,subject,body.slice(0,500),body,html,idempotencyKey,triggerKey]
+    )).rows[0];
+  } else {
+    communication=(await query("UPDATE communications SET status='PROCESSING',failure_code=NULL,failure_message=NULL,updated_at=now() WHERE id=$1 RETURNING *",[communication.id])).rows[0];
+  }
+  try{
+    const delivery=await sendEmail({to,subject,body,html});
+    await query(
+      "UPDATE communications SET status='SENT_TO_PROVIDER',sent_at=now(),provider=$1,provider_message_id=$2,updated_at=now() WHERE id=$3",
+      [delivery.provider,delivery.providerMessageId,communication.id]
+    );
+    await query(
+      `INSERT INTO email_messages(communication_id,provider,provider_message_id,to_email,subject,status,body_preview,sent_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,now())`,
+      [communication.id,delivery.provider,delivery.providerMessageId,to,subject,delivery.status||"SENT_TO_PROVIDER",body.slice(0,500)]
+    );
+    return {...communication,status:"SENT_TO_PROVIDER",delivery};
+  }catch(error){
+    await query(
+      "UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$1,failure_message=$2,updated_at=now() WHERE id=$3",
+      [error.code||"EMAIL_SEND_FAILED",error.message,communication.id]
+    );
+    throw error;
+  }
 }
 
 async function recordProviderPaymentFailure(input) {
