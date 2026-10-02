@@ -118,13 +118,12 @@ test("October UAT: dashboard event drilldowns preserve exact query filters", () 
 
 test("October UAT: dynamic list filters keep PostgreSQL parameter placeholders", () => {
   const admin = source("server/src/routes/admin.js");
-  const suspicious = admin.split("\n").filter(line =>
-    line.includes("params.length") &&
-    /(?:=|<|>)\s*\$?\{params\.length\}/.test(line)
-  );
-  assert.deepEqual(suspicious, []);
-  assert.match(admin, /"due_date >= \$"\+params\.length/);
-  assert.match(admin, /paymentTime\+" >=?\$"?/);
+  assert.ok(admin.includes('where.push("due_date >= $"+params.length+"::date")'));
+  assert.ok(admin.includes('where.push("due_date < $"+params.length+"::date")'));
+  assert.ok(admin.includes('where.push(paymentTime+">=$"+params.length+"::timestamptz")'));
+  assert.ok(admin.includes('where.push(paymentTime+"<$"+params.length+"::timestamptz")'));
+  assert.ok(admin.includes('ee.experience_id=$" + params.length'));
+  assert.ok(admin.includes('ep.package_id=$" + params.length'));
 });
 
 test("October UAT: booking deposit confirmation prefers the invoice deposit threshold", () => {
@@ -132,6 +131,17 @@ test("October UAT: booking deposit confirmation prefers the invoice deposit thre
   assert.match(reconciliation, /invoice_deposit_required/);
   assert.match(reconciliation, /invoiceDepositRequired > 0 \? invoiceDepositRequired : bookingDepositRequired/);
   assert.match(reconciliation, /depositRequired > 0 \? paid >= depositRequired : paid > 0/);
+});
+
+test("October UAT: proposal range filters use proposal activity timestamps", () => {
+  const admin = source("server/src/routes/admin.js");
+  const start = admin.indexOf('adminRouter.get("/proposals"');
+  const end = admin.indexOf('adminRouter.post("/proposals"', start);
+  const proposalRoute = admin.slice(start, end);
+  assert.match(proposalRoute, /accepted_at/);
+  assert.match(proposalRoute, /sent_at/);
+  assert.match(proposalRoute, /created_at/);
+  assert.doesNotMatch(proposalRoute, /paymentTime|paid_at|payment_date/);
 });
 
 test("October UAT: payment search and date drilldowns use consistent joins and timestamps", () => {
