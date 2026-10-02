@@ -1559,3 +1559,19 @@ input,select,textarea{min-width:0}button:focus-visible,a:focus-visible,[tabindex
   .public-proposal-sticky span{display:block;color:var(--muted);font-size:.68rem;text-transform:uppercase}
   .public-proposal-sticky a{background:var(--gold);color:#fff;padding:12px 17px;text-decoration:none;font-weight:700}
 }
+
+
+.template-card-list{display:grid;gap:12px;margin-top:16px}
+.template-admin-card{border:1px solid var(--border,#e4ddd4);border-radius:12px;padding:14px;background:var(--surface,#fff);display:grid;gap:12px}
+.template-admin-card-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.template-admin-card-heading div{display:grid;gap:3px;min-width:0}
+.template-admin-card-heading strong{font-size:1rem}
+.template-admin-card-heading small{overflow-wrap:anywhere;color:var(--muted,#746d64)}
+.template-admin-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0}
+.template-admin-meta div{display:grid;gap:2px;min-width:0}
+.template-admin-meta dt{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted,#746d64)}
+.template-admin-meta dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.template-card-actions{display:flex;flex-wrap:wrap;gap:8px}
+.template-card-actions button{display:inline-flex;align-items:center;gap:5px}
+@media (max-width:900px){.template-admin-meta{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.template-admin-card-heading{display:grid}.template-admin-meta{grid-template-columns:1fr}.template-card-actions button{flex:1 1 45%;justify-content:center}}
