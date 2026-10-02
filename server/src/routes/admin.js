@@ -2719,6 +2719,27 @@ const settingsSchema = z.object({
   other_review_url: z.string().optional().nullable()
 }).passthrough();
 
+adminRouter.patch("/settings/payment-checkout", requirePermission("write:settings"), validate(z.object({
+  stripe_enabled: z.boolean()
+})), asyncHandler(async (req, res) => {
+  const before = await query("SELECT id, stripe_enabled FROM business_settings LIMIT 1");
+  const existing = before.rows[0];
+  if (!existing) throw notFound("Settings");
+  const updated = await query(
+    "UPDATE business_settings SET stripe_enabled=$1, updated_at=now() WHERE id=$2 RETURNING id, stripe_enabled",
+    [req.body.stripe_enabled, existing.id]
+  );
+  await writeAudit({
+    req,
+    action: "payment_checkout_settings_changed",
+    entity: "business_settings",
+    entityId: existing.id,
+    before: existing,
+    after: updated.rows[0]
+  });
+  res.json(updated.rows[0]);
+}));
+
 adminRouter.patch("/settings", requirePermission("write:settings"), validate(settingsSchema), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM business_settings LIMIT 1");
   const existing = before.rows[0];
