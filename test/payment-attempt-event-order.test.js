@@ -18,7 +18,19 @@ function harness(prior){
     updates.push({sql,args});return {rows:[]};
   };
   const noop=async()=>{};
-  const run=new Function('query','transaction','notFound','cents','invoiceBalance','AppError','reconcileInvoice','applyBookingConfirmationPolicy','writeAudit','enqueueLifecycle',`${handler};return recordProviderPayment;`)(query,fn=>fn({query}),()=>Error('missing'),x=>Math.round(x*100),()=>10,Error,noop,noop,noop,noop);
+  const getReceiptView=async()=>({thisPayment:10,invoiceNumber:'INV-1',paymentDate:'2026-10-02',invoiceTotal:10,previouslyPaid:0,totalPaid:10,balanceDue:0});
+  const secureDocumentUrl=()=>null;
+  const documentOrigin=()=>'https://example.test';
+  const brandedEmailHtml=(body)=>body;
+  const env={formNotificationEmail:''};
+  const createNotification=noop;
+  const sendEmail=async()=>({provider:'test',providerMessageId:'message',status:'SENT_TO_PROVIDER'});
+  const run=new Function(
+    'query','transaction','notFound','cents','invoiceBalance','AppError',
+    'reconcileInvoice','applyBookingConfirmationPolicy','writeAudit','enqueueLifecycle',
+    'getReceiptView','secureDocumentUrl','documentOrigin','brandedEmailHtml','env','createNotification','sendEmail',
+    `${handler};return recordProviderPayment;`
+  )(query,fn=>fn({query}),()=>Error('missing'),x=>Math.round(x*100),()=>10,Error,noop,noop,noop,noop,getReceiptView,secureDocumentUrl,documentOrigin,brandedEmailHtml,env,createNotification,sendEmail);
   return {run,updates};
 }
 const input={invoiceId:'invoice',provider:'STRIPE',providerPaymentId:'pi_test',amount:10,currency:'USD',paymentMethod:'ONLINE'};
