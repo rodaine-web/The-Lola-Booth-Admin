@@ -131,13 +131,15 @@ export async function recordManualPayment(req) {
   if (invoice && amount > invoiceBalance(invoice)) {
     throw new AppError("Manual payment cannot exceed the invoice balance.", 409, "PAYMENT_EXCEEDS_BALANCE");
   }
+  const paymentEventId = invoice ? invoice.event_id : req.body.event_id;
+  const paymentClientId = invoice ? invoice.client_id : req.body.client_id;
   const payment = await transaction(async (client) => {
     const inserted = await client.query(
       `INSERT INTO payments (event_id, client_id, invoice_id, provider, amount, currency, payment_method, reference_number, payment_date, paid_at, notes, recorded_by, status, idempotency_key)
        VALUES ($1,$2,$3,'MANUAL',$4,$5,$6,$7,$8,$8::date::timestamptz,$9,$10,'SUCCEEDED',$11)
        ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET updated_at=now()
        RETURNING *`,
-      [req.body.event_id, req.body.client_id, req.body.invoice_id || null, amount, req.body.currency || "USD", req.body.payment_method, req.body.reference_number || null, req.body.payment_date, req.body.notes || null, req.user.id, req.body.idempotency_key || null]
+      [paymentEventId, paymentClientId, req.body.invoice_id || null, amount, req.body.currency || "USD", req.body.payment_method, req.body.reference_number || null, req.body.payment_date, req.body.notes || null, req.user.id, req.body.idempotency_key || null]
     );
     return inserted.rows[0];
   });
