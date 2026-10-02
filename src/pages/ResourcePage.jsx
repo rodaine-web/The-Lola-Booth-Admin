@@ -160,6 +160,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
         await api.post(endpoint, payload);
         setNotice(`${title.replace(/s$/, "")} created.`);
       }
+      setDuplicateEvent(null);
       setEditing(null);
       const queryParams=new URLSearchParams(routeParams);queryParams.set("search",search);if(statusFilter)queryParams.set("status",statusFilter);else queryParams.delete("status");queryParams.set("sort_by",sort);if(overdue)queryParams.set("overdue","true");else queryParams.delete("overdue");
       const result = await api.get(`${endpoint}?${queryParams.toString()}`);
