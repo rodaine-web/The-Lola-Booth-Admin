@@ -93,7 +93,7 @@ test("proposal-first workflow refuses a client/event mismatch", async () => {
   );
 });
 
-test("proposal-first workflow requires real client contact details instead of inventing them", async () => {
+test("proposal-first workflow requires email but allows missing phone", async () => {
   const noEmail = buildHarness({ customer: { ...customer, email: null }, event });
   await assert.rejects(
     () => noEmail.ensureProposalLead(noEmail.client, { client_id: customer.id, event_id: event.id }, "user-1"),
@@ -101,8 +101,9 @@ test("proposal-first workflow requires real client contact details instead of in
   );
 
   const noPhone = buildHarness({ customer: { ...customer, phone: null }, event });
-  await assert.rejects(
-    () => noPhone.ensureProposalLead(noPhone.client, { client_id: customer.id, event_id: event.id }, "user-1"),
-    error => error.code === "CLIENT_PHONE_REQUIRED"
-  );
+  const result = await noPhone.ensureProposalLead(noPhone.client, { client_id: customer.id, event_id: event.id }, "user-1");
+  assert.equal(result.lead_id, "lead-created");
+  const insert = noPhone.calls.find(call => call.sql.includes("INSERT INTO leads"));
+  assert.ok(insert);
+  assert.ok(insert.args.includes(null));
 });
