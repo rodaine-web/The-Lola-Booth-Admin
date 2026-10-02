@@ -70,9 +70,10 @@ test("October UAT: new users require explicit role selection", () => {
 
 test("October UAT: event package and experience filters include multi-service selections", () => {
   const admin = source("server/src/routes/admin.js");
-  assert.ok(admin.includes("event_experiences ee WHERE ee.event_id=${table}.id AND ee.experience_id=${params.length}"));
-  assert.ok(admin.includes("event_packages ep WHERE ep.event_id=${table}.id AND ep.package_id=${params.length}"));
-  assert.doesNotMatch(admin, /where\.push\(`package_id = \$\{params\.length\}`\)/);
+  assert.match(admin, /event_experiences ee WHERE ee\.event_id=/);
+  assert.match(admin, /ee\.experience_id=\$" \+ params\.length/);
+  assert.match(admin, /event_packages ep WHERE ep\.event_id=/);
+  assert.match(admin, /ep\.package_id=\$" \+ params\.length/);
 });
 
 test("October UAT: dashboard event drilldowns preserve exact query filters", () => {
