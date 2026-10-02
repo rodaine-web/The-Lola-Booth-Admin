@@ -9,6 +9,9 @@ export default function SystemHealth() {
   const [error, setError] = useState("");
   const [refreshing,setRefreshing]=useState(false);
   const [lastRefreshed,setLastRefreshed]=useState(null);
+  const [notice,setNotice]=useState("");
+  const [refreshing,setRefreshing]=useState(false);
+  const [lastRefreshed,setLastRefreshed]=useState(null);
 
   async function load() {
     setRefreshing(true);
@@ -52,7 +55,7 @@ export default function SystemHealth() {
         <button className="primary-action" onClick={load} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "spin" : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
       {health?.build&&<p className="note-text">Environment: {health.build.environment} · API revision: {health.build.revision.slice(0,12)} · Admin revision: {__BUILD_REVISION__.slice(0,12)}{lastRefreshed ? ` · Last refreshed ${lastRefreshed.toLocaleTimeString()}` : ""}</p>}
-      {error && <div className="toast error">{error}</div>}
+      {notice && <div className="toast" role="status">{notice}</div>}{error && <div className="toast error">{error}</div>}
       {health && <section className={`health-banner ${health.status.toLowerCase()}`}>
         <AlertTriangle size={18} />
         <div><strong>{health.status}</strong><span>Generated {new Date(health.generatedAt).toLocaleString()}</span></div>
