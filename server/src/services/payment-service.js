@@ -613,7 +613,7 @@ async function lockableInvoice(id) {
 }
 
 function isInvoicePayable(invoice) {
-  return invoice && !invoice.archived_at && ["SENT", "VIEWED", "PARTIALLY_PAID", "OVERDUE"].includes(invoice.status) && invoiceBalance(invoice) > 0;
+  return invoice && !invoice.archived_at && ["SENT", "VIEWED", "PARTIALLY_PAID", "PARTIAL", "OVERDUE"].includes(invoice.status) && invoiceBalance(invoice) > 0;
 }
 
 function safeSession(row, provider) {
