@@ -110,7 +110,21 @@ export async function updateDraftInvoice(req) {
     const currentItems = await client.query("SELECT * FROM invoice_items WHERE invoice_id=$1", [before.id]);
     const totals = calculateInvoiceTotals(req.body.items ?? currentItems.rows);
     const values = [req.body.client_id === undefined ? before.client_id : req.body.client_id, req.body.event_id === undefined ? before.event_id : req.body.event_id, req.body.due_date === undefined ? before.due_date : req.body.due_date, req.body.notes === undefined ? before.notes : req.body.notes, req.body.terms === undefined ? before.terms : req.body.terms];
-    const updated = await client.query(`UPDATE invoices SET client_id=$1,event_id=$2,due_date=$3,notes=$4,terms=$5,subtotal=$6,discount=$7,tax=$8,total=$9,balance_due=$9,amount_outstanding=$9,pricing_snapshot=$10,updated_at=now() WHERE id=$11 RETURNING *`, [...values,totals.subtotal,totals.discount,totals.tax,totals.total,JSON.stringify(totals),before.id]);
+    const previousPricing = before.pricing_snapshot && typeof before.pricing_snapshot === "object" ? before.pricing_snapshot : {};
+    const previousMinimum = previousPricing.amount_due_now;
+    const preservedMinimum = previousMinimum === null || previousMinimum === undefined || previousMinimum === ""
+      ? totals.total
+      : money(Math.min(Number(previousMinimum), Number(totals.total)));
+    const pricingSnapshot = {
+      ...previousPricing,
+      ...totals,
+      amount_due_now: preservedMinimum,
+      proposal_total: totals.total,
+      payment_mode: previousPricing.payment_mode || "BALANCE_DUE",
+      allow_pay_in_full: previousPricing.allow_pay_in_full !== false,
+      allow_custom_amount: previousPricing.allow_custom_amount !== false
+    };
+    const updated = await client.query(`UPDATE invoices SET client_id=$1,event_id=$2,due_date=$3,notes=$4,terms=$5,subtotal=$6,discount=$7,tax=$8,total=$9,balance_due=$9,amount_outstanding=$9,pricing_snapshot=$10,updated_at=now() WHERE id=$11 RETURNING *`, [...values,totals.subtotal,totals.discount,totals.tax,totals.total,JSON.stringify(pricingSnapshot),before.id]);
     await client.query("DELETE FROM invoice_items WHERE invoice_id=$1", [before.id]);
     for (const item of totals.items) await client.query(`INSERT INTO invoice_items(invoice_id,label,description,quantity,unit_price,taxable,tax_rate,discount,total,line_total) VALUES($1,$2,$2,$3,$4,$5,$6,$7,$8,$8)`,[before.id,item.description,item.quantity,item.unit_price,item.taxable ?? true,item.tax_rate || 0,item.discount,item.line_total]);
     return {before,after:updated.rows[0]};
