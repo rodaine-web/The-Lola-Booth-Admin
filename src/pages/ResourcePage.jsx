@@ -58,11 +58,20 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     setNotice("");
   }
 
-  function openEdit(row) {
-    setForm({...Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(row[name]) : type === "lines" ? (row[name] || []).join("\n") : row[name] ?? ""])),package_ids:row.package_ids||[],experience_ids:row.experience_ids||[]});
-    setEditing({ mode: "edit", id: row.id });
+  async function openEdit(row) {
     setError("");
     setNotice("");
+    try {
+      const source = endpoint === "/events" ? await api.get(`${endpoint}/${row.id}`) : row;
+      setForm({
+        ...Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(source[name]) : type === "lines" ? (source[name] || []).join("\n") : source[name] ?? ""])),
+        package_ids: source.package_ids || [],
+        experience_ids: source.experience_ids || []
+      });
+      setEditing({ mode: "edit", id: row.id });
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   async function createInlineClient() {
