@@ -433,6 +433,8 @@ const proposalSchema = z.object({
   event_id: uuid.optional().nullable(),
   package_id: uuid.optional().nullable(),
   experience_id: uuid.optional().nullable(),
+  package_ids: z.array(uuid).optional(),
+  experience_ids: z.array(uuid).optional(),
   status: z.enum(proposalStatuses).optional(),
   valid_through: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -1076,13 +1078,27 @@ adminRouter.get("/my-events/:id", requirePermission("read:attendant"), asyncHand
 adminRouter.post("/events", requirePermission("write:events"), validate(eventSchema), asyncHandler(async (req, res) => {
   validateEventTimes(req.body);
   const eventNumber = `EVT-${Date.now().toString().slice(-6)}`;
-  const fields = Object.keys({ ...req.body, event_number: eventNumber });
-  const body = { ...req.body, event_number: eventNumber };
-  const values = fields.map((field) => body[field]);
-  const inserted = await query(`INSERT INTO events (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values);
-  await recordActivity({ actorUserId: req.user.id, entityType: "event", entityId: inserted.rows[0].id, action: "event_created", summary: "Event created" });
-  await writeAudit({ req, action: "event_created", entity: "event", entityId: inserted.rows[0].id, after: inserted.rows[0] });
-  res.status(201).json(inserted.rows[0]);
+  const inserted = await transaction(async (client) => {
+    const body = { ...req.body };
+    delete body.package_ids;
+    delete body.experience_ids;
+    body.event_number = eventNumber;
+    const fields = Object.keys(body);
+    const values = fields.map((field) => body[field]);
+    const event = (await client.query(`INSERT INTO events (${fields.join(",")}) VALUES (${fields.map((_, i) => `${i + 1}`).join(",")}) RETURNING *`, values)).rows[0];
+    const packageIds = [...new Set([...(req.body.package_ids || []), req.body.package_id].filter(Boolean))];
+    const experienceIds = [...new Set([...(req.body.experience_ids || []), req.body.experience_id].filter(Boolean))];
+    for (const [index, packageId] of packageIds.entries()) {
+      await client.query("INSERT INTO event_packages (event_id, package_id, display_order) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [event.id, packageId, index]);
+    }
+    for (const [index, experienceId] of experienceIds.entries()) {
+      await client.query("INSERT INTO event_experiences (event_id, experience_id, display_order) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [event.id, experienceId, index]);
+    }
+    return event;
+  });
+  await recordActivity({ actorUserId: req.user.id, entityType: "event", entityId: inserted.id, action: "event_created", summary: "Event created" });
+  await writeAudit({ req, action: "event_created", entity: "event", entityId: inserted.id, after: inserted });
+  res.status(201).json(inserted);
 }));
 
 adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(async (req, res) => {
@@ -1099,7 +1115,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     [req.params.id]
   );
   if (!event.rows[0]) throw notFound("Event");
-  const [staff, equipment, tasks, files, payments, communications, activity, audit, addons, proposals, invoices, operations] = await Promise.all([
+  const [staff, equipment, tasks, files, payments, communications, activity, audit, addons, proposals, invoices, operations, packages, experiences] = await Promise.all([
     query(`SELECT sa.*, sp.name, sp.email, sp.phone FROM staff_assignments sa JOIN staff_profiles sp ON sp.id=sa.staff_profile_id WHERE sa.event_id=$1 AND sa.released_at IS NULL ORDER BY sa.created_at`, [req.params.id]),
     query(`SELECT ea.*, eq.name, eq.category, eq.status FROM equipment_assignments ea JOIN equipment eq ON eq.id=ea.equipment_id WHERE ea.event_id=$1 AND ea.released_at IS NULL ORDER BY ea.created_at`, [req.params.id]),
     query("SELECT * FROM tasks WHERE event_id=$1 AND deleted_at IS NULL ORDER BY due_date NULLS LAST", [req.params.id]),
@@ -1111,16 +1127,43 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query("SELECT ea.*, a.name, a.pricing_type FROM event_addons ea JOIN addons a ON a.id=ea.addon_id WHERE ea.event_id=$1", [req.params.id]),
     query("SELECT * FROM proposals WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
     query("SELECT * FROM invoices WHERE event_id=$1 AND deleted_at IS NULL ORDER BY due_date DESC", [req.params.id]),
-    getEventOperations(req.params.id, req.user)
+    getEventOperations(req.params.id, req.user),
+    query("SELECT ep.package_id AS id, p.name, p.starting_price, ep.display_order FROM event_packages ep JOIN packages p ON p.id=ep.package_id WHERE ep.event_id=$1 ORDER BY ep.display_order, p.name", [req.params.id]),
+    query("SELECT ee.experience_id AS id, x.name, x.base_price, ee.display_order FROM event_experiences ee JOIN experiences x ON x.id=ee.experience_id WHERE ee.event_id=$1 ORDER BY ee.display_order, x.name", [req.params.id])
   ]);
-  res.json({ ...event.rows[0], staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
+  res.json({ ...event.rows[0], package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
 }));
 
 adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {
   validateEventTimes(req.body);
   const before = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Event");
-  const updated = await updateById({ table: "events", id: req.params.id, body: req.body, allowed: ["client_id", "event_name", "event_type", "event_date", "start_time", "end_time", "setup_time", "breakdown_time", "venue_name", "venue_address", "city", "state", "zip", "guest_count", "package_id", "experience_id", "status", "internal_notes", "client_notes", "backdrop", "print_template", "parking_loading_instructions", "access_instructions", "load_in_instructions", "special_restrictions", "setup_instructions", "room_name", "venue_contact_name", "venue_contact_phone", "power_requirements", "wifi_notes", "operational_status", "gallery_status", "gallery_url"] });
+  const updated = await transaction(async (client) => {
+    const patch = { ...req.body };
+    delete patch.package_ids;
+    delete patch.experience_ids;
+    let event = before.rows[0];
+    const allowed = ["client_id", "event_name", "event_type", "event_date", "start_time", "end_time", "setup_time", "breakdown_time", "venue_name", "venue_address", "city", "state", "zip", "guest_count", "package_id", "experience_id", "status", "internal_notes", "client_notes", "backdrop", "print_template", "parking_loading_instructions", "access_instructions", "load_in_instructions", "special_restrictions", "setup_instructions", "room_name", "venue_contact_name", "venue_contact_phone", "power_requirements", "wifi_notes", "operational_status", "gallery_status", "gallery_url"];
+    const fields = Object.keys(patch).filter(key=>allowed.includes(key));
+    if (fields.length) {
+      const values = fields.map(field=>patch[field]);
+      values.push(req.params.id);
+      event = (await client.query(`UPDATE events SET ${fields.map((field,index)=>`${field}=${index+1}`).join(", ")}, updated_at=now() WHERE id=${values.length} AND deleted_at IS NULL RETURNING *`, values)).rows[0];
+    }
+    if (req.body.package_ids) {
+      await client.query("DELETE FROM event_packages WHERE event_id=$1", [req.params.id]);
+      for (const [index, packageId] of [...new Set(req.body.package_ids.filter(Boolean))].entries()) {
+        await client.query("INSERT INTO event_packages (event_id, package_id, display_order) VALUES ($1,$2,$3)", [req.params.id, packageId, index]);
+      }
+    }
+    if (req.body.experience_ids) {
+      await client.query("DELETE FROM event_experiences WHERE event_id=$1", [req.params.id]);
+      for (const [index, experienceId] of [...new Set(req.body.experience_ids.filter(Boolean))].entries()) {
+        await client.query("INSERT INTO event_experiences (event_id, experience_id, display_order) VALUES ($1,$2,$3)", [req.params.id, experienceId, index]);
+      }
+    }
+    return event;
+  });
   await recordActivity({ actorUserId: req.user.id, entityType: "event", entityId: req.params.id, action: req.body.status ? "event_status_changed" : "event_edited", summary: req.body.status ? `Event status changed to ${req.body.status}` : "Event edited" });
   await writeAudit({ req, action: req.body.status ? "event_status_changed" : "event_edited", entity: "event", entityId: req.params.id, before: before.rows[0], after: updated });
   res.json(updated);
