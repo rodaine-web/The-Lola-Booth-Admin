@@ -122,7 +122,11 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
       const result = await api.get(`${endpoint}?search=${encodeURIComponent(search)}&status=${statusFilter}&sort_by=${sort}&overdue=${overdue}`);
       setRows(result.data || []);
     } catch (err) {
-      if (err.message.includes("Possible duplicate")) {
+      if (err.code === "POSSIBLE_DUPLICATE" && err.details?.duplicate) {
+        const duplicate = err.details.duplicate;
+        const reason = duplicate.match_reason === "EMAIL_MATCH" ? "email address" : "phone number";
+        setError(`Possible duplicate: the ${reason} matches ${duplicate.name || [duplicate.first_name, duplicate.last_name].filter(Boolean).join(" ") || "an existing record"} (${duplicate.email || duplicate.phone || duplicate.id}). Open the existing record before creating another one.`);
+      } else if (err.message.includes("Possible duplicate")) {
         setError(`${err.message} Open the existing record or continue with a distinct email/phone.`);
       } else {
         setError(err.message);
