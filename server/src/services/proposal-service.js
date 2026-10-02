@@ -50,17 +50,29 @@ export async function buildProposalSnapshot(input) {
   const experience = exp.rows[0] || {};
   const selectedInput = Array.isArray(input.selected_experiences) ? input.selected_experiences : [];
   const selectedIds = selectedInput.map((item) => item?.experience_id).filter(Boolean);
-  const selectedExperienceRows = selectedIds.length
-    ? (await query("SELECT * FROM experiences WHERE id = ANY($1::uuid[])", [selectedIds])).rows
-    : [];
+  const selectedPackageIds = selectedInput.flatMap((item) => Array.isArray(item?.packages) ? item.packages.map((pkg) => pkg?.package_id).filter(Boolean) : []);
+  const [selectedExperienceRows, selectedPackageRows] = await Promise.all([
+    selectedIds.length ? query("SELECT * FROM experiences WHERE id = ANY($1::uuid[])", [selectedIds]).then(result => result.rows) : [],
+    selectedPackageIds.length ? query("SELECT * FROM packages WHERE id = ANY($1::uuid[])", [selectedPackageIds]).then(result => result.rows) : []
+  ]);
   const selectedExperiences = selectedInput.map((item, index) => {
     const catalog = selectedExperienceRows.find((row) => row.id === item.experience_id) || {};
+    const packages = (Array.isArray(item.packages) ? item.packages : []).map((selectedPackage) => {
+      const packageCatalog = selectedPackageRows.find((row) => row.id === selectedPackage.package_id) || {};
+      return {
+        package_id: selectedPackage.package_id || packageCatalog.id || null,
+        name: selectedPackage.name || packageCatalog.name || "Package",
+        price: money(selectedPackage.price ?? packageCatalog.starting_price ?? 0),
+        description: selectedPackage.description || packageCatalog.proposal_description || packageCatalog.description || ""
+      };
+    });
     return {
       experience_id: item.experience_id || catalog.id || null,
       key: item.key || proposalExperienceKey(item.name || catalog.name || `experience-${index + 1}`),
       name: item.name || catalog.name || `Experience ${index + 1}`,
-      package_name: item.package_name || "",
-      price: money(item.price ?? item.unit_price ?? catalog.base_price ?? 0),
+      packages,
+      package_name: packages.length ? packages.map((pkg) => pkg.name).join(" + ") : (item.package_name || ""),
+      price: packages.length ? packages.reduce((sum, pkg) => sum + pkg.price, 0) : money(item.price ?? item.unit_price ?? catalog.base_price ?? 0),
       headline: item.headline || "",
       description: item.description || catalog.proposal_description || catalog.description || "",
       features: Array.isArray(item.features) ? item.features : [],
@@ -93,15 +105,29 @@ export async function buildProposalSnapshot(input) {
       taxable: item.taxable !== false
     };
   });
-  const selectedExperienceLines = selectedExperiences.map((item) => ({
-    type: "EXPERIENCE_SELECTED",
-    experience_id: item.experience_id,
-    description: [item.name, item.package_name].filter(Boolean).join(" - "),
-    detail: item.description || "",
-    quantity: 1,
-    unit_price: item.price,
-    line_total: item.price
-  }));
+  const selectedExperienceLines = selectedExperiences.flatMap((item) => {
+    if (item.packages?.length) {
+      return item.packages.map((pkg) => ({
+        type: "EXPERIENCE_SELECTED",
+        experience_id: item.experience_id,
+        package_id: pkg.package_id,
+        description: [item.name, pkg.name].filter(Boolean).join(" - "),
+        detail: pkg.description || item.description || "",
+        quantity: 1,
+        unit_price: pkg.price,
+        line_total: pkg.price
+      }));
+    }
+    return [{
+      type: "EXPERIENCE_SELECTED",
+      experience_id: item.experience_id,
+      description: [item.name, item.package_name].filter(Boolean).join(" - "),
+      detail: item.description || "",
+      quantity: 1,
+      unit_price: item.price,
+      line_total: item.price
+    }];
+  });
   const lines = [
     ...(!selectedExperiences.length && (input.package_id || packageAmount > 0 || pack.name) ? [{ type: "PACKAGE", package_id: input.package_id, description: input.package_name || pack.name || "Package", detail: input.package_description || pack.proposal_description || "", quantity: 1, unit_price: packageAmount, line_total: packageAmount }] : []),
     ...(!selectedExperiences.length && experienceAmount ? [{ type: "EXPERIENCE", experience_id: input.experience_id, description: `${experience.name || "Experience"} surcharge`, quantity: 1, unit_price: experienceAmount, line_total: experienceAmount }] : []),
