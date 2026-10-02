@@ -106,7 +106,7 @@ test("October UAT: Communications uses Templates terminology and responsive temp
   const css = source("src/styles/global.css");
   assert.match(communications, /"Templates"/);
   assert.doesNotMatch(communications, /<h[12][^>]*>Email Templates<\/h[12]>/);
-  assert.match(css, /template-(admin-grid|list|row)/i);
+  assert.match(css, /template-(card-list|admin-card|card-actions)/i);
 });
 
 test("October UAT: failed payments and refunds notify both customer and owner paths", () => {
