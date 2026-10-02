@@ -13,6 +13,7 @@ export function metricHref(metric, range) {
   if (metric.key === 'booked_revenue') return '/events/events?' + new URLSearchParams({booking_from:range.start,booking_to:range.end});
   if (metric.key === 'collected_revenue') return '/finance/payments?' + new URLSearchParams({from:range.start,to:range.end});
   if (metric.key === 'refunds') return '/finance/payments?' + new URLSearchParams({refunded:'true',from:range.start,to:range.end});
+  if (metric.key === 'tasks_due') return '/operations/tasks?' + new URLSearchParams({due_from:range.start,due_to:range.end});
   if (metric.key === 'upcoming_events') return '/events/events?' + new URLSearchParams({upcoming:'true',to:range.end});
   return metric.href;
 }
