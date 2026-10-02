@@ -1610,10 +1610,10 @@ adminRouter.get("/payments", requirePermission("read:finance"), validate(paginat
   const offset = (filters.page - 1) * pageSize;
   const params = [];
   const where = ["p.deleted_at IS NULL"];
-  const activity=filters.funnel||filters.activity;
-  const timeColumn=activity==='accepted'?'p.accepted_at':activity==='sent'?'p.sent_at':'p.created_at';
-  if(filters.from){params.push(filters.from);where.push(`${timeColumn}>=$${params.length}::timestamptz`);}
-  if(filters.to){params.push(filters.to);where.push(`${timeColumn}<$${params.length}::timestamptz`);}
+  const paymentTime="COALESCE(p.paid_at,p.payment_date::timestamptz,p.created_at)";
+  if(filters.from){params.push(filters.from);where.push(`${paymentTime}>=${params.length}::timestamptz`);}
+  if(filters.to){params.push(filters.to);where.push(`${paymentTime}<${params.length}::timestamptz`);}
+  if(filters.refunded==="true"||filters.refunded===true)where.push("COALESCE(p.refunded_amount,0)>0");
 
   if (filters.status) {
     params.push(filters.status);
