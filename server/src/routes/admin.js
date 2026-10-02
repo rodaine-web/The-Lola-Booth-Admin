@@ -628,7 +628,10 @@ adminRouter.post("/leads", requirePermission("write:sales"), validate(leadSchema
       [req.body.email, req.body.phone]
     );
     if (duplicate.rows[0]) {
-      throw new AppError("Possible duplicate lead found.", 409, "POSSIBLE_DUPLICATE", { duplicate: duplicate.rows[0] });
+      const matchReason = req.body.email && String(duplicate.rows[0].email || "").toLowerCase() === String(req.body.email).toLowerCase()
+        ? "EMAIL_MATCH"
+        : "PHONE_MATCH";
+      throw new AppError("Possible duplicate lead found.", 409, "POSSIBLE_DUPLICATE", { duplicate: { ...duplicate.rows[0], match_reason: matchReason } });
     }
   }
   const fields = Object.keys(req.body);
@@ -913,7 +916,12 @@ adminRouter.post("/clients", requirePermission("write:sales"), validate(clientSc
        LIMIT 1`,
       [req.body.email || null, req.body.phone || null]
     );
-    if (duplicate.rows[0]) throw new AppError("Possible duplicate client found.", 409, "POSSIBLE_DUPLICATE", { duplicate: duplicate.rows[0] });
+    if (duplicate.rows[0]) {
+      const matchReason = req.body.email && String(duplicate.rows[0].email || "").toLowerCase() === String(req.body.email).toLowerCase()
+        ? "EMAIL_MATCH"
+        : "PHONE_MATCH";
+      throw new AppError("Possible duplicate client found.", 409, "POSSIBLE_DUPLICATE", { duplicate: { ...duplicate.rows[0], match_reason: matchReason } });
+    }
   }
   const body = { ...req.body, name, billing_address: [req.body.address, req.body.city, req.body.state, req.body.zip].filter(Boolean).join(", ") || null };
   const allowed = ["name", "first_name", "last_name", "email", "phone", "company", "preferred_contact_method", "address", "city", "state", "zip", "notes", "tags", "client_type", "referral_source", "billing_address"];
