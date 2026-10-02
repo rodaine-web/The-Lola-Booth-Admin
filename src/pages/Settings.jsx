@@ -14,8 +14,14 @@ export default function Settings() {
 
   useEffect(() => {
     api.get("/settings").then((result) => {
-      setSettings(result);
-      setForm({...result,business_email:result.business_email==='hello@lolabooths.com'?'info@thelolabooth.com':result.business_email});
+      const normalized = {
+        ...result,
+        business_email: result.business_email === "hello@lolabooths.com"
+          ? "info@thelolabooth.com"
+          : result.business_email
+      };
+      setSettings(normalized);
+      setForm(normalized);
     }).catch(e=>setError(e.message));
     api.get("/notifications/preferences").then(setNotificationPrefs).catch(() => null);
   }, [revision]);
