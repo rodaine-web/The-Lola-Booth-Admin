@@ -60,23 +60,26 @@ export async function publicPaymentOptions(invoice) {
     }, "Staging payment options diagnostic");
   }
   const balance = invoiceBalance(invoice);
+  const paid = money(invoice.amount_paid || 0);
   const storedMinimum = invoice.pricing_snapshot?.amount_due_now;
   const hasStoredMinimum = storedMinimum !== null && storedMinimum !== undefined && storedMinimum !== "";
   const configuredMinimum = hasStoredMinimum ? money(storedMinimum) : null;
-  const depositRemaining = hasStoredMinimum
-    ? Math.max(0, configuredMinimum - money(invoice.amount_paid || 0))
-    : null;
-  // Legacy invoices may not have amount_due_now. Their stored outstanding balance
-  // already reflects prior payments, so subtracting amount_paid again understates
-  // the amount due.
-  const amountDue = hasStoredMinimum
-    ? (depositRemaining > 0 ? Math.min(depositRemaining, balance) : balance)
-    : balance;
+  const depositRemaining = hasStoredMinimum ? Math.max(0, configuredMinimum - paid) : null;
+  const depositSatisfied = hasStoredMinimum
+    ? configuredMinimum <= 0 || paid >= configuredMinimum
+    : paid > 0;
+  const depositAvailable = !depositSatisfied && depositRemaining > 0 && depositRemaining < balance;
+  // Legacy invoices without a stored minimum use their authoritative outstanding
+  // balance. Once any payment has been made, "deposit" is no longer offered.
+  const amountDue = depositAvailable ? money(depositRemaining) : balance;
   return {
     payable,
     amountDue,
     fullAmount: balance,
-    minimumAmount: depositRemaining > 0 ? amountDue : Math.min(1, balance),
+    minimumAmount: depositAvailable ? amountDue : Math.min(1, balance),
+    depositSatisfied,
+    depositAvailable,
+    depositRemaining: depositAvailable ? amountDue : 0,
     paymentMode: invoice.pricing_snapshot?.payment_mode || "BALANCE_DUE",
     allowPayInFull: invoice.pricing_snapshot?.allow_pay_in_full !== false,
     allowCustomAmount: invoice.pricing_snapshot?.allow_custom_amount !== false,
@@ -97,6 +100,9 @@ export async function createPaymentSession({ token, provider, amountChoice = "DE
   const options = await publicPaymentOptions(invoice);
   if (!options.providers.some((item) => item.provider === normalizedProvider)) throw new AppError("This payment provider is not configured.", 409, "PAYMENT_PROVIDER_UNAVAILABLE");
   let selectedAmount = options.amountDue;
+  if (amountChoice === "DEPOSIT" && !options.depositAvailable) {
+    throw new AppError("The deposit requirement has already been satisfied. Choose the remaining balance or another amount.",409,"DEPOSIT_ALREADY_SATISFIED");
+  }
   if (amountChoice === "FULL") {
     if (!options.allowPayInFull) throw new AppError("Pay in full is not available for this invoice.",409,"PAYMENT_OPTION_UNAVAILABLE");
     selectedAmount = options.fullAmount;
@@ -639,21 +645,46 @@ async function persistWebhookEvent(provider, eventId, eventType, payload, proces
   if (!eventId || !eventType) throw new AppError("Invalid webhook event.",400,"INVALID_WEBHOOK");
   const payloadText=JSON.stringify(payload);
   const payloadHash=crypto.createHash("sha256").update(payloadText).digest("hex");
+
+  await query(
+    `INSERT INTO webhook_events(provider,external_event_id,event_type,payload,payload_hash,status,attempt_count)
+     VALUES($1,$2,$3,$4,$5,'RECEIVED',1)
+     ON CONFLICT(provider,external_event_id) DO UPDATE SET
+       attempt_count=webhook_events.attempt_count+1,
+       error_message=NULL`,
+    [provider,eventId,eventType,payloadText,payloadHash]
+  );
+
+  const row=(await query(
+    "SELECT * FROM webhook_events WHERE provider=$1 AND external_event_id=$2",
+    [provider,eventId]
+  )).rows[0];
+  if (row.payload_hash && row.payload_hash !== payloadHash) {
+    throw new AppError("Webhook payload changed.",409,"WEBHOOK_PAYLOAD_MISMATCH");
+  }
+  if (row.status === "PROCESSED") return {duplicate:true,status:"IGNORED"};
+
+  const claimed=(await query(
+    `UPDATE webhook_events
+     SET status='PROCESSING', last_error=NULL, error_message=NULL
+     WHERE id=$1 AND status IN ('RECEIVED','FAILED','FAILED_NEEDS_REVIEW')
+     RETURNING *`,
+    [row.id]
+  )).rows[0];
+  if (!claimed) return {duplicate:true,status:"PROCESSING"};
+
   try {
-    return await transaction(async client=>{
-      await client.query(`INSERT INTO webhook_events(provider,external_event_id,event_type,payload,payload_hash,status)
-        VALUES($1,$2,$3,$4,$5,'RECEIVED') ON CONFLICT(provider,external_event_id) DO NOTHING`,[provider,eventId,eventType,payloadText,payloadHash]);
-      const row=(await client.query("SELECT * FROM webhook_events WHERE provider=$1 AND external_event_id=$2 FOR UPDATE",[provider,eventId])).rows[0];
-      if(row.payload_hash!==payloadHash)throw new AppError("Webhook payload changed.",409,"WEBHOOK_PAYLOAD_MISMATCH");
-      if(row.status==='PROCESSED')return {duplicate:true,status:'IGNORED'};
-      await processor();
-      await client.query("UPDATE webhook_events SET status='PROCESSED',processed_at=now(),error_message=NULL WHERE id=$1",[row.id]);
-      return {duplicate:false,status:'PROCESSED'};
-    });
+    await processor();
+    await query(
+      "UPDATE webhook_events SET status='PROCESSED',processed_at=now(),last_error=NULL,error_message=NULL WHERE id=$1",
+      [row.id]
+    );
+    return {duplicate:false,status:"PROCESSED"};
   } catch(error) {
-    await query(`INSERT INTO webhook_events(provider,external_event_id,event_type,payload,payload_hash,status,error_message)
-      VALUES($1,$2,$3,$4,$5,'FAILED',$6) ON CONFLICT(provider,external_event_id) DO UPDATE SET error_message=EXCLUDED.error_message
-      WHERE webhook_events.status <> 'PROCESSED'`,[provider,eventId,eventType,payloadText,payloadHash,error.code||'WEBHOOK_PROCESSING_FAILED']);
+    await query(
+      "UPDATE webhook_events SET status='FAILED',last_error=$2,error_message=$2 WHERE id=$1",
+      [row.id,error.code||error.message||"WEBHOOK_PROCESSING_FAILED"]
+    ).catch(()=>null);
     throw error;
   }
 }
