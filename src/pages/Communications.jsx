@@ -242,30 +242,36 @@ export default function Communications() {
         <section className="template-admin-grid">
           <article className="panel">
             <div className="table-heading">
-              <h2>Email Templates</h2>
+              <h2>Templates</h2>
               <button className="primary-action" onClick={() => editTemplate()}><Edit3 size={15} />New</button>
             </div>
             <div className="segmented-control">
               {templateTabs.map((tab) => <button key={tab} className={templateTab === tab ? "active" : ""} onClick={() => setTemplateTab(tab)}>{tab}</button>)}
             </div>
-            <div className="template-table">
+            <div className="template-card-list">
               {filteredTemplates.map((template) => (
-                <div className="template-admin-row" key={template.id}>
-                  <strong>{template.name}</strong>
-                  <span>{template.key || template.template_key}</span>
-                  <span>{template.template_type || template.channel}</span>
-                  <span>{template.status || (template.active ? "ACTIVE" : "DRAFT")}</span>
-                  <span>{template.default_send_mode || "SEND_NOW"}</span>
-                  <span>v{template.version || 1}</span>
-                  <span>{template.updated_at ? new Date(template.updated_at).toLocaleDateString() : "New"}</span>
-                  <div className="icon-actions">
-                    <button title="Edit" onClick={() => editTemplate(template)}><Edit3 size={15} /></button>
-                    <button title="Preview" onClick={() => { editTemplate(template); previewTemplate(template.id); }}><Eye size={15} /></button>
-                    <button title="Duplicate" onClick={() => templateAction(template, "duplicate")}><Copy size={15} /></button>
-                    <button title="Activate" onClick={() => templateAction(template, "activate")}><CheckCircle2 size={15} /></button>
-                    <button title="Archive" onClick={() => templateAction(template, "archive")}><Archive size={15} /></button>
+                <article className="template-admin-card" key={template.id}>
+                  <div className="template-admin-card-heading">
+                    <div>
+                      <strong>{template.name}</strong>
+                      <small>{template.key || template.template_key}</small>
+                    </div>
+                    <span className="status-pill">{template.status || (template.active ? "ACTIVE" : "DRAFT")}</span>
                   </div>
-                </div>
+                  <dl className="template-admin-meta">
+                    <div><dt>Type</dt><dd>{template.template_type || template.channel}</dd></div>
+                    <div><dt>Send mode</dt><dd>{template.default_send_mode || "SEND_NOW"}</dd></div>
+                    <div><dt>Version</dt><dd>v{template.version || 1}</dd></div>
+                    <div><dt>Updated</dt><dd>{template.updated_at ? new Date(template.updated_at).toLocaleDateString() : "New"}</dd></div>
+                  </dl>
+                  <div className="icon-actions template-card-actions">
+                    <button title="Edit template" aria-label="Edit template" onClick={() => editTemplate(template)}><Edit3 size={15} />Edit</button>
+                    <button title="Preview template" aria-label="Preview template" onClick={() => { editTemplate(template); previewTemplate(template.id); }}><Eye size={15} />Preview</button>
+                    <button title="Duplicate template" aria-label="Duplicate template" onClick={() => templateAction(template, "duplicate")}><Copy size={15} />Duplicate</button>
+                    <button title="Activate template" aria-label="Activate template" onClick={() => templateAction(template, "activate")}><CheckCircle2 size={15} />Activate</button>
+                    <button title="Archive template" aria-label="Archive template" onClick={() => templateAction(template, "archive")}><Archive size={15} />Archive</button>
+                  </div>
+                </article>
               ))}
             </div>
           </article>
