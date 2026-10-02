@@ -5,7 +5,7 @@ import { Archive, ArrowLeft, Copy, Download, FileText, Mail, ReceiptText } from 
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import DocumentPreview from "../components/DocumentPreview.jsx";
+import AdminProposalPreview from "../components/AdminProposalPreview.jsx";
 import { api } from "../api/client.js";
 
 export default function ProposalDetail() {
@@ -86,7 +86,16 @@ export default function ProposalDetail() {
         <Metric label="Accepted By" value={proposal.accepted_by_name || "Not accepted"} />
       </section>
       <section className="panel"><h2>Version history</h2>{proposal.versions?.length ? <ul>{proposal.versions.map(version => <li key={version.id}>Version {version.version_number} · {new Date(version.created_at).toLocaleString()}</li>)}</ul> : <p>No saved versions.</p>}</section>
-      <DocumentPreview path={`/proposals/${id}/pdf`} title="Proposal preview" />
+      <section className="panel">
+        <div className="table-heading">
+          <div>
+            <h2>HTML Proposal Preview</h2>
+            <p className="note-text">This is the client-facing proposal view. Review it here first, then download the PDF when you are satisfied.</p>
+          </div>
+          <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/pdf`, `${proposal.proposal_number}.pdf`), "PDF generated.")}><Download size={16} />Download PDF</button>
+        </div>
+        <AdminProposalPreview id={id} />
+      </section>
     </main>
   );
 }
