@@ -246,7 +246,7 @@ async function ensureProposalLead(client, input = {}, actorUserId = null) {
       firstName,
       lastName,
       customer.email,
-      customer.phone || "",
+      customer.phone || null,
       event.event_date,
       event.start_time || null,
       event.end_time || null,
