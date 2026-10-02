@@ -1374,10 +1374,9 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
   const params = [];
   const where = ["p.deleted_at IS NULL"];
   if(filters.data_scope==="business")where.push("p.data_classification IN ('BUSINESS','UNREVIEWED')");
-  const activity=filters.funnel||filters.activity;
-  const timeColumn=activity==='accepted'?'p.accepted_at':activity==='sent'?'p.sent_at':'p.created_at';
-  if(filters.from){params.push(filters.from);where.push(`${timeColumn}>=$${params.length}::timestamptz`);}
-  if(filters.to){params.push(filters.to);where.push(`${timeColumn}<$${params.length}::timestamptz`);}
+  const paymentTime="COALESCE(p.paid_at,p.payment_date::timestamptz,p.created_at)";
+  if(filters.from){params.push(filters.from);where.push(`${paymentTime}>=${params.length}::timestamptz`);}
+  if(filters.to){params.push(filters.to);where.push(`${paymentTime}<${params.length}::timestamptz`);}
 
   if (filters.status) {
     params.push(filters.status);
@@ -1639,7 +1638,7 @@ adminRouter.get("/payments", requirePermission("read:finance"), validate(paginat
      ORDER BY p.payment_date DESC NULLS LAST, p.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
-  const count = await query(`SELECT count(*)::int AS count FROM payments p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN invoices i ON i.id=p.invoice_id WHERE ${where.join(" AND ")}`, params.slice(0, -2));
+  const count = await query(`SELECT count(*)::int AS count FROM payments p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id LEFT JOIN invoices i ON i.id=p.invoice_id WHERE ${where.join(" AND ")}`, params.slice(0, -2));
   res.json({ data: rows.rows, pagination: { page: filters.page, pageSize, total: count.rows[0].count } });
 }));
 
