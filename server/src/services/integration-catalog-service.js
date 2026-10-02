@@ -23,7 +23,14 @@ export async function integrationCatalog(){
   else if(provider==='PAYPAL'){status='DISABLED';detail='Preserved adapter; disabled until verified webhook and capture qualification.';}
   else if(provider==='MANUAL'){status='DISABLED';detail='Manual recording remains restricted to authorized finance operators.';}
   else if(provider==='WEBSITE'){status='READY';mode='LOCAL';detail='Local API available. Frozen production CMS publication is not certified here.';}
-  else if(provider==='LINKEDIN'){status='PENDING_APPROVAL';detail='Optional integration; API approval and external delivery are pending.';}
+  else if(provider==='LINKEDIN'){
+    const initiated=Boolean(process.env.LINKEDIN_CLIENT_ID || process.env.LINKEDIN_CLIENT_SECRET || process.env.LINKEDIN_ORGANIZATION_ID);
+    mode=initiated?'SETUP_STARTED':'DISABLED';
+    status=initiated?'PENDING_APPROVAL':'NOT_CONFIGURED';
+    detail=initiated
+      ? 'LinkedIn setup has been initiated. API approval and external delivery remain pending.'
+      : 'Optional integration. No LinkedIn setup has been initiated.';
+  }
   else if(MARKETING_PROVIDERS.includes(provider)){const c=marketingConfiguration(provider);mode=c.enabled?'PROVIDER':'DISABLED';status=!c.enabled?'DISABLED':!c.complete?'NOT_CONFIGURED':evidence.last_failure&&(!evidence.last_success||evidence.last_failure>evidence.last_success)?'ERROR':evidence.last_success?'READY':'TEST_READY';detail='Server adapter available. Payload tests never dispatch externally. Provider acceptance does not certify attribution or reporting.';}
   else if(present){status=present===keys.length?'PENDING_VERIFICATION':'ERROR';}
   if(provider==='MICROSOFT'&&isStaging()&&process.env.STAGING_EMAIL_ENABLED!=='true'){mode='STAGING_PAUSED';status='DISABLED';detail='Microsoft configuration retained; staging sends are paused pending controlled inbox qualification.';}
