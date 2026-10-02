@@ -25,6 +25,12 @@ test("October UAT: proposal workflow hydrates leads and synchronizes proposal st
   assert.match(service, /syncLeadProposalStage/);
 });
 
+test("October UAT: proposal acceptance applies the configured booking confirmation policy", () => {
+  const publicRoutes = source("server/src/routes/public.js");
+  assert.match(publicRoutes, /applyBookingConfirmationPolicy/);
+  assert.match(publicRoutes, /proposal\.event_id\) await applyBookingConfirmationPolicy\(proposal\.event_id\)/);
+});
+
 test("October UAT: event workflow supports inline client creation and multi-service selections", () => {
   const resource = source("src/pages/ResourcePage.jsx");
   const admin = source("server/src/routes/admin.js");
