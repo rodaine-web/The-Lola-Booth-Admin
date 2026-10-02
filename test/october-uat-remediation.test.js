@@ -1,0 +1,85 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+function source(path) {
+  return fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+test("October UAT: proposals use HTML-first preview with PDF as download fallback", () => {
+  const detail = source("src/pages/ProposalDetail.jsx");
+  assert.match(detail, /AdminProposalPreview/);
+  assert.match(detail, /HTML Proposal Preview/);
+  assert.match(detail, /\/proposals\/\$\{id\}\/pdf/);
+  assert.doesNotMatch(detail, /DocumentPreview path=\{\`\/proposals\/\$\{id\}\/pdf/);
+});
+
+test("October UAT: proposal workflow hydrates leads and synchronizes proposal stages", () => {
+  const editor = source("src/pages/ProposalEditor.jsx");
+  const service = source("server/src/services/proposal-service.js");
+  assert.match(editor, /hydrateFromLead/);
+  assert.match(editor, /hydrateProposalFromLead/);
+  assert.match(service, /ensureProposalLead/);
+  assert.match(service, /PROPOSAL_DRAFT/);
+  assert.match(service, /PROPOSAL_SENT/);
+  assert.match(service, /syncLeadProposalStage/);
+});
+
+test("October UAT: event workflow supports inline client creation and multi-service selections", () => {
+  const resource = source("src/pages/ResourcePage.jsx");
+  const admin = source("server/src/routes/admin.js");
+  const migration = source("server/migrations/033_event_multi_service_selections.sql");
+  assert.match(resource, /createInlineClient/);
+  assert.match(resource, /experience_ids/);
+  assert.match(resource, /package_ids/);
+  assert.match(admin, /event_packages/);
+  assert.match(admin, /event_experiences/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS event_packages/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS event_experiences/);
+});
+
+test("October UAT: new users require explicit role selection", () => {
+  const users = source("src/pages/Users.jsx");
+  assert.match(users, /roles:\s*\[\]/);
+  assert.doesNotMatch(users, /roles:\s*\["ATTENDANT"\]/);
+  assert.match(users, /!form\.roles\.length/);
+});
+
+test("October UAT: dashboard event drilldowns preserve exact query filters", () => {
+  const resource = source("src/pages/ResourcePage.jsx");
+  const links = source("src/utils/dashboard-links.js");
+  const admin = source("server/src/routes/admin.js");
+  assert.match(resource, /useSearchParams/);
+  assert.match(resource, /new URLSearchParams\(routeParams\)/);
+  assert.match(links, /booking_from/);
+  assert.match(links, /upcoming/);
+  assert.match(admin, /status IN \('CONFIRMED','PREPARING','READY','IN_PROGRESS'\)/);
+});
+
+test("October UAT: payment notifications are immediate, recorded, idempotent, and non-fatal after payment posting", () => {
+  const payment = source("server/src/services/payment-service.js");
+  assert.match(payment, /sendRecordedPaymentEmail/);
+  assert.match(payment, /payment-confirmation:/);
+  assert.match(payment, /payment-owner-notification:/);
+  assert.match(payment, /SENT_TO_PROVIDER/);
+  assert.match(payment, /Customer payment confirmation email failed after payment posting/);
+  assert.match(payment, /Owner payment notification email failed after payment posting/);
+});
+
+test("October UAT: invitation delivery outcomes are visible and retryable", () => {
+  const users = source("src/pages/Users.jsx");
+  const admin = source("server/src/routes/admin.js");
+  assert.match(users, /invitation_status/);
+  assert.match(users, /Resend invitation/);
+  assert.match(admin, /deliveryErrorCode|deliveryError/);
+});
+
+test("October UAT: controlled client and event values and actionable validation remain present", () => {
+  const app = source("src/App.jsx");
+  const resource = source("src/pages/ResourcePage.jsx");
+  assert.match(app, /Preferred contact method/);
+  assert.match(app, /EMAIL.*PHONE.*TEXT/s);
+  assert.match(app, /State.*select/s);
+  assert.match(resource, /End time must be after start time/);
+  assert.match(resource, /scrollIntoView/);
+});
