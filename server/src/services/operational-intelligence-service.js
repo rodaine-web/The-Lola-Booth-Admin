@@ -137,7 +137,12 @@ async function dashboardMetrics([start, end]) {
       (SELECT COALESCE(sum(total),0)::numeric FROM bookings WHERE created_at >= $1 AND created_at < $2 AND deleted_at IS NULL) AS booked_revenue,
       (SELECT COALESCE(sum(amount - refunded_amount),0)::numeric FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL) AS collected_revenue,
       (SELECT COALESCE(sum(refunded_amount),0)::numeric FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND deleted_at IS NULL) AS refunds,
-      (SELECT COALESCE(sum(deposit_required),0)::numeric FROM bookings WHERE created_at >= $1 AND created_at < $2 AND amount_paid > 0 AND deleted_at IS NULL) AS deposits_collected,
+      (SELECT COALESCE(sum(LEAST(COALESCE(amount_paid,0),COALESCE(deposit_required,0))),0)::numeric
+         FROM bookings
+         WHERE created_at >= $1 AND created_at < $2
+           AND COALESCE(amount_paid,0) > 0
+           AND COALESCE(deposit_required,0) > 0
+           AND deleted_at IS NULL) AS deposits_collected,
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID') AS outstanding_balance,
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID' AND due_date >= current_date AND due_date < current_date + interval '7 days') AS due_this_week,
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID' AND due_date < current_date AND COALESCE(amount_outstanding,balance_due) > 0) AS overdue_balance,
