@@ -34,6 +34,10 @@ export async function getInvoice(idOrToken, { publicView = false } = {}) {
 
 export async function createInvoice(req) {
   if (req.body.proposal_id) {
+    const proposal = await getProposal(req.body.proposal_id);
+    if (proposal.status !== "ACCEPTED" && proposal.status !== "CONVERTED") {
+      throw new AppError("Only an accepted proposal can be converted to an invoice.", 409, "PROPOSAL_NOT_ACCEPTED");
+    }
     const paymentMode = req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE";
     const existing = await query(
       "SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status <> 'VOID' AND COALESCE(pricing_snapshot->>'payment_mode','')=$2 ORDER BY created_at DESC LIMIT 1",
