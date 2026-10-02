@@ -38,10 +38,9 @@ export async function createInvoice(req) {
     if (proposal.status !== "ACCEPTED" && proposal.status !== "CONVERTED") {
       throw new AppError("Only an accepted proposal can be converted to an invoice.", 409, "PROPOSAL_NOT_ACCEPTED");
     }
-    const paymentMode = req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE";
     const existing = await query(
-      "SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status <> 'VOID' AND COALESCE(pricing_snapshot->>'payment_mode','')=$2 ORDER BY created_at DESC LIMIT 1",
-      [req.body.proposal_id, paymentMode]
+      "SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status <> 'VOID' ORDER BY created_at DESC LIMIT 1",
+      [req.body.proposal_id]
     );
     if (existing.rows[0]) return existing.rows[0];
   }
