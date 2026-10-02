@@ -44,7 +44,18 @@ export default function Settings() {
         setNotice("No changes to save.");
         return;
       }
-      const updated = await api.patch("/settings", changed);
+      let updated = settings;
+      if (Object.prototype.hasOwnProperty.call(changed, "stripe_enabled")) {
+        const paymentSettings = await api.patch("/settings/payment-checkout", {
+          stripe_enabled: Boolean(changed.stripe_enabled)
+        });
+        updated = { ...updated, ...paymentSettings };
+        delete changed.stripe_enabled;
+      }
+      if (Object.keys(changed).length) {
+        const generalSettings = await api.patch("/settings", changed);
+        updated = { ...updated, ...generalSettings };
+      }
       setSettings(updated);
       setForm(updated);
       setNotice("Settings saved.");
