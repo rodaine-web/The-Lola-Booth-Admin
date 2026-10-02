@@ -83,3 +83,38 @@ test("October UAT: controlled client and event values and actionable validation 
   assert.match(resource, /End time must be after start time/);
   assert.match(resource, /scrollIntoView/);
 });
+
+
+test("October UAT: integrations expose actionable setup and lifecycle controls", () => {
+  const integrations = source("src/pages/Integrations.jsx");
+  assert.match(integrations, /Reconnect \/ Configure/);
+  assert.match(integrations, /Recheck status/);
+  assert.match(integrations, />Disable</);
+  assert.match(integrations, /Configuration guidance/);
+});
+
+test("October UAT: System Health refresh shows progress, completion, and timestamp", () => {
+  const health = source("src/pages/SystemHealth.jsx");
+  assert.match(health, /refreshing/);
+  assert.match(health, /Refreshing…/);
+  assert.match(health, /System health refreshed/);
+  assert.match(health, /Last refreshed/);
+});
+
+test("October UAT: Communications uses Templates terminology and responsive template UI", () => {
+  const communications = source("src/pages/Communications.jsx");
+  const css = source("src/styles.css");
+  assert.match(communications, /"Templates"/);
+  assert.doesNotMatch(communications, /<h[12][^>]*>Email Templates<\/h[12]>/);
+  assert.match(css, /template-card|template-grid|templates/i);
+});
+
+test("October UAT: failed payments and refunds notify both customer and owner paths", () => {
+  const payment = source("server/src/services/payment-service.js");
+  assert.match(payment, /payment-failed:/);
+  assert.match(payment, /payment-failed-owner:/);
+  assert.match(payment, /refund-confirmation:/);
+  assert.match(payment, /refund-owner-notification:/);
+  assert.match(payment, /PAYMENT_FAILED_INTERNAL/);
+  assert.match(payment, /REFUND_INTERNAL/);
+});
