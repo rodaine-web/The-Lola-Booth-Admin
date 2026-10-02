@@ -17,6 +17,7 @@ export default function Integrations(){
   {card.stateManaged&&card.connectionStatus!=="DISCONNECTED"&&<button disabled={Boolean(busy)} onClick={()=>disable(card.provider)}>{busy===card.provider?"Working…":"Disable"}</button>}
 </div>
 {["PENDING_VERIFICATION","PENDING_APPROVAL","TEST_READY"].includes(card.status)&&<p className="note-text">Configuration is not the same as verified provider connectivity. Complete the provider-specific verification before treating this integration as live.</p>}
+{card.provider==="LINKEDIN"&&card.status==="PENDING_APPROVAL"&&<p className="note-text">LinkedIn Lead Sync requires LinkedIn API approval. Setup has been initiated, but external delivery is not verified yet.</p>}
 <details><summary>Configuration guidance</summary><p>Credentials belong in the server environment, never in this browser.</p>{card.config.fields.length>0&&<ul>{card.config.fields.map(key=><li key={key}>{key}</li>)}</ul>}<Link to="/system/settings#integrations">Open integration preferences</Link></details></article>)}</div></section>)}</AsyncState><InboundHistory/></main>;
 }
 
