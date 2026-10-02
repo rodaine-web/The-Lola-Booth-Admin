@@ -22,6 +22,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   const [inlineClientSaving,setInlineClientSaving]=useState(false);
   const [inlineClient,setInlineClient]=useState({first_name:"",last_name:"",email:"",phone:""});
   const [multiOptions,setMultiOptions]=useState({packages:[],experiences:[]});
+  const [duplicateEvent,setDuplicateEvent]=useState(null);
   useDialogFocus(Boolean(editing),()=>setEditing(null));
 
   useEffect(()=>{setEditing(null);setForm({});setStatusFilter(routeParams.get("status")||"");setOverdue(routeParams.get("overdue")==="true");},[endpoint,routeParams.toString()]);
@@ -47,6 +48,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   }, [endpoint, search, revision,statusFilter,sort,overdue,routeParams.toString()]);
 
   function openCreate() {
+    setDuplicateEvent(null);
     setInlineClientOpen(false);
     setInlineClient({first_name:"",last_name:"",email:"",phone:""});
     setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? false : ""])));
@@ -59,6 +61,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   }
 
   async function openEdit(row) {
+    setDuplicateEvent(null);
     setError("");
     setNotice("");
     try {
@@ -88,6 +91,29 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
       setError(err.message);
     } finally {
       setInlineClientSaving(false);
+    }
+  }
+
+  function eventPayload() {
+    const payload = eventPayload();
+    return payload;
+  }
+
+  async function createDuplicateEventAnyway() {
+    if (saving || endpoint !== "/events" || !duplicateEvent) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await api.post("/events?continueAnyway=true", eventPayload());
+      setDuplicateEvent(null);
+      setEditing(null);
+      setNotice("Event created after duplicate review.");
+      const queryParams=new URLSearchParams(routeParams);queryParams.set("search",search);if(statusFilter)queryParams.set("status",statusFilter);else queryParams.delete("status");queryParams.set("sort_by",sort);
+      const result=await api.get(`/events?${queryParams.toString()}`);
+      setRows(result.data||[]);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -142,8 +168,9 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
       if (err.code === "POSSIBLE_DUPLICATE" && err.details?.duplicate) {
         const duplicate = err.details.duplicate;
         if (endpoint === "/events") {
+          setDuplicateEvent(duplicate);
           const when = [duplicate.event_date, duplicate.start_time].filter(Boolean).join(" at ");
-          setError(`Possible duplicate event: ${duplicate.event_name || "an existing event"}${when ? ` on ${when}` : ""}${duplicate.venue_name ? ` at ${duplicate.venue_name}` : ""}. Open the existing event before creating another one.`);
+          setError(`Possible duplicate event: ${duplicate.event_name || "an existing event"}${when ? ` on ${when}` : ""}${duplicate.venue_name ? ` at ${duplicate.venue_name}` : ""}. Review it before deciding whether to create another event.`);
         } else {
           const reason = duplicate.match_reason === "EMAIL_MATCH" ? "email address" : "phone number";
           setError(`Possible duplicate: the ${reason} matches ${duplicate.name || [duplicate.first_name, duplicate.last_name].filter(Boolean).join(" ") || "an existing record"} (${duplicate.email || duplicate.phone || duplicate.id}). Open the existing record before creating another one.`);
@@ -227,8 +254,16 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
                 <button type="button" className="primary-action" disabled={inlineClientSaving||!inlineClient.first_name||!inlineClient.last_name||!inlineClient.email} onClick={createInlineClient}>{inlineClientSaving?"Creating…":"Create client & use"}</button>
               </div>
             </section>}
+            {endpoint === "/events" && duplicateEvent && <section className="panel wide" role="alert">
+              <h3>Possible duplicate event</h3>
+              <p>{duplicateEvent.event_name || "Existing event"}{duplicateEvent.event_number ? ` · ${duplicateEvent.event_number}` : ""}. Open the existing event if this is the same booking. Only create another event when it is intentionally separate.</p>
+              <div className="button-row">
+                <a href={`/events/events/${duplicateEvent.id}`}>Open existing event</a>
+                <button type="button" disabled={saving} onClick={createDuplicateEventAnyway}>Create anyway</button>
+              </div>
+            </section>}
             <div className="modal-actions">
-              <button type="button" onClick={() => setEditing(null)}>Cancel</button>
+              <button type="button" onClick={() => {setDuplicateEvent(null);setEditing(null);}}>Cancel</button>
               <button className="primary-action" disabled={saving}>{saving?"Saving…":"Save"}</button>
             </div>
           </form>
