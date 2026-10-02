@@ -1200,9 +1200,9 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
 }));
 
 adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {
-  validateEventTimes(req.body);
   const before = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Event");
+  validateEventTimes({ ...before.rows[0], ...req.body });
   const updated = await transaction(async (client) => {
     const patch = { ...req.body };
     delete patch.package_ids;
