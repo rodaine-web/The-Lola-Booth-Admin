@@ -75,7 +75,11 @@ export async function getSystemHealth() {
   checks.push(await integrationCheck());
   checks.push(await retentionCheck());
 
-  for (const item of checks) item.optional = item.name.startsWith("payments.") || ["sms", "integrations"].includes(item.name);
+  for (const item of checks) {
+    item.optional = item.name.startsWith("payments.")
+      ? !item.details?.businessEnabled
+      : ["sms", "integrations"].includes(item.name);
+  }
   const status = overallStatus(checks.filter(item => !item.optional));
   await query("INSERT INTO system_health_snapshots (status, checks) VALUES ($1,$2)", [status, checks]).catch(() => null);
   return { status, build:buildInfo(), generatedAt: new Date().toISOString(), checks };
@@ -122,9 +126,11 @@ function environmentChecks() {
 
 async function paymentChecks() {
   const providers = providerStatus();
+  const settings=(await query("SELECT stripe_enabled,paypal_enabled FROM business_settings LIMIT 1")).rows[0]||{};
   const results = [];
   for (const provider of Object.values(providers)) {
     const name = `payments.${provider.provider.toLowerCase()}`;
+    const businessEnabled = provider.provider === "STRIPE" ? Boolean(settings.stripe_enabled) : provider.provider === "PAYPAL" ? Boolean(settings.paypal_enabled) : false;
     if (!provider.configured) {
       results.push(check(name, "DISCONNECTED", `${provider.provider} credentials are not configured.`, provider));
       continue;
@@ -147,7 +153,7 @@ async function paymentChecks() {
        WHERE provider=$1 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL`,
       [provider.provider]
     )).rows[0];
-    const details = { ...provider, lastWebhook: webhook || null, lastSuccessfulPayment: payment?.last_successful_payment || null };
+    const details = { ...provider, businessEnabled, lastWebhook: webhook || null, lastSuccessfulPayment: payment?.last_successful_payment || null };
     if (webhook && ["FAILED","FAILED_NEEDS_REVIEW"].includes(webhook.status)) {
       results.push(check(name, "ERROR", `${provider.provider} is configured, but the most recent webhook failed processing.`, details));
       continue;
