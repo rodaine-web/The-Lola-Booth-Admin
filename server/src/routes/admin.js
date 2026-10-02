@@ -476,6 +476,12 @@ const proposalSchema = z.object({
     key: z.string().optional().nullable(),
     name: z.string().optional().nullable(),
     package_name: z.string().optional().nullable(),
+    packages: z.array(z.object({
+      package_id: uuid,
+      name: z.string().optional().nullable(),
+      price: z.coerce.number().min(0).optional().nullable(),
+      description: z.string().optional().nullable()
+    }).passthrough()).optional(),
     price: z.coerce.number().min(0).optional().nullable(),
     headline: z.string().optional().nullable(),
     description: z.string().optional().nullable(),
