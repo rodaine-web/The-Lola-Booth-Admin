@@ -43,6 +43,7 @@ export default function ProposalEditor() {
   });
   const [error, setError] = useState("");
   const [saving,setSaving]=useState(false);
+  const [hydratingSource,setHydratingSource]=useState(false);
 
   useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
   useEffect(() => {
@@ -50,12 +51,36 @@ export default function ProposalEditor() {
   }, []);
 
   useEffect(() => {
-    if (form.event_id && !form.client_id) {
+    const leadId = params.get("leadId");
+    if (!id && leadId) hydrateFromLead(leadId);
+  }, [id]);
+
+  useEffect(() => {
+    if (form.event_id) {
       api.get(`/events/${form.event_id}`).then((event) => {
-        setForm((current) => ({ ...current, client_id: event.client_id || current.client_id, package_id: event.package_id || current.package_id, experience_id: event.experience_id || current.experience_id }));
+        setForm((current) => ({
+          ...current,
+          client_id: event.client_id || current.client_id,
+          package_id: event.package_id || current.package_id,
+          experience_id: event.experience_id || current.experience_id
+        }));
       }).catch(() => {});
     }
   }, [form.event_id]);
+
+  async function hydrateFromLead(leadId) {
+    if (!leadId) return;
+    setHydratingSource(true);
+    setError("");
+    try {
+      const lead = await api.get(`/leads/${leadId}`);
+      setForm((current) => hydrateProposalFromLead(current, lead));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setHydratingSource(false);
+    }
+  }
 
   function setField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -138,7 +163,7 @@ export default function ProposalEditor() {
         <section className="panel">
           <h2>Proposal</h2>
           <div className="form-grid">
-            <label>Lead<RelationshipSelect resource="leads" value={form.lead_id} placeholder="Lead" onChange={(value) => setField("lead_id", value)} /></label>
+            <label>Lead<RelationshipSelect resource="leads" value={form.lead_id} placeholder="Lead" onChange={(value) => { setField("lead_id", value); hydrateFromLead(value); }} /></label>
             <label>Client<RelationshipSelect resource="clients" value={form.client_id} placeholder="Client" onChange={(value) => setField("client_id", value)} /></label>
             <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={(value) => setField("event_id", value)} /></label>
             <label>Proposal type<select value={form.proposal_type || "PRIVATE_EVENT"} onChange={(event) => setField("proposal_type", event.target.value)}>
@@ -259,7 +284,7 @@ export default function ProposalEditor() {
             <label className="wide">Internal notes<textarea value={form.notes || ""} onChange={(event) => setField("notes", event.target.value)} /></label>
           </div>
         </section>
-        <div className="modal-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action" disabled={!loaded||saving}>{id ? "Save Proposal" : mode === "upload" ? "Upload Proposal" : "Create Proposal"}</button></div>
+        <div className="modal-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action" disabled={!loaded||saving||hydratingSource}>{hydratingSource ? "Loading lead details…" : id ? "Save Proposal" : mode === "upload" ? "Upload Proposal" : "Create Proposal"}</button></div>
       </form>
     </main>
   );
@@ -267,6 +292,84 @@ export default function ProposalEditor() {
 
 function section(title, display_order = 0) {
   return { id: title.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""), title, body: "", items: [], display_order };
+}
+
+
+function hydrateProposalFromLead(current, lead) {
+  const preferredExperience = lead.preferredExperience || null;
+  const preferredPackage = lead.preferredPackage || null;
+  const selectedExperiences = preferredExperience
+    ? [{
+        experience_id: preferredExperience.id,
+        name: preferredExperience.name,
+        package_name: preferredPackage?.name || "",
+        price: Number(preferredPackage?.starting_price ?? preferredExperience.base_price ?? 0),
+        headline: "",
+        description: preferredExperience.proposal_description || preferredExperience.description || "",
+        visuals: {}
+      }]
+    : current.selected_experiences || [];
+
+  return {
+    ...current,
+    lead_id: lead.id || current.lead_id,
+    client_id: lead.converted_client_id || current.client_id,
+    event_id: lead.converted_event_id || current.event_id,
+    package_id: lead.preferred_package_id || current.package_id,
+    experience_id: lead.preferred_experience_id || current.experience_id,
+    package_amount: preferredPackage?.starting_price ?? current.package_amount,
+    selected_experiences: selectedExperiences,
+    proposal_title: proposalTitleForLead(lead),
+    proposal_type: proposalTypeForLead(lead.event_type),
+    introduction: current.introduction || "The LOLA Booth creates polished, interactive photo experiences designed to bring people together and leave guests with something worth keeping. We combine thoughtful service, professional presentation, and memorable content for every event.",
+    next_steps: current.next_steps || "Review the proposed experience and investment, let us know any edits you would like, and approve the proposal when you are ready to move forward. Once approved, we will prepare the invoice and confirm the remaining event details.",
+    sections: hydrateLeadSections(current.sections || [], lead, preferredExperience, preferredPackage)
+  };
+}
+
+function hydrateLeadSections(sections, lead, experience, pkg) {
+  const clientName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "the client";
+  const eventName = lead.event_type ? `${lead.event_type} for ${clientName}` : `Event for ${clientName}`;
+  const eventDetails = [
+    lead.event_date ? `Date: ${lead.event_date}` : null,
+    lead.venue_name ? `Venue: ${lead.venue_name}` : null,
+    [lead.venue_address, lead.city, lead.state, lead.zip].filter(Boolean).length
+      ? `Location: ${[lead.venue_address, lead.city, lead.state, lead.zip].filter(Boolean).join(", ")}`
+      : null,
+    lead.guest_count ? `Estimated guests: ${lead.guest_count}` : null
+  ].filter(Boolean).join("\n");
+
+  const bodyByTitle = {
+    "Introduction": `Thank you, ${clientName}, for considering The LOLA Booth for ${eventName}. We are excited to create a polished, guest-friendly experience that fits the occasion and gives your guests memorable photos and moments to take with them.`,
+    "Event Details": eventDetails,
+    "Proposed Experience": experience
+      ? `Recommended experience: ${experience.name}. ${experience.proposal_description || experience.description || ""}`.trim()
+      : "Select one or more LOLA experiences for this event.",
+    "Package Includes": pkg
+      ? `${pkg.name}${pkg.starting_price != null ? ` starting at ${Number(pkg.starting_price).toLocaleString()}` : ""}.`
+      : "Select the package and any enhancements that best fit the event.",
+    "Next Steps": "Review the experience, pricing, and event details. Request any edits you need, then approve the proposal when you are ready to proceed.",
+    "Terms": "Final scope, pricing, availability, and event logistics remain subject to the approved proposal and invoice."
+  };
+
+  return sections.map((item) => ({
+    ...item,
+    body: item.body || bodyByTitle[item.title] || ""
+  }));
+}
+
+function proposalTitleForLead(lead) {
+  const clientName = [lead.first_name, lead.last_name].filter(Boolean).join(" ");
+  return [lead.event_type, clientName].filter(Boolean).join(" · ") || "Custom Experience Proposal";
+}
+
+function proposalTypeForLead(eventType = "") {
+  const value = String(eventType).toLowerCase();
+  if (value.includes("wedding")) return "WEDDING";
+  if (value.includes("corporate")) return "CORPORATE";
+  if (value.includes("brand")) return "BRAND_ACTIVATION";
+  if (value.includes("private") || value.includes("birthday") || value.includes("shower") || value.includes("graduation")) return "PRIVATE_EVENT";
+  return "CUSTOM";
 }
 
 function compact(value) {
