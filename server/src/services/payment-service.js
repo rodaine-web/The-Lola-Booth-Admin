@@ -355,17 +355,48 @@ async function sendRecordedPaymentEmail({payment, invoice, to, subject, body, ht
 
 async function recordProviderPaymentFailure(input) {
   if (!input.invoiceId && !input.providerPaymentId) return null;
-  await query(
+  const updated = await query(
     `UPDATE payment_attempts
      SET status='FAILED', provider_reference=COALESCE(provider_reference,$1), failure_code=$2, updated_at=now()
      WHERE provider=$3 AND (
        provider_reference=$1
        OR provider_session_id=$1
        OR ($4::uuid IS NOT NULL AND invoice_id=$4 AND status='PENDING')
-     ) AND status <> 'SUCCEEDED'`,
+     ) AND status <> 'SUCCEEDED'
+     RETURNING *`,
     [input.providerPaymentId || null, input.failureCode || "payment_failed", input.provider, input.invoiceId || null]
   );
-  return { status: "FAILED" };
+  const attempt = updated.rows[0];
+  if (!attempt?.invoice_id) return { status: "FAILED" };
+  const invoice = (await query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL", [attempt.invoice_id])).rows[0];
+  const customer = attempt.client_id ? (await query("SELECT name,email FROM clients WHERE id=$1", [attempt.client_id])).rows[0] : null;
+  const payUrl = invoice ? secureDocumentUrl(documentOrigin(), "pay", invoice) : null;
+  if (customer?.email && invoice) {
+    const subject = `Payment unsuccessful — ${invoice.invoice_number}`;
+    const body = `Hi ${customer.name || "there"},\n\nYour payment for invoice ${invoice.invoice_number} was not completed. No successful payment was posted for this attempt. Please try again when ready.${payUrl ? `\n\nTry payment again: ${payUrl}` : ""}`;
+    await sendRecordedPaymentEmail({
+      payment: { client_id: attempt.client_id, event_id: attempt.event_id },
+      invoice,
+      to: customer.email,
+      subject,
+      body,
+      html: brandedEmailHtml(body, { kicker: "Payment not completed", ctaLabel: payUrl ? "Try Again" : undefined, ctaUrl: payUrl }),
+      idempotencyKey: `payment-failed:${attempt.id}`,
+      triggerKey: "PAYMENT_FAILED"
+    }).catch(() => null);
+  }
+  await createNotification({
+    roleTarget: "OWNER_ADMIN",
+    category: "PAYMENTS",
+    severity: "WARNING",
+    title: `Payment failed — ${invoice?.invoice_number || "Invoice"}`,
+    body: `${customer?.name || "A client"} had an unsuccessful payment attempt${input.failureCode ? ` (${input.failureCode})` : ""}.`,
+    entityType: "invoice",
+    entityId: attempt.invoice_id,
+    actionUrl: `/finance/invoices/${attempt.invoice_id}`,
+    metadata: { attemptId: attempt.id, failureCode: input.failureCode || "payment_failed" }
+  }).catch(() => null);
+  return { status: "FAILED", attemptId: attempt.id };
 }
 
 async function recordProviderRefund(input) {
