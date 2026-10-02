@@ -33,8 +33,12 @@ export async function getInvoice(idOrToken, { publicView = false } = {}) {
 }
 
 export async function createInvoice(req) {
-  if (req.body.proposal_id && req.body.depositOnly) {
-    const existing = await query("SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status <> 'VOID' AND COALESCE(pricing_snapshot->>'payment_mode','')='DEPOSIT_REQUEST' ORDER BY created_at DESC LIMIT 1", [req.body.proposal_id]);
+  if (req.body.proposal_id) {
+    const paymentMode = req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE";
+    const existing = await query(
+      "SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status <> 'VOID' AND COALESCE(pricing_snapshot->>'payment_mode','')=$2 ORDER BY created_at DESC LIMIT 1",
+      [req.body.proposal_id, paymentMode]
+    );
     if (existing.rows[0]) return existing.rows[0];
   }
   const invoice = await transaction(async (client) => {
