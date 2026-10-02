@@ -385,6 +385,21 @@ async function recordProviderPaymentFailure(input) {
       triggerKey: "PAYMENT_FAILED"
     }).catch(() => null);
   }
+  if (invoice) {
+    const ownerEmail=env.formNotificationEmail || (await query("SELECT business_email FROM business_settings LIMIT 1")).rows[0]?.business_email || null;
+    if(ownerEmail){
+      const subject=`Payment failed — ${invoice.invoice_number}`;
+      const body=`${customer?.name || "A client"} had an unsuccessful ${input.provider} payment attempt for invoice ${invoice.invoice_number}${input.failureCode ? ` (${input.failureCode})` : ""}.`;
+      await sendRecordedPaymentEmail({
+        payment:{client_id:attempt.client_id,event_id:attempt.event_id},
+        invoice,to:ownerEmail,subject,body,
+        html:brandedEmailHtml(body,{kicker:"Payment failed"}),
+        idempotencyKey:`payment-failed-owner:${attempt.id}`,
+        triggerKey:"PAYMENT_FAILED_INTERNAL"
+      }).catch(()=>null);
+    }
+  }
+
   await createNotification({
     roleTarget: "OWNER_ADMIN",
     category: "PAYMENTS",
@@ -421,6 +436,41 @@ async function recordProviderRefund(input) {
     return inserted.rows[0];
   });
   if (payment.invoice_id) await reconcileInvoice(payment.invoice_id, { action: "refund_completed" });
+  if (payment.invoice_id) {
+    const invoice=(await query("SELECT * FROM invoices WHERE id=$1",[payment.invoice_id])).rows[0];
+    const customer=(await query("SELECT name,email FROM clients WHERE id=$1",[payment.client_id])).rows[0];
+    const currency=refund.currency || payment.currency || "USD";
+    const fmt=value=>new Intl.NumberFormat("en-US",{style:"currency",currency}).format(value);
+    const invoiceUrl=invoice ? secureDocumentUrl(documentOrigin(),"invoice",invoice) : null;
+    if(invoice && customer?.email){
+      const subject=`Refund confirmation — ${invoice.invoice_number}`;
+      const body=`Hi ${customer.name || "there"},\n\nA refund of ${fmt(refund.amount)} has been processed for invoice ${invoice.invoice_number}.\nRefund type: ${refund.refund_type}.\n\nIf you have questions about the refund timing, please reply to this email.`;
+      await sendRecordedPaymentEmail({
+        payment,invoice,to:customer.email,subject,body,
+        html:brandedEmailHtml(body,{kicker:"Refund processed",ctaLabel:invoiceUrl?"View Invoice":undefined,ctaUrl:invoiceUrl}),
+        idempotencyKey:`refund-confirmation:${refund.id}`,
+        triggerKey:"REFUND_CONFIRMATION"
+      }).catch(()=>null);
+    }
+    if(invoice){
+      const ownerEmail=env.formNotificationEmail || (await query("SELECT business_email FROM business_settings LIMIT 1")).rows[0]?.business_email || null;
+      const subject=`Refund processed — ${invoice.invoice_number}`;
+      const body=`A ${String(refund.refund_type||"").toLowerCase()} refund of ${fmt(refund.amount)} was processed for ${customer?.name || "a client"} on invoice ${invoice.invoice_number}.`;
+      if(ownerEmail){
+        await sendRecordedPaymentEmail({
+          payment,invoice,to:ownerEmail,subject,body,
+          html:brandedEmailHtml(body,{kicker:"Refund processed",ctaLabel:invoiceUrl?"Open Invoice":undefined,ctaUrl:invoiceUrl}),
+          idempotencyKey:`refund-owner-notification:${refund.id}`,
+          triggerKey:"REFUND_INTERNAL"
+        }).catch(()=>null);
+      }
+      await createNotification({
+        roleTarget:"OWNER_ADMIN",category:"PAYMENTS",severity:"INFO",title:subject,body,
+        entityType:"payment",entityId:payment.id,actionUrl:`/finance/payments/${payment.id}`,
+        metadata:{refundId:refund.id,amount:refund.amount,currency}
+      }).catch(()=>null);
+    }
+  }
   return refund;
 }
 
