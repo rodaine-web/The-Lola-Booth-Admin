@@ -66,6 +66,10 @@ export default function SystemHealth() {
             <small>{item.status}</small>
             <strong>{item.name.replaceAll(".", " ")}{item.optional ? " · optional" : ""}</strong>
             <p>{item.summary}</p>
+            {item.details && Object.keys(item.details).length > 0 && <details>
+              <summary>Details</summary>
+              <pre className="health-details">{JSON.stringify(item.details, null, 2)}</pre>
+            </details>}
           </article>
         ))}
       </section>
