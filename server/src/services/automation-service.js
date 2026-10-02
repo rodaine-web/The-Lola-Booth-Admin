@@ -619,12 +619,13 @@ export async function createCommunicationDraft(input = {}, user = {}) {
 
 export async function sendCommunication(id, user = {}, { workerClaim = false, qualificationClaim = false } = {}) {
   if(stagingJobsPaused()&&!qualificationClaim&&(await query('SELECT 1 FROM staging_email_qualification_jobs WHERE communication_id=$1',[id])).rowCount)throw new AppError('This QA message is controlled by its qualification job.',409,'STAGING_JOB_REQUIRED');
-  const result = await transaction(async (client) => {
-    const communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
+
+  const claim = await transaction(async (client) => {
+    let communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!communication) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
     if (communication.status === "SENT" || communication.status === "SENT_TO_PROVIDER") {
       logger.warn({ communicationId: id, providerMessageId: communication.provider_message_id }, "Duplicate communication send prevented");
-      return { communication, delivery: { status: communication.status, provider: communication.provider, providerMessageId: communication.provider_message_id, duplicatePrevented: true } };
+      return { duplicate: true, communication };
     }
     if(communication.failure_code==="DELIVERY_OUTCOME_UNKNOWN")throw new AppError("Delivery outcome is unknown. Review provider history before any retry.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
     if (!["DRAFT", "SCHEDULED", "FAILED", ...(workerClaim ? ["PROCESSING"] : [])].includes(communication.status)) throw new AppError("This communication cannot be sent.", 409, "COMMUNICATION_IMMUTABLE");
@@ -632,8 +633,23 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
     if (communication.channel !== "EMAIL") throw new AppError("Only email sending is currently enabled.", 422, "CHANNEL_NOT_IMPLEMENTED", { retryable: false });
     if (!communication.recipient) throw new AppError("Recipient is required before sending.", 422, "COMMUNICATION_RECIPIENT_REQUIRED", { retryable: false });
     if (!communication.subject || !communication.rendered_body) throw new AppError("Subject and body are required before sending.", 422, "COMMUNICATION_CONTENT_REQUIRED", { retryable: false });
-    let delivery;
-    try { delivery = await sendEmail({
+    if (communication.status !== "PROCESSING") {
+      communication=(await client.query(
+        "UPDATE communications SET status='PROCESSING', queued_at=COALESCE(queued_at,now()), failure_code=NULL, failure_message=NULL, updated_at=now() WHERE id=$1 RETURNING *",
+        [id]
+      )).rows[0];
+    }
+    return { duplicate: false, communication };
+  });
+
+  if (claim.duplicate) {
+    return { communication: claim.communication, delivery: { status: claim.communication.status, provider: claim.communication.provider, providerMessageId: claim.communication.provider_message_id, duplicatePrevented: true } };
+  }
+
+  const communication = claim.communication;
+  let delivery;
+  try {
+    delivery = await sendEmail({
       to: communication.recipient,
       cc: communication.cc,
       bcc: communication.bcc,
@@ -642,12 +658,25 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
       html: communication.rendered_html,
       formOwnerNotification: communication.trigger_key === "PUBLIC_FORM" && /^public-form:[a-f0-9-]+:owner$/.test(communication.idempotency_key || "")
     });
-    } catch (error) {
-      const unknown=error.details?.outcomeUnknown===true;
-      const code=unknown?'DELIVERY_OUTCOME_UNKNOWN':(error.code||'EMAIL_SEND_FAILED');
-      const message=unknown?'Delivery outcome is unknown. Review provider history; automatic retry is blocked.':'Email delivery failed. The saved message can be reviewed and retried.';
-      await client.query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$2,failure_message=$3,updated_at=now() WHERE id=$1",[id,code,message]);
-      return {sendError:new AppError(message,502,code,{retryable:!unknown&&error.details?.retryable!==false})};
+  } catch (error) {
+    const unknown=error.details?.outcomeUnknown===true;
+    const code=unknown?'DELIVERY_OUTCOME_UNKNOWN':(error.code||'EMAIL_SEND_FAILED');
+    const message=unknown?'Delivery outcome is unknown. Review provider history; automatic retry is blocked.':'Email delivery failed. The saved message can be reviewed and retried.';
+    await query(
+      "UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$2,failure_message=$3,updated_at=now() WHERE id=$1",
+      [id,code,message]
+    );
+    throw new AppError(message,502,code,{retryable:!unknown&&error.details?.retryable!==false});
+  }
+
+  const result = await transaction(async (client) => {
+    const current=(await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",[id])).rows[0];
+    if (!current) throw new AppError("Communication not found.",404,"COMMUNICATION_NOT_FOUND");
+    if (current.status === "SENT" || current.status === "SENT_TO_PROVIDER") {
+      return { communication: current, duplicateFinalization: true };
+    }
+    if (current.status !== "PROCESSING") {
+      throw new AppError("Communication state changed while sending. Review provider history before retrying.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
     }
     const updated = await client.query(
       `UPDATE communications
@@ -658,13 +687,12 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
     await client.query(
       `INSERT INTO email_messages (communication_id, provider, provider_message_id, to_email, subject, status, body_preview, sent_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,now())`,
-      [id, delivery.provider, delivery.providerMessageId, communication.recipient, communication.rendered_subject || communication.subject, delivery.status || "SENT", communication.rendered_body.slice(0, 500)]
+      [id, delivery.provider, delivery.providerMessageId, current.recipient, current.rendered_subject || current.subject, delivery.status || "SENT", current.rendered_body.slice(0, 500)]
     );
-    await recordActivity({ actorUserId: user.id, entityType: "communication", entityId: id, action: "communication_sent_to_provider", summary: `${communication.channel} sent to provider for ${communication.recipient}` });
-    return { communication: updated.rows[0], delivery };
+    return { communication: updated.rows[0] };
   });
-  if (result.sendError) throw result.sendError;
-  return result;
+  await recordActivity({ actorUserId: user.id, entityType: "communication", entityId: id, action: "communication_sent_to_provider", summary: `${communication.channel} sent to provider for ${communication.recipient}` });
+  return { ...result, delivery };
 }
 
 export async function scheduleCommunication(id, scheduledAt, user = {}) {
@@ -996,40 +1024,53 @@ async function scheduleCommunicationJob(client, job) {
   return { communication: result.rows[0] };
 }
 
-async function sendAndRecordEmail(client, job, { to, subject, body, template = null, mergeData = {} }) {
-  const html = brandedEmailHtml(body);
-  const delivery = await sendEmail({ to, subject, body, html });
-  const communication = await client.query(
-    `INSERT INTO communications (
-       lead_id, client_id, type, channel, direction, subject, rendered_subject, message_summary, rendered_body, rendered_html,
-       recipient, template_id, template_key, template_version, merge_data, send_mode, status, trigger_key,
-       sent_at, provider, provider_message_id
-     )
-     VALUES ($1,$2,'EMAIL','EMAIL','OUTBOUND',$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,'SEND_NOW','SENT_TO_PROVIDER',$12,now(),$13,$14)
-     RETURNING *`,
-    [
-      job.related_entity_type === "lead" ? job.related_entity_id : null,
-      job.related_entity_type === "client" ? job.related_entity_id : null,
-      subject,
-      body.slice(0, 500),
-      body,
-      html,
-      to,
-      template?.id || null,
-      template?.key || template?.template_key || job.action_config?.template_key || null,
-      template?.version || null,
-      mergeData,
-      job.job_type,
-      delivery.provider,
-      delivery.providerMessageId
-    ]
-  );
-  await client.query(
-    `INSERT INTO email_messages (communication_id, provider, provider_message_id, to_email, subject, status, body_preview, sent_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,now())`,
-    [communication.rows[0].id, delivery.provider, delivery.providerMessageId, to, subject, delivery.status, body.slice(0, 500)]
-  );
-  return delivery;
+async function sendAndRecordEmail(_client, job, { to, subject, body, template = null, mergeData = {} }) {
+  const idempotencyKey = `automation-job:${job.id}`;
+  let communication=(await query(
+    "SELECT * FROM communications WHERE idempotency_key=$1 AND deleted_at IS NULL LIMIT 1",
+    [idempotencyKey]
+  )).rows[0];
+
+  if (communication?.status === "SENT" || communication?.status === "SENT_TO_PROVIDER") {
+    return { duplicatePrevented:true, communication };
+  }
+  if (communication?.failure_code === "DELIVERY_OUTCOME_UNKNOWN" || communication?.status === "PROCESSING") {
+    throw new AppError("Automation email delivery outcome requires operator review before retry.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
+  }
+
+  if (!communication) {
+    const html = brandedEmailHtml(body);
+    communication=(await query(
+      `INSERT INTO communications (
+         lead_id, client_id, type, channel, direction, subject, rendered_subject, message_summary, rendered_body, rendered_html,
+         recipient, template_id, template_key, template_version, merge_data, send_mode, status, trigger_key, idempotency_key
+       )
+       VALUES ($1,$2,'EMAIL','EMAIL','OUTBOUND',$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,'SEND_NOW','DRAFT',$12,$13)
+       ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET updated_at=now()
+       RETURNING *`,
+      [
+        job.related_entity_type === "lead" ? job.related_entity_id : null,
+        job.related_entity_type === "client" ? job.related_entity_id : null,
+        subject,
+        body.slice(0, 500),
+        body,
+        html,
+        to,
+        template?.id || null,
+        template?.key || template?.template_key || job.action_config?.template_key || null,
+        template?.version || null,
+        mergeData,
+        job.job_type,
+        idempotencyKey
+      ]
+    )).rows[0];
+  }
+
+  if (communication.status === "FAILED") {
+    await query("UPDATE communications SET failure_code=NULL,failure_message=NULL,failed_at=NULL,updated_at=now() WHERE id=$1",[communication.id]);
+  }
+  const sent=await sendCommunication(communication.id, {});
+  return sent.delivery || sent;
 }
 
 async function executeAutomationJob(client, job) {
