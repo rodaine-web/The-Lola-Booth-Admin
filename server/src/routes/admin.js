@@ -1789,7 +1789,7 @@ adminRouter.get("/files", ...listRoute("files", ["filename", "category", "storag
 adminRouter.get("/galleries", ...listRoute("galleries", ["gallery_name", "gallery_url", "status"], "read:tasks"));
 adminRouter.get("/users", requirePermission("view:users"), asyncHandler(async (req, res) => {
   const rows = await query(
-    `SELECT u.id, u.name, u.email, u.active, u.first_name, u.last_name, u.phone, u.business_role, u.invitation_status, u.invited_at, u.disabled_at, u.created_at,
+    `SELECT u.id, u.name, u.email, u.active, u.first_name, u.last_name, u.phone, u.business_role, u.invitation_status, u.invited_at, u.invitation_delivery_status, u.invitation_delivery_attempted_at, u.invitation_delivery_error_code, u.invitation_delivery_provider, u.invitation_delivery_message_id, u.disabled_at, u.created_at,
             COALESCE(json_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL),'[]') AS roles,
             COALESCE((SELECT json_agg(p.key) FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=u.id),'[]') AS permissions
      FROM users u
@@ -1861,6 +1861,23 @@ adminRouter.post("/users", requirePermission("create:users"), asyncHandler(async
     }, "LOLA Admin invitation email delivery failed");
     return { ok: false, errorCode: error?.code || "EMAIL_SEND_FAILED" };
   });
+  await query(
+    `UPDATE users
+     SET invitation_delivery_status=$2,
+         invitation_delivery_attempted_at=now(),
+         invitation_delivery_error_code=$3,
+         invitation_delivery_provider=$4,
+         invitation_delivery_message_id=$5,
+         updated_at=now()
+     WHERE id=$1`,
+    [
+      created.id,
+      delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      delivery.ok ? null : delivery.errorCode,
+      delivery.ok ? delivery.result?.provider || null : null,
+      delivery.ok ? delivery.result?.providerMessageId || null : null
+    ]
+  );
   await writeAudit({
     req,
     action: delivery.ok ? "user_invited" : "user_invitation_delivery_failed",
@@ -1877,7 +1894,9 @@ adminRouter.post("/users", requirePermission("create:users"), asyncHandler(async
     ...created,
     roles: body.roles,
     deliveryError: !delivery.ok,
-    deliveryErrorCode: delivery.ok ? null : delivery.errorCode
+    deliveryErrorCode: delivery.ok ? null : delivery.errorCode,
+    deliveryStatus: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+    deliveryProvider: delivery.ok ? delivery.result?.provider || null : null
   });
 }));
 
@@ -1968,6 +1987,23 @@ adminRouter.post("/users/:id/resend-invitation", requirePermission("invitations.
     }, "LOLA Admin invitation resend email delivery failed");
     return { ok: false, errorCode: error?.code || "EMAIL_SEND_FAILED" };
   });
+  await query(
+    `UPDATE users
+     SET invitation_delivery_status=$2,
+         invitation_delivery_attempted_at=now(),
+         invitation_delivery_error_code=$3,
+         invitation_delivery_provider=$4,
+         invitation_delivery_message_id=$5,
+         updated_at=now()
+     WHERE id=$1`,
+    [
+      user.id,
+      delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      delivery.ok ? null : delivery.errorCode,
+      delivery.ok ? delivery.result?.provider || null : null,
+      delivery.ok ? delivery.result?.providerMessageId || null : null
+    ]
+  );
   await writeAudit({
     req,
     action: delivery.ok ? "user_invitation_resent" : "user_invitation_delivery_failed",
