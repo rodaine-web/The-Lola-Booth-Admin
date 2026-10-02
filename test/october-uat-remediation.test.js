@@ -89,7 +89,7 @@ test("October UAT: integrations expose actionable setup and lifecycle controls",
   const integrations = source("src/pages/Integrations.jsx");
   assert.match(integrations, /Reconnect \/ Configure/);
   assert.match(integrations, /Recheck status/);
-  assert.match(integrations, />Disable</);
+  assert.match(integrations, /[\"']Disable[\"']/);
   assert.match(integrations, /Configuration guidance/);
 });
 
@@ -106,7 +106,7 @@ test("October UAT: Communications uses Templates terminology and responsive temp
   const css = source("src/styles/global.css");
   assert.match(communications, /"Templates"/);
   assert.doesNotMatch(communications, /<h[12][^>]*>Email Templates<\/h[12]>/);
-  assert.match(css, /template-card|template-grid|templates/i);
+  assert.match(css, /template-(admin-grid|list|row)/i);
 });
 
 test("October UAT: failed payments and refunds notify both customer and owner paths", () => {
