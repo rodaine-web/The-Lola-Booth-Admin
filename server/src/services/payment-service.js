@@ -414,7 +414,7 @@ async function sendRecordedPaymentEmail({payment, invoice, to, subject, body, ht
   if(!communication){
     communication=(await query(
       `INSERT INTO communications(client_id,event_id,invoice_id,type,channel,direction,recipient,subject,rendered_subject,message_summary,rendered_body,rendered_html,status,send_mode,idempotency_key,trigger_key)
-       VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$6,$7,'PROCESSING','SEND_NOW',$8,$9)
+       VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$7,$8,'PROCESSING','SEND_NOW',$9,$10)
        RETURNING *`,
       [payment.client_id,payment.event_id,invoice.id,to,subject,body.slice(0,500),body,html,idempotencyKey,triggerKey]
     )).rows[0];
