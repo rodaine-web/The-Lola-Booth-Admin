@@ -387,9 +387,11 @@ function listRoute(table, searchable = [], permission = "read:admin") {
           where.push("(package_id = $" + params.length + " OR EXISTS (SELECT 1 FROM event_packages ep WHERE ep.event_id=" + table + ".id AND ep.package_id=$" + params.length + "))");
         }
         if (req.query.readiness === "staff") {
+          where.push("event_date >= current_date AND event_date < current_date + interval '30 days'");
           where.push(`NOT EXISTS (SELECT 1 FROM staff_assignments sa WHERE sa.event_id=${table}.id AND sa.released_at IS NULL)`);
         }
         if (req.query.readiness === "equipment") {
+          where.push("event_date >= current_date AND event_date < current_date + interval '30 days'");
           where.push(`NOT EXISTS (SELECT 1 FROM equipment_assignments ea WHERE ea.event_id=${table}.id AND ea.released_at IS NULL)`);
         }
       }
@@ -404,9 +406,17 @@ function listRoute(table, searchable = [], permission = "read:admin") {
           params.push(filters.assigned_user);
           where.push(`assigned_user_id = $${params.length}`);
         }
+        if (filters.due_from) {
+          params.push(filters.due_from);
+          where.push(`due_date >= ${params.length}::date`);
+        }
+        if (filters.due_to) {
+          params.push(filters.due_to);
+          where.push(`due_date < ${params.length}::date`);
+        }
         if (filters.due_before) {
           params.push(filters.due_before);
-          where.push(`due_date < $${params.length}`);
+          where.push(`due_date < ${params.length}`);
         }
         if (filters.overdue === "true" || filters.overdue === true) {
           where.push(`due_date < current_date AND status <> 'DONE'`);
