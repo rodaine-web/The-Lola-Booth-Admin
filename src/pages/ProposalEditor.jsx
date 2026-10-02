@@ -22,6 +22,7 @@ export default function ProposalEditor() {
   const [addon, setAddon] = useState({ addon_id: "", quantity: 1 });
   const [customLine, setCustomLine] = useState({ description: "", detail: "", quantity: 1, unit_price: "" });
   const [experienceOptions, setExperienceOptions] = useState([]);
+  const [packageOptions, setPackageOptions] = useState([]);
   const [upload, setUpload] = useState({ filename: "", pdf_base64: "" });
   const [inlineClientOpen,setInlineClientOpen]=useState(false);
   const [inlineEventOpen,setInlineEventOpen]=useState(false);
@@ -53,7 +54,16 @@ export default function ProposalEditor() {
 
   useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
   useEffect(() => {
-    api.get("/experiences?pageSize=100").then((result) => setExperienceOptions(result?.data || result || [])).catch(() => setExperienceOptions([]));
+    Promise.all([
+      api.get("/experiences?pageSize=100"),
+      api.get("/packages?pageSize=200")
+    ]).then(([experiences, packages]) => {
+      setExperienceOptions(experiences?.data || experiences || []);
+      setPackageOptions(packages?.data || packages || []);
+    }).catch(() => {
+      setExperienceOptions([]);
+      setPackageOptions([]);
+    });
   }, []);
 
   useEffect(() => {
@@ -102,6 +112,7 @@ export default function ProposalEditor() {
             experience_id: experience.id,
             name: experience.name,
             package_name: "",
+            packages: [],
             price: Number(experience.base_price || 0),
             headline: "",
             description: experience.proposal_description || experience.description || "",
@@ -109,6 +120,34 @@ export default function ProposalEditor() {
           }];
       return { ...current, selected_experiences: next, experience_id: next[0]?.experience_id || current.experience_id || "" };
     });
+  }
+
+  function toggleExperiencePackage(index, pkg) {
+    setForm((current) => ({
+      ...current,
+      selected_experiences: (current.selected_experiences || []).map((item, i) => {
+        if (i !== index) return item;
+        const selected = Array.isArray(item.packages) ? item.packages : [];
+        const exists = selected.some((entry) => entry.package_id === pkg.id);
+        const packages = exists
+          ? selected.filter((entry) => entry.package_id !== pkg.id)
+          : [...selected, {
+              package_id: pkg.id,
+              name: pkg.name,
+              price: Number(pkg.starting_price || 0),
+              description: pkg.proposal_description || pkg.description || ""
+            }];
+        const experience = experienceOptions.find((entry) => entry.id === item.experience_id);
+        return {
+          ...item,
+          packages,
+          package_name: packages.map((entry) => entry.name).join(" + "),
+          price: packages.length
+            ? packages.reduce((sum, entry) => sum + Number(entry.price || 0), 0)
+            : Number(experience?.base_price || 0)
+        };
+      })
+    }));
   }
 
   function updateSelectedExperience(index, patch) {
@@ -298,8 +337,23 @@ export default function ProposalEditor() {
                     </div>
                     <div className="form-grid">
                       <label>Display name<input value={item.name || ""} onChange={(event) => updateSelectedExperience(index, { name: event.target.value })} /></label>
-                      <label>Package name<input value={item.package_name || ""} onChange={(event) => updateSelectedExperience(index, { package_name: event.target.value })} /></label>
-                      <label>Price<input type="number" min="0" step="0.01" value={item.price ?? ""} onChange={(event) => updateSelectedExperience(index, { price: event.target.value })} /></label>
+                      <fieldset className="wide">
+                        <legend>Packages</legend>
+                        {packageOptions
+                          .filter((pkg) => !pkg.experience_id || pkg.experience_id === item.experience_id)
+                          .map((pkg) => (
+                            <label className="check-row" key={pkg.id}>
+                              <input
+                                type="checkbox"
+                                checked={(item.packages || []).some((entry) => entry.package_id === pkg.id)}
+                                onChange={() => toggleExperiencePackage(index, pkg)}
+                              />
+                              <span>{pkg.name}{pkg.starting_price != null ? ` · ${Number(pkg.starting_price).toLocaleString()}` : ""}</span>
+                            </label>
+                          ))}
+                        {!packageOptions.some((pkg) => !pkg.experience_id || pkg.experience_id === item.experience_id) && <p className="note-text">No catalog packages are linked to this experience yet.</p>}
+                      </fieldset>
+                      <label>Selected package total<input type="number" min="0" step="0.01" value={item.price ?? ""} onChange={(event) => updateSelectedExperience(index, { price: event.target.value })} /></label>
                       <label>Headline<input value={item.headline || ""} onChange={(event) => updateSelectedExperience(index, { headline: event.target.value })} /></label>
                       <label className="wide">Description<textarea value={item.description || ""} onChange={(event) => updateSelectedExperience(index, { description: event.target.value })} /></label>
                     </div>
@@ -391,6 +445,12 @@ function hydrateProposalFromLead(current, lead) {
         experience_id: preferredExperience.id,
         name: preferredExperience.name,
         package_name: preferredPackage?.name || "",
+        packages: preferredPackage ? [{
+          package_id: preferredPackage.id,
+          name: preferredPackage.name,
+          price: Number(preferredPackage.starting_price || 0),
+          description: preferredPackage.proposal_description || preferredPackage.description || ""
+        }] : [],
         price: Number(preferredPackage?.starting_price ?? preferredExperience.base_price ?? 0),
         headline: "",
         description: preferredExperience.proposal_description || preferredExperience.description || "",
