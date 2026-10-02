@@ -211,13 +211,21 @@ async function ensureProposalLead(client, input = {}, actorUserId = null) {
   if (!customer) throw notFound("Client");
   if (!event) throw notFound("Event");
 
+  if (event.client_id && event.client_id !== customer.id) {
+    throw new AppError(
+      "The selected event belongs to a different client. Choose the matching client or event before creating the proposal.",
+      422,
+      "PROPOSAL_CLIENT_EVENT_MISMATCH"
+    );
+  }
+
   const existing = (await client.query(
     `SELECT id FROM leads
      WHERE deleted_at IS NULL
-       AND (converted_event_id=$1 OR (converted_client_id=$2 AND event_date=$3))
+       AND converted_event_id=$1
      ORDER BY created_at DESC
      LIMIT 1`,
-    [event.id, customer.id, event.event_date]
+    [event.id]
   )).rows[0];
   if (existing) return { ...input, lead_id: existing.id };
 
@@ -226,6 +234,13 @@ async function ensureProposalLead(client, input = {}, actorUserId = null) {
       "The selected client needs an email address before a proposal-stage lead can be created.",
       422,
       "CLIENT_EMAIL_REQUIRED"
+    );
+  }
+  if (!customer.phone || String(customer.phone).replace(/\D/g, "").length < 7) {
+    throw new AppError(
+      "The selected client needs a valid phone number before a proposal-stage lead can be created.",
+      422,
+      "CLIENT_PHONE_REQUIRED"
     );
   }
   if (!customer.phone) {
