@@ -63,7 +63,7 @@ export async function getSystemHealth() {
   }
 
   checks.push(...environmentChecks());
-  checks.push(...paymentChecks());
+  checks.push(...await paymentChecks());
   checks.push(await emailCheck());
   checks.push(smsCheck());
   checks.push(await communicationReadinessCheck());
@@ -120,13 +120,45 @@ function environmentChecks() {
   return [check("environment", env.nodeEnv === "production" ? "MISCONFIGURED" : "DEGRADED", "Required server environment values still need attention.", { issues: productionReadinessIssues })];
 }
 
-function paymentChecks() {
+async function paymentChecks() {
   const providers = providerStatus();
-  return Object.values(providers).map((provider) => {
-    if (!provider.configured) return check(`payments.${provider.provider.toLowerCase()}`, "DISCONNECTED", `${provider.provider} credentials are not configured.`, provider);
-    if (!provider.webhookConfigured) return check(`payments.${provider.provider.toLowerCase()}`, "MISCONFIGURED", `${provider.provider} credentials exist but webhook verification is not configured.`, provider);
-    return check(`payments.${provider.provider.toLowerCase()}`, "UNKNOWN", `${provider.provider} configuration is present for ${provider.mode}; provider acceptance is not verified.`, provider);
-  });
+  const results = [];
+  for (const provider of Object.values(providers)) {
+    const name = `payments.${provider.provider.toLowerCase()}`;
+    if (!provider.configured) {
+      results.push(check(name, "DISCONNECTED", `${provider.provider} credentials are not configured.`, provider));
+      continue;
+    }
+    if (!provider.webhookConfigured) {
+      results.push(check(name, "MISCONFIGURED", `${provider.provider} credentials exist but webhook verification is not configured.`, provider));
+      continue;
+    }
+    const webhook = (await query(
+      `SELECT status, processed_at, received_at, COALESCE(last_error,error_message) AS error
+       FROM webhook_events
+       WHERE provider=$1
+       ORDER BY received_at DESC
+       LIMIT 1`,
+      [provider.provider]
+    )).rows[0];
+    const payment = (await query(
+      `SELECT max(COALESCE(paid_at,created_at)) AS last_successful_payment
+       FROM payments
+       WHERE provider=$1 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL`,
+      [provider.provider]
+    )).rows[0];
+    const details = { ...provider, lastWebhook: webhook || null, lastSuccessfulPayment: payment?.last_successful_payment || null };
+    if (webhook && ["FAILED","FAILED_NEEDS_REVIEW"].includes(webhook.status)) {
+      results.push(check(name, "ERROR", `${provider.provider} is configured, but the most recent webhook failed processing.`, details));
+      continue;
+    }
+    if (webhook?.status === "PROCESSED" && payment?.last_successful_payment) {
+      results.push(check(name, "HEALTHY", `${provider.provider} configuration, webhook processing, and successful payment evidence are present.`, details));
+      continue;
+    }
+    results.push(check(name, "UNKNOWN", `${provider.provider} configuration is ready for ${provider.mode}; successful end-to-end processing has not yet been verified.`, details));
+  }
+  return results;
 }
 
 async function emailCheck() {
