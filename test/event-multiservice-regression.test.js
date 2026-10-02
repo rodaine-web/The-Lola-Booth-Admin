@@ -11,6 +11,14 @@ test("event create/update SQL keeps PostgreSQL parameter placeholders", () => {
   assert.ok(admin.includes('WHERE id=$${values.length} AND deleted_at IS NULL RETURNING *'));
 });
 
+test("event dashboard filters keep PostgreSQL parameter placeholders", () => {
+  assert.ok(admin.includes('where.push(`event_type = ${params.length}`);'));
+  assert.ok(admin.includes('b.created_at >= ${params.length}::timestamptz'));
+  assert.ok(admin.includes('b.created_at < ${params.length}::timestamptz'));
+  assert.ok(admin.includes('where.push(`event_date < ${params.length}::date`);'));
+  assert.ok(!admin.includes('where.push(`event_type = ${params.length}`);'));
+});
+
 test("event multi-service selections persist in join tables", () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS event_packages/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS event_experiences/);
