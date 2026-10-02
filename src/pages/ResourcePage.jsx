@@ -44,7 +44,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
         if(active){setRows([]);setError(err.message);}
       }).finally(()=>{if(active)setLoading(false);});
     return ()=>{active=false;};
-  }, [endpoint, search, revision,statusFilter,sort,overdue]);
+  }, [endpoint, search, revision,statusFilter,sort,overdue,routeParams.toString()]);
 
   function openCreate() {
     setInlineClientOpen(false);
