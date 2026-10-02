@@ -384,7 +384,13 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         }
         if (filters.package) {
           params.push(filters.package);
-          where.push(`package_id = $${params.length}`);
+          where.push(`package_id = ${params.length}`);
+        }
+        if (req.query.readiness === "staff") {
+          where.push(`NOT EXISTS (SELECT 1 FROM staff_assignments sa WHERE sa.event_id=${table}.id AND sa.released_at IS NULL)`);
+        }
+        if (req.query.readiness === "equipment") {
+          where.push(`NOT EXISTS (SELECT 1 FROM equipment_assignments ea WHERE ea.event_id=${table}.id AND ea.released_at IS NULL)`);
         }
       }
       if (table === "tasks") {
