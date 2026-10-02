@@ -48,9 +48,18 @@ export async function publicPaymentOptions(invoice) {
   const status = providerStatus();
   const payable = isInvoicePayable(invoice);
   const balance = invoiceBalance(invoice);
-  const configuredMinimum = money(invoice.pricing_snapshot?.amount_due_now || balance);
-  const depositRemaining = Math.max(0, configuredMinimum - money(invoice.amount_paid || 0));
-  const amountDue = depositRemaining > 0 ? Math.min(depositRemaining, balance) : balance;
+  const storedMinimum = invoice.pricing_snapshot?.amount_due_now;
+  const hasStoredMinimum = storedMinimum !== null && storedMinimum !== undefined && storedMinimum !== "";
+  const configuredMinimum = hasStoredMinimum ? money(storedMinimum) : null;
+  const depositRemaining = hasStoredMinimum
+    ? Math.max(0, configuredMinimum - money(invoice.amount_paid || 0))
+    : null;
+  // Legacy invoices may not have amount_due_now. Their stored outstanding balance
+  // already reflects prior payments, so subtracting amount_paid again understates
+  // the amount due.
+  const amountDue = hasStoredMinimum
+    ? (depositRemaining > 0 ? Math.min(depositRemaining, balance) : balance)
+    : balance;
   return {
     payable,
     amountDue,
