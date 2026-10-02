@@ -39,6 +39,13 @@ test("Stripe webhook keeps raw body before JSON parsing and verifies signatures"
   assert.match(paymentService, /status IN \('RECEIVED','FAILED','FAILED_NEEDS_REVIEW'\)/);
 });
 
+test("Deposit-paid booking policy requires the configured deposit amount", () => {
+  const reconciliation = fs.readFileSync(new URL("../server/src/services/payment-reconciliation-service.js", import.meta.url), "utf8");
+  assert.match(reconciliation, /sum\(deposit_required\)/);
+  assert.match(reconciliation, /const depositSatisfied = depositRequired > 0 \? paid >= depositRequired : paid > 0/);
+  assert.match(reconciliation, /policy === "DEPOSIT_PAID" && depositSatisfied/);
+});
+
 test("Manual payments inherit client and event from the invoice", () => {
   const start = paymentService.indexOf("export async function recordManualPayment");
   const end = paymentService.indexOf("export async function getPayment", start);
