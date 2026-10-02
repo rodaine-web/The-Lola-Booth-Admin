@@ -11,15 +11,17 @@ export default function SystemHealth() {
   const [lastRefreshed,setLastRefreshed]=useState(null);
   const [notice,setNotice]=useState("");
 
-  async function load() {
+  async function load(manual = false) {
     setRefreshing(true);
     setError("");
+    if (manual) setNotice("");
     try {
       const [healthResult, jobsResult] = await Promise.all([api.get("/system/health"), api.get("/system/jobs")]);
       setHealth(healthResult);
       setJobs(jobsResult.data || []);
       setSelected([]);
       setLastRefreshed(new Date());
+      if (manual) setNotice("System health refreshed.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -27,7 +29,7 @@ export default function SystemHealth() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(false); }, []);
 
   async function jobAction(id, action) {
     await api.post(`/system/jobs/${id}/${action}`, {});
@@ -50,7 +52,7 @@ export default function SystemHealth() {
           <p className="eyebrow">{health?.build?.environment==='staging'?'Staging baseline':'Environment readiness'}</p>
           <h1>System Health</h1>
         </div>
-        <button className="primary-action" onClick={load} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "spin" : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
+        <button className="primary-action" onClick={()=>load(true)} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "spin" : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
       {health?.build&&<p className="note-text">Environment: {health.build.environment} · API revision: {health.build.revision.slice(0,12)} · Admin revision: {__BUILD_REVISION__.slice(0,12)}{lastRefreshed ? ` · Last refreshed ${lastRefreshed.toLocaleTimeString()}` : ""}</p>}
       {notice && <div className="toast" role="status">{notice}</div>}{error && <div className="toast error">{error}</div>}
