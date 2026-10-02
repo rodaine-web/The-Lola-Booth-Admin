@@ -62,6 +62,12 @@ test("October UAT: dashboard event drilldowns preserve exact query filters", () 
   assert.match(admin, /status IN \('CONFIRMED','PREPARING','READY','IN_PROGRESS'\)/);
 });
 
+test("October UAT: accepted proposals reuse one active invoice", () => {
+  const invoice = source("server/src/services/invoice-service.js");
+  assert.match(invoice, /SELECT \* FROM invoices WHERE proposal_id=\$1 AND deleted_at IS NULL AND status <> 'VOID' ORDER BY created_at DESC LIMIT 1/);
+  assert.doesNotMatch(invoice, /pricing_snapshot->>'payment_mode'.*proposal_id/s);
+});
+
 test("October UAT: payment notifications are immediate, recorded, idempotent, and non-fatal after payment posting", () => {
   const payment = source("server/src/services/payment-service.js");
   assert.match(payment, /sendRecordedPaymentEmail/);
