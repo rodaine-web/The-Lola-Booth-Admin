@@ -44,6 +44,12 @@ test("October UAT: event workflow supports inline client creation and multi-serv
   assert.match(migration, /CREATE TABLE IF NOT EXISTS event_experiences/);
 });
 
+test("October UAT: partial event edits validate against existing event times", () => {
+  const admin = source("server/src/routes/admin.js");
+  assert.match(admin, /validateEventTimes\(\{ \.\.\.before\.rows\[0\], \.\.\.req\.body \}\)/);
+  assert.doesNotMatch(admin, /patch\("\/events\/:id"[\s\S]{0,220}validateEventTimes\(req\.body\)/);
+});
+
 test("October UAT: duplicate events require review before an explicit override", () => {
   const resource = source("src/pages/ResourcePage.jsx");
   const admin = source("server/src/routes/admin.js");
