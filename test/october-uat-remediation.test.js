@@ -160,8 +160,18 @@ test("October UAT: Payments page preserves dashboard URL filters", () => {
 
 test("October UAT: accepted proposals reuse one active invoice", () => {
   const invoice = source("server/src/services/invoice-service.js");
-  assert.match(invoice, /SELECT \* FROM invoices WHERE proposal_id=\$1 AND deleted_at IS NULL AND status <> 'VOID' ORDER BY created_at DESC LIMIT 1/);
+  assert.match(invoice, /SELECT \* FROM invoices WHERE proposal_id=\$1 AND deleted_at IS NULL AND status NOT IN \('VOID','REFUNDED'\) ORDER BY created_at DESC LIMIT 1/);
   assert.doesNotMatch(invoice, /pricing_snapshot->>'payment_mode'.*proposal_id/s);
+});
+
+test("October UAT: fully refunded invoices stay closed and can be rebilled intentionally", () => {
+  const reconciliation = source("server/src/services/payment-reconciliation-service.js");
+  const invoice = source("server/src/services/invoice-service.js");
+  assert.match(reconciliation, /const fullyRefunded = refundedAmount > 0 && paid === 0/);
+  assert.match(reconciliation, /const outstanding = fullyRefunded \? 0/);
+  assert.match(reconciliation, /if \(fullyRefunded\) status = "REFUNDED"/);
+  assert.match(reconciliation, /status NOT IN \('VOID','REFUNDED'\)/);
+  assert.match(invoice, /status NOT IN \('VOID','REFUNDED'\) ORDER BY created_at DESC LIMIT 1/);
 });
 
 test("October UAT: draft invoice edits preserve deposit and payment-choice metadata", () => {
