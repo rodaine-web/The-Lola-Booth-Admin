@@ -31,6 +31,13 @@ test("October UAT: proposal acceptance applies the configured booking confirmati
   assert.match(publicRoutes, /proposal\.event_id\) await applyBookingConfirmationPolicy\(proposal\.event_id\)/);
 });
 
+test("October UAT: proposal primary service IDs follow multi-service selections", () => {
+  const editor = source("src/pages/ProposalEditor.jsx");
+  assert.match(editor, /experience_id: next\[0\]\?\.experience_id \|\| ""/);
+  assert.match(editor, /package_id: next\.flatMap\(\(item\) => item\.packages \|\| \[\]\)\[0\]\?\.package_id \|\| ""/);
+  assert.match(editor, /package_id: selected_experiences\.flatMap\(\(item\) => item\.packages \|\| \[\]\)\[0\]\?\.package_id \|\| ""/);
+});
+
 test("October UAT: event workflow supports inline client creation and multi-service selections", () => {
   const resource = source("src/pages/ResourcePage.jsx");
   const admin = source("server/src/routes/admin.js");
