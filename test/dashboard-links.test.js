@@ -12,4 +12,6 @@ test('dashboard links preserve date windows and matching stage/source filters', 
   assert.equal(collected.pathname,'/finance/payments');assert.equal(collected.searchParams.get('from'),range.start);assert.equal(collected.searchParams.get('to'),range.end);
   const refunds=new URL(metricHref({key:'refunds',href:'/finance/payments?status=REFUNDED'},range),'https://admin.test');
   assert.equal(refunds.pathname,'/finance/payments');assert.equal(refunds.searchParams.get('refunded'),'true');assert.equal(refunds.searchParams.get('from'),range.start);assert.equal(refunds.searchParams.get('to'),range.end);
+  const tasks=new URL(metricHref({key:'tasks_due',href:'/operations/tasks'},range),'https://admin.test');
+  assert.equal(tasks.pathname,'/operations/tasks');assert.equal(tasks.searchParams.get('due_from'),range.start);assert.equal(tasks.searchParams.get('due_to'),range.end);
 });
