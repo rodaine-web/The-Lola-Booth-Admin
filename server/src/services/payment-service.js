@@ -292,11 +292,13 @@ async function recordProviderPayment(input) {
   const prior = (await query("SELECT * FROM payments WHERE provider=$1 AND provider_payment_id=$2",[input.provider,input.providerPaymentId])).rows[0];
   if (prior) {
     // Checkout and PaymentIntent notifications can arrive in either order.
-    // Complete the matching attempt even when the payment already exists.
+    // Complete the matching attempt and always reconcile the invoice so a retry
+    // repairs any stale invoice state left by an earlier post-payment failure.
     if (input.providerSessionId) {
       await query("UPDATE payment_attempts SET status='SUCCEEDED', provider_reference=$4, updated_at=now() WHERE invoice_id=$1 AND provider=$2 AND provider_session_id=$3", [input.invoiceId, input.provider, input.providerSessionId, input.providerPaymentId]);
       await query("UPDATE payments SET provider_session_id=$2 WHERE id=$1 AND provider_session_id IS DISTINCT FROM $2", [prior.id, input.providerSessionId]);
     }
+    await reconcileInvoice(input.invoiceId, { action: "payment_succeeded_retry" });
     return prior;
   }
   let attempt = null;
@@ -335,8 +337,13 @@ async function recordProviderPayment(input) {
     return result.rows[0];
   });
   await reconcileInvoice(input.invoiceId, { action: "payment_succeeded" });
-  await applyBookingConfirmationPolicy(payment.event_id);
-  await query("INSERT INTO payment_receipts(payment_id,invoice_id) VALUES($1,$2) ON CONFLICT(payment_id) DO NOTHING",[payment.id,input.invoiceId]);
+
+  await applyBookingConfirmationPolicy(payment.event_id).catch((error)=>{
+    logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"BOOKING_CONFIRMATION_FAILED"},"Booking confirmation side effect failed after payment posting");
+  });
+  await query("INSERT INTO payment_receipts(payment_id,invoice_id) VALUES($1,$2) ON CONFLICT(payment_id) DO NOTHING",[payment.id,input.invoiceId]).catch((error)=>{
+    logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"RECEIPT_RECORD_FAILED"},"Receipt record side effect failed after payment posting");
+  });
   const customer=(await query("SELECT name,email FROM clients WHERE id=$1",[payment.client_id])).rows[0];
   const reconciled=(await query("SELECT * FROM invoices WHERE id=$1",[input.invoiceId])).rows[0];
   const receipt=await getReceiptView(reconciled,payment.id);
@@ -391,8 +398,12 @@ async function recordProviderPayment(input) {
     actionUrl:`/finance/payments/${payment.id}`,
     metadata:{invoiceId:input.invoiceId,amount:payment.amount,currency:payment.currency}
   }).catch(()=>null);
-  await writeAudit({req:{},action:"payment_succeeded",entity:"payment",entityId:payment.id,after:{invoice_id:input.invoiceId,amount:payment.amount,currency:payment.currency,provider:payment.provider}});
-  await enqueueLifecycle({action:'payment_succeeded',entityType:'payment',entityId:payment.id});
+  await writeAudit({req:{},action:"payment_succeeded",entity:"payment",entityId:payment.id,after:{invoice_id:input.invoiceId,amount:payment.amount,currency:payment.currency,provider:payment.provider}}).catch((error)=>{
+    logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"AUDIT_WRITE_FAILED"},"Payment audit side effect failed after payment posting");
+  });
+  await enqueueLifecycle({action:'payment_succeeded',entityType:'payment',entityId:payment.id}).catch((error)=>{
+    logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"LIFECYCLE_ENQUEUE_FAILED"},"Payment lifecycle side effect failed after payment posting");
+  });
   return payment;
 }
 
