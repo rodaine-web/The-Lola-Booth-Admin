@@ -350,22 +350,22 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         }
         if (filters.event_type) {
           params.push(filters.event_type);
-          where.push(`event_type = ${params.length}`);
+          where.push(`event_type = $${params.length}`);
         }
         if (req.query.booking_from) {
           params.push(req.query.booking_from);
-          where.push(`EXISTS (SELECT 1 FROM bookings b WHERE b.event_id=${table}.id AND b.deleted_at IS NULL AND b.created_at >= ${params.length}::timestamptz)`);
+          where.push(`EXISTS (SELECT 1 FROM bookings b WHERE b.event_id=${table}.id AND b.deleted_at IS NULL AND b.created_at >= $${params.length}::timestamptz)`);
         }
         if (req.query.booking_to) {
           params.push(req.query.booking_to);
-          where.push(`EXISTS (SELECT 1 FROM bookings b WHERE b.event_id=${table}.id AND b.deleted_at IS NULL AND b.created_at < ${params.length}::timestamptz)`);
+          where.push(`EXISTS (SELECT 1 FROM bookings b WHERE b.event_id=${table}.id AND b.deleted_at IS NULL AND b.created_at < $${params.length}::timestamptz)`);
         }
         if (req.query.upcoming === "true") {
           where.push("event_date >= current_date");
           where.push("status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')");
           if (req.query.to) {
             params.push(req.query.to);
-            where.push(`event_date < ${params.length}::date`);
+            where.push(`event_date < $${params.length}::date`);
           }
         }
         if (filters.experience) {
@@ -1115,7 +1115,7 @@ adminRouter.post("/events", requirePermission("write:events"), validate(eventSch
     body.event_number = eventNumber;
     const fields = Object.keys(body);
     const values = fields.map((field) => body[field]);
-    const event = (await client.query(`INSERT INTO events (${fields.join(",")}) VALUES (${fields.map((_, i) => `${i + 1}`).join(",")}) RETURNING *`, values)).rows[0];
+    const event = (await client.query(`INSERT INTO events (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values)).rows[0];
     const packageIds = [...new Set([...(req.body.package_ids || []), req.body.package_id].filter(Boolean))];
     const experienceIds = [...new Set([...(req.body.experience_ids || []), req.body.experience_id].filter(Boolean))];
     for (const [index, packageId] of packageIds.entries()) {
@@ -1178,7 +1178,7 @@ adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eve
     if (fields.length) {
       const values = fields.map(field=>patch[field]);
       values.push(req.params.id);
-      event = (await client.query(`UPDATE events SET ${fields.map((field,index)=>`${field}=${index+1}`).join(", ")}, updated_at=now() WHERE id=${values.length} AND deleted_at IS NULL RETURNING *`, values)).rows[0];
+      event = (await client.query(`UPDATE events SET ${fields.map((field,index)=>`${field}=$${index+1}`).join(", ")}, updated_at=now() WHERE id=$${values.length} AND deleted_at IS NULL RETURNING *`, values)).rows[0];
     }
     if (req.body.package_ids) {
       await client.query("DELETE FROM event_packages WHERE event_id=$1", [req.params.id]);
