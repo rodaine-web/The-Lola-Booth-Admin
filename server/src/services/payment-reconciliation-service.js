@@ -17,13 +17,16 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
       [invoiceId]
     );
     const paid = money(payments.rows[0].net_paid);
-    const outstanding = money(Math.max(0, Number(invoice.rows[0].total || 0) - paid));
+    const refundedAmount = money(refunded.rows[0].refunded);
+    const fullyRefunded = refundedAmount > 0 && paid === 0;
+    const outstanding = fullyRefunded ? 0 : money(Math.max(0, Number(invoice.rows[0].total || 0) - paid));
     const previousStatus = invoice.rows[0].status;
     let status = previousStatus;
     if (previousStatus !== "VOID") {
-      if (outstanding === 0) status = refunded.rows[0].refunded > 0 ? "PAID" : "PAID";
+      if (fullyRefunded) status = "REFUNDED";
+      else if (outstanding === 0) status = "PAID";
       else if (paid > 0) status = "PARTIALLY_PAID";
-      else if (previousStatus === "PAID" || previousStatus === "PARTIALLY_PAID") status = "SENT";
+      else if (["PAID","PARTIALLY_PAID","PARTIAL","REFUNDED"].includes(previousStatus)) status = "SENT";
     }
     const updated = await client.query(
       "UPDATE invoices SET amount_paid=$1, balance_due=$2, amount_outstanding=$2, status=$3, updated_at=now() WHERE id=$4 RETURNING *",
@@ -54,7 +57,7 @@ export async function reconcileEventFinance(client, eventId) {
       COALESCE(sum(i.amount_paid),0)::numeric AS total_paid,
       COALESCE(sum(i.amount_outstanding),0)::numeric AS outstanding
      FROM invoices i
-     WHERE i.event_id=$1 AND i.deleted_at IS NULL AND i.status <> 'VOID'`,
+     WHERE i.event_id=$1 AND i.deleted_at IS NULL AND i.status NOT IN ('VOID','REFUNDED')`,
     [eventId]
   );
   const refunded = await client.query("SELECT COALESCE(sum(r.amount),0)::numeric AS refunded FROM refunds r WHERE r.event_id=$1 AND r.status='SUCCEEDED'", [eventId]);
@@ -83,7 +86,7 @@ export async function applyBookingConfirmationPolicy(eventId) {
        COALESCE(sum(amount_paid),0)::numeric AS paid,
        COALESCE(sum(amount_outstanding),0)::numeric AS outstanding,
        COALESCE(sum(CASE WHEN pricing_snapshot->>'payment_mode'='DEPOSIT_REQUEST' THEN COALESCE(NULLIF(pricing_snapshot->>'amount_due_now','')::numeric,0) ELSE 0 END),0)::numeric AS invoice_deposit_required
-     FROM invoices WHERE event_id=$1 AND deleted_at IS NULL AND status <> 'VOID'`,
+     FROM invoices WHERE event_id=$1 AND deleted_at IS NULL AND status NOT IN ('VOID','REFUNDED')`,
     [eventId]
   );
   const booking = await query(
