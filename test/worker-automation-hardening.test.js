@@ -47,7 +47,9 @@ test("worker recovers stale processing jobs after restart", () => {
 
 test("current worker path is storage independent", () => {
   assert.doesNotMatch(workerSource, /storage-service|LOCAL_STORAGE_ROOT|getStorageProvider/);
-  assert.match(automationSource, /sendEmail\(\{ to, subject, body, html \}\)/);
+  assert.match(automationSource, /return sendAndRecordEmail\(client, job, \{ to, subject, body/);
+  assert.match(automationSource, /sendCommunication\(communication\.id/);
+  assert.match(automationSource, /idempotencyKey = \`automation-job:\$\{job\.id\}\`/);
   assert.doesNotMatch(automationSource, /attachments:\s*\[/);
   assert.match(railwayRunbook, /Do not mount a Railway volume or set worker `LOCAL_STORAGE_ROOT`/);
 });
