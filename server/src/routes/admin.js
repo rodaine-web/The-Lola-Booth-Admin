@@ -1123,6 +1123,25 @@ adminRouter.get("/my-events/:id", requirePermission("read:attendant"), asyncHand
 
 adminRouter.post("/events", requirePermission("write:events"), validate(eventSchema), asyncHandler(async (req, res) => {
   validateEventTimes(req.body);
+  if (!req.query.continueAnyway) {
+    const duplicate = await query(
+      `SELECT id, event_number, event_name, event_date, start_time, venue_name, status
+       FROM events
+       WHERE deleted_at IS NULL
+         AND client_id=$1
+         AND event_date=$2::date
+         AND COALESCE(start_time::text,'')=COALESCE($3::text,'')
+         AND lower(event_name)=lower($4)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [req.body.client_id, req.body.event_date, req.body.start_time || null, req.body.event_name]
+    );
+    if (duplicate.rows[0]) {
+      throw new AppError("Possible duplicate event found.", 409, "POSSIBLE_DUPLICATE", {
+        duplicate: { ...duplicate.rows[0], match_reason: "CLIENT_DATE_TIME_TITLE_MATCH" }
+      });
+    }
+  }
   const eventNumber = `EVT-${Date.now().toString().slice(-6)}`;
   const inserted = await transaction(async (client) => {
     const body = { ...req.body };
