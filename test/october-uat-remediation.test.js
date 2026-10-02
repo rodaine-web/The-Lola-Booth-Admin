@@ -98,6 +98,8 @@ test("October UAT: payment page honors allowed checkout choices and completion s
   assert.match(pay, /Payment complete/);
   assert.match(pay, /Thank you for your payment/);
   assert.match(pay, /No further payment is due on this invoice/);
+  assert.match(pay, /No online payment amount is currently available for this invoice/);
+  assert.match(pay, /const hasChoice=Boolean\(first\)/);
 });
 
 test("October UAT: payment notifications are immediate, recorded, idempotent, and non-fatal after payment posting", () => {
