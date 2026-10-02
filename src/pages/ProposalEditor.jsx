@@ -28,6 +28,7 @@ export default function ProposalEditor() {
   const [inlineEventOpen,setInlineEventOpen]=useState(false);
   const [inlineClientSaving,setInlineClientSaving]=useState(false);
   const [inlineEventSaving,setInlineEventSaving]=useState(false);
+  const [inlineDuplicateEvent,setInlineDuplicateEvent]=useState(null);
   const [inlineClient,setInlineClient]=useState({first_name:"",last_name:"",email:"",phone:""});
   const [inlineEvent,setInlineEvent]=useState({event_name:"",event_type:"",event_date:"",start_time:"",end_time:"",venue_name:"",venue_address:"",city:"",state:"",zip:""});
   const [form, setForm] = useState({
@@ -197,30 +198,55 @@ export default function ProposalEditor() {
     }
   }
 
-  async function createInlineEvent() {
+  function inlineEventPayload() {
+    return {
+      ...inlineEvent,
+      client_id: form.client_id,
+      package_id: form.package_id || null,
+      experience_id: form.experience_id || null,
+      status: "TENTATIVE"
+    };
+  }
+
+  function finishInlineEvent(created) {
+    setForm((current) => ({ ...current, event_id: created.id }));
+    setInlineDuplicateEvent(null);
+    setInlineEventOpen(false);
+    setInlineEvent({event_name:"",event_type:"",event_date:"",start_time:"",end_time:"",venue_name:"",venue_address:"",city:"",state:"",zip:""});
+  }
+
+  async function createInlineEvent(continueAnyway = false) {
     if (inlineEventSaving) return;
     if (!form.client_id) {
       setError("Choose or create a client before creating an event.");
       return;
     }
+    if (inlineEvent.start_time && inlineEvent.end_time && inlineEvent.end_time <= inlineEvent.start_time) {
+      setError("End time must be after start time.");
+      return;
+    }
     setInlineEventSaving(true);
     setError("");
     try {
-      const created = await api.post("/events", {
-        ...inlineEvent,
-        client_id: form.client_id,
-        package_id: form.package_id || null,
-        experience_id: form.experience_id || null,
-        status: "TENTATIVE"
-      });
-      setForm((current) => ({ ...current, event_id: created.id }));
-      setInlineEventOpen(false);
-      setInlineEvent({event_name:"",event_type:"",event_date:"",start_time:"",end_time:"",venue_name:"",venue_address:"",city:"",state:"",zip:""});
+      const created = await api.post(continueAnyway ? "/events?continueAnyway=true" : "/events", inlineEventPayload());
+      finishInlineEvent(created);
     } catch (err) {
-      setError(err.message);
+      if (err.code === "POSSIBLE_DUPLICATE" && err.details?.duplicate) {
+        setInlineDuplicateEvent(err.details.duplicate);
+        setError("Possible duplicate event found. Use the existing event or explicitly create a separate event.");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setInlineEventSaving(false);
     }
+  }
+
+  function useInlineDuplicateEvent() {
+    if (!inlineDuplicateEvent) return;
+    setForm((current) => ({ ...current, event_id: inlineDuplicateEvent.id }));
+    setInlineDuplicateEvent(null);
+    setInlineEventOpen(false);
   }
 
   async function chooseFile(event) {
@@ -265,7 +291,7 @@ export default function ProposalEditor() {
               {!id && <button type="button" onClick={()=>setInlineClientOpen(value=>!value)}>{inlineClientOpen?"Cancel new client":"Create new client"}</button>}
             </label>
             <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={(value) => setField("event_id", value)} />
-              {!id && <button type="button" onClick={()=>setInlineEventOpen(value=>!value)}>{inlineEventOpen?"Cancel new event":"Create new event"}</button>}
+              {!id && <button type="button" onClick={()=>{setInlineDuplicateEvent(null);setInlineEventOpen(value=>!value);}}>{inlineEventOpen?"Cancel new event":"Create new event"}</button>}
             </label>
             <label>Proposal type<select value={form.proposal_type || "PRIVATE_EVENT"} onChange={(event) => setField("proposal_type", event.target.value)}>
               <option value="WEDDING">Wedding</option>
@@ -311,9 +337,17 @@ export default function ProposalEditor() {
             <label>State<input value={inlineEvent.state} onChange={(event)=>setInlineEvent(current=>({...current,state:event.target.value}))}/></label>
             <label>ZIP<input value={inlineEvent.zip} onChange={(event)=>setInlineEvent(current=>({...current,zip:event.target.value}))}/></label>
           </div>
+          {inlineDuplicateEvent && <div className="panel" role="alert">
+            <strong>Possible duplicate</strong>
+            <p>{inlineDuplicateEvent.event_name || "Existing event"}{inlineDuplicateEvent.event_number ? ` · ${inlineDuplicateEvent.event_number}` : ""}. Use the existing event unless this is intentionally a separate booking.</p>
+            <div className="button-row">
+              <button type="button" onClick={useInlineDuplicateEvent}>Use existing event</button>
+              <button type="button" disabled={inlineEventSaving} onClick={()=>createInlineEvent(true)}>Create separate event anyway</button>
+            </div>
+          </div>}
           <div className="button-row">
-            <button type="button" onClick={()=>setInlineEventOpen(false)}>Cancel</button>
-            <button type="button" className="primary-action" disabled={inlineEventSaving||!form.client_id||!inlineEvent.event_name||!inlineEvent.event_type||!inlineEvent.event_date||!inlineEvent.start_time||!inlineEvent.end_time} onClick={createInlineEvent}>{inlineEventSaving?"Creating…":"Create event & use"}</button>
+            <button type="button" onClick={()=>{setInlineDuplicateEvent(null);setInlineEventOpen(false);}}>Cancel</button>
+            <button type="button" className="primary-action" disabled={inlineEventSaving||!form.client_id||!inlineEvent.event_name||!inlineEvent.event_type||!inlineEvent.event_date||!inlineEvent.start_time||!inlineEvent.end_time} onClick={()=>createInlineEvent(false)}>{inlineEventSaving?"Creating…":"Create event & use"}</button>
           </div>
         </section>}
 
