@@ -44,6 +44,17 @@ test("October UAT: event workflow supports inline client creation and multi-serv
   assert.match(migration, /CREATE TABLE IF NOT EXISTS event_experiences/);
 });
 
+test("October UAT: duplicate events require review before an explicit override", () => {
+  const resource = source("src/pages/ResourcePage.jsx");
+  const admin = source("server/src/routes/admin.js");
+  assert.match(admin, /req\.query\.continueAnyway/);
+  assert.match(admin, /CLIENT_DATE_TIME_TITLE_MATCH/);
+  assert.match(resource, /Possible duplicate event/);
+  assert.match(resource, /Open existing event/);
+  assert.match(resource, /Create anyway/);
+  assert.match(resource, /events\?continueAnyway=true/);
+});
+
 test("October UAT: new users require explicit role selection", () => {
   const users = source("src/pages/Users.jsx");
   assert.match(users, /roles:\s*\[\]/);
