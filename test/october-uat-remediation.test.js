@@ -118,8 +118,13 @@ test("October UAT: dashboard event drilldowns preserve exact query filters", () 
 
 test("October UAT: dynamic list filters keep PostgreSQL parameter placeholders", () => {
   const admin = source("server/src/routes/admin.js");
-  const bad = admin.split("\n").filter(line => line.includes("${params.length}") && !line.includes("${params.length}"));
-  assert.deepEqual(bad, []);
+  const suspicious = admin.split("\n").filter(line =>
+    line.includes("params.length") &&
+    /(?:=|<|>)\s*\$?\{params\.length\}/.test(line)
+  );
+  assert.deepEqual(suspicious, []);
+  assert.match(admin, /"due_date >= \$"\+params\.length/);
+  assert.match(admin, /paymentTime\+" >=?\$"?/);
 });
 
 test("October UAT: booking deposit confirmation prefers the invoice deposit threshold", () => {
