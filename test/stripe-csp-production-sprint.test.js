@@ -39,6 +39,14 @@ test("Stripe webhook keeps raw body before JSON parsing and verifies signatures"
   assert.match(paymentService, /status IN \('RECEIVED','FAILED','FAILED_NEEDS_REVIEW'\)/);
 });
 
+test("Payment confirmation communication binding matches SQL placeholders", () => {
+  const start = paymentService.indexOf("async function sendRecordedPaymentEmail");
+  const end = paymentService.indexOf("async function recordProviderPaymentFailure", start);
+  const slice = paymentService.slice(start, end);
+  assert.match(slice, /VALUES\(\$1,\$2,\$3,'EMAIL','EMAIL','OUTBOUND',\$4,\$5,\$5,\$6,\$7,\$8,'PROCESSING','SEND_NOW',\$9,\$10\)/);
+  assert.match(slice, /\[payment\.client_id,payment\.event_id,invoice\.id,to,subject,body\.slice\(0,500\),body,html,idempotencyKey,triggerKey\]/);
+});
+
 test("Stripe test sprint handles success, failure, and refund webhooks without duplicate payments", () => {
   for (const token of [
     "checkout.session.completed",
