@@ -118,14 +118,18 @@ export default function ProposalEditor() {
             description: experience.proposal_description || experience.description || "",
             visuals: {}
           }];
-      return { ...current, selected_experiences: next, experience_id: next[0]?.experience_id || current.experience_id || "" };
+      return {
+        ...current,
+        selected_experiences: next,
+        experience_id: next[0]?.experience_id || "",
+        package_id: next.flatMap((item) => item.packages || [])[0]?.package_id || ""
+      };
     });
   }
 
   function toggleExperiencePackage(index, pkg) {
-    setForm((current) => ({
-      ...current,
-      selected_experiences: (current.selected_experiences || []).map((item, i) => {
+    setForm((current) => {
+      const selected_experiences = (current.selected_experiences || []).map((item, i) => {
         if (i !== index) return item;
         const selected = Array.isArray(item.packages) ? item.packages : [];
         const exists = selected.some((entry) => entry.package_id === pkg.id);
@@ -146,8 +150,14 @@ export default function ProposalEditor() {
             ? packages.reduce((sum, entry) => sum + Number(entry.price || 0), 0)
             : Number(experience?.base_price || 0)
         };
-      })
-    }));
+      });
+      return {
+        ...current,
+        selected_experiences,
+        experience_id: selected_experiences[0]?.experience_id || "",
+        package_id: selected_experiences.flatMap((item) => item.packages || [])[0]?.package_id || ""
+      };
+    });
   }
 
   function updateSelectedExperience(index, patch) {
