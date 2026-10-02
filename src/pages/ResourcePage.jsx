@@ -2,16 +2,18 @@ import EventTypeSelect from '../components/EventTypeSelect.jsx';
 import {useDialogFocus} from "../utils/use-dialog-focus.js";
 import AsyncState from "../components/AsyncState.jsx";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 import MediaSelect from "../components/MediaSelect.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 
 export default function ResourcePage({ title, endpoint, columns, phase, rowHref, fields = [] }) {
+  const [routeParams] = useSearchParams();
   const [rows, setRows] = useState([]);
   const [loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[saving,setSaving]=useState(false);
   const [search, setSearch] = useState("");
-  const [statusFilter,setStatusFilter]=useState(""),[sort,setSort]=useState("created_at"),[overdue,setOverdue]=useState(false);
+  const [statusFilter,setStatusFilter]=useState(routeParams.get("status")||""),[sort,setSort]=useState("created_at"),[overdue,setOverdue]=useState(routeParams.get("overdue")==="true");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(null);
@@ -22,7 +24,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   const [multiOptions,setMultiOptions]=useState({packages:[],experiences:[]});
   useDialogFocus(Boolean(editing),()=>setEditing(null));
 
-  useEffect(()=>{setEditing(null);setForm({});setStatusFilter("");},[endpoint]);
+  useEffect(()=>{setEditing(null);setForm({});setStatusFilter(routeParams.get("status")||"");setOverdue(routeParams.get("overdue")==="true");},[endpoint,routeParams.toString()]);
   useEffect(()=>{
     if(endpoint!=="/events") return;
     Promise.all([api.get("/pickers/packages?q="),api.get("/pickers/experiences?q=")])
@@ -31,7 +33,12 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   },[endpoint]);
   useEffect(() => {
     let active=true; setLoading(true); setError("");
-    api.get(`${endpoint}?search=${encodeURIComponent(search)}&status=${statusFilter}&sort_by=${sort}&overdue=${overdue}`)
+    const queryParams=new URLSearchParams(routeParams);
+    queryParams.set("search",search);
+    if(statusFilter)queryParams.set("status",statusFilter);else queryParams.delete("status");
+    queryParams.set("sort_by",sort);
+    if(overdue)queryParams.set("overdue","true");else queryParams.delete("overdue");
+    api.get(`${endpoint}?${queryParams.toString()}`)
       .then((result) => {if(active)setRows(result.data || []);})
       .catch((err) => {
         if(active){setRows([]);setError(err.message);}
@@ -119,7 +126,8 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
         setNotice(`${title.replace(/s$/, "")} created.`);
       }
       setEditing(null);
-      const result = await api.get(`${endpoint}?search=${encodeURIComponent(search)}&status=${statusFilter}&sort_by=${sort}&overdue=${overdue}`);
+      const queryParams=new URLSearchParams(routeParams);queryParams.set("search",search);if(statusFilter)queryParams.set("status",statusFilter);else queryParams.delete("status");queryParams.set("sort_by",sort);if(overdue)queryParams.set("overdue","true");else queryParams.delete("overdue");
+      const result = await api.get(`${endpoint}?${queryParams.toString()}`);
       setRows(result.data || []);
     } catch (err) {
       if (err.code === "POSSIBLE_DUPLICATE" && err.details?.duplicate) {
