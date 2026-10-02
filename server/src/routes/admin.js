@@ -1384,9 +1384,10 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
   const params = [];
   const where = ["p.deleted_at IS NULL"];
   if(filters.data_scope==="business")where.push("p.data_classification IN ('BUSINESS','UNREVIEWED')");
-  const paymentTime="COALESCE(p.paid_at,p.payment_date::timestamptz,p.created_at)";
-  if(filters.from){params.push(filters.from);where.push(paymentTime+">=$"+params.length+"::timestamptz");}
-  if(filters.to){params.push(filters.to);where.push(paymentTime+"<$"+params.length+"::timestamptz");}
+  const activity=filters.funnel||filters.activity;
+  const timeColumn=activity==='accepted'?'p.accepted_at':activity==='sent'?'p.sent_at':'p.created_at';
+  if(filters.from){params.push(filters.from);where.push(timeColumn+">=$"+params.length+"::timestamptz");}
+  if(filters.to){params.push(filters.to);where.push(timeColumn+"<$"+params.length+"::timestamptz");}
 
   if (filters.status) {
     params.push(filters.status);
