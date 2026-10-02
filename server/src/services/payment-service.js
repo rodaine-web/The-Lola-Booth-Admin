@@ -47,6 +47,18 @@ export async function publicPaymentOptions(invoice) {
   const s = settings.rows[0] || {};
   const status = providerStatus();
   const payable = isInvoicePayable(invoice);
+  if (process.env.APP_ENV === "staging") {
+    logger.info({
+      invoiceId: invoice.id,
+      invoiceStatus: invoice.status,
+      payable,
+      stripeEnabledSetting: Boolean(s.stripe_enabled),
+      stripeConfigured: Boolean(status.stripe.configured),
+      stripeWebhookConfigured: Boolean(status.stripe.webhookConfigured),
+      stripeMode: status.stripe.mode,
+      stripeReadiness: status.stripe.readiness
+    }, "Staging payment options diagnostic");
+  }
   const balance = invoiceBalance(invoice);
   const storedMinimum = invoice.pricing_snapshot?.amount_due_now;
   const hasStoredMinimum = storedMinimum !== null && storedMinimum !== undefined && storedMinimum !== "";
