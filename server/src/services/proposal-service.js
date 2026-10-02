@@ -192,6 +192,83 @@ async function resolveProposalRelationships(input = {}) {
   };
 }
 
+async function ensureProposalLead(client, input = {}, actorUserId = null) {
+  if (input.lead_id) return input;
+  if (!input.client_id || !input.event_id) {
+    throw new AppError(
+      "Choose an existing lead, or choose/create both a client and an event before creating the proposal.",
+      422,
+      "PROPOSAL_RELATIONSHIPS_REQUIRED"
+    );
+  }
+
+  const [clientResult, eventResult] = await Promise.all([
+    client.query("SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL", [input.client_id]),
+    client.query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [input.event_id])
+  ]);
+  const customer = clientResult.rows[0];
+  const event = eventResult.rows[0];
+  if (!customer) throw notFound("Client");
+  if (!event) throw notFound("Event");
+
+  const existing = (await client.query(
+    `SELECT id FROM leads
+     WHERE deleted_at IS NULL
+       AND (converted_event_id=$1 OR (converted_client_id=$2 AND event_date=$3))
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [event.id, customer.id, event.event_date]
+  )).rows[0];
+  if (existing) return { ...input, lead_id: existing.id };
+
+  if (!customer.email) {
+    throw new AppError(
+      "The selected client needs an email address before a proposal-stage lead can be created.",
+      422,
+      "CLIENT_EMAIL_REQUIRED"
+    );
+  }
+
+  const name = String(customer.name || "").trim();
+  const pieces = name.split(/\s+/).filter(Boolean);
+  const firstName = customer.first_name || pieces[0] || "Client";
+  const lastName = customer.last_name || pieces.slice(1).join(" ") || "Contact";
+  const inserted = (await client.query(
+    `INSERT INTO leads (
+       first_name,last_name,email,phone,event_date,event_start_time,event_end_time,event_type,
+       guest_count,venue_name,venue_address,city,state,zip,preferred_experience_id,preferred_package_id,
+       referral_source,message,lead_source,assigned_user_id,status,converted_client_id,converted_event_id
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+       'Admin proposal', $17, 'MANUAL', $18, 'PROPOSAL_DRAFT', $19, $20
+     ) RETURNING id`,
+    [
+      firstName,
+      lastName,
+      customer.email,
+      customer.phone || "",
+      event.event_date,
+      event.start_time || null,
+      event.end_time || null,
+      event.event_type,
+      event.guest_count || null,
+      event.venue_name || null,
+      event.venue_address || null,
+      event.city || null,
+      event.state || null,
+      event.zip || null,
+      input.experience_id || event.experience_id || null,
+      input.package_id || event.package_id || null,
+      input.notes || event.client_notes || event.internal_notes || null,
+      actorUserId,
+      customer.id,
+      event.id
+    ]
+  )).rows[0];
+
+  return { ...input, lead_id: inserted.id };
+}
+
 async function syncLeadProposalStage(client, leadId, stage) {
   if (!leadId) return;
   const allowed = stage === "PROPOSAL_SENT"
@@ -209,13 +286,14 @@ export async function createProposal(req) {
   const resolvedBody = await resolveProposalRelationships(req.body);
   const snapshot = await buildProposalSnapshot(resolvedBody);
   const result = await transaction(async (client) => {
-    const proposalNumber = resolvedBody.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
+    const linkedBody = await ensureProposalLead(client, resolvedBody, req.user.id);
+    const proposalNumber = linkedBody.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
     const inserted = await client.query(
       `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, proposal_type, selected_experiences, proposal_visuals)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'GENERATED',$18,$19,$20,$21,$22) RETURNING *`,
-      [proposalNumber, resolvedBody.lead_id || null, resolvedBody.client_id || snapshot.client.id || null, resolvedBody.event_id || null, req.user.id, resolvedBody.package_id || null, resolvedBody.experience_id || null, crypto.randomBytes(24).toString("hex"), resolvedBody.status || "DRAFT", resolvedBody.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals)]
+      [proposalNumber, linkedBody.lead_id || null, linkedBody.client_id || snapshot.client.id || null, linkedBody.event_id || null, req.user.id, linkedBody.package_id || null, linkedBody.experience_id || null, crypto.randomBytes(24).toString("hex"), linkedBody.status || "DRAFT", linkedBody.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals)]
     );
-    await syncLeadProposalStage(client, resolvedBody.lead_id, "PROPOSAL_DRAFT");
+    await syncLeadProposalStage(client, linkedBody.lead_id, "PROPOSAL_DRAFT");
     await client.query('UPDATE proposals SET visual_sections=$2 WHERE id=$1',[inserted.rows[0].id,JSON.stringify(snapshot.visualSections)]);
     inserted.rows[0].visual_sections=snapshot.visualSections;
     await createProposalVersion(client, inserted.rows[0], req.user.id);
