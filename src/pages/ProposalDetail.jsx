@@ -41,11 +41,11 @@ export default function ProposalDetail() {
     } finally {setBusy(false);}
   }
 
-  async function createDepositInvoice() {
+  async function createInvoiceFromProposal(depositOnly) {
     if (busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const invoice = await api.post(`/proposals/${id}/create-invoice`, { depositOnly: true });
+      const invoice = await api.post(`/proposals/${id}/create-invoice`, { depositOnly });
       navigate(`/finance/invoices/${invoice.id}`);
     } catch (err) {
       setError(err.message);
@@ -73,11 +73,11 @@ export default function ProposalDetail() {
           <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/docx`, `${proposal.proposal_number}.docx`), "DOCX generated.")}><FileText size={16} />DOCX</button>
           <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/duplicate`, {}), "Proposal duplicated.")}><Copy size={16} />Duplicate</button>
           <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/archive`, {}), "Proposal archived.")}><Archive size={16} />Archive</button>
-          <button className="primary-action" disabled={busy||proposal.status !== "ACCEPTED"} onClick={createDepositInvoice}><ReceiptText size={16} />Create Deposit Invoice</button>
+          <button className="primary-action" disabled={busy||proposal.status !== "ACCEPTED"} onClick={()=>createInvoiceFromProposal(true)}><ReceiptText size={16} />Create Deposit Invoice</button>
         </div>
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
-      {proposal.status === "ACCEPTED" && <section className="panel"><h2>Proposal accepted</h2><p><strong>Next step:</strong> create the deposit invoice, review it, then send the secure payment link to the client.</p><button className="primary-action" disabled={busy} onClick={createDepositInvoice}><ReceiptText size={16} />Create Deposit Invoice & Continue</button></section>}
+      {proposal.status === "ACCEPTED" && <section className="panel"><h2>Proposal accepted</h2><p><strong>Next step:</strong> choose how you want to invoice this proposal. You can request the configured deposit now or invoice the full proposal amount. Either option opens the draft invoice for review before sending.</p><div className="button-row"><button className="primary-action" disabled={busy} onClick={()=>createInvoiceFromProposal(true)}><ReceiptText size={16} />Create Deposit Invoice</button><button disabled={busy} onClick={()=>createInvoiceFromProposal(false)}><ReceiptText size={16} />Create Full Invoice</button></div></section>}
       {!accessAvailable && <section className="panel"><p role="status">Public access not available.</p>{can("write:sales") && <button disabled={busy} onClick={()=>action(()=>api.post(`/proposals/${id}/ensure-access`,{}),"Secure access generated.")}>Generate Secure Access</button>}</section>}
       <section className="detail-summary">
         <Metric label="Valid Through" value={proposal.valid_through ? formatDateOnly(proposal.valid_through) : "Unset"} />
