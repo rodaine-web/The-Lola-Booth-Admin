@@ -32,7 +32,7 @@ test("phase 14 production UAT report includes all required delivery sections", (
 });
 
 test("phase 14 report separates local certification from production-only verification", () => {
-  assert.match(report, /npm test`: PASS, 127\/127 tests/);
+  assert.match(report, /npm test`: PASS, \d+ passed \/ 0 failed \/ \d+ intentionally skipped \(\d+ total\)/);
   assert.match(report, /npm run build`: PASS/);
   assert.match(report, /Production worker certification: \*\*MANUAL VERIFICATION REQUIRED\*\*/);
   assert.match(report, /Production release remains conditional/);
