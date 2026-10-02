@@ -78,6 +78,17 @@ test("October UAT: draft invoice edits preserve deposit and payment-choice metad
   assert.match(slice, /allow_custom_amount: previousPricing\.allow_custom_amount !== false/);
 });
 
+test("October UAT: payment page honors allowed checkout choices and completion state", () => {
+  const pay = source("public/staging-site/pay.html");
+  assert.match(pay, /id="customChoice"/);
+  assert.match(pay, /fullChoice\.style\.display=o\.allowPayInFull\?"flex":"none"/);
+  assert.match(pay, /customChoice\.style\.display=o\.allowCustomAmount\?"flex":"none"/);
+  assert.match(pay, /depositChoice\.style\.display=o\.depositAvailable\?"flex":"none"/);
+  assert.match(pay, /Payment complete/);
+  assert.match(pay, /Thank you for your payment/);
+  assert.match(pay, /No further payment is due on this invoice/);
+});
+
 test("October UAT: payment notifications are immediate, recorded, idempotent, and non-fatal after payment posting", () => {
   const payment = source("server/src/services/payment-service.js");
   assert.match(payment, /sendRecordedPaymentEmail/);
