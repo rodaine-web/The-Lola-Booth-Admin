@@ -350,7 +350,23 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         }
         if (filters.event_type) {
           params.push(filters.event_type);
-          where.push(`event_type = $${params.length}`);
+          where.push(`event_type = ${params.length}`);
+        }
+        if (req.query.booking_from) {
+          params.push(req.query.booking_from);
+          where.push(`EXISTS (SELECT 1 FROM bookings b WHERE b.event_id=${table}.id AND b.deleted_at IS NULL AND b.created_at >= ${params.length}::timestamptz)`);
+        }
+        if (req.query.booking_to) {
+          params.push(req.query.booking_to);
+          where.push(`EXISTS (SELECT 1 FROM bookings b WHERE b.event_id=${table}.id AND b.deleted_at IS NULL AND b.created_at < ${params.length}::timestamptz)`);
+        }
+        if (req.query.upcoming === "true") {
+          where.push("event_date >= current_date");
+          where.push("status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')");
+          if (req.query.to) {
+            params.push(req.query.to);
+            where.push(`event_date < ${params.length}::date`);
+          }
         }
         if (filters.experience) {
           params.push(filters.experience);
