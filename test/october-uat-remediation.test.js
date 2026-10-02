@@ -93,6 +93,14 @@ test("October UAT: payment search and date drilldowns use consistent joins and t
   assert.match(admin, /FROM payments p LEFT JOIN clients c ON c\.id=p\.client_id LEFT JOIN events e ON e\.id=p\.event_id LEFT JOIN invoices i ON i\.id=p\.invoice_id/);
 });
 
+test("October UAT: Payments page preserves dashboard URL filters", () => {
+  const payments = source("src/pages/Payments.jsx");
+  assert.match(payments, /useSearchParams/);
+  assert.match(payments, /new URLSearchParams\(urlParams\)/);
+  assert.match(payments, /setFilter\("provider"/);
+  assert.match(payments, /setFilter\("status"/);
+});
+
 test("October UAT: accepted proposals reuse one active invoice", () => {
   const invoice = source("server/src/services/invoice-service.js");
   assert.match(invoice, /SELECT \* FROM invoices WHERE proposal_id=\$1 AND deleted_at IS NULL AND status <> 'VOID' ORDER BY created_at DESC LIMIT 1/);
