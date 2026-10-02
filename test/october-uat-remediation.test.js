@@ -87,6 +87,12 @@ test("October UAT: dashboard event drilldowns preserve exact query filters", () 
   assert.match(admin, /status IN \('CONFIRMED','PREPARING','READY','IN_PROGRESS'\)/);
 });
 
+test("October UAT: payment search and date drilldowns use consistent joins and timestamps", () => {
+  const admin = source("server/src/routes/admin.js");
+  assert.match(admin, /const paymentTime="COALESCE\(p\.paid_at,p\.payment_date::timestamptz,p\.created_at\)"/);
+  assert.match(admin, /FROM payments p LEFT JOIN clients c ON c\.id=p\.client_id LEFT JOIN events e ON e\.id=p\.event_id LEFT JOIN invoices i ON i\.id=p\.invoice_id/);
+});
+
 test("October UAT: accepted proposals reuse one active invoice", () => {
   const invoice = source("server/src/services/invoice-service.js");
   assert.match(invoice, /SELECT \* FROM invoices WHERE proposal_id=\$1 AND deleted_at IS NULL AND status <> 'VOID' ORDER BY created_at DESC LIMIT 1/);
