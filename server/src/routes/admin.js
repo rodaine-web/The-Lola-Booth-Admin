@@ -380,11 +380,11 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         }
         if (filters.experience) {
           params.push(filters.experience);
-          where.push(`(experience_id = ${params.length} OR EXISTS (SELECT 1 FROM event_experiences ee WHERE ee.event_id=${table}.id AND ee.experience_id=${params.length}))`);
+          where.push("(experience_id = $" + params.length + " OR EXISTS (SELECT 1 FROM event_experiences ee WHERE ee.event_id=" + table + ".id AND ee.experience_id=$" + params.length + "))");
         }
         if (filters.package) {
           params.push(filters.package);
-          where.push(`(package_id = ${params.length} OR EXISTS (SELECT 1 FROM event_packages ep WHERE ep.event_id=${table}.id AND ep.package_id=${params.length}))`);
+          where.push("(package_id = $" + params.length + " OR EXISTS (SELECT 1 FROM event_packages ep WHERE ep.event_id=" + table + ".id AND ep.package_id=$" + params.length + "))");
         }
         if (req.query.readiness === "staff") {
           where.push(`NOT EXISTS (SELECT 1 FROM staff_assignments sa WHERE sa.event_id=${table}.id AND sa.released_at IS NULL)`);
