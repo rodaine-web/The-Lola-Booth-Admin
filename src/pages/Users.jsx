@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const blank = { first_name:'', last_name:'', email:'', phone:'', business_role:'', roles:['ATTENDANT'], permissions:[] };
+const blank = { first_name:'', last_name:'', email:'', phone:'', business_role:'', roles:[], permissions:[] };
 export default function Users() {
   const {user:actor,can} = useAuth();
   const [loading,setLoading]=useState(true),[viewing,setViewing]=useState(null);
