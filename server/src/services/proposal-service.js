@@ -174,15 +174,48 @@ export async function buildProposalSnapshot(input) {
   };
 }
 
+
+async function resolveProposalRelationships(input = {}) {
+  if (!input.lead_id) return input;
+  const lead = (await query(
+    `SELECT id, converted_client_id, converted_event_id, preferred_package_id, preferred_experience_id
+     FROM leads WHERE id=$1 AND deleted_at IS NULL`,
+    [input.lead_id]
+  )).rows[0];
+  if (!lead) throw notFound("Lead");
+  return {
+    ...input,
+    client_id: input.client_id || lead.converted_client_id || null,
+    event_id: input.event_id || lead.converted_event_id || null,
+    package_id: input.package_id || lead.preferred_package_id || null,
+    experience_id: input.experience_id || lead.preferred_experience_id || null
+  };
+}
+
+async function syncLeadProposalStage(client, leadId, stage) {
+  if (!leadId) return;
+  const allowed = stage === "PROPOSAL_SENT"
+    ? ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_DRAFT", "FOLLOW_UP"]
+    : ["NEW", "CONTACTED", "QUALIFIED", "FOLLOW_UP"];
+  await client.query(
+    `UPDATE leads
+     SET status=$2, updated_at=now()
+     WHERE id=$1 AND deleted_at IS NULL AND status = ANY($3::text[])`,
+    [leadId, stage, allowed]
+  );
+}
+
 export async function createProposal(req) {
-  const snapshot = await buildProposalSnapshot(req.body);
+  const resolvedBody = await resolveProposalRelationships(req.body);
+  const snapshot = await buildProposalSnapshot(resolvedBody);
   const result = await transaction(async (client) => {
-    const proposalNumber = req.body.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
+    const proposalNumber = resolvedBody.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
     const inserted = await client.query(
       `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, proposal_type, selected_experiences, proposal_visuals)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'GENERATED',$18,$19,$20,$21,$22) RETURNING *`,
-      [proposalNumber, req.body.lead_id || null, req.body.client_id || snapshot.client.id || null, req.body.event_id || null, req.user.id, req.body.package_id || null, req.body.experience_id || null, crypto.randomBytes(24).toString("hex"), req.body.status || "DRAFT", req.body.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals)]
+      [proposalNumber, resolvedBody.lead_id || null, resolvedBody.client_id || snapshot.client.id || null, resolvedBody.event_id || null, req.user.id, resolvedBody.package_id || null, resolvedBody.experience_id || null, crypto.randomBytes(24).toString("hex"), resolvedBody.status || "DRAFT", resolvedBody.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals)]
     );
+    await syncLeadProposalStage(client, resolvedBody.lead_id, "PROPOSAL_DRAFT");
     await client.query('UPDATE proposals SET visual_sections=$2 WHERE id=$1',[inserted.rows[0].id,JSON.stringify(snapshot.visualSections)]);
     inserted.rows[0].visual_sections=snapshot.visualSections;
     await createProposalVersion(client, inserted.rows[0], req.user.id);
@@ -337,6 +370,7 @@ export async function sendProposal(req, proposal) {
        WHERE id=$1`,
       [proposal.id]
     );
+    await syncLeadProposalStage(client, proposal.lead_id, "PROPOSAL_SENT");
     await client.query(
       `INSERT INTO proposal_deliveries (proposal_id, recipient_email, delivery_method, status, sent_at)
        VALUES ($1,$2,'EMAIL',$3,now())`,
