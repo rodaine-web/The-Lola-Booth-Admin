@@ -166,7 +166,17 @@ export const adminRouter = Router();
 
 adminRouter.use(authenticate);
 adminRouter.use((req,_res,next)=>{
-  if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)&&freezesPublicMutation(req.path,req.body))return next(new AppError('Public website V1 is frozen. Use the STAGING CMS channel.',409,'PUBLIC_CONTENT_FROZEN'));
+  if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)){
+    if(req.path==='/settings'){
+      const publicKeys=new Set(['business_name','business_email','contact_email','phone','website','service_area','instagram_url','tiktok_url','facebook_url','pinterest_url','copyright_text','brand_line','site_title','default_meta_description','default_og_image_media_id','canonical_domain','social_share_title','social_share_description','show_starting_price']);
+      const keys=Object.keys(req.body||{});
+      const operationalKeys=keys.filter(key=>!publicKeys.has(key));
+      if(!operationalKeys.length&&keys.some(key=>publicKeys.has(key)))return next(new AppError('Public website V1 is frozen. Use the STAGING CMS channel.',409,'PUBLIC_CONTENT_FROZEN'));
+      for(const key of keys)if(publicKeys.has(key))delete req.body[key];
+    }else if(freezesPublicMutation(req.path,req.body)){
+      return next(new AppError('Public website V1 is frozen. Use the STAGING CMS channel.',409,'PUBLIC_CONTENT_FROZEN'));
+    }
+  }
   next();
 });
 adminRouter.use('/website/staging',(req,res,next)=>isStaging()?next():next(new AppError('Staging CMS is unavailable in this environment.',404,'NOT_FOUND')),stagingCmsRouter);
