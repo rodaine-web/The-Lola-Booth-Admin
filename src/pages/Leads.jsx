@@ -12,7 +12,7 @@ const sources = ["", "WEBSITE", "META", "FACEBOOK", "INSTAGRAM", "TIKTOK", "LINK
 export default function Leads() {
   const [creating,setCreating]=useState(false),[saving,setSaving]=useState(false),[draft,setDraft]=useState({}),[revision,setRevision]=useState(0);
   useDialogFocus(creating,()=>setCreating(false));
-  async function createLead(e){e.preventDefault();if(saving)return;setSaving(true);setError('');try{await api.post('/leads',draft);setCreating(false);setRevision(v=>v+1);}catch(error){setError(error.message);}finally{setSaving(false);}}
+  async function createLead(e){e.preventDefault();if(saving)return;setSaving(true);setError('');try{await api.post('/leads',draft);setCreating(false);setRevision(v=>v+1);}catch(error){const duplicate=error.details?.duplicate;if(error.code==='POSSIBLE_DUPLICATE'&&duplicate){const reason=duplicate.match_reason==='EMAIL_MATCH'?'email address':'phone number';setError(`Possible duplicate: the ${reason} matches ${duplicate.first_name||''} ${duplicate.last_name||''} (${duplicate.email||duplicate.phone||duplicate.id}). Open the existing record before creating another lead.`);}else setError(error.message);}finally{setSaving(false);}}
 
   const [urlParams, setUrlParams] = useSearchParams();
   const [view, setView] = useState("table");
