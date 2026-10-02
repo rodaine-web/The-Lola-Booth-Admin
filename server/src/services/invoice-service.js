@@ -39,7 +39,7 @@ export async function createInvoice(req) {
       throw new AppError("Only an accepted proposal can be converted to an invoice.", 409, "PROPOSAL_NOT_ACCEPTED");
     }
     const existing = await query(
-      "SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status <> 'VOID' ORDER BY created_at DESC LIMIT 1",
+      "SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1",
       [req.body.proposal_id]
     );
     if (existing.rows[0]) return existing.rows[0];
