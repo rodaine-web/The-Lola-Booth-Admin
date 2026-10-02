@@ -143,7 +143,7 @@ async function dashboardMetrics([start, end]) {
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID' AND due_date < current_date AND COALESCE(amount_outstanding,balance_due) > 0) AS overdue_balance,
       (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND deleted_at IS NULL) AS events_scheduled,
       (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND status='COMPLETED' AND deleted_at IS NULL) AS events_completed,
-      (SELECT count(*)::int FROM events WHERE event_date >= current_date AND event_date < $2::date AND status <> 'CANCELLED' AND deleted_at IS NULL) AS upcoming_events,
+      (SELECT count(*)::int FROM events WHERE event_date >= current_date AND event_date < $2::date AND status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS') AND deleted_at IS NULL) AS upcoming_events,
       (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND status='CANCELLED' AND deleted_at IS NULL) AS cancelled_events,
       (SELECT count(*)::int FROM tasks WHERE due_date >= $1::date AND due_date < $2::date AND status <> 'DONE' AND deleted_at IS NULL) AS tasks_due,
       (SELECT count(*)::int FROM tasks WHERE due_date < current_date AND status <> 'DONE' AND deleted_at IS NULL) AS overdue_tasks,
@@ -167,7 +167,7 @@ async function dashboardMetrics([start, end]) {
 async function dashboardLists([start, end], range, user) {
   const todayOnly = range === "today";
   const todayEvents = await eventRows(todayOnly ? "e.event_date >= $1::date AND e.event_date < $2::date" : "e.event_date >= $1::date AND e.event_date < $2::date", [start, end], 12);
-  const upcomingEvents = await eventRows("e.event_date >= current_date AND e.event_date < current_date + interval '30 days'", [], 10);
+  const upcomingEvents = await eventRows("e.event_date >= current_date AND e.event_date < current_date + interval '30 days' AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')", [], 10);
   const readinessDetails=await dashboardReadiness(upcomingEvents,user,{canAccess:userCanAccessEvent,readOperations:getEventOperations});
   const [tasks, attention, activity, weekly] = await Promise.all([
     query(`SELECT t.*, u.name AS owner_name, c.name AS client_name, e.event_name
