@@ -20,6 +20,7 @@ import { generatePaymentReceiptPdf } from "../services/document-service.js";
 import { generateInvoicePdf } from "../services/document-service.js";
 import { getInvoice } from "../services/invoice-service.js";
 import { createPaymentSession, publicPaymentOptions } from "../services/payment-service.js";
+import { applyBookingConfirmationPolicy } from "../services/payment-reconciliation-service.js";
 import { getProposal, proposalPdfBuffer, proposalPreviewHtml, userDocumentFilename } from "../services/proposal-service.js";
 import { publicCreativeApproval, respondToCreativeApproval } from "../services/creative-approval-service.js";
 import { getStorageProvider } from "../services/storage-service.js";
@@ -210,6 +211,7 @@ publicRouter.post("/proposals/:token/accept", asyncHandler(async (req, res) => {
   );
   if (!updated.rows[0]) throw new AppError("This proposal has already been updated. Refresh to see its current status.",409,"PROPOSAL_STATE_CHANGED");
   await recordActivity({ entityType: "proposal", entityId: proposal.id, action: "proposal_accepted", summary: `Proposal ${proposal.proposal_number} accepted by ${body.acceptedByName}` });
+  if (proposal.event_id) await applyBookingConfirmationPolicy(proposal.event_id);
   await createNotification({ roleTarget: "OWNER_ADMIN", category: "SALES", severity: "HIGH", title: `Proposal ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted ${proposal.proposal_number}. Next step: create and send the deposit invoice.`, entityType: "proposal", entityId: proposal.id, actionUrl: `/sales/proposals/${proposal.id}`, metadata: { nextStep: "CREATE_DEPOSIT_INVOICE", acceptedBy: body.acceptedByName }, email: { enabled: true, subject: `LOLA: ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted the proposal. Create and send the deposit invoice from the Admin portal.` } }).catch(error => req.log?.warn({ code:error.code }, "Proposal acceptance notification failed"));
   res.json({ proposal: updated.rows[0], nextStep: { action: "CREATE_DEPOSIT_INVOICE", label: "Create and send deposit invoice" } });
 }));
