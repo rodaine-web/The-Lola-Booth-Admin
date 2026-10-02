@@ -137,6 +137,14 @@ test("October UAT: integrations expose actionable setup and lifecycle controls",
   assert.match(integrations, /Configuration guidance/);
 });
 
+test("October UAT: enabled payment providers remain required in every health state", () => {
+  const health = source("server/src/services/system-health-service.js");
+  assert.match(health, /businessEnabled = provider\.provider === "STRIPE"/);
+  assert.match(health, /\{ \.\.\.provider, businessEnabled \}/);
+  assert.match(health, /item\.name\.startsWith\("payments\."\)/);
+  assert.match(health, /!item\.details\?\.businessEnabled/);
+});
+
 test("October UAT: System Health refresh shows progress, completion, and timestamp", () => {
   const health = source("src/pages/SystemHealth.jsx");
   assert.match(health, /refreshing/);
