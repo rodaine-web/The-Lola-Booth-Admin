@@ -16,6 +16,9 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
+  const [inlineClientOpen,setInlineClientOpen]=useState(false);
+  const [inlineClientSaving,setInlineClientSaving]=useState(false);
+  const [inlineClient,setInlineClient]=useState({first_name:"",last_name:"",email:"",phone:""});
   useDialogFocus(Boolean(editing),()=>setEditing(null));
 
   useEffect(()=>{setEditing(null);setForm({});setStatusFilter("");},[endpoint]);
@@ -30,6 +33,8 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   }, [endpoint, search, revision,statusFilter,sort,overdue]);
 
   function openCreate() {
+    setInlineClientOpen(false);
+    setInlineClient({first_name:"",last_name:"",email:"",phone:""});
     setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? false : ""])));
     if (endpoint === "/experiences") setForm(current=>({...current,website_status:"DRAFT",active:true}));
     if (endpoint === "/packages") setForm(current => ({ ...current, pricing_mode: "STARTING", website_status: "DRAFT", currency: "USD", active: true }));
@@ -43,6 +48,23 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     setEditing({ mode: "edit", id: row.id });
     setError("");
     setNotice("");
+  }
+
+  async function createInlineClient() {
+    if (inlineClientSaving) return;
+    setInlineClientSaving(true);
+    setError("");
+    try {
+      const created = await api.post("/clients", inlineClient);
+      setForm((current) => ({ ...current, client_id: created.id }));
+      setInlineClientOpen(false);
+      setInlineClient({first_name:"",last_name:"",email:"",phone:""});
+      setNotice(`Client ${created.name || "created"} added to this event.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setInlineClientSaving(false);
+    }
   }
 
   async function saveForm(event) {
@@ -110,13 +132,29 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
                   ) : type === "checkbox" ? (
                     <input type="checkbox" checked={Boolean(form[name])} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.checked }))} />
                   ) : type === "relationship" ? (
-                    <RelationshipSelect resource={config.resource} value={form[name]} placeholder={label} onChange={(value) => setForm((current) => ({ ...current, [name]: value }))} />
+                    <>
+                      <RelationshipSelect resource={config.resource} value={form[name]} placeholder={label} onChange={(value) => setForm((current) => ({ ...current, [name]: value }))} />
+                      {endpoint === "/events" && name === "client_id" && editing?.mode === "create" && <button type="button" onClick={() => setInlineClientOpen((value) => !value)}>{inlineClientOpen ? "Cancel new client" : "Create new client"}</button>}
+                    </>
                   ) : (
-                    <input type={type} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                    <input required={Boolean(config.required)} type={type} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
                   )}
                 </label>
               ))}
             </div>
+            {endpoint === "/events" && inlineClientOpen && <section className="panel wide">
+              <h3>Create client without leaving this event</h3>
+              <div className="form-grid">
+                <label>First name<input required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
+                <label>Last name<input required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
+                <label>Email<input required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
+                <label>Phone<input value={inlineClient.phone} onChange={(event)=>setInlineClient(current=>({...current,phone:event.target.value}))}/></label>
+              </div>
+              <div className="button-row">
+                <button type="button" onClick={()=>setInlineClientOpen(false)}>Cancel</button>
+                <button type="button" className="primary-action" disabled={inlineClientSaving||!inlineClient.first_name||!inlineClient.last_name||!inlineClient.email} onClick={createInlineClient}>{inlineClientSaving?"Creating…":"Create client & use"}</button>
+              </div>
+            </section>}
             <div className="modal-actions">
               <button type="button" onClick={() => setEditing(null)}>Cancel</button>
               <button className="primary-action" disabled={saving}>{saving?"Saving…":"Save"}</button>
