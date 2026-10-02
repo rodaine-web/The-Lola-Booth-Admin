@@ -89,6 +89,12 @@ export async function createInvoice(req) {
         [invoice.rows[0].id, item.description, item.quantity, item.unit_price, item.taxable, item.tax_rate, item.discount, item.line_total]
       );
     }
+    if (req.body.proposal_id) {
+      await client.query(
+        "UPDATE proposals SET status='CONVERTED', updated_at=now() WHERE id=$1 AND status='ACCEPTED'",
+        [req.body.proposal_id]
+      );
+    }
     return invoice.rows[0];
   });
   await recordActivity({ actorUserId: req.user.id, entityType: "invoice", entityId: invoice.id, action: "invoice_created", summary: `Invoice ${invoice.invoice_number} created` });
