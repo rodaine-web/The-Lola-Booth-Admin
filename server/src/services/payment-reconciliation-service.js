@@ -79,7 +79,10 @@ export async function applyBookingConfirmationPolicy(eventId) {
   const event = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [eventId]);
   if (!event.rows[0] || event.rows[0].status === "CANCELLED") return null;
   const finance = await query(
-    `SELECT COALESCE(sum(amount_paid),0)::numeric AS paid, COALESCE(sum(amount_outstanding),0)::numeric AS outstanding
+    `SELECT
+       COALESCE(sum(amount_paid),0)::numeric AS paid,
+       COALESCE(sum(amount_outstanding),0)::numeric AS outstanding,
+       COALESCE(sum(CASE WHEN pricing_snapshot->>'payment_mode'='DEPOSIT_REQUEST' THEN COALESCE(NULLIF(pricing_snapshot->>'amount_due_now','')::numeric,0) ELSE 0 END),0)::numeric AS invoice_deposit_required
      FROM invoices WHERE event_id=$1 AND deleted_at IS NULL AND status <> 'VOID'`,
     [eventId]
   );
@@ -90,7 +93,9 @@ export async function applyBookingConfirmationPolicy(eventId) {
   );
   const paid = Number(finance.rows[0].paid || 0);
   const outstanding = Number(finance.rows[0].outstanding || 0);
-  const depositRequired = Number(booking.rows[0]?.deposit_required || 0);
+  const invoiceDepositRequired = Number(finance.rows[0].invoice_deposit_required || 0);
+  const bookingDepositRequired = Number(booking.rows[0]?.deposit_required || 0);
+  const depositRequired = invoiceDepositRequired > 0 ? invoiceDepositRequired : bookingDepositRequired;
   const depositSatisfied = depositRequired > 0 ? paid >= depositRequired : paid > 0;
   const shouldConfirm = policy === "PROPOSAL_ACCEPTED" || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
   if (!shouldConfirm || !["TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
