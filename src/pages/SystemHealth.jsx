@@ -7,16 +7,22 @@ export default function SystemHealth() {
   const [jobs, setJobs] = useState([]);
   const [selected, setSelected] = useState([]);
   const [error, setError] = useState("");
+  const [refreshing,setRefreshing]=useState(false);
+  const [lastRefreshed,setLastRefreshed]=useState(null);
 
   async function load() {
+    setRefreshing(true);
     setError("");
     try {
       const [healthResult, jobsResult] = await Promise.all([api.get("/system/health"), api.get("/system/jobs")]);
       setHealth(healthResult);
       setJobs(jobsResult.data || []);
       setSelected([]);
+      setLastRefreshed(new Date());
     } catch (err) {
       setError(err.message);
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -43,9 +49,9 @@ export default function SystemHealth() {
           <p className="eyebrow">{health?.build?.environment==='staging'?'Staging baseline':'Environment readiness'}</p>
           <h1>System Health</h1>
         </div>
-        <button className="primary-action" onClick={load}><RefreshCw size={16} />Refresh</button>
+        <button className="primary-action" onClick={load} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "spin" : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
-      {health?.build&&<p className="note-text">Environment: {health.build.environment} · API revision: {health.build.revision.slice(0,12)} · Admin revision: {__BUILD_REVISION__.slice(0,12)}</p>}
+      {health?.build&&<p className="note-text">Environment: {health.build.environment} · API revision: {health.build.revision.slice(0,12)} · Admin revision: {__BUILD_REVISION__.slice(0,12)}{lastRefreshed ? ` · Last refreshed ${lastRefreshed.toLocaleTimeString()}` : ""}</p>}
       {error && <div className="toast error">{error}</div>}
       {health && <section className={`health-banner ${health.status.toLowerCase()}`}>
         <AlertTriangle size={18} />
