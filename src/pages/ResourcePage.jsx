@@ -141,8 +141,13 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     } catch (err) {
       if (err.code === "POSSIBLE_DUPLICATE" && err.details?.duplicate) {
         const duplicate = err.details.duplicate;
-        const reason = duplicate.match_reason === "EMAIL_MATCH" ? "email address" : "phone number";
-        setError(`Possible duplicate: the ${reason} matches ${duplicate.name || [duplicate.first_name, duplicate.last_name].filter(Boolean).join(" ") || "an existing record"} (${duplicate.email || duplicate.phone || duplicate.id}). Open the existing record before creating another one.`);
+        if (endpoint === "/events") {
+          const when = [duplicate.event_date, duplicate.start_time].filter(Boolean).join(" at ");
+          setError(`Possible duplicate event: ${duplicate.event_name || "an existing event"}${when ? ` on ${when}` : ""}${duplicate.venue_name ? ` at ${duplicate.venue_name}` : ""}. Open the existing event before creating another one.`);
+        } else {
+          const reason = duplicate.match_reason === "EMAIL_MATCH" ? "email address" : "phone number";
+          setError(`Possible duplicate: the ${reason} matches ${duplicate.name || [duplicate.first_name, duplicate.last_name].filter(Boolean).join(" ") || "an existing record"} (${duplicate.email || duplicate.phone || duplicate.id}). Open the existing record before creating another one.`);
+        }
       } else if (err.message.includes("Possible duplicate")) {
         setError(`${err.message} Open the existing record or continue with a distinct email/phone.`);
       } else {
