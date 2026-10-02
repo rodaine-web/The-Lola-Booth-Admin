@@ -10,4 +10,6 @@ test('dashboard links preserve date windows and matching stage/source filters', 
   const source=new URL(sourceHref('Social & referrals',range),'https://admin.test');assert.equal(source.searchParams.get('source_group'),'Social & referrals');assert.equal(source.searchParams.get('from'),range.start);
   const collected=new URL(metricHref({key:'collected_revenue',href:'/finance/payments'},range),'https://admin.test');
   assert.equal(collected.pathname,'/finance/payments');assert.equal(collected.searchParams.get('from'),range.start);assert.equal(collected.searchParams.get('to'),range.end);
+  const refunds=new URL(metricHref({key:'refunds',href:'/finance/payments?status=REFUNDED'},range),'https://admin.test');
+  assert.equal(refunds.pathname,'/finance/payments');assert.equal(refunds.searchParams.get('refunded'),'true');assert.equal(refunds.searchParams.get('from'),range.start);assert.equal(refunds.searchParams.get('to'),range.end);
 });
