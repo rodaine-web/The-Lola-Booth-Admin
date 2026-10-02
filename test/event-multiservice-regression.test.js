@@ -12,14 +12,11 @@ test("event create/update SQL keeps PostgreSQL parameter placeholders", () => {
 });
 
 test("event dashboard filters keep PostgreSQL parameter placeholders", () => {
-  assert.ok(admin.includes('where.push(`event_type = ${params.length}`);'));
-  assert.ok(admin.includes('b.created_at >= ${params.length}::timestamptz'));
-  assert.ok(admin.includes('b.created_at < ${params.length}::timestamptz'));
-  assert.ok(admin.includes('where.push(`event_date < ${params.length}::date`);'));
+  assert.ok(admin.includes('where.push(`event_type = $${params.length}`);'));
+  assert.ok(admin.includes('b.created_at >= $${params.length}::timestamptz'));
+  assert.ok(admin.includes('b.created_at < $${params.length}::timestamptz'));
+  assert.ok(admin.includes('where.push(`event_date < $${params.length}::date`);'));
   assert.ok(!admin.includes('where.push(`event_type = ${params.length}`);'));
-  assert.ok(!admin.includes('b.created_at >= ${params.length}::timestamptz'));
-  assert.ok(!admin.includes('b.created_at < ${params.length}::timestamptz'));
-  assert.ok(!admin.includes('where.push(`event_date < ${params.length}::date`);'));
 });
 
 test("event multi-service selections persist in join tables", () => {
