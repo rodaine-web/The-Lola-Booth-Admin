@@ -83,6 +83,19 @@ test("October UAT: event package and experience filters include multi-service se
   assert.match(admin, /ep\.package_id=\$" \+ params\.length/);
 });
 
+test("October UAT: readiness drilldowns use a bounded upcoming-event window", () => {
+  const admin = source("server/src/routes/admin.js");
+  const staffStart = admin.indexOf('req.query.readiness === "staff"');
+  const equipmentStart = admin.indexOf('req.query.readiness === "equipment"');
+  const tasksStart = admin.indexOf('if (table === "tasks")');
+  const staff = admin.slice(staffStart, equipmentStart);
+  const equipment = admin.slice(equipmentStart, tasksStart);
+  assert.ok(staff.includes("event_date >= current_date"));
+  assert.ok(staff.includes("current_date + interval"));
+  assert.ok(equipment.includes("event_date >= current_date"));
+  assert.ok(equipment.includes("current_date + interval"));
+});
+
 test("October UAT: dashboard event drilldowns preserve exact query filters", () => {
   const resource = source("src/pages/ResourcePage.jsx");
   const links = source("src/utils/dashboard-links.js");
