@@ -131,6 +131,8 @@ test("October UAT: payment page honors allowed checkout choices and completion s
   assert.match(pay, /customChoice\.style\.display=o\.allowCustomAmount\?"flex":"none"/);
   assert.match(pay, /depositChoice\.style\.display=o\.depositAvailable\?"flex":"none"/);
   assert.match(pay, /Payment complete/);
+  assert.match(pay, /Payment received/);
+  assert.match(pay, /confirmation is still being applied to this invoice/);
   assert.match(pay, /Thank you for your payment/);
   assert.match(pay, /No further payment is due on this invoice/);
   assert.match(pay, /No online payment amount is currently available for this invoice/);
