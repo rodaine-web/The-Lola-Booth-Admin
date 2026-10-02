@@ -10,8 +10,6 @@ export default function SystemHealth() {
   const [refreshing,setRefreshing]=useState(false);
   const [lastRefreshed,setLastRefreshed]=useState(null);
   const [notice,setNotice]=useState("");
-  const [refreshing,setRefreshing]=useState(false);
-  const [lastRefreshed,setLastRefreshed]=useState(null);
 
   async function load() {
     setRefreshing(true);
