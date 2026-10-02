@@ -83,9 +83,16 @@ export async function applyBookingConfirmationPolicy(eventId) {
      FROM invoices WHERE event_id=$1 AND deleted_at IS NULL AND status <> 'VOID'`,
     [eventId]
   );
+  const booking = await query(
+    `SELECT COALESCE(sum(deposit_required),0)::numeric AS deposit_required
+     FROM bookings WHERE event_id=$1 AND deleted_at IS NULL`,
+    [eventId]
+  );
   const paid = Number(finance.rows[0].paid || 0);
   const outstanding = Number(finance.rows[0].outstanding || 0);
-  const shouldConfirm = policy === "PROPOSAL_ACCEPTED" || (policy === "DEPOSIT_PAID" && paid > 0) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
+  const depositRequired = Number(booking.rows[0]?.deposit_required || 0);
+  const depositSatisfied = depositRequired > 0 ? paid >= depositRequired : paid > 0;
+  const shouldConfirm = policy === "PROPOSAL_ACCEPTED" || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
   if (!shouldConfirm || !["TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
   const updated = await query("UPDATE events SET status='CONFIRMED', updated_at=now() WHERE id=$1 RETURNING *", [eventId]);
   await recordActivity({ entityType: "event", entityId: eventId, action: "booking_auto_confirmed", summary: `Booking auto-confirmed by ${policy} policy` });
