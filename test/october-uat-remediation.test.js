@@ -116,6 +116,19 @@ test("October UAT: dashboard event drilldowns preserve exact query filters", () 
   assert.match(admin, /status IN \('CONFIRMED','PREPARING','READY','IN_PROGRESS'\)/);
 });
 
+test("October UAT: dynamic list filters keep PostgreSQL parameter placeholders", () => {
+  const admin = source("server/src/routes/admin.js");
+  const bad = admin.split("\n").filter(line => line.includes("${params.length}") && !line.includes("${params.length}"));
+  assert.deepEqual(bad, []);
+});
+
+test("October UAT: booking deposit confirmation prefers the invoice deposit threshold", () => {
+  const reconciliation = source("server/src/services/payment-reconciliation-service.js");
+  assert.match(reconciliation, /invoice_deposit_required/);
+  assert.match(reconciliation, /invoiceDepositRequired > 0 \? invoiceDepositRequired : bookingDepositRequired/);
+  assert.match(reconciliation, /depositRequired > 0 \? paid >= depositRequired : paid > 0/);
+});
+
 test("October UAT: payment search and date drilldowns use consistent joins and timestamps", () => {
   const admin = source("server/src/routes/admin.js");
   assert.match(admin, /const paymentTime="COALESCE\(p\.paid_at,p\.payment_date::timestamptz,p\.created_at\)"/);
