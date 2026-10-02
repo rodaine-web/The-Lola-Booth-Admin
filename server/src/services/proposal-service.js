@@ -262,14 +262,6 @@ async function ensureProposalLead(client, input = {}, actorUserId = null) {
       "CLIENT_EMAIL_REQUIRED"
     );
   }
-  if (!customer.phone || String(customer.phone).replace(/\D/g, "").length < 7) {
-    throw new AppError(
-      "The selected client needs a valid phone number before a proposal-stage lead can be created.",
-      422,
-      "CLIENT_PHONE_REQUIRED"
-    );
-  }
-
   const name = String(customer.name || "").trim();
   const pieces = name.split(/\s+/).filter(Boolean);
   const firstName = customer.first_name || pieces[0] || "Client";
