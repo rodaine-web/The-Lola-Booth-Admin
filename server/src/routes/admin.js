@@ -408,15 +408,15 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         }
         if (filters.due_from) {
           params.push(filters.due_from);
-          where.push(`due_date >= ${params.length}::date`);
+          where.push("due_date >= $"+params.length+"::date");
         }
         if (filters.due_to) {
           params.push(filters.due_to);
-          where.push(`due_date < ${params.length}::date`);
+          where.push("due_date < $"+params.length+"::date");
         }
         if (filters.due_before) {
           params.push(filters.due_before);
-          where.push(`due_date < ${params.length}`);
+          where.push("due_date < $"+params.length);
         }
         if (filters.overdue === "true" || filters.overdue === true) {
           where.push(`due_date < current_date AND status <> 'DONE'`);
@@ -1621,8 +1621,8 @@ adminRouter.get("/payments", requirePermission("read:finance"), validate(paginat
   const params = [];
   const where = ["p.deleted_at IS NULL"];
   const paymentTime="COALESCE(p.paid_at,p.payment_date::timestamptz,p.created_at)";
-  if(filters.from){params.push(filters.from);where.push(`${paymentTime}>=${params.length}::timestamptz`);}
-  if(filters.to){params.push(filters.to);where.push(`${paymentTime}<${params.length}::timestamptz`);}
+  if(filters.from){params.push(filters.from);where.push(paymentTime+">=$"+params.length+"::timestamptz");}
+  if(filters.to){params.push(filters.to);where.push(paymentTime+"<$"+params.length+"::timestamptz");}
   if(filters.refunded==="true"||filters.refunded===true)where.push("COALESCE(p.refunded_amount,0)>0");
 
   if (filters.status) {
