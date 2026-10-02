@@ -25,7 +25,20 @@ export default function Settings() {
     setNotice("");
     setError("");
     try {
-      const updated = await api.patch("/settings", {...Object.fromEntries(fields.filter(k=>form[k]!==null&&form[k]!==undefined).map(k=>[k,form[k]])),sms_escalations:form.sms_escalations,stripe_enabled:Boolean(form.stripe_enabled)});
+      const changed = Object.fromEntries(
+        [...fields, "stripe_enabled"].filter((key) => {
+          if (form[key] === null || form[key] === undefined) return false;
+          return JSON.stringify(form[key]) !== JSON.stringify(settings[key]);
+        }).map((key) => [key, key === "stripe_enabled" ? Boolean(form[key]) : form[key]])
+      );
+      if (JSON.stringify(form.sms_escalations) !== JSON.stringify(settings.sms_escalations)) {
+        changed.sms_escalations = form.sms_escalations;
+      }
+      if (!Object.keys(changed).length) {
+        setNotice("No changes to save.");
+        return;
+      }
+      const updated = await api.patch("/settings", changed);
       setSettings(updated);
       setForm(updated);
       setNotice("Settings saved.");
