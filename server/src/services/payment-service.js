@@ -160,6 +160,52 @@ export async function createRefund(req) {
     return inserted.rows[0];
   });
   if (payment.invoice_id) await reconcileInvoice(payment.invoice_id, { req, actorUserId: req.user.id, action: "refund_completed" });
+  const invoice = payment.invoice_id ? (await query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL", [payment.invoice_id])).rows[0] : null;
+  const customer = payment.client_id ? (await query("SELECT name,email FROM clients WHERE id=$1 AND deleted_at IS NULL", [payment.client_id])).rows[0] : null;
+  const fmt = (value) => new Intl.NumberFormat("en-US", { style: "currency", currency: refund.currency || payment.currency || "USD" }).format(Number(value || 0));
+  const invoiceUrl = invoice ? secureDocumentUrl(documentOrigin(), "invoice", invoice) : null;
+  if (customer?.email && invoice) {
+    const subject = `Refund processed — ${invoice.invoice_number}`;
+    const body = `Hi ${customer.name || "there"},\n\nA ${refund.refund_type === "FULL" ? "full" : "partial"} refund of ${fmt(refund.amount)} has been recorded for invoice ${invoice.invoice_number}.${req.body.reason ? `\nReason: ${req.body.reason}` : ""}\n\nUpdated invoice balance: ${fmt(invoice.balance_due)}.${invoiceUrl ? `\nView your invoice: ${invoiceUrl}` : ""}`;
+    await sendRecordedPaymentEmail({
+      payment,
+      invoice,
+      to: customer.email,
+      subject,
+      body,
+      html: brandedEmailHtml(body, { kicker: "Refund processed", ctaLabel: invoiceUrl ? "View Invoice" : undefined, ctaUrl: invoiceUrl }),
+      idempotencyKey: `refund-confirmation:${refund.id}`,
+      triggerKey: "REFUND_CONFIRMATION"
+    }).catch(() => null);
+  }
+  if (invoice) {
+    const ownerEmail = env.formNotificationEmail || (await query("SELECT business_email FROM business_settings LIMIT 1")).rows[0]?.business_email || null;
+    if (ownerEmail) {
+      const subject = `Refund processed — ${invoice.invoice_number}`;
+      const body = `${customer?.name || "A client"} received a ${refund.refund_type === "FULL" ? "full" : "partial"} refund of ${fmt(refund.amount)} for invoice ${invoice.invoice_number}. Updated balance: ${fmt(invoice.balance_due)}.`;
+      await sendRecordedPaymentEmail({
+        payment,
+        invoice,
+        to: ownerEmail,
+        subject,
+        body,
+        html: brandedEmailHtml(body, { kicker: "Refund processed", ctaLabel: invoiceUrl ? "Open Invoice" : undefined, ctaUrl: invoiceUrl }),
+        idempotencyKey: `refund-owner-notification:${refund.id}`,
+        triggerKey: "REFUND_COMPLETED_INTERNAL"
+      }).catch(() => null);
+    }
+    await createNotification({
+      roleTarget: "OWNER_ADMIN",
+      category: "PAYMENTS",
+      severity: "NORMAL",
+      title: `Refund processed — ${invoice.invoice_number}`,
+      body: `${fmt(refund.amount)} refunded to ${customer?.name || "client"}.`,
+      entityType: "payment",
+      entityId: payment.id,
+      actionUrl: `/finance/payments/${payment.id}`,
+      metadata: { refundId: refund.id, invoiceId: invoice.id, amount: refund.amount, refundType: refund.refund_type }
+    }).catch(() => null);
+  }
   await writeAudit({ req, action: "refund_completed", entity: "refund", entityId: refund.id, after: refund });
   return refund;
 }
