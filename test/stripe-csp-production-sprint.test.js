@@ -39,6 +39,15 @@ test("Stripe webhook keeps raw body before JSON parsing and verifies signatures"
   assert.match(paymentService, /status IN \('RECEIVED','FAILED','FAILED_NEEDS_REVIEW'\)/);
 });
 
+test("Manual payments inherit client and event from the invoice", () => {
+  const start = paymentService.indexOf("export async function recordManualPayment");
+  const end = paymentService.indexOf("export async function getPayment", start);
+  const slice = paymentService.slice(start, end);
+  assert.match(slice, /const paymentEventId = invoice \? invoice\.event_id : req\.body\.event_id/);
+  assert.match(slice, /const paymentClientId = invoice \? invoice\.client_id : req\.body\.client_id/);
+  assert.match(slice, /\[paymentEventId, paymentClientId, req\.body\.invoice_id \|\| null/);
+});
+
 test("Payment confirmation communication binding matches SQL placeholders", () => {
   const start = paymentService.indexOf("async function sendRecordedPaymentEmail");
   const end = paymentService.indexOf("async function recordProviderPaymentFailure", start);
