@@ -69,9 +69,35 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
 
   async function saveForm(event) {
     event.preventDefault();
-    if(saving)return; setSaving(true);
+    if(saving)return;
     setError("");
     setNotice("");
+    if (endpoint === "/events") {
+      const required = [
+        ["client_id","Client"],
+        ["event_name","Event title"],
+        ["event_type","Event type"],
+        ["event_date","Event date"],
+        ["start_time","Start time"],
+        ["end_time","End time"]
+      ];
+      const missing = required.find(([name]) => !form[name]);
+      if (missing) {
+        setError(`${missing[1]} is required.`);
+        requestAnimationFrame(() => {
+          const field = document.querySelector(`[aria-label="${missing[1]}"], [aria-label="Search ${missing[1]}"]`);
+          field?.scrollIntoView?.({behavior:"smooth",block:"center"});
+          field?.focus?.();
+        });
+        return;
+      }
+      if (form.start_time && form.end_time && form.end_time <= form.start_time) {
+        setError("End time must be after start time.");
+        requestAnimationFrame(()=>document.querySelector('[aria-label="End time"]')?.focus?.());
+        return;
+      }
+    }
+    setSaving(true);
     const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value === "" ? null : value]));
     for(const [name,,type] of fields)if(type==="number"&&payload[name]===null&&name!=="starting_price")delete payload[name];
     for (const [name, , type] of fields) if (type === "lines") payload[name] = String(form[name] || "").split("\n").map(value => value.trim()).filter(Boolean);
