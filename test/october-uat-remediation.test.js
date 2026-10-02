@@ -38,6 +38,15 @@ test("October UAT: proposal primary service IDs follow multi-service selections"
   assert.match(editor, /package_id: selected_experiences\.flatMap\(\(item\) => item\.packages \|\| \[\]\)\[0\]\?\.package_id \|\| ""/);
 });
 
+test("October UAT: inline proposal event creation validates time and duplicate review", () => {
+  const editor = source("src/pages/ProposalEditor.jsx");
+  assert.match(editor, /End time must be after start time/);
+  assert.match(editor, /POSSIBLE_DUPLICATE/);
+  assert.match(editor, /Use existing event/);
+  assert.match(editor, /Create separate event anyway/);
+  assert.match(editor, /events\?continueAnyway=true/);
+});
+
 test("October UAT: event workflow supports inline client creation and multi-service selections", () => {
   const resource = source("src/pages/ResourcePage.jsx");
   const admin = source("server/src/routes/admin.js");
