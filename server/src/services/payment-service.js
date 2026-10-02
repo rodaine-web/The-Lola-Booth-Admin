@@ -8,6 +8,7 @@ import { brandedEmailHtml } from "./automation-service.js";
 import { sendEmail } from "./email-service.js";
 import { createNotification } from "./notification-service.js";
 import { env } from "../config/env.js";
+import { logger } from "../config/logger.js";
 import { query, transaction } from "../db/pool.js";
 import { AppError, notFound } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
@@ -330,6 +331,8 @@ async function recordProviderPayment(input) {
       html: brandedEmailHtml(body,{kicker:"Payment received",ctaLabel:"View Your Receipt",ctaUrl:receiptUrl,secondaryCta:payUrl&&receipt.balanceDue>0?{label:"Pay Remaining Balance",url:payUrl}:undefined}),
       idempotencyKey:`payment-confirmation:${payment.id}`,
       triggerKey:"PAYMENT_CONFIRMATION"
+    }).catch((error)=>{
+      logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"EMAIL_SEND_FAILED"},"Customer payment confirmation email failed after payment posting");
     });
   }
 
@@ -346,6 +349,8 @@ async function recordProviderPayment(input) {
       html: brandedEmailHtml(ownerBody,{kicker:"Payment received",ctaLabel:"Open Invoice",ctaUrl:invoiceUrl}),
       idempotencyKey:`payment-owner-notification:${payment.id}`,
       triggerKey:"PAYMENT_RECEIVED_INTERNAL"
+    }).catch((error)=>{
+      logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"EMAIL_SEND_FAILED"},"Owner payment notification email failed after payment posting");
     });
   }
   await createNotification({
