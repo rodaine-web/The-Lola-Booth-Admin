@@ -2609,7 +2609,7 @@ const paymentSchema = z.object({
   event_id: uuid,
   client_id: uuid,
   invoice_id: uuid.optional().nullable(),
-  amount: money,
+  amount: money.refine((value) => Number(value) > 0, "Payment amount must be greater than zero."),
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
   payment_method: z.enum(["CARD", "CASH", "CHECK", "BANK_TRANSFER", "ZELLE", "EXTERNAL_CARD", "OTHER"]),
   reference_number: z.string().optional().nullable(),
