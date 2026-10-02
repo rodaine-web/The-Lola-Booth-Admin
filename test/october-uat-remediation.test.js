@@ -68,6 +68,16 @@ test("October UAT: accepted proposals reuse one active invoice", () => {
   assert.doesNotMatch(invoice, /pricing_snapshot->>'payment_mode'.*proposal_id/s);
 });
 
+test("October UAT: draft invoice edits preserve deposit and payment-choice metadata", () => {
+  const invoice = source("server/src/services/invoice-service.js");
+  const slice = invoice.slice(invoice.indexOf("export async function updateDraftInvoice"), invoice.indexOf("export function calculateInvoiceTotals"));
+  assert.match(slice, /previousPricing = before\.pricing_snapshot/);
+  assert.match(slice, /amount_due_now: preservedMinimum/);
+  assert.match(slice, /payment_mode: previousPricing\.payment_mode \|\| "BALANCE_DUE"/);
+  assert.match(slice, /allow_pay_in_full: previousPricing\.allow_pay_in_full !== false/);
+  assert.match(slice, /allow_custom_amount: previousPricing\.allow_custom_amount !== false/);
+});
+
 test("October UAT: payment notifications are immediate, recorded, idempotent, and non-fatal after payment posting", () => {
   const payment = source("server/src/services/payment-service.js");
   assert.match(payment, /sendRecordedPaymentEmail/);
