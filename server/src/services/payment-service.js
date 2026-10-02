@@ -125,6 +125,9 @@ export async function createPaymentSession({ token, provider, amountChoice = "DE
 export async function recordManualPayment(req) {
   const invoice = req.body.invoice_id ? await lockableInvoice(req.body.invoice_id) : null;
   const amount = money(req.body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError("Payment amount must be greater than zero.", 422, "INVALID_PAYMENT_AMOUNT");
+  }
   if (invoice && amount > invoiceBalance(invoice)) {
     throw new AppError("Manual payment cannot exceed the invoice balance.", 409, "PAYMENT_EXCEEDS_BALANCE");
   }
