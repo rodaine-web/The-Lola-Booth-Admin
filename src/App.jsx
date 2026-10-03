@@ -27,6 +27,7 @@ const Settings = lazy(() => import("./pages/Settings.jsx"));
 const ResourcePage = lazy(() => import("./pages/ResourcePage.jsx"));
 const Proposals = lazy(() => import("./pages/Proposals.jsx"));
 const ProposalEditor = lazy(() => import("./pages/ProposalEditor.jsx"));
+const ProposalTemplates = lazy(() => import("./pages/ProposalTemplates.jsx"));
 const ProposalWizard = lazy(() => import("./pages/ProposalWizard.jsx"));
 const ProposalDetail = lazy(() => import("./pages/ProposalDetail.jsx"));
 const Invoices = lazy(() => import("./pages/Invoices.jsx"));
@@ -128,6 +129,7 @@ export default function App() {
         <Route path="system/health" element={<SystemHealth />} />
         <Route path="system/audit-log" element={<AuditLog/>} />
         <Route path="system/data-review" element={<DataReview/>}/>
+        <Route path="system/proposal-templates" element={<ProposalTemplates />} />
         <Route path="system/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={

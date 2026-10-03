@@ -1,3 +1,5 @@
+import {scenarioConfigSchema,scenarioOverridesSchema} from "../services/proposal-scenario-schema.js";
+import { mergeDefaults } from "../../../shared/proposal-scenario.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import { documentOrigin } from "../utils/public-document-url.js";
 import { recoverDocumentAccess } from "../services/document-access-service.js";
@@ -48,7 +50,7 @@ import {
   getInvoice,
   sendInvoice
 } from "../services/invoice-service.js";
-import { generateInvoicePdf, generatePaymentReceiptPdf, generateProposalDocx, generateProposalPdf } from "../services/document-service.js";
+import { proposalHtml, generateInvoicePdf, generatePaymentReceiptPdf, generateProposalDocx, generateProposalPdf } from "../services/document-service.js";
 import {
   createRefund,
   getPayment,
@@ -436,6 +438,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       );
       const count = await query(`SELECT count(*)::int AS count FROM ${table} WHERE ${where.join(" AND ")}`, params.slice(0, -2));
       let data=rows.rows;
+      if(table==='packages'&&data.length){const items=(await query("SELECT package_id,label FROM package_items WHERE package_id=ANY($1::uuid[]) ORDER BY display_order",[data.map(row=>row.id)])).rows;data=data.map(row=>({...row,items:items.filter(item=>item.package_id===row.id).map(item=>item.label)}));}
       if(table==='tasks'&&data.length){const ids=data.map(r=>r.id);data=(await query(`SELECT t.*,u.name AS owner_name,e.event_name,c.name AS client_name FROM tasks t LEFT JOIN users u ON u.id=t.assigned_user_id LEFT JOIN events e ON e.id=t.event_id LEFT JOIN clients c ON c.id=t.client_id WHERE t.id=ANY($1::uuid[]) ORDER BY array_position($1::uuid[],t.id)`,[ids])).rows;}
       res.json({ data, pagination: { page, pageSize, total: count.rows[0].count } });
     })
@@ -469,6 +472,8 @@ async function pickerRows(search, sql) {
 }
 
 const proposalSchema = z.object({
+  scenario_enabled:z.boolean().optional(),
+  scenario_overrides:scenarioOverridesSchema.optional(),
   visual_sections: proposalVisualSchema.optional(),
   lead_id: uuid.optional().nullable(),
   client_id: uuid.optional().nullable(),
@@ -686,8 +691,8 @@ adminRouter.get("/leads/:id", requirePermission("read:sales"), asyncHandler(asyn
     query("SELECT * FROM proposals WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
     query("SELECT * FROM tasks WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY due_date NULLS LAST", [req.params.id]),
     query("SELECT * FROM files WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
-    query("SELECT id, name, starting_price, duration FROM packages WHERE id=$1", [lead.rows[0].preferred_package_id]),
-    query("SELECT id, name, base_price, default_duration FROM experiences WHERE id=$1", [lead.rows[0].preferred_experience_id])
+    query("SELECT p.*, COALESCE(json_agg(pi.label ORDER BY pi.display_order) FILTER (WHERE pi.id IS NOT NULL),'[]') AS items FROM packages p LEFT JOIN package_items pi ON pi.package_id=p.id WHERE p.id=$1 GROUP BY p.id", [lead.rows[0].preferred_package_id]),
+    query("SELECT * FROM experiences WHERE id=$1", [lead.rows[0].preferred_experience_id])
   ]);
   res.json({
     ...lead.rows[0],
@@ -1410,6 +1415,25 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
     : `${select} ORDER BY ${sortBy} ${direction} NULLS LAST LIMIT $${params.length-1} OFFSET $${params.length}`, params);
   const count = await query(`SELECT count(${grouped ? "DISTINCT COALESCE(p.lead_id,p.id)" : "*"})::int AS count ${from}`,params.slice(0,-2));
   res.json({ data: rows.rows, pagination: { page: filters.page, pageSize, total: count.rows[0].count } });
+}));
+
+adminRouter.post("/proposals/preview", requirePermission("write:sales"), validate(proposalSchema), asyncHandler(async (req,res)=>{
+  const snapshot=await buildProposalSnapshot({...req.body,scenario_enabled:true});
+  const proposal={content:snapshot.content,pricing_snapshot:snapshot.pricing,line_items_snapshot:snapshot.lineItems,selected_experiences:snapshot.selectedExperiences,proposal_title:snapshot.proposalTitle,proposal_date:snapshot.proposalDate,valid_through:snapshot.validThrough,proposal_type:snapshot.proposalType};
+  res.json({scenario:snapshot.content.scenario,pricing:snapshot.pricing,html:proposalHtml(proposal)});
+}));
+
+adminRouter.get("/proposal-scenario-template", requirePermission("read:sales"), asyncHandler(async(req,res)=>{
+  const row=(await query("SELECT * FROM proposal_document_templates WHERE key='scenario_composer' AND active=true")).rows[0];
+  if(!row)throw new AppError("Apply migration 036 to enable proposal scenarios.",503,"PROPOSAL_TEMPLATE_UNAVAILABLE");
+  res.json({...row,config:mergeDefaults(row.config)});
+}));
+adminRouter.patch("/proposal-scenario-template", requirePermission("write:settings"), validate(z.object({version:z.number().int(),config:scenarioConfigSchema})), asyncHandler(async(req,res)=>{
+  const before=(await query("SELECT * FROM proposal_document_templates WHERE key='scenario_composer'")).rows[0];
+  const row=(await query("UPDATE proposal_document_templates SET config=$1,version=version+1,updated_at=now() WHERE key='scenario_composer' AND version=$2 RETURNING *",[JSON.stringify(req.body.config),req.body.version])).rows[0];
+  if(!row)throw new AppError("Another user updated these defaults. Reload before saving.",409,"TEMPLATE_VERSION_CONFLICT");
+  await writeAudit({req,action:"proposal_template_updated",entity:"proposal_document_template",entityId:row.id,before,after:row});
+  res.json(row);
 }));
 
 adminRouter.post("/proposals", requirePermission("write:sales"), validate(proposalSchema), asyncHandler(async (req, res) => {

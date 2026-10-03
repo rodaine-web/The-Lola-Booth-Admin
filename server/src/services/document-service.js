@@ -1,3 +1,4 @@
+import { scenarioHtml, renderScenarioPdf } from "./proposal-scenario-document.js";
 import { proposalNarrative } from "./proposal-narrative.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {proposalVisualHtml} from "./proposal-visual-service.js";
@@ -58,6 +59,7 @@ export function sanitizeContent(value) {
 }
 
 export function proposalHtml(proposal) {
+  if(proposal.content?.scenario) return scenarioHtml(proposal,logoDataUri("primaryDark"));
   const content = proposal.content || {};
   const pricing = proposal.pricing_snapshot || {};
   const experiences = proposalSelectedExperiences(proposal);
@@ -139,10 +141,11 @@ function drawBrandPage(doc, title, subtitle, { asset = "primaryDark", label = ""
 export async function generateProposalPdf(proposal) {
   proposal = await compactProposalPhotos(proposal);
   const chunks = [];
-  const pdf = new PDFDocument({ size: "LETTER", margin: 0 });
+  const pdf = new PDFDocument({ size: "LETTER", margin: 0, autoFirstPage: !proposal.content?.scenario, bufferPages: Boolean(proposal.content?.scenario) });
   pdf.on("data", (chunk) => chunks.push(chunk));
   const done = new Promise((resolve) => pdf.on("end", () => resolve(Buffer.concat(chunks))));
-  renderProposalPdf(pdf, proposal, {
+  if(proposal.content?.scenario) renderScenarioPdf(pdf,proposal,{logo:logoPath("primaryDark")});
+  else renderProposalPdf(pdf, proposal, {
     brand, logo: logoPath("primaryDark"), experiences: proposalSelectedExperiences(proposal),
     features: item => selectedExperienceFeatures(selectedExperienceKey(item), item),
     image: item => { const source = proposalPdfExperienceImage(item); return Buffer.isBuffer(source) || (source && fs.existsSync(source)) ? source : null; },

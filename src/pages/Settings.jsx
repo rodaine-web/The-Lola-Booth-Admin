@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 
 import AsyncState from "../components/AsyncState.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
@@ -68,7 +69,7 @@ export default function Settings(){
   return <main className="page settings-redesign">
     <section className="page-heading lola-page-heading">
       <div><p className="eyebrow">Settings</p><h1>Settings</h1><p className="lede">Configure your business.</p></div>
-      <div className="button-row"><button className="lola-secondary-button" onClick={()=>{setForm({...settings});setNotice("Unsaved changes reverted.");}}>Revert</button><button className="primary-action" disabled={busy} onClick={save}>{busy?"Saving...":"Save Changes"}</button></div>
+      <div className="button-row"><Link className="lola-secondary-button" to="/system/proposal-templates">Proposal defaults</Link><button className="lola-secondary-button" onClick={()=>{setForm({...settings});setNotice("Unsaved changes reverted.");}}>Revert</button><button className="primary-action" disabled={busy} onClick={save}>{busy?"Saving...":"Save Changes"}</button></div>
     </section>
 
     {(notice||error)&&<div className={error?"toast error":"toast"}>{error||notice}</div>}

@@ -1,3 +1,5 @@
+import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
+import ProposalScenarioReview from "../components/ProposalScenarioReview.jsx";
 import {retainProposalPhotoSections} from "../../shared/proposal-photo-mapping.js";
 import {loadCatalog} from "../../shared/catalog-loading.js";
 import ProposalVisualEditor from "../components/ProposalVisualEditor.jsx";
@@ -302,6 +304,7 @@ export default function ProposalEditor() {
             <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={(value) => setField("event_id", value)} />
               {!id && <button type="button" onClick={()=>{setInlineDuplicateEvent(null);setInlineEventOpen(value=>!value);}}>{inlineEventOpen?"Cancel new event":"Create new event"}</button>}
             </label>
+            {form.scenario_enabled && <label>Event scenario<select value={form.event_type||'Other'} onChange={event=>setField('event_type',event.target.value)}>{['Wedding','Birthday','Private Party','Brand Activation','Corporate Event','Other'].map(type=><option key={type}>{type}</option>)}</select></label>}
             <label>Proposal type<select value={form.proposal_type || "PRIVATE_EVENT"} onChange={(event) => setField("proposal_type", event.target.value)}>
               <option value="WEDDING">Wedding</option>
               <option value="PRIVATE_EVENT">Private Event</option>
@@ -446,8 +449,8 @@ export default function ProposalEditor() {
               <div className="line-list">{form.custom_line_items.map((item, index) => <div key={`${item.description}-${index}`}><span>{item.description} · Qty {item.quantity} · ${item.unit_price || 0}</span><button type="button" aria-label="Remove service" onClick={() => setForm((current) => ({ ...current, custom_line_items: current.custom_line_items.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
             </section>
 
-            <section className="panel">
-              <h2>Content Sections</h2>
+            {!form.scenario_enabled && <section className="panel">
+              <h2>{form.scenario_enabled?"Legacy sections (not used by this composed document)":"Content Sections"}</h2>
               <div className="section-pills">
                 {corporateSections.map((title) => <button type="button" key={title} onClick={() => setForm((current) => ({ ...current, sections: [...current.sections, section(title, current.sections.length)] }))}><Plus size={13} />{title}</button>)}
               </div>
@@ -466,10 +469,12 @@ export default function ProposalEditor() {
                   </article>
                 ))}
               </div>
-            </section>
+            </section>}
           </>
         )}
 
+        {form.scenario_enabled && <label>Client-facing notes<textarea value={form.customer_notes||''} onChange={event=>setField('customer_notes',event.target.value)}/></label>}
+        {form.scenario_enabled && <ProposalScenarioReview scenario={form.content?.scenario} overrides={form.scenario_overrides||{}} onChange={value=>setField('scenario_overrides',value)} experiences={form.selected_experiences||[]} onExperiencesChange={value=>setField('selected_experiences',value)}/>}
         {mode === "create" && <ProposalVisualEditor experiences={form.selected_experiences||[]} value={form.visual_sections||[]} onChange={value=>setField("visual_sections",value)}/>}
         <section className="panel">
           <h2>Terms / Notes</h2>
@@ -491,6 +496,7 @@ function section(title, display_order = 0) {
 
 
 function hydrateProposalFromLead(current, lead) {
+  const bookingPrefill = proposalBookingPrefill(lead);
   const preferredExperience = lead.preferredExperience || null;
   const preferredPackage = lead.preferredPackage || null;
   const selectedExperiences = preferredExperience
@@ -520,6 +526,10 @@ function hydrateProposalFromLead(current, lead) {
     experience_id: lead.preferred_experience_id || current.experience_id,
     package_amount: preferredPackage?.starting_price ?? current.package_amount,
     selected_experiences: selectedExperiences,
+    customer_notes: lead.message || '',
+    client_details: {...current.client_details, ...Object.fromEntries(['first_name','last_name','email','phone','company'].map(key=>[key,lead[key] || '']))},
+    event_type: bookingPrefill.fields.event_type,
+    event_details: {...current.event_details, ...Object.fromEntries(['event_name','event_type','event_date','start_time','end_time','guest_count','venue_name','venue_address','city','state','zip'].map(key=>[key,bookingPrefill.fields[key]]))},
     proposal_title: proposalTitleForLead(lead),
     proposal_type: proposalTypeForLead(lead.event_type),
     introduction: current.introduction || "The LOLA Booth creates polished, interactive photo experiences designed to bring people together and leave guests with something worth keeping. We combine thoughtful service, professional presentation, and memorable content for every event.",

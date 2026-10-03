@@ -16,3 +16,6 @@ storage/uploads
 
 # Local website audit captures and screenshots (reports are in docs/).
 audit-output/
+
+# Temporary proposal scenario render and review files.
+work/qa-scenarios/

@@ -1,3 +1,5 @@
+import { composeProposal } from "../../../shared/proposal-scenario.js";
+import { compactProposalPhotos } from "./proposal-pdf-images.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {validateProposalVisuals,hydrateProposalVisuals} from "./proposal-visual-service.js";
 import {proposalCatalogError} from '../../../shared/proposal-catalog.js';
@@ -35,6 +37,8 @@ export async function nextNumber(client, column, prefixColumn, fallbackPrefix) {
 
 export async function buildProposalSnapshot(input) {
   const visualSections = await validateProposalVisuals(input.visual_sections || []);
+  if(input.scenario_enabled && !input.selected_experiences?.length)throw new AppError("Select at least one experience.",422,"EXPERIENCE_REQUIRED");
+  if(input.scenario_enabled && (['discount','travel','other_fees','tax_rate','deposit_value'].some(k=>input[k]!=null && (!Number.isFinite(Number(input[k]))||Number(input[k])<0)) || (input.deposit_type!=='FIXED' && Number(input.deposit_value)>100)))throw new AppError("Pricing adjustments must be positive; percentage deposits cannot exceed 100%.",422,"PRICING_INVALID");
   const [settings, client, event, pkg, exp, documentTemplate] = await Promise.all([
     query("SELECT * FROM business_settings LIMIT 1"),
     input.client_id ? query("SELECT * FROM clients WHERE id=$1", [input.client_id]) : { rows: [] },
@@ -49,17 +53,24 @@ export async function buildProposalSnapshot(input) {
   const pack = pkg.rows[0] || {};
   const experience = exp.rows[0] || {};
   const selectedInput = Array.isArray(input.selected_experiences) ? input.selected_experiences : [];
+  if(input.scenario_enabled && (new Set(selectedInput.map(item=>item.experience_id)).size!==selectedInput.length || selectedInput.length>4))throw new AppError("Select each experience once, up to four experiences.",422,"CATALOG_SELECTION_INVALID");
+  if(input.scenario_enabled && (input.custom_line_items||[]).some(line=>!String(line.description||'').trim() || !(Number(line.quantity||1)>0) || Number(line.unit_price||0)<0))throw new AppError("Custom line items need a description, positive quantity and a non-negative price.",422,"PRICING_INVALID");
   const selectedIds = selectedInput.map((item) => item?.experience_id).filter(Boolean);
   const selectedPackageIds = selectedInput.flatMap((item) => Array.isArray(item?.packages) ? item.packages.map((pkg) => pkg?.package_id).filter(Boolean) : []);
   const [selectedExperienceRows, selectedPackageRows] = await Promise.all([
     selectedIds.length ? query("SELECT * FROM experiences WHERE id = ANY($1::uuid[])", [selectedIds]).then(result => result.rows) : [],
-    selectedPackageIds.length ? query("SELECT * FROM packages WHERE id = ANY($1::uuid[])", [selectedPackageIds]).then(result => result.rows) : []
+    selectedPackageIds.length ? query("SELECT p.*, COALESCE(json_agg(pi.label ORDER BY pi.display_order) FILTER (WHERE pi.id IS NOT NULL),'[]') AS items FROM packages p LEFT JOIN package_items pi ON pi.package_id=p.id WHERE p.id = ANY($1::uuid[]) GROUP BY p.id", [selectedPackageIds]).then(result => result.rows) : []
   ]);
   const selectedExperiences = selectedInput.map((item, index) => {
     const catalog = selectedExperienceRows.find((row) => row.id === item.experience_id) || {};
+    if(input.scenario_enabled && (!catalog.id || catalog.active===false))throw new AppError("Choose an active catalog experience.",422,"CATALOG_SELECTION_INVALID");
     const packages = (Array.isArray(item.packages) ? item.packages : []).map((selectedPackage) => {
       const packageCatalog = selectedPackageRows.find((row) => row.id === selectedPackage.package_id) || {};
+      if (!packageCatalog.id || packageCatalog.active === false || (packageCatalog.experience_id && packageCatalog.experience_id !== item.experience_id)) throw new AppError("Choose an active package belonging to the selected experience.",422,"CATALOG_SELECTION_INVALID");
+      if (packageCatalog.pricing_mode === 'CUSTOM' && !(Number(selectedPackage.price)>0)) throw new AppError("Enter the agreed custom package price.",422,"CATALOG_SELECTION_INVALID");
       return {
+        duration: packageCatalog.duration, included_hours: packageCatalog.included_hours,
+        features: packageCatalog.items?.length ? packageCatalog.items : (packageCatalog.website_features || []),
         package_id: selectedPackage.package_id || packageCatalog.id || null,
         name: selectedPackage.name || packageCatalog.name || "Package",
         price: money(selectedPackage.price ?? packageCatalog.starting_price ?? 0),
@@ -81,7 +92,7 @@ export async function buildProposalSnapshot(input) {
   });
   const addonIds = (input.addons || []).map((item) => item.addon_id).filter(Boolean);
   const addons = addonIds.length ? await query("SELECT * FROM addons WHERE id = ANY($1::uuid[])", [addonIds]) : { rows: [] };
-  const catalogError = proposalCatalogError(input, pack, addons.rows);
+  const catalogError = proposalCatalogError(selectedExperiences.length ? {...input, package_amount:selectedExperiences.flatMap(item=>item.packages).find(item=>item.package_id===input.package_id)?.price} : input, pack, addons.rows);
   if (catalogError) throw new AppError(catalogError,422,"CATALOG_SELECTION_INVALID");
   const addonRows = input.addons || [];
   const packageAmount = money(input.package_amount ?? pack.starting_price);
@@ -158,7 +169,7 @@ export async function buildProposalSnapshot(input) {
     settings: s
   });
 
-  return {
+  const snapshot = {
     visualSections,
     client: customer,
     event: ev,
@@ -198,6 +209,26 @@ export async function buildProposalSnapshot(input) {
     selectedExperiences,
     proposalVisuals: input.proposal_visuals || {}
   };
+  if (input.scenario_enabled) {
+    const template = (await query("SELECT config,version FROM proposal_document_templates WHERE key='scenario_composer' AND active=true")).rows[0];
+    if (!template) throw new AppError("Apply the proposal scenario migration before creating a composed proposal.",503,"PROPOSAL_TEMPLATE_UNAVAILABLE");
+    snapshot.content.scenario = composeProposal({input:{...input,proposal_title:snapshot.proposalTitle,proposal_date:snapshot.proposalDate,valid_through:snapshot.validThrough},client:customer,event:ev,experiences:selectedExperiences,pricing:snapshot.pricing,lines,config:template.config,templateVersion:template.version,settings:s});
+    snapshot.content.scenario_overrides = input.scenario_overrides || {};
+    const scenario=snapshot.content.scenario;
+    for(const item of scenario.experiences) { const slot='experience:'+item.experience_id; if(!scenario.media[slot])scenario.media[slot]=template.config?.experiences?.[item.key]?.media_ids||[]; }
+    const mediaSections=['cover','event',...selectedExperiences.map(item=>'experience:'+item.experience_id)].map(slot=>({id:crypto.randomUUID(),title:slot,kind:'REFERENCE',body:'',media_ids:(scenario.media[slot]|| (slot.startsWith('experience:') ? [] : [...scenario.media.event,...scenario.media.global])).slice(0,4)})).filter(section=>section.media_ids.length);
+    snapshot.visualSections = await validateProposalVisuals([...visualSections.filter(section=>!(section.kind==='REFERENCE' && /^(cover|event|experience:)/.test(section.title))),...mediaSections]);
+    // Freeze approved media together with copy, facts and financials. Later CMS edits cannot change sent documents.
+    const hydrated=await compactProposalPhotos(await hydrateProposalVisuals({selected_experiences:selectedExperiences,visual_sections:snapshot.visualSections}));
+    scenario.experiences=scenario.experiences.map(item=>{
+      const mappedSection=hydrated.visual_sections.find(row=>row.kind==='EXPERIENCE' && row.title===`${item.name} · Experience photos`);
+      // Composed documents never trust arbitrary URLs or data supplied as a visual string.
+      return {...item,visuals:mappedSection?.images?.length?{hero:mappedSection.images[0].dataUri}: {}};
+    });
+    scenario.mediaImages=Object.fromEntries(mediaSections.map(section=>[section.title,hydrated.visual_sections.find(row=>row.id===section.id)?.images||[]]));
+    snapshot.content.scenario=scenario;
+  }
+  return snapshot;
 }
 
 
@@ -317,10 +348,10 @@ async function syncLeadProposalStage(client, leadId, stage) {
 
 export async function createProposal(req) {
   const resolvedBody = await resolveProposalRelationships(req.body);
-  const snapshot = await buildProposalSnapshot(resolvedBody);
   const result = await transaction(async (client) => {
     const linkedBody = await ensureProposalLead(client, resolvedBody, req.user.id);
     const proposalNumber = linkedBody.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
+    const snapshot=await buildProposalSnapshot({...resolvedBody,proposal_number:proposalNumber});
     const inserted = await client.query(
       `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, proposal_type, selected_experiences, proposal_visuals)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'GENERATED',$18,$19,$20,$21,$22) RETURNING *`,
@@ -435,7 +466,7 @@ export async function proposalPdfBuffer(proposal, type = "pdf") {
   if (type !== "docx" && proposal.proposal_source === "UPLOADED" && proposal.external_document_storage_key) {
     return getStorageProvider().get(proposal.external_document_storage_key);
   }
-  const visualProposal = await hydrateProposalVisuals(proposal);
+  const visualProposal = proposal.content?.scenario ? {...proposal,public_url:publicProposalUrl(proposal)} : await hydrateProposalVisuals(proposal);
   return type === "docx" ? generateProposalDocx(visualProposal) : generateProposalPdf(visualProposal);
 }
 
@@ -522,7 +553,7 @@ export async function sendProposal(req, proposal) {
 }
 
 export async function proposalPreviewHtml(proposal) {
-  return proposalHtml(await hydrateProposalVisuals(proposal));
+  return proposalHtml(proposal.content?.scenario ? proposal : await hydrateProposalVisuals(proposal));
 }
 
 function round(value) {
