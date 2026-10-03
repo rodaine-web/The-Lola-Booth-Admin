@@ -549,7 +549,8 @@ export async function sendProposal(req, proposal) {
       [communication.rows[0].id, email.provider, email.providerMessageId, req.body.recipient || proposal.client_email, subject, "SENT_TO_PROVIDER", body.slice(0, 500)]
     );
   });
-  return { email, document: doc };
+  // Delivery uses HTML and secure download links; no document attachment is generated here.
+  return { email };
 }
 
 export async function proposalPreviewHtml(proposal) {
