@@ -1,3 +1,4 @@
+import {processCampaignJobs} from "./services/campaign-service.js";
 import {processFormOwnerNotifications} from "./services/form-owner-notifications.js";
 import {assertDatabaseIdentity} from './config/database-identity.js';
 import {processStagingQualificationJobs} from './services/staging-email-qualification-service.js';
@@ -21,6 +22,8 @@ async function tick() {
       logger.info({processed:formNotifications.processed},'Owner form notifications processed');
       await recordWorkerProcessingResult("automation-worker",{success:formNotifications.processed.every(item=>item.status==='SENT_TO_PROVIDER'),processed:formNotifications.processed.length,ownerFormsOnly:true});
     }
+    const campaigns=await processCampaignJobs({limit:25});
+    if(campaigns.processed.length)await recordWorkerProcessingResult("automation-worker",{success:campaigns.processed.every(item=>item.status==='SENT_TO_PROVIDER'),processed:campaigns.processed.length,campaignsOnly:true});
     if(stagingJobsPaused()){const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:true,processed:result.processed.length,qualificationOnly:true});return;}
     await recoverPublicInquiryAcknowledgments();
     await queueDueReminders();

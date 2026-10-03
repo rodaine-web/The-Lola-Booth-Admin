@@ -40,6 +40,8 @@ const PublicReceipt = lazy(() => import("./pages/PublicReceipt.jsx"));
 const PublicInvoice = lazy(() => import("./pages/PublicInvoice.jsx"));
 const Integrations = lazy(() => import("./pages/Integrations.jsx"));
 const WebsiteCms = lazy(() => import.meta.env.VITE_APP_ENV === "production" ? import("./pages/WebsiteCms.jsx") : import("./pages/StagingCms.jsx"));
+const Campaigns=lazy(()=>import("./pages/Campaigns.jsx"));
+const CampaignInterest=lazy(()=>import("./pages/CampaignInterest.jsx"));
 const Communications = lazy(() => import("./pages/Communications.jsx"));
 const MyEvents = lazy(() => import("./pages/MyEvents.jsx"));
 const PublicDelivery = lazy(() => import("./pages/PublicDelivery.jsx"));
@@ -63,6 +65,8 @@ export default function App() {
   return (
     <Suspense fallback={<main className="boot-screen">Opening Admin Portal...</main>}>
     <Routes>
+      <Route path="/interest/:token" element={<CampaignInterest/>}/>
+      <Route path="/unsubscribe/:token" element={<CampaignInterest unsubscribe/>}/>
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
       <Route path="/proposal/:token" element={<PublicProposal />} />
@@ -84,6 +88,8 @@ export default function App() {
         <Route path="sales/clients" element={<Clients />} />
         <Route path="sales/clients/:id" element={<ClientDetail />} />
         <Route path="sales/proposals" element={<Proposals />} />
+        <Route path="communications/campaigns" element={<Campaigns/>}/>
+        <Route path="communications/campaigns/:id" element={<Campaigns/>}/>
         <Route path="sales/communications" element={<Communications />} />
         <Route path="sales/proposals/:id/edit" element={<ProposalEditor />} />
         <Route path="sales/proposals/new" element={<ProposalWizard />} />

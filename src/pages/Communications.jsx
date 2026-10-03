@@ -1,5 +1,5 @@
 import {timestampInput} from "../utils/display.js";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { Archive, CheckCircle2, Clock, Copy, Edit3, Eye, Mail, Play, RefreshCw, Save, Search, Send, ToggleLeft, ToggleRight, XCircle } from "lucide-react";
@@ -25,7 +25,9 @@ const blankTemplate = {
 
 export default function Communications() {
   const [automationEdit,setAutomationEdit]=useState(null);
+  const location=useLocation();
   const [section, setSection] = useState("Communications");
+  useEffect(()=>{const params=new URLSearchParams(location.search);setSection(["Templates","Automations"].includes(params.get("section"))?params.get("section"):"Communications");if(params.get("status")==="SCHEDULED")setCommunicationTab("SCHEDULED");},[location.search]);
   const [templateTab, setTemplateTab] = useState("All");
   const [communicationTab, setCommunicationTab] = useState("SENT_TO_PROVIDER");
   const [communicationSearch,setCommunicationSearch]=useState(""),[communicationSort,setCommunicationSort]=useState("created_at"),[communicationPage,setCommunicationPage]=useState(1);
@@ -218,6 +220,7 @@ export default function Communications() {
       {error ? <AsyncState error={error} requestId={requestId} onRetry={load} noun="communications" /> : notice && <div role="status" className="toast">{notice}</div>}
 
       <div className="segmented-control page-tabs">
+        <Link to="/communications/campaigns">Campaigns</Link>
         {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item === "Communications" ? "Messages" : item}</button>)}
       </div>
 

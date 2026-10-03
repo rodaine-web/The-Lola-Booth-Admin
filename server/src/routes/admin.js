@@ -1,3 +1,4 @@
+import {campaignRouter} from "./campaigns.js";
 import {scenarioConfigSchema,scenarioOverridesSchema} from "../services/proposal-scenario-schema.js";
 import { mergeDefaults } from "../../../shared/proposal-scenario.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
@@ -2327,6 +2328,8 @@ adminRouter.post("/integrations/failed-inbound/:id/retry", requirePermission("wr
 adminRouter.post("/integrations/failed-inbound/:id/resolve", requirePermission("write:integrations"), asyncHandler(async (req, res) => {
   res.json(await resolveInboundLead(req.params.id));
 }));
+
+adminRouter.use("/campaigns",campaignRouter);
 
 adminRouter.get("/communications/templates", requireAnyPermission("templates.view", "read:sales"), asyncHandler(async (_req, res) => {
   res.json(await listEmailTemplates());

@@ -1,3 +1,4 @@
+import {campaignPublicRouter} from "./campaigns.js";
 import {inquirySchema,publicFormKind} from "../services/public-form-schema.js";
 import {getReceiptView} from "../services/receipt-service.js";
 import {authenticate,requirePermission} from '../middleware/auth.js';
@@ -43,6 +44,8 @@ publicRouter.use(rateLimit({
 }));
 
 
+
+publicRouter.use(campaignPublicRouter);
 
 publicRouter.post("/inquiries", (req, _res, next) => {
   const origin = req.headers.origin;

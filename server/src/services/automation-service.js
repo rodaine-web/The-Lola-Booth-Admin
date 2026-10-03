@@ -17,6 +17,7 @@ export const futureAutomationJobTypes = ["CREATE_TASK", "ASSIGN_LEAD", "CHANGE_L
 const staleProcessingMinutes = 10;
 
 export const allowedTemplateVariables = [
+  "contact.first_name", "contact.last_name", "contact.full_name", "contact.email", "company.name",
   "subject", "body", "proposal.public_url", "invoice.public_url",
   "first_name", "client_name", "event_type", "event_date", "venue", "proposal_number",
   "proposal_url", "invoice_number", "invoice_url", "amount_due", "due_date",
@@ -623,6 +624,10 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
   const claim = await transaction(async (client) => {
     let communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!communication) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
+    if(communication.campaign_recipient_id){
+      const recipient=(await client.query("SELECT status FROM campaign_recipients WHERE id=$1",[communication.campaign_recipient_id])).rows[0];
+      if(!workerClaim||recipient?.status!=="PROCESSING")throw new AppError("Campaign messages must be sent by the campaign worker.",409,"CAMPAIGN_WORKER_REQUIRED",{retryable:false});
+    }
     if (communication.status === "SENT" || communication.status === "SENT_TO_PROVIDER") {
       logger.warn({ communicationId: id, providerMessageId: communication.provider_message_id }, "Duplicate communication send prevented");
       return { duplicate: true, communication };
@@ -656,6 +661,8 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
       subject: communication.rendered_subject || communication.subject,
       body: communication.rendered_body,
       html: communication.rendered_html,
+      replyTo: communication.reply_to || undefined,
+      senderName:communication.sender_name || undefined,
       formOwnerNotification: communication.trigger_key === "PUBLIC_FORM" && /^public-form:[a-f0-9-]+:owner$/.test(communication.idempotency_key || "")
     });
   } catch (error) {
