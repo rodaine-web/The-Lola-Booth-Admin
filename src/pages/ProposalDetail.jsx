@@ -52,7 +52,7 @@ export default function ProposalDetail() {
     } finally { setBusy(false); }
   }
 
-  if (error && !proposal) return <main className="page"><AsyncState error={error} noun="proposal" onRetry={()=>{setError("");load();}}/></main>;
+  if (error && !proposal) return <main className="page record-detail-redesign"><AsyncState error={error} noun="proposal" onRetry={()=>{setError("");load();}}/></main>;
   if (!proposal) return <main className="page"><div className="empty-state">Loading proposal...</div></main>;
 
   const accessAvailable = documentAccessState(proposal) === "AVAILABLE";
