@@ -204,7 +204,7 @@ export default function Communications() {
     }
   }
 
-  if (!templates || !automations || !communications) return <main className="page"><h1>Communications</h1><AsyncState loading={loading} error={error} requestId={requestId} onRetry={load} noun="communications" /></main>;
+  if (!templates || !automations || !communications) return <main className="page communications-center"><h1>Communications</h1><AsyncState loading={loading} error={error} requestId={requestId} onRetry={load} noun="communications" /></main>;
 
   return (
     <main className="page communications-redesign">
