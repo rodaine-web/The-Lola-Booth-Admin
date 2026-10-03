@@ -35,7 +35,7 @@ export default function PaymentDetail() {
     }
   }
 
-  if (error && !payment) return <main className="page"><div className="empty-state">{error}</div></main>;
+  if (error && !payment) return <main className="page record-detail-redesign"><div className="empty-state">{error}</div></main>;
   if (!payment) return <main className="page"><div className="empty-state">Loading payment...</div></main>;
   const refundable = Math.max(0, Number(payment.amount || 0) - Number(payment.refunded_amount || 0));
 
