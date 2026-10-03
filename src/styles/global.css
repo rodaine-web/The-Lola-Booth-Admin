@@ -1968,3 +1968,11 @@ input:focus,select:focus,textarea:focus{border-color:#c59d61;box-shadow:0 0 0 3p
 .record-detail-redesign .field-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid #eee9e2}.record-detail-redesign .field-row:last-child{border-bottom:0}.record-detail-redesign .field-row span{font-size:.7rem;color:var(--lola-muted)}.record-detail-redesign .field-row strong{font-size:.73rem;text-align:right}
 .record-detail-redesign .document-preview{border-radius:13px;overflow:hidden}
 @media(max-width:840px){.record-detail-redesign .detail-heading{display:grid}.record-detail-redesign .detail-actions{justify-content:flex-start}.record-detail-redesign .detail-grid{grid-template-columns:1fr}}
+
+
+/* LOLA FINAL UTILITY POLISH */
+.website-diagnostics-redesign>.page-heading,.gallery-admin>.page-heading,.users-workspace>.page-heading{align-items:center}
+.website-diagnostics-redesign>.panel{border-radius:13px}.website-diagnostics-redesign>.panel+ .panel{margin-top:12px}.website-diagnostics-redesign table{width:100%}.website-diagnostics-redesign a{color:var(--lola-gold-2)}
+.gallery-admin .album-admin-grid{gap:14px}.gallery-admin .album-admin-card{border-radius:14px;overflow:hidden;border-color:var(--lola-border);background:#fff}.gallery-admin .album-cover{background:#eee9e1}.gallery-admin .gallery-summary article{border-radius:11px;border-color:var(--lola-border);background:#fff}.gallery-admin .gallery-admin-bar{background:#fff;border:1px solid var(--lola-border);border-radius:11px;padding:6px 10px}.gallery-admin .gallery-admin-bar nav button.active{background:#171717;color:#fff}
+.users-workspace>.panel.table-wrap{padding:0;overflow:auto}.users-workspace table{margin:0}.users-workspace td .button-row{flex-wrap:wrap}
+.system-admin-page .toast{margin-bottom:12px}
