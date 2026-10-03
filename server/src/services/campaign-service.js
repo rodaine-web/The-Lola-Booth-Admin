@@ -8,11 +8,30 @@ import { writeAudit } from './audit-service.js';
 import { createNotification } from './notification-service.js';
 import { sendCommunication, createCommunicationDraft } from './automation-service.js';
 import { stagingJobsPaused, isStaging } from '../config/staging-safety.js';
-import { campaignContent, eligibleAudience, campaignPackages } from '../../../shared/campaign-content.js';
+import { campaignContent, eligibleAudience, campaignInterestOptions, campaignPackages } from '../../../shared/campaign-content.js';
 import { renderCampaignEmail } from './campaign-email.js';
 export const hashCampaignToken = token => createHash('sha256').update(token).digest('hex');
 export const newCampaignToken = () => randomBytes(32).toString('base64url');
+export const offerSchema = z.object({
+  key: z.string().regex(/^(EXPERIENCE|ADDON)_[0-9a-f-]{36}$/i),
+  kind: z.enum(['EXPERIENCE','ADDON']),
+  catalog_id: z.uuid(),
+  package_id: z.uuid().nullable().optional(),
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(2000).default(''),
+  image_url: z.string().max(2000).default(''),
+  hours: z.number().min(0).max(48).default(4),
+  original_price: z.number().min(0).max(1000000),
+  discount_type: z.enum(['NONE','PERCENT','AMOUNT']).default('NONE'),
+  discount_value: z.number().min(0).max(1000000).default(0)
+}).refine(o => o.discount_type !== 'PERCENT' || o.discount_value <= 100, {message:'Percentage discount cannot exceed 100%.'})
+.refine(o => o.discount_type !== 'AMOUNT' || o.discount_value <= o.original_price, {message:'Discount cannot exceed the original price.'})
+.refine(o => o.key === o.kind + '_' + o.catalog_id, {message:'Offer identity does not match the selected catalog item.'});
 const contentSchema = z.object({
+  format: z.enum(['CORPORATE','TEXT','HTML']).default('CORPORATE'),
+  text_body: z.string().max(20000).default(''),
+  html_body: z.string().max(250000).default(''),
+  offers: z.array(offerSchema).max(50).default([]),
   headline: z.string().min(1).max(200),
   intro: z.string().min(1).max(2000),
   cta: z.string().min(1).max(80),
@@ -49,6 +68,7 @@ export const campaignSchema = z.object({
       first_name: z.string().max(100).default(''),
       last_name: z.string().max(100).default(''),
       company: z.string().max(200).default(''),
+      phone: z.string().max(50).default(''),
       marketing_email_opt_in: z.boolean()
     })).max(1000).default([])
   }).default({
@@ -59,7 +79,7 @@ export const campaignSchema = z.object({
   })
 });
 export const interestSchema = z.object({
-  package: z.enum(campaignPackages),
+  package: z.string().regex(/^(GLAM|360|DUO|GENERAL|EXPERIENCE_[0-9a-f-]{36})$/i),
   event_date: z.iso.date(),
   event_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   location: z.string().trim().max(300).optional().default('').transform(value=>sanitizeHtml(value,{allowedTags:[],allowedAttributes:{}})),
@@ -116,7 +136,7 @@ export async function listCampaigns(filters = {}) {
   };
 }
 export async function campaignContacts() {
-  return (await query(`SELECT id,'lead' kind,first_name,last_name,email,company,lead_source source,marketing_email_opt_in,'{}'::jsonb communication_preferences,'{}'::text[] tags FROM leads WHERE deleted_at IS NULL UNION ALL SELECT id,'client',split_part(name,' ',1),CASE WHEN position(' ' in name)>0 THEN substring(name from position(' ' in name)+1) ELSE '' END,email,company,referral_source,marketing_email_opt_in,communication_preferences,tags FROM clients WHERE deleted_at IS NULL ORDER BY first_name`)).rows;
+  return (await query(`SELECT id,'lead' kind,first_name,last_name,email,phone,company,lead_source source,marketing_email_opt_in,'{}'::jsonb communication_preferences,'{}'::text[] tags FROM leads WHERE deleted_at IS NULL UNION ALL SELECT id,'client',split_part(name,' ',1),CASE WHEN position(' ' in name)>0 THEN substring(name from position(' ' in name)+1) ELSE '' END,email,phone,company,referral_source,marketing_email_opt_in,communication_preferences,tags FROM clients WHERE deleted_at IS NULL ORDER BY first_name`)).rows;
 }
 export async function resolveCampaignAudience(audience = {}) {
   const contacts = await campaignContacts(),
@@ -208,7 +228,7 @@ export async function queueCampaign(id, req, {
         rendered = renderCampaignEmail(c, r, {
           token
         });
-      const recipient = (await query(`INSERT INTO campaign_recipients(campaign_id,lead_id,client_id,email,first_name,last_name,company,token_hash,token_expires_at,status,queued_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,now()+interval '1 year','QUEUED',now()) ON CONFLICT(campaign_id,email) DO NOTHING RETURNING *`, [id, r.kind === 'lead' ? r.id : null, r.kind === 'client' ? r.id : null, r.email, r.first_name, r.last_name, r.company, hashCampaignToken(token)])).rows[0];
+      const recipient = (await query(`INSERT INTO campaign_recipients(campaign_id,lead_id,client_id,email,first_name,last_name,company,token_hash,phone,token_expires_at,status,queued_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '1 year','QUEUED',now()) ON CONFLICT(campaign_id,email) DO NOTHING RETURNING *`, [id, r.kind === 'lead' ? r.id : null, r.kind === 'client' ? r.id : null, r.email, r.first_name, r.last_name, r.company, hashCampaignToken(token), r.phone || null])).rows[0];
       if (!recipient) continue;
       const m = await createCommunicationDraft({
         lead_id: recipient.lead_id,
@@ -302,7 +322,9 @@ export async function submitCampaignInterest(token, input) {
   const data = interestSchema.parse(input);
   return transaction(async () => {
     const r = await resolveCampaignToken(token);
+    if (!campaignInterestOptions(r.content_json).some(o => o.key === data.package)) throw new AppError('Choose an experience offered in this campaign.',422,'INVALID_CAMPAIGN_OFFER');
     if (r.unsubscribed_at) throw new AppError('This marketing link has been unsubscribed.', 410, 'UNSUBSCRIBED');
+    const selectedOffer = campaignInterestOptions(r.content_json).find(o=>o.key===data.package);
     const inserted = (await query('INSERT INTO campaign_interests(campaign_id,campaign_recipient_id,package,event_date,event_time,location) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(campaign_recipient_id) DO NOTHING RETURNING *', [r.campaign_id, r.id, data.package, data.event_date, data.event_time, data.location || null])).rows[0];
     if (!inserted) return {
       duplicate: true,
@@ -321,7 +343,7 @@ export async function submitCampaignInterest(token, input) {
       roleTarget: 'OWNER_ADMIN',
       category: 'LEADS',
       title: 'New campaign interest',
-      body: [r.first_name, r.last_name, r.company, data.package, data.event_date, data.event_time, data.location].filter(Boolean).join(' · '),
+      body: [r.first_name, r.last_name, r.company, selectedOffer?.name || data.package, data.event_date, data.event_time, data.location].filter(Boolean).join(' · '),
       entityType: 'campaign',
       entityId: r.campaign_id,
       actionUrl: '/communications/campaigns/' + r.campaign_id,
@@ -424,7 +446,7 @@ export async function processCampaignJobs({
 }
 export async function convertCampaignInterest(campaignId, interestId, req) {
   return transaction(async () => {
-    const i = (await query('SELECT i.*,r.* ,i.id interest_id FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id WHERE i.id=$1 AND i.campaign_id=$2 FOR UPDATE OF r', [interestId, campaignId])).rows[0];
+    const i = (await query('SELECT i.*,r.* ,i.id interest_id,c.content_json FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id JOIN campaigns c ON c.id=i.campaign_id WHERE i.id=$1 AND i.campaign_id=$2 FOR UPDATE OF r', [interestId, campaignId])).rows[0];
     if (!i) throw new AppError('Interest not found.', 404, 'NOT_FOUND');
     if (i.lead_id) return {
       lead_id: i.lead_id,
@@ -434,7 +456,8 @@ export async function convertCampaignInterest(campaignId, interestId, req) {
     await query('SELECT pg_advisory_xact_lock(hashtext($1))', [i.email]);
     let lead = (await query('SELECT id FROM leads WHERE lower(email)=$1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1', [i.email])).rows[0];
     if (!lead) {
-      lead = (await query(`INSERT INTO leads(first_name,last_name,email,phone,event_date,event_start_time,event_type,venue_name,company,lead_source,message,marketing_email_opt_in,assigned_user_id) VALUES($1,$2,$3,NULL,$4,$5,'CORPORATE',$6,$7,'MANUAL',$8,false,$9) RETURNING id`, [i.first_name || 'Prospect', i.last_name || '', i.email, i.event_date, i.event_time, i.location || null, i.company, `Campaign interest: ${i.package}. Requested ${i.event_date} ${i.event_time}.`, req.user.id])).rows[0];
+      const selected=campaignContent(i.content_json).offers.find(o=>o.key===i.package);
+      lead = (await query(`INSERT INTO leads(first_name,last_name,email,phone,event_date,event_start_time,event_type,venue_name,company,lead_source,message,marketing_email_opt_in,assigned_user_id,preferred_experience_id,preferred_package_id) VALUES($1,$2,$3,$10,$4,$5,'CORPORATE',$6,$7,'MANUAL',$8,false,$9,$11,$12) RETURNING id`, [i.first_name || 'Prospect', i.last_name || '', i.email, i.event_date, i.event_time, i.location || null, i.company, `Campaign interest: ${selected?.name || i.package}. Requested ${i.event_date} ${i.event_time}.`, req.user.id, i.phone || null, selected?.catalog_id || null, selected?.package_id || null])).rows[0];
     }
     await query('UPDATE campaign_recipients SET lead_id=$2 WHERE id=$1', [i.campaign_recipient_id, lead.id]);
     await recordActivity({

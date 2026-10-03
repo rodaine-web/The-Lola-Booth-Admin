@@ -360,3 +360,20 @@ test('unsubscribe token stays usable after campaign archive and interest token e
  const calls=fixture(t,sql=>sql.includes('WHERE token_hash=')?[{id:recipientId,campaign_id:id,email:'qa@example.invalid'}]:[]);
  await campaigns.unsubscribeCampaign(campaigns.newCampaignToken());assert.equal(calls.find(c=>c.sql.includes('WHERE token_hash=')).args[1],true);
 });
+
+
+test('custom campaign rejects an experience outside its offers before recording interest',async t=>{
+ const experienceId=randomUUID();
+ const calls=fixture(t,sql=>sql.includes('WHERE token_hash=')?[{id:recipientId,campaign_id:id,content_json:campaignContent({format:'TEXT',offers:[]})}]:[]);
+ await assert.rejects(campaigns.submitCampaignInterest(campaigns.newCampaignToken(),{package:'EXPERIENCE_'+experienceId,event_date:'2099-12-20',event_time:'18:00'}),e=>e.code==='INVALID_CAMPAIGN_OFFER');
+ assert.equal(calls.some(c=>c.sql.startsWith('INSERT INTO campaign_interests')),false);
+});
+test('explicit conversion carries imported phone and selected catalog experience/package into the lead',async t=>{
+ const experienceId=randomUUID(),packageId=randomUUID(),interestId=randomUUID();
+ const offer={key:'EXPERIENCE_'+experienceId,kind:'EXPERIENCE',catalog_id:experienceId,package_id:packageId,name:'360 Signature',original_price:999,discount_type:'NONE',discount_value:0};
+ const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',phone:'+1 312 555 0100',package:offer.key,event_date:'2099-12-20',event_time:'18:00',content_json:campaignContent({format:'TEXT',offers:[offer]})}]:sql.startsWith('INSERT INTO leads')?[{id:leadId}]:[]);
+ const out=await campaigns.convertCampaignInterest(id,interestId,req);
+ assert.equal(out.lead_id,leadId);
+ const insert=calls.find(c=>c.sql.startsWith('INSERT INTO leads'));
+ assert.equal(insert.args[9],'+1 312 555 0100');assert.equal(insert.args[10],experienceId);assert.equal(insert.args[11],packageId);assert.match(insert.args[7],/360 Signature/);
+});

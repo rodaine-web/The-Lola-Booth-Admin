@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { campaignContent, campaignSubject } from '../../../shared/campaign-content.js';
+import { renderComposedCampaign } from './campaign-composer.js';
 import {AppError} from '../utils/errors.js';
 import { renderTemplate } from './automation-service.js';
 const template = readFileSync(new URL('../templates/corporate-year-end.html', import.meta.url), 'utf8');
@@ -51,6 +52,7 @@ export function renderCampaignEmail(campaign, recipient = {}, {
     unsubscribe_url: escapeEmail(origin + '/unsubscribe/' + token),
     test_banner: test ? '<div style="background:#171717;color:white;text-align:center;padding:10px;font:12px Arial">TEST EMAIL — sample recipient data</div>' : ''
   });
+  const composed = c.format !== 'CORPORATE' ? renderComposedCampaign(campaign,c,recipient,{origin,token,test}) : null;
   const html = template.replace(/\{\{([\w.]+)\}\}/g, (_, key) => vars[key] ?? '');
   const contact = {
     first_name: recipient.first_name || '',
@@ -65,8 +67,8 @@ export function renderCampaignEmail(campaign, recipient = {}, {
     }
   });
   return {
-    html,
+    html: composed?.html || html,
     subject,
-    text: `${c.headline}\n${c.intro}\nLOLA Glam ${money(c.glam_price)} · LOLA 360 ${money(c['360_price'])} · Duo ${money(c.duo_price)}\n${origin}/interest/${token}\nUnsubscribe: ${origin}/unsubscribe/${token}`
+    text: composed?.text || `${c.headline}\n${c.intro}\nLOLA Glam ${money(c.glam_price)} · LOLA 360 ${money(c['360_price'])} · Duo ${money(c.duo_price)}\n${origin}/interest/${token}\nUnsubscribe: ${origin}/unsubscribe/${token}`
   };
 }

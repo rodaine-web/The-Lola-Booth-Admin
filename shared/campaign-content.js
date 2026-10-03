@@ -1,5 +1,9 @@
 export const campaignPackages = ['GLAM', '360', 'DUO'];
 export const campaignDefaults = {
+  format: 'CORPORATE',
+  text_body: '',
+  html_body: '',
+  offers: [],
   headline: 'Make Your Year-End Celebration One to Remember',
   intro: 'Bring your team together with a polished photo experience, a high-energy 360 moment, or both.',
   cta: "I'M INTERESTED",
@@ -32,7 +36,7 @@ export function campaignContent(input = {}) {
   };
 }
 export function campaignSubject(subject, recipient) {
-  return !recipient.first_name || !recipient.company ? 'Make Your Year-End Celebration Unforgettable' : subject;
+  return ((!recipient.first_name && subject.includes('{{contact.first_name}}')) || (!recipient.company && subject.includes('{{company.name}}'))) ? 'Make Your Year-End Celebration Unforgettable' : subject;
 }
 export function eligibleAudience(contacts = [], suppressed = []) {
   const blocked = new Set(suppressed.map(x => String(x.email || x).trim().toLowerCase()));
@@ -71,4 +75,21 @@ export function eligibleAudience(contacts = [], suppressed = []) {
     excluded,
     count: byEmail.size
   };
+}
+
+export function campaignOfferPrice(offer) {
+  const cents = Math.round(Number(offer.original_price || 0) * 100);
+  const value = Number(offer.discount_value || 0);
+  const reduction = offer.discount_type === 'PERCENT' ? Math.round(cents * value / 100) : offer.discount_type === 'AMOUNT' ? Math.round(value * 100) : 0;
+  return { original: cents / 100, discounted: Math.max(0, cents - reduction) / 100, saving: Math.min(cents, reduction) / 100 };
+}
+export function campaignInterestOptions(content) {
+  const c = campaignContent(content);
+  if (c.format === 'CORPORATE') return campaignPackages.map(key => ({key, name: key === 'GLAM' ? 'The LOLA Glam' : key === '360' ? 'The LOLA 360' : 'The Year-End Duo', price: c[key === 'GLAM' ? 'glam_price' : key === '360' ? '360_price' : 'duo_price']}));
+  const experiences = c.offers.filter(o => o.kind === 'EXPERIENCE');
+  return experiences.length ? experiences.map(o => ({key:o.key,name:o.name,price:campaignOfferPrice(o).discounted})) : [{key:'GENERAL',name:'Tell me more',price:null}];
+}
+
+export function campaignPackageOffer(offer,pkg) {
+  return {...offer,package_id:pkg.id,original_price:Number(pkg.starting_price ?? pkg.price ?? offer.original_price),hours:Number(pkg.included_hours ?? pkg.duration ?? offer.hours),description:pkg.proposal_description||pkg.description||offer.description};
 }

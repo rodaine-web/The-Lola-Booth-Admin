@@ -1,3 +1,4 @@
+import { importCampaignContacts } from '../services/campaign-contact-import.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requirePermission } from '../middleware/auth.js';
@@ -8,6 +9,7 @@ export const campaignRouter = Router();
 const route = (method, path, permission, fn) => campaignRouter[method](path, requirePermission(permission), asyncHandler(async (req, res) => res.json(await fn(req))));
 route('get', '/', 'campaigns.read', req => listCampaigns(req.query));
 route('get', '/contacts', 'campaigns.read', () => campaignContacts());
+route('post', '/import-contacts', 'campaigns.create', req => importCampaignContacts(req.body));
 route('post', '/audience-preview', 'campaigns.read', req => resolveCampaignAudience(campaignSchema.shape.audience_json.parse(req.body)));
 route('post', '/', 'campaigns.create', req => saveCampaign(req.body, req));
 route('get', '/:id', 'campaigns.read', req => campaignDetail(z.uuid().parse(req.params.id)));

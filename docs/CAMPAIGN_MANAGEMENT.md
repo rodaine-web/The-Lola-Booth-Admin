@@ -5,10 +5,12 @@ Implemented on `main-staging` in `work/lola-admin`. No deployment, migration aga
 ## Delivered
 
 - Grouped, expandable navigation with existing routes, permission/feature filtering, session persistence and automatic expansion of the active group.
-- Campaign list with filters and six-step creation: Details, Audience, Content, Interest CTA, Review, Send/Schedule.
+- Campaign list with filters and four-step creation: Campaign, Recipients, Offers, Review & send. Text uses a message form; HTML accepts pasted code or an uploaded .html file. The approved Year-End template remains available.
 - Reusable campaign records; the initial channel is EMAIL. SMS is reserved in the data model; SMS delivery is not implemented.
 - Corporate Year-End template uses the supplied HTML layout and extracted images, compressed as public assets. Structured prices, features, copy, image URLs, subject, sender display name, reply-to and footer are editable.
 - Glam $999, 360 $1,099 and Duo $1,799 for four hours; computed $299 saving. Extra hours $200/$250/$350. A mailing address must be supplied before live queuing.
+- Downloadable Excel Contacts template with instructions and consent dropdown. Excel/CSV imports validate headers, email addresses, length, row limits and consent; review errors and duplicates before adding recipients. Imported phone numbers persist through explicit lead conversion.
+- Catalog experience, package and add-on selection; editable price/features; percentage or dollar discounts. Email offers display a struck-through original price, discounted price and savings. Selected experience/package preferences carry into new leads upon explicit conversion.
 - Audience selection from leads, clients, associated company strings, sources, client tags, and explicitly consented manual recipients. Email normalization, deduplication, marketing consent and suppression exclusions. There is no separate Company entity in the current CRM.
 - Existing Microsoft email provider, communications records and worker reused. Batches of 25; atomic claims; pause/cancel block future claims. Already claimed sends can finish. Unknown outcomes require provider review and are never automatically resent.
 - Personalized preview and explicit test address. Test sends do not create campaign recipients or influence analytics. Test email links use a nonfunctional `preview` token: use a QA campaign to verify form submissions.
@@ -56,7 +58,7 @@ Frontend:
 
 Authenticated API:
 - GET `/api/campaigns`, `/api/campaigns/contacts`, `/api/campaigns/:id`
-- POST `/api/campaigns/audience-preview`, `/api/campaigns`
+- POST `/api/campaigns/audience-preview`, `/api/campaigns/import-contacts`, `/api/campaigns`
 - PATCH `/api/campaigns/:id`
 - POST `/api/campaigns/:id/{duplicate,preview,test,send,schedule,pause,resume,retry,cancel,archive,ready}`
 - POST `/api/campaigns/:id/interests/:interestId/convert`
@@ -75,6 +77,10 @@ Public API:
 
 ## Verification
 
+Composer follow-up: **491 tests; 486 passed; 0 failed; 5 existing skips**. Build and whitespace checks passed. Additional coverage includes discount rounding, actual catalog package price/hour fields, text and HTML rendering, HTML sanitization, merge fields, CSV/XLSX validation and shipped template round-trip, invalid custom interest selections, and selected experience/package/phone persistence on explicit lead conversion. These service tests mock database responses. Migration 038 and the new UI still need live staging verification.
+
+Initial campaign sprint verification:
+
 Full automated suite: **475 tests; 470 passed; 0 failed; 5 existing skips**. Includes 33 new campaign tests. Build passed with `npm run build -- --configLoader runner`. Whitespace check passed.
 
 Tests exercise HTML generation, escaping and merge fallback, HTTPS links, template features, consent/deduplication, hashes, validation, queue-only requests, permissions, CRUD, audit, scheduling validation, worker claims, provider acceptance/failure, pause/cancel, unknown outcomes, unsubscribe, interest deduplication, notifications and explicit conversion.
@@ -84,7 +90,7 @@ Database tests use mocked PostgreSQL responses. They do not prove that migration
 ## Manual staging deployment
 
 1. Review this change on `main-staging`. Back up the staging database. Keep campaign jobs disabled and do not target production credentials.
-2. Apply migrations with `npm run db:migrate` using the staging connection. Verify migration 037 and its seeded DRAFT.
+2. Apply migrations with `npm run db:migrate` using the staging connection. Verify migration 037 and its seeded DRAFT, then migration 038 (selected experience interest keys and recipient phone). Migration 037 is already applied to staging; 038 has not been applied here.
 3. Deploy the admin frontend/API through the existing Vercel process, and update/restart the existing worker with the matching code. This has not been performed here.
 4. Configure the public origin above. Verify public interest routes and all four HTTPS assets are accessible without admin login or Vercel protection. Email clients cannot use protected image URLs.
 5. Re-login as an admin; verify campaign permissions and grouped sidebar.
@@ -118,3 +124,14 @@ Database tests use mocked PostgreSQL responses. They do not prove that migration
 The user ran the prepared Railway SSH checks from their Terminal. The service confirmed `APP_ENV=staging` and the staging admin origin before connecting. PostgreSQL 18.6 was reachable. Migration 037 passed its rollback trial and was then applied to the staging database. All 14 reported checks passed: migration SQL, draft/channel defaults, duplicate recipient and interest constraints, invalid status/package constraints, hashed token resolution, event idempotency, suppression, six permissions and administrator grants, test rollback, final migration application and draft seed. All five tables now exist. No synthetic records remain and no emails were sent.
 
 The hosted `/communications/campaigns` route currently returns Page not found, so browser/API end-to-end tests still await deployment of the campaign application commit. Local GitHub access is blocked by this session's DNS/network restrictions. The branch has not been pushed. Earlier statements about migration not being executed refer to the initial implementation checks, before this staging verification.
+
+
+## Composer follow-up staging checks
+
+- Apply migration 038 before using updated queue or conversion code; deploy matching API, frontend and worker.
+- Create one Text and one HTML draft. Paste/upload the supplied HTML and confirm its table layout in the preview.
+- Download the Excel template from Recipients. Import synthetic contacts, including a phone with a leading +, duplicate emails, invalid emails and Yes/No consent; confirm review and exclusion counts.
+- Select a catalog experience and package. Confirm starting price and included hours populate correctly; choose an add-on. Test percent and dollar discounts, zero discount, and invalid values above 100% or the original price.
+- Preview desktop and 375px. Check crossed-out prices and selected offer CTAs in Outlook.
+- Send only to authorized QA addresses under the existing staging policy. Submit interest, verify the selected experience is preselected, and explicitly convert it to a lead. Check phone and preferred experience/package in the proposal wizard.
+- Preserve existing year-end draft behavior and unsubscribe/consent exclusions. No real email was sent during implementation.

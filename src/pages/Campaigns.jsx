@@ -1,20 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import CampaignBuilder from '../components/campaigns/CampaignBuilder.jsx';
 import { campaignContent } from '../../shared/campaign-content.js';
-const steps = ['Details', 'Audience', 'Content', 'Interest CTA', 'Review', 'Send / Schedule'];
 const tabs = ['Overview', 'Recipients', 'Interested', 'Content', 'Activity', 'Settings'];
 const blank = {
   name: '',
   description: '',
   type: 'CORPORATE_OUTREACH',
-  subject: "{{contact.first_name}}, make {{company.name}}'s year-end celebration unforgettable",
+  subject: 'A special offer from The LOLA Booth',
   preview_text: 'The LOLA Glam, The LOLA 360 or both. Premium year-end experiences for your team.',
   sender_name: 'The LOLA Booth',
   reply_to: 'info@thelolabooth.com',
   timezone: 'America/Chicago',
-  content_json: campaignContent(),
+  content_json: campaignContent({format:'TEXT',headline:'A special offer for your event',text_body:''}),
   audience_json: {
     ids: [],
     companies: [],
@@ -68,9 +68,9 @@ export default function Campaigns() {
     [sampleId, setSampleId] = useState(''),
     [schedule, setSchedule] = useState(''),
     [testEmail, setTestEmail] = useState(user?.email || ''),
-    [confirm, setConfirm] = useState(null),
-    [contactSearch, setContactSearch] = useState(''),
-    [manual, setManual] = useState('');
+    [confirm, setConfirm] = useState(null);
+  const confirmationRef=useRef(null);
+  useEffect(()=>{if(!confirm)return;const before=document.activeElement;confirmationRef.current?.querySelector('button')?.focus();return()=>before?.focus();},[confirm]);
   useEffect(() => {
     let live = true;
     setError('');
@@ -158,7 +158,7 @@ export default function Campaigns() {
         }}>All campaigns</Link>}{!id && !editing && permitted('create') && <button className="primary-action" onClick={() => {
           setDraft({
             ...blank,
-            content_json: campaignContent()
+            content_json: campaignContent({format:'TEXT',headline:'A special offer for your event',text_body:''})
           });
           setEditing(true);
           setStep(0);
@@ -171,83 +171,7 @@ export default function Campaigns() {
           setNotice('Duplicated as a draft with no recipients or delivery history.');
         })}>Duplicate</button>}</div></div>
  {error && <p role="alert" className="campaign-error">{error}</p>}{notice && <p role="status">{notice}</p>}
- {editing ? <><nav className="campaign-tabs" aria-label="Campaign steps">{steps.map((name, i) => <button key={name} className={step === i ? 'active' : ''} onClick={() => setStep(i)}>{i + 1}. {name}</button>)}</nav><div className="campaign-panel">
- {step === 0 && <><Field label="Campaign name" required value={draft.name} onChange={v => change('name', v)} /><label className="campaign-field">Template<select value="corporate-year-end-2026" readOnly><option>2026 Corporate Year-End Celebration</option></select></label><Field label="Internal description" value={draft.description} onChange={v => change('description', v)} type="textarea" /><label className="campaign-field">Campaign type<select value={draft.type} onChange={e => change('type', e.target.value)}>{['CORPORATE_OUTREACH', 'EMPLOYEE_APPRECIATION', 'SUMMER_EVENT', 'OTHER'].map(t => <option key={t}>{t}</option>)}</select></label><div className="campaign-grid"><Field label="Sender name" value={draft.sender_name} onChange={v => change('sender_name', v)} /><Field label="Reply-to email" type="email" value={draft.reply_to} onChange={v => change('reply_to', v)} /></div><Field label="Subject" value={draft.subject} onChange={v => change('subject', v)} /><p>Use {'{{contact.first_name}}'} and {'{{company.name}}'}. Missing names use a safe subject fallback.</p><Field label="Preview text" value={draft.preview_text} onChange={v => change('preview_text', v)} /></>}
- {step === 1 && <><h2>Choose your audience</h2><p>Only contacts with marketing consent are eligible. Duplicate emails, unsubscribed and suppressed addresses are excluded.</p><div className="campaign-metrics"><div>Eligible recipients<strong>{audience?.count ?? '…'}</strong></div><div>Excluded<strong>{audience?.excluded?.length ?? '…'}</strong></div></div><div className="campaign-grid"><Field label="Search contacts, companies or emails" value={contactSearch} onChange={setContactSearch} /><label className="campaign-field">Company<select value="" onChange={e => {
-                if (e.target.value) change('audience_json', {
-                  ...draft.audience_json,
-                  companies: [...new Set([...draft.audience_json.companies, e.target.value])]
-                });
-              }}><option value="">Add a company</option>{[...new Set(contacts.map(c => c.company).filter(Boolean))].sort().map(c => <option key={c}>{c}</option>)}</select></label></div>{draft.audience_json.companies.map(c => <button key={c} onClick={() => change('audience_json', {
-            ...draft.audience_json,
-            companies: draft.audience_json.companies.filter(x => x !== c)
-          })}>{c} ×</button>)}<label className="campaign-field">Tag audience<select value="" onChange={e => {
-              if (e.target.value) change('audience_json', {
-                ...draft.audience_json,
-                tags: [...new Set([...(draft.audience_json.tags || []), e.target.value])]
-              });
-            }}><option value="">Add a tag</option>{[...new Set(contacts.flatMap(c => c.tags || []))].map(t => <option key={t}>{t}</option>)}</select></label>{(draft.audience_json.tags || []).map(t => <button key={t} onClick={() => change('audience_json', {
-            ...draft.audience_json,
-            tags: draft.audience_json.tags.filter(x => x !== t)
-          })}>{t} ×</button>)}<Field label="Source filter (optional)" value={draft.audience_json.source} onChange={v => change('audience_json', {
-            ...draft.audience_json,
-            source: v
-          })} /><div style={{
-            maxHeight: 350,
-            overflow: 'auto'
-          }}>{contacts.filter(c => [c.first_name, c.last_name, c.email, c.company].join(' ').toLowerCase().includes(contactSearch.toLowerCase())).map(c => <label className="campaign-selection" key={c.id}><input type="checkbox" checked={draft.audience_json.ids.includes(c.id)} onChange={e => change('audience_json', {
-                ...draft.audience_json,
-                ids: e.target.checked ? [...draft.audience_json.ids, c.id] : draft.audience_json.ids.filter(x => x !== c.id)
-              })} /><span><strong>{c.first_name} {c.last_name}</strong><br />{c.email} · {c.company || 'No company'} · {c.marketing_email_opt_in ? 'Consented' : 'No marketing consent'}</span></label>)}</div><Field label="Manual recipient email" type="email" value={manual} onChange={setManual} /><button onClick={() => {
-            if (manual) {
-              change('audience_json', {
-                ...draft.audience_json,
-                manual: [...draft.audience_json.manual, {
-                  email: manual,
-                  first_name: '',
-                  last_name: '',
-                  company: '',
-                  marketing_email_opt_in: false
-                }]
-              });
-              setManual('');
-            }
-          }}>Add recipient</button>{draft.audience_json.manual.map((r, i) => <div className="campaign-selection" key={i}><span>{r.email}</span><label><input type="checkbox" checked={r.marketing_email_opt_in} onChange={e => change('audience_json', {
-                ...draft.audience_json,
-                manual: draft.audience_json.manual.map((x, j) => j === i ? {
-                  ...x,
-                  marketing_email_opt_in: e.target.checked
-                } : x)
-              })} /> I have this recipient’s marketing consent</label><button onClick={() => change('audience_json', {
-              ...draft.audience_json,
-              manual: draft.audience_json.manual.filter((_, j) => j !== i)
-            })}>Remove</button></div>)}{audience?.excluded?.length > 0 && <details><summary>Review exclusions</summary>{audience.excluded.map((c, i) => <p key={i}>{c.email || c.first_name}: {c.reason}</p>)}</details>}</>}
- {step === 2 && <><Field label="Hero headline" value={draft.content_json.headline} onChange={v => content('headline', v)} /><Field label="Intro" type="textarea" value={draft.content_json.intro} onChange={v => content('intro', v)} /><div className="campaign-grid">{['glam', '360', 'duo'].map(key => <div key={key}><h3>{key === 'duo' ? 'Year-End Duo' : key === 'glam' ? 'LOLA Glam' : 'LOLA 360'}</h3><Field label="4-hour price ($)" type="number" min="0" value={draft.content_json[key + '_price']} onChange={v => content(key + '_price', v)} /><Field label="Additional hour ($)" type="number" min="0" value={draft.content_json[key + '_extra']} onChange={v => content(key + '_extra', v)} />{<Field label="Features (one per line)" type="textarea" value={draft.content_json[key + '_features'].join('\n')} onChange={v => content(key + '_features', v.split('\n').filter(Boolean))} />}</div>)}</div><h3>Campaign images</h3><p>Choose a published media URL from the Media Library, or use the approved hosted assets.</p><Link to="/website/media-library">Open Media Library</Link>{Object.entries(draft.content_json.images).map(([key, value]) => <Field key={key} label={key + ' image URL'} value={value} onChange={v => content('images', {
-            ...draft.content_json.images,
-            [key]: v
-          })} />)}<Field label="Footer contact details" value={draft.content_json.footer} onChange={v => content('footer', v)} /><Field label="Business mailing address" value={draft.content_json.mailing_address} onChange={v => content('mailing_address', v)} /></>}
- {step === 3 && <><h2>A simple declaration of interest</h2><p>Recipients provide package, event date, event time and an optional location. Package links preselect the experience and remain changeable.</p><Field label="Primary button text" value={draft.content_json.cta} onChange={v => content('cta', v)} /><p>We’ll confirm availability and send next steps. No commitment required.</p><p>Responses create CRM interest and notifications. Your team decides when to create a proposal or event.</p></>}
- {step === 4 && <><h2>Review your campaign</h2><p><strong>{draft.name}</strong> · {audience?.count ?? '…'} eligible recipients</p><p>Reply to: {draft.reply_to}</p><label className="campaign-field">Sample recipient<select value={sampleId} onChange={e => setSampleId(e.target.value)}><option value="">Jordan · Northstar Group</option>{contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} · {c.company || 'No company'}</option>)}</select></label>{sampleId && (!selected.first_name || !selected.company) && <p role="status">Missing personalization: {!selected.first_name ? 'first name ' : ''}{!selected.company ? 'company' : ''}. Safe fallbacks will be used.</p>}<div className="campaign-toolbar"><button onClick={() => run(showPreview)}>Preview with sample recipient</button><button onClick={() => setMobile(v => !v)}>{mobile ? 'Desktop preview' : 'Mobile preview (375px)'}</button></div></>}
- {step === 5 && <><h2>Send when you’re ready</h2><p>{audience?.count ?? '…'} eligible recipients · Sender: {draft.sender_name}</p><Field label="Test email address" type="email" value={testEmail} onChange={setTestEmail} />{permitted('send') && <button disabled={busy} onClick={() => run(async () => {
-            const c = await save();
-            await api.post('/campaigns/' + c.id + '/test', {
-              email: testEmail,
-              sample: selected
-            });
-            setNotice('Test accepted by the email provider.');
-          })}>Send test campaign</button>}<div className="campaign-grid"><Field label="Schedule date and time" type="datetime-local" value={schedule} onChange={setSchedule} /><Field label="Timezone" value={draft.timezone} onChange={v => change('timezone', v)} /></div><p>Schedule uses the selected timezone: {draft.timezone}.</p><div className="campaign-toolbar">{permitted('send') && <button className="primary-action" onClick={() => run(async () => {
-              await save();
-              setAudience(await api.post('/campaigns/audience-preview', draft.audience_json));
-              setConfirm('send');
-            })}>Send Now</button>}{permitted('schedule') && <button disabled={!schedule} onClick={() => run(async () => {
-              await save();
-              setAudience(await api.post('/campaigns/audience-preview', draft.audience_json));
-              setConfirm('schedule');
-            })}>Schedule</button>}</div></>}
- <div className="campaign-step-footer"><button onClick={() => step > 0 ? setStep(step - 1) : setEditing(false)}>{step ? 'Back' : 'Cancel'}</button><div className="campaign-toolbar"><button disabled={busy} onClick={() => run(async () => {
-              await save();
-              setNotice('Draft saved.');
-            })}>Save draft</button>{step < 5 && <button className="primary-action" onClick={() => setStep(step + 1)}>Continue →</button>}</div></div></div></> : !id ? <><div className="campaign-toolbar"><Field label="Search campaigns, companies or emails" value={filter.search} onChange={v => setFilter({
+ {editing ? <CampaignBuilder draft={draft} setDraft={setDraft} contacts={contacts} audience={audience} busy={busy} initialStep={step} onSave={save} onClose={()=>setEditing(false)} run={run} canSend={permitted('send')} canSchedule={permitted('schedule')} schedule={schedule} setSchedule={setSchedule} testEmail={testEmail} setTestEmail={setTestEmail} onDelivery={mode=>run(async()=>{await save();setAudience(await api.post('/campaigns/audience-preview',draft.audience_json));setConfirm(mode);})} onTest={sample=>run(async()=>{const saved=await save();await api.post('/campaigns/'+saved.id+'/test',{email:testEmail,sample});setNotice('Test accepted by the email provider.');})}/> : !id ? <><div className="campaign-toolbar"><Field label="Search campaigns, companies or emails" value={filter.search} onChange={v => setFilter({
           ...filter,
           search: v
         })} /><Field label="Audience / company / tag" value={filter.audience||''} onChange={v=>setFilter({...filter,audience:v})}/><Field label="Created from" type="date" value={filter.from||''} onChange={v=>setFilter({...filter,from:v})}/><Field label="Created through" type="date" value={filter.to||''} onChange={v=>setFilter({...filter,to:v})}/><label className="campaign-field">Creator<select value={filter.owner||''} onChange={e=>setFilter({...filter,owner:e.target.value})}><option value="">All creators</option>{[...new Map(list.filter(c=>c.created_by).map(c=>[c.created_by,c])).values()].map(c=><option key={c.created_by} value={c.created_by}>{c.creator_name||c.created_by}</option>)}</select></label><label className="campaign-field">Status<select value={filter.status} onChange={e => setFilter({
@@ -264,7 +188,7 @@ export default function Campaigns() {
               setStep(5);
             }}>Send / Schedule</button>}{['SENDING', 'SCHEDULED'].includes(campaign.status) && permitted('cancel') && <button onClick={() => run(() => action('pause'))}>Pause</button>}{campaign.status === 'FAILED' && permitted('send') && <button onClick={() => run(() => action('retry'))}>Retry safe failures</button>}{campaign.status === 'PAUSED' && permitted('send') && <button onClick={() => run(() => action('resume'))}>Resume</button>}{['DRAFT', 'READY', 'SENDING', 'SCHEDULED', 'PAUSED'].includes(campaign.status) && permitted('cancel') && <button onClick={() => setConfirm('cancel')}>Cancel unsent recipients</button>}{['DRAFT', 'READY', 'SENT', 'FAILED', 'CANCELLED'].includes(campaign.status) && permitted('edit') && <button onClick={() => run(() => action('archive'))}>Archive</button>}</div></>}
  {tab === 'Recipients' && <Table heads={['Recipient', 'Company', 'Email', 'Status', 'Sent', 'Delivered', 'Opened', 'Clicked', 'Interested', 'Last Activity', 'Failure']}>{campaign.recipients.map(r => <tr key={r.id}><td>{r.first_name} {r.last_name}</td><td>{r.company}</td><td>{r.email}</td><td>{r.status}</td><td>{r.sent_at ? new Date(r.sent_at).toLocaleString() : '—'}</td><td>Unavailable</td><td>Unavailable</td><td>Unavailable</td><td>{r.interested_at ? 'Yes' : '—'}</td><td>{new Date(r.interested_at||r.failed_at||r.sent_at||r.queued_at||r.created_at).toLocaleString()}</td><td>{r.failure_message || '—'}</td></tr>)}</Table>}
- {tab === 'Interested' && <><Table heads={['Name', 'Company', 'Package', 'Date', 'Time', 'Location', 'Submitted', 'Lead status', 'Owner', 'Next step']}>{campaign.interests.map(r => <tr key={r.id}><td>{r.first_name} {r.last_name}</td><td>{r.company}</td><td>{r.package}</td><td>{r.event_date}</td><td>{r.event_time}</td><td>{r.location || '—'}</td><td>{new Date(r.submitted_at).toLocaleString()}</td><td>{r.lead_status || 'Prospect'}</td><td>{r.owner || 'Unassigned'}</td><td>{r.lead_id ? <Link to={'/sales/leads/' + r.lead_id}>Open lead</Link> : r.client_id ? <Link to={'/sales/clients/' + r.client_id}>Open contact</Link> : can('write:sales') && <button onClick={() => run(async () => {
+ {tab === 'Interested' && <><Table heads={['Name', 'Company', 'Package', 'Date', 'Time', 'Location', 'Submitted', 'Lead status', 'Owner', 'Next step']}>{campaign.interests.map(r => <tr key={r.id}><td>{r.first_name} {r.last_name}</td><td>{r.company}</td><td>{campaign.content_json.offers?.find(o=>o.key===r.package)?.name||r.package}</td><td>{r.event_date}</td><td>{r.event_time}</td><td>{r.location || '—'}</td><td>{new Date(r.submitted_at).toLocaleString()}</td><td>{r.lead_status || 'Prospect'}</td><td>{r.owner || 'Unassigned'}</td><td>{r.lead_id ? <Link to={'/sales/leads/' + r.lead_id}>Open lead</Link> : r.client_id ? <Link to={'/sales/clients/' + r.client_id}>Open contact</Link> : can('write:sales') && <button onClick={() => run(async () => {
                   const converted = await api.post('/campaigns/' + id + '/interests/' + r.id + '/convert', {});
                   navigate('/sales/leads/' + converted.lead_id);
                 })}>Convert to Lead</button>}<br /><Link to={'/sales/proposals/new' + (r.lead_id ? '?leadId=' + r.lead_id : '')}>Create proposal</Link></td></tr>)}</Table>{!campaign.interests.length && <p>Interest responses will appear here with the requested package, date, time and location.</p>}</>}
@@ -276,12 +200,12 @@ export default function Campaigns() {
             setNotice('Test accepted by the email provider.');
           })}>Send test</button>}</>}
  {tab === 'Activity' && campaign.activity.map(e => <div className="campaign-selection" key={e.id}><time>{new Date(e.created_at).toLocaleString()}</time><strong>{e.event_type.replaceAll('_', ' ')}</strong><span>{e.metadata?.actor || e.metadata?.message || ''}</span></div>)}
- {tab === 'Settings' && <><p>Sender: {campaign.sender_name}</p><p>Reply to: {campaign.reply_to}</p><p>Timezone: {campaign.timezone}</p><p>Channel: Email</p><p>Template: 2026 Corporate Year-End Celebration</p><p>Mailing address: {campaign.content_json.mailing_address || 'Required before sending'}</p></>}
+ {tab === 'Settings' && <><p>Sender: {campaign.sender_name}</p><p>Reply to: {campaign.reply_to}</p><p>Timezone: {campaign.timezone}</p><p>Channel: Email</p><p>Format: {campaign.content_json.format==='TEXT'?'Text campaign':campaign.content_json.format==='HTML'?'HTML campaign':'2026 Corporate Year-End Celebration'}</p><p>Mailing address: {campaign.content_json.mailing_address || 'Required before sending'}</p></>}
  </div></>}
  {preview && <><p>Preview subject: {preview.subject}</p><iframe sandbox="" title="Personalized campaign preview" srcDoc={preview.html} className="campaign-preview" style={{
         width: mobile ? 375 : 680
       }} /></>}
- {confirm && <div className="campaign-confirmation"><div role="dialog" aria-modal="true" aria-labelledby="campaign-confirm" className="campaign-panel"><h2 id="campaign-confirm">{confirm === 'cancel' ? 'Cancel unsent recipients?' : 'You are about to ' + (confirm === 'schedule' ? 'schedule' : 'send') + ' this campaign'}</h2><p>{draft.name} · {audience?.count ?? campaign?.metrics?.recipients} recipients</p><p>Sender: {draft.sender_name}<br />Subject: {draft.subject}</p><p>Already claimed messages may finish. Paused or cancelled campaigns will not claim additional recipients.</p><div className="campaign-toolbar"><button onClick={() => setConfirm(null)}>Go back</button><button disabled={busy} className="primary-action" onClick={() => run(async () => {
+ {confirm && <div className="campaign-confirmation"><div ref={confirmationRef} onKeyDown={e=>{if(e.key==='Escape'&&!busy)setConfirm(null);if(e.key==='Tab'){const buttons=[...e.currentTarget.querySelectorAll('button:not(:disabled)')];const first=buttons[0],last=buttons.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}} role="dialog" aria-modal="true" aria-labelledby="campaign-confirm" className="campaign-panel"><h2 id="campaign-confirm">{confirm === 'cancel' ? 'Cancel unsent recipients?' : 'You are about to ' + (confirm === 'schedule' ? 'schedule' : 'send') + ' this campaign'}</h2><p>{draft.name} · {audience?.count ?? campaign?.metrics?.recipients} recipients</p><p>Sender: {draft.sender_name}<br />Subject: {draft.subject}</p><p>Already claimed messages may finish. Paused or cancelled campaigns will not claim additional recipients.</p><div className="campaign-toolbar"><button onClick={() => setConfirm(null)}>Go back</button><button disabled={busy} className="primary-action" onClick={() => run(async () => {
           if (confirm === 'cancel') await action('cancel');else {
             await api.post('/campaigns/' + id + '/' + confirm, confirm === 'schedule' ? {
               scheduled_at: zonedSchedule(schedule, draft.timezone)
