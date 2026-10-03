@@ -46,7 +46,7 @@ export default function SystemHealth() {
   }
 
   return (
-    <main className="page">
+    <main className="page system-health-redesign">
       <div className="page-heading">
         <div>
           <p className="eyebrow">{health?.build?.environment==='staging'?'Staging baseline':'Environment readiness'}</p>
