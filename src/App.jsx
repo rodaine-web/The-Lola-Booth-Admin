@@ -17,6 +17,7 @@ const Users = lazy(() => import("./pages/Users.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Leads = lazy(() => import("./pages/Leads.jsx"));
 const LeadDetail = lazy(() => import("./pages/LeadDetail.jsx"));
+const Clients = lazy(() => import("./pages/Clients.jsx"));
 const EventDetail = lazy(() => import("./pages/EventDetail.jsx"));
 const ClientDetail = lazy(() => import("./pages/ClientDetail.jsx"));
 const Calendar = lazy(() => import("./pages/Calendar.jsx"));
@@ -77,7 +78,7 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="sales/leads" element={<Leads />} />
         <Route path="sales/leads/:id" element={<LeadDetail />} />
-        <Route path="sales/clients" element={<ResourcePage title="Clients" endpoint="/clients" columns={["name", "email", "phone", "client_type"]} rowHref={(row) => `/sales/clients/${row.id}`} fields={clientFields} />} />
+        <Route path="sales/clients" element={<Clients />} />
         <Route path="sales/clients/:id" element={<ClientDetail />} />
         <Route path="sales/proposals" element={<Proposals />} />
         <Route path="sales/communications" element={<Communications />} />
