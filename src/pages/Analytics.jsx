@@ -20,7 +20,7 @@ export default function Analytics() {
   if (!data) return <main className="page analytics-redesign"><div className="empty-state">Loading analytics...</div></main>;
 
   return (
-    <main className="page">
+    <main className="page analytics-redesign">
       <div className="page-heading">
         <div>
           <p className="eyebrow">Insights</p>
