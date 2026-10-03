@@ -46,7 +46,8 @@ test("lead conversion uses in-app review instead of browser confirm", () => {
   assert.match(leadDetail, /Review Conversion/);
 });
 
-test("sidebar filters navigation items by permissions", () => {
-  assert.match(layout, /visibleItems = section\.items\.filter/);
+test("sidebar filters redesigned navigation items by permissions", () => {
+  assert.match(layout, /navItems\.filter\(item =>/);
   assert.match(layout, /can\(item\.permission\)/);
+  assert.match(layout, /const visibleNav/);
 });
