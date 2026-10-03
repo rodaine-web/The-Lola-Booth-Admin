@@ -232,7 +232,7 @@ export default function ProposalWizard(){
     <div className="detail-back"><Link to="/sales/proposals"><ArrowLeft size={16}/>Back to proposals</Link></div>
     <section className="page-heading">
       <div><p className="eyebrow">Proposal Builder</p><h1>Create Proposal</h1><p className="lede">Simple. Flexible. Fast.</p></div>
-      <Link className="lola-secondary-button" to="/sales/proposals/new?advanced=true">Advanced editor</Link>
+      <Link className="lola-secondary-button" to="/sales/proposals/new/advanced">Advanced editor</Link>
     </section>
 
     <div className="wizard-progress">
