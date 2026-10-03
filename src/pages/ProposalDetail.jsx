@@ -82,7 +82,7 @@ export default function ProposalDetail() {
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       {sendOpen && <form className="panel" onSubmit={event=>{event.preventDefault();action(async()=>{await api.post(`/proposals/${id}/send`,{recipient:recipient.trim()});setSendOpen(false);},"Proposal submitted to the email provider.");}}>
         <h2>Send proposal</h2>
-        <p>The recipient will receive a link to this proposal and an attached PDF.</p>
+        <p>The recipient will receive an HTML email with a proposal link and the option to download the PDF.</p>
         <label>Recipient email<input type="email" required disabled={busy} value={recipient} onChange={event=>setRecipient(event.target.value)}/></label>
         <div className="button-row"><button className="primary-action" disabled={busy}>{busy?"Sending…":"Send proposal email"}</button><button type="button" disabled={busy} onClick={()=>setSendOpen(false)}>Cancel</button></div>
       </form>}

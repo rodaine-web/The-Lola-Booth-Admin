@@ -1,5 +1,6 @@
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {proposalVisualHtml} from "./proposal-visual-service.js";
+import {compactProposalPhotos} from "./proposal-pdf-images.js";
 import { documentOrigin } from "../utils/public-document-url.js";
 import { normalizeInvoice } from "../../../shared/invoice-balance.js";
 import fs from "node:fs";
@@ -129,6 +130,7 @@ function drawBrandPage(doc, title, subtitle, { asset = "primaryDark", label = ""
 }
 
 export async function generateProposalPdf(proposal) {
+  proposal = await compactProposalPhotos(proposal);
   const chunks = [];
   const pdf = new PDFDocument({ size: "LETTER", margin: 0 });
   pdf.on("data", (chunk) => chunks.push(chunk));

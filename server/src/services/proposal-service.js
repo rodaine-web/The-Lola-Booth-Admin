@@ -441,15 +441,6 @@ export async function proposalPdfBuffer(proposal, type = "pdf") {
 
 export async function sendProposal(req, proposal) {
   if (!publicProposalUrl(proposal)) throw new AppError("Public access not available. Generate secure access before sending.", 409, "DOCUMENT_ACCESS_UNAVAILABLE");
-  const pdfBuffer = await proposalPdfBuffer(proposal, "pdf");
-  const doc = {
-    filename: userDocumentFilename("Proposal", proposal.proposal_number, "pdf"),
-    mimeType: "application/pdf",
-    sizeBytes: pdfBuffer.length,
-    buffer: pdfBuffer,
-    storageProvider: null,
-    storageKey: null
-  };
   const proposalUrl = publicProposalUrl(proposal);
   const mergeData = proposalMergeData(proposal, proposalUrl);
   let rendered = null;
@@ -461,15 +452,16 @@ export async function sendProposal(req, proposal) {
   if (!rendered) await recordTemplateFallback({ templateKey: "PROPOSAL_DELIVERY", reason: "Active template was not found or could not render.", relatedEntityType: "proposal", relatedEntityId: proposal.id });
   const template = rendered?.template || null;
   const subject = req.body.subject || rendered?.subject || `Your LOLA Booths Proposal - ${proposal.event_name || proposal.event_date || proposal.proposal_number}`;
-  const body = req.body.body || rendered?.body || `THE LOLA BOOTH\nGood people. Better photos.\n\nHi ${firstName(proposal.client_name)},\n\nIt was great hearing about your event. We've prepared your LOLA Booths proposal based on the details you shared with us.\n\nReview and accept your proposal:\n${proposalUrl}\n\nWe've also attached a branded PDF copy for your records.\n\nQuestions? Just reply to this email.\n\nYour event. Their favorite memory.\n\nLOLA Booths`;
+  const body = req.body.body || rendered?.body || `THE LOLA BOOTH\nGood people. Better photos.\n\nHi ${firstName(proposal.client_name)},\n\nIt was great hearing about your event. We've prepared your LOLA Booths proposal based on the details you shared with us.\n\nReview and accept your proposal:\n${proposalUrl}\n\nYou can download a branded PDF copy from the proposal page.\n\nQuestions? Just reply to this email.\n\nYour event. Their favorite memory.\n\nLOLA Booths`;
   const html = brandedEmailHtml(body, {
     firstName: firstName(proposal.client_name),
     kicker: "Your proposal is ready",
     ctaLabel: "View Your Proposal",
     ctaUrl: proposalUrl,
-    event: proposalEmailEvent(proposal)
+    event: proposalEmailEvent(proposal),
+    secondaryCta: {label:"Download PDF",url:`${proposalUrl}?download=pdf`,copyLabel:"Or download your proposal PDF:"}
   });
-  const email = await sendEmail({ to: req.body.recipient || proposal.client_email, subject, body, html, attachments: [doc] });
+  const email = await sendEmail({ to: req.body.recipient || proposal.client_email, subject, body, html, attachments: [] });
   await transaction(async (client) => {
     await client.query(
       `UPDATE proposals
