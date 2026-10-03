@@ -8,7 +8,7 @@ import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
 const templateTabs = ["All", "Email", "SMS", "Proposal", "Invoice", "Document", "Internal"];
-const communicationTabs = ["SENT_TO_PROVIDER", "DRAFT", "SCHEDULED", "FAILED", "ALL"];
+const communicationTabs = ["ALL", "SCHEDULED", "SENT_TO_PROVIDER", "FAILED", "DRAFT"];
 const blankTemplate = {
   name: "",
   key: "",
@@ -207,27 +207,27 @@ export default function Communications() {
   if (!templates || !automations || !communications) return <main className="page"><h1>Communications</h1><AsyncState loading={loading} error={error} requestId={requestId} onRetry={load} noun="communications" /></main>;
 
   return (
-    <main className="page">
+    <main className="page communications-redesign">
       <div className="page-heading">
-        <div><p className="eyebrow">Admin</p><h1>Communications</h1></div>
+        <div><p className="eyebrow">Communications</p><h1>Client communications in one place.</h1><p className="lede">Send, schedule, review, and troubleshoot every client message.</p></div>
         <div className="button-row">
-          <button onClick={load}><RefreshCw size={16} />Refresh</button>
-          <button className="primary-action" onClick={processJobs}><Play size={16} />Process Due Jobs</button>
+          <button className="lola-secondary-button" onClick={load}><RefreshCw size={16} />Refresh</button>
+          <button className="primary-action" onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>New Message</button>
         </div>
       </div>
       {error ? <AsyncState error={error} requestId={requestId} onRetry={load} noun="communications" /> : notice && <div role="status" className="toast">{notice}</div>}
 
       <div className="segmented-control page-tabs">
-        {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item}</button>)}
+        {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item === "Communications" ? "Messages" : item}</button>)}
       </div>
 
       {section === "Communications" && (
         <>
           <section className="panel">
             <div className="table-heading">
-              <h2>Communication Center</h2><button onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>Compose Email</button>
+              <div><h2>Messages</h2><p className="note-text">All outbound and internal communication activity.</p></div>
               <div className="segmented-control">
-                {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => {setCommunicationPage(1);setCommunicationTab(tab);}}>{tab.toLowerCase().replaceAll("_"," ")}</button>)}
+                {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => {setCommunicationPage(1);setCommunicationTab(tab);}}>{tab === "SENT_TO_PROVIDER" ? "Sent" : tab.toLowerCase().replaceAll("_"," ")}</button>)}
               </div>
             </div>
             <div className="toolbar"><label>Search communications<input value={communicationSearch} onChange={e=>{setCommunicationPage(1);setCommunicationSearch(e.target.value);}} placeholder="Recipient or subject"/></label><label>Sort<select aria-label="Sort" value={communicationSort} onChange={e=>setCommunicationSort(e.target.value)}><option value="created_at">Newest first</option><option value="scheduled_at">Scheduled time</option><option value="recipient">Recipient</option></select></label></div>
