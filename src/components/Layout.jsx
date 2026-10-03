@@ -40,6 +40,7 @@ const navItems = [
 
 const createItems = [
   { label: "New Lead", to: "/sales/leads?create=true", permission: "write:sales" },
+  { label: "New Client", to: "/sales/clients?create=true", permission: "write:sales" },
   { label: "New Event", to: "/events/events?create=true", permission: "write:events" },
   { label: "Create Proposal", to: "/sales/proposals/new", permission: "write:sales" },
   { label: "Create Invoice", to: "/finance/invoices/new", permission: "write:finance" }
