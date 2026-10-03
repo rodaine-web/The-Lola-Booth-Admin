@@ -27,6 +27,7 @@ const Settings = lazy(() => import("./pages/Settings.jsx"));
 const ResourcePage = lazy(() => import("./pages/ResourcePage.jsx"));
 const Proposals = lazy(() => import("./pages/Proposals.jsx"));
 const ProposalEditor = lazy(() => import("./pages/ProposalEditor.jsx"));
+const ProposalWizard = lazy(() => import("./pages/ProposalWizard.jsx"));
 const ProposalDetail = lazy(() => import("./pages/ProposalDetail.jsx"));
 const Invoices = lazy(() => import("./pages/Invoices.jsx"));
 const InvoiceEditor = lazy(() => import("./pages/InvoiceEditor.jsx"));
@@ -84,7 +85,8 @@ export default function App() {
         <Route path="sales/proposals" element={<Proposals />} />
         <Route path="sales/communications" element={<Communications />} />
         <Route path="sales/proposals/:id/edit" element={<ProposalEditor />} />
-        <Route path="sales/proposals/new" element={<ProposalEditor />} />
+        <Route path="sales/proposals/new" element={<ProposalWizard />} />
+        <Route path="sales/proposals/new/advanced" element={<ProposalEditor />} />
         <Route path="sales/proposals/:id" element={<ProposalDetail />} />
         <Route path="events/events" element={<Events />} />
         <Route path="events/events/:id" element={<EventDetail />} />
