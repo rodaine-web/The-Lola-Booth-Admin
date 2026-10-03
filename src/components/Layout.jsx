@@ -4,10 +4,10 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   BarChart3, Bell, Boxes, CalendarDays, ChevronDown, CircleDollarSign, ContactRound,
   FileText, Gauge, HeartPulse, Images, LogOut, MessageSquareText, Package, PanelsTopLeft,
-  Plug, Plus, ReceiptText, RadioTower, Search, Settings, ShieldCheck, Sparkles,
+  Plug, Plus, ReceiptText, RadioTower, Search, Settings, ShieldCheck, Sparkles, Menu, X,
   UserCog, UsersRound, Wrench
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import NotificationCenter from "./NotificationCenter.jsx";
@@ -49,7 +49,9 @@ const createItems = [
 export default function Layout() {
   const { user, logout, can } = useAuth();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const menuTrigger = useRef(null);
+  const createMenu = useRef(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -58,19 +60,39 @@ export default function Layout() {
   useEffect(() => {
     setNavigationOpen(false);
     setCreateOpen(false);
-  }, [pathname]);
+  }, [pathname, search]);
+
+  useEffect(() => {
+    function dismiss(event) {
+      if (event.key === "Escape") {
+        if (navigationOpen) menuTrigger.current?.focus();
+        setNavigationOpen(false);
+        setCreateOpen(false);
+      }
+    }
+    function outside(event) {
+      if (!createMenu.current?.contains(event.target)) setCreateOpen(false);
+    }
+    document.addEventListener("keydown", dismiss);
+    document.addEventListener("pointerdown", outside);
+    return () => {
+      document.removeEventListener("keydown", dismiss);
+      document.removeEventListener("pointerdown", outside);
+    };
+  }, [navigationOpen]);
 
   useEffect(() => {
     if (query.trim().length < 2) {
       setResults([]);
       return;
     }
+    let active = true;
     const timer = setTimeout(() => {
       api.get(`/search?q=${encodeURIComponent(query)}`)
-        .then((result) => setResults(result.data || []))
-        .catch(() => setResults([]));
+        .then((result) => { if (active) setResults(result.data || []); })
+        .catch(() => { if (active) setResults([]); });
     }, 250);
-    return () => clearTimeout(timer);
+    return () => { active = false; clearTimeout(timer); };
   }, [query]);
 
   const visibleNav = useMemo(() => navItems.filter(item => {
@@ -94,7 +116,8 @@ export default function Layout() {
 
   return (
     <div className="lola-app-shell">
-      <aside className={navigationOpen ? "lola-sidebar open" : "lola-sidebar"}>
+      <a className="lola-skip-link" href="#workspace-content">Skip to content</a>
+      <aside id="lola-navigation" className={navigationOpen ? "lola-sidebar open" : "lola-sidebar"}>
         <div className="lola-brand">
           <img className="brand-logo-admin-stacked" src="/brand/LOLA_Primary_Light_Transparent.png" alt="The LOLA Booth" />
           <div>
@@ -103,16 +126,14 @@ export default function Layout() {
           </div>
         </div>
 
-        <button className="lola-mobile-nav-toggle" onClick={() => setNavigationOpen(v => !v)}>
-          {navigationOpen ? "Close" : "Menu"}
-        </button>
+        <button className="lola-nav-close" aria-label="Close navigation" onClick={() => { setNavigationOpen(false); menuTrigger.current?.focus(); }}><X size={20}/></button>
 
         <nav className="lola-nav" aria-label="Main navigation">
           {visibleNav.map(item => {
             const Icon = item.icon;
             return (
-              <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({isActive}) => isActive ? "active" : ""}>
-                <Icon size={17} />
+              <NavLink key={item.to} to={item.to} title={item.label} aria-label={item.label} end={item.to === "/"} className={({isActive}) => isActive ? "active" : ""}>
+                <Icon size={17} aria-hidden="true" />
                 <span>{item.label}</span>
               </NavLink>
             );
@@ -129,7 +150,9 @@ export default function Layout() {
       </aside>
 
       <section className="lola-workspace">
+        {navigationOpen && <button className="lola-nav-backdrop" aria-label="Close navigation" onClick={() => setNavigationOpen(false)} />}
         <header className="lola-topbar">
+          <button ref={menuTrigger} className="lola-mobile-nav-toggle" aria-label="Open navigation" aria-expanded={navigationOpen} aria-controls="lola-navigation" onClick={() => setNavigationOpen(v => !v)}><Menu size={20}/></button>
           <div className="lola-search">
             <Search size={18} />
             <input
@@ -152,13 +175,13 @@ export default function Layout() {
 
           <div className="lola-topbar-actions">
             {visibleCreate.length > 0 && (
-              <div className="lola-create-menu">
-                <button className="lola-create-button" onClick={() => setCreateOpen(v => !v)}>
+              <div ref={createMenu} className="lola-create-menu">
+                <button className="lola-create-button" aria-expanded={createOpen} aria-controls="lola-create-options" aria-label="Create a record" onClick={() => setCreateOpen(v => !v)}>
                   <Plus size={16} /> Create <ChevronDown size={14} />
                 </button>
                 {createOpen && (
-                  <div className="lola-create-popover">
-                    {visibleCreate.map(item => <button key={item.to} onClick={() => navigate(item.to)}>{item.label}</button>)}
+                  <div id="lola-create-options" className="lola-create-popover">
+                    {visibleCreate.map(item => <button key={item.to} onClick={() => { setCreateOpen(false); navigate(item.to); }}>{item.label}</button>)}
                   </div>
                 )}
               </div>
@@ -171,7 +194,7 @@ export default function Layout() {
             <button className="lola-icon-button" aria-label="Sign out" onClick={logout}><LogOut size={17} /></button>
           </div>
         </header>
-        <div className="lola-page-stage">
+        <div id="workspace-content" tabIndex={-1} className="lola-page-stage">
           <Outlet />
         </div>
       </section>

@@ -1,6 +1,8 @@
+import { useAuth } from "../context/AuthContext.jsx";
+import { GALLERY_ENABLED } from "../utils/features.js";
 import AsyncState from "../components/AsyncState.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
-import { formatMoney, formatDateOnly, formatPercent, formatCount } from "../utils/display.js";
+import { formatMoney, formatDateOnly, businessToday, formatPercent, formatCount } from "../utils/display.js";
 import {
   ArrowRight, CalendarDays, CircleDollarSign, FileText, Plus, UsersRound,
   AlertCircle, Sparkles
@@ -12,14 +14,13 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis
 } from "recharts";
 import { api } from "../api/client.js";
-import { useAuth } from "../context/AuthContext.jsx";
 import { funnelHref, sourceHref, metricHref } from "../utils/dashboard-links.js";
 
 const ranges = [["today","Today"],["week","This Week"],["mtd","Month To Date"],["ytd","Year To Date"]];
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [searchParams,setSearchParams]=useSearchParams();
   const range=searchParams.get("range")||"mtd";
   const [data,setData]=useState(null);
@@ -68,7 +69,7 @@ export default function Dashboard() {
       <section className="dashboard-hero-row">
         <div>
           <p className="eyebrow">Dashboard</p>
-          <h1>Good morning, {firstName(user?.name)||"there"}!</h1>
+          <h1>Good morning, {firstName(user?.name || data?.viewerName)||"there"}!</h1>
           <p className="lede">Here’s what’s happening with The Lola Booth today.</p>
         </div>
         <div className="dashboard-range-picker">
@@ -90,7 +91,7 @@ export default function Dashboard() {
           <div>
             <span>THE LOLA BOOTH</span>
             <h2>Good people.<br/>Better photos.</h2>
-            <Link to="/operations/galleries">View Gallery <ArrowRight size={15}/></Link>
+            {GALLERY_ENABLED && can("read:events") && <Link to="/operations/galleries">View Gallery <ArrowRight size={15}/></Link>}
           </div>
           <Sparkles size={54}/>
         </aside>
@@ -135,7 +136,7 @@ export default function Dashboard() {
         </article>
 
         <article className="panel dashboard-today-card">
-          <div className="dashboard-card-heading"><div><h2>Today</h2><p>{formatDateOnly(new Date().toISOString())}</p></div><Link to="/events/calendar">View Calendar <ArrowRight size={14}/></Link></div>
+          <div className="dashboard-card-heading"><div><h2>Today</h2><p>{formatDateOnly(businessToday())}</p></div><Link to="/events/calendar">View Calendar <ArrowRight size={14}/></Link></div>
           <div className="today-list">
             {(data.todaysEvents||[]).slice(0,5).map(event=><Link key={event.id} to={`/events/events/${event.id}`}><time>{event.start_time||"TBD"}</time><div><strong>{event.event_name}</strong><span>{event.client_name||"Client pending"} · {event.venue_name||"Venue TBD"}</span></div><StatusBadge status={event.operational_status||event.status}/></Link>)}
             {!data.todaysEvents?.length&&<div className="mini-empty">No events scheduled today.</div>}
@@ -158,7 +159,7 @@ export default function Dashboard() {
           </div>
         </article>
 
-        <article className="panel" aria-label="Needs Attention">
+        <article className="panel">
           <div className="dashboard-card-heading"><h2>Tasks & Attention</h2><Link to="/operations/tasks">View All <ArrowRight size={14}/></Link></div>
           <div className="attention-list dashboard-attention">
             {(data.needsAttention||[]).slice(0,6).map((item,index)=><Link key={index} to={item.href||"/"}><span className="attention-icon"><AlertCircle size={16}/></span><div><strong>{item.message}</strong><small>{String(item.type||"Attention").replaceAll("_"," ")}</small></div></Link>)}
@@ -167,13 +168,12 @@ export default function Dashboard() {
         </article>
       </section>
 
-      <details className="panel dashboard-secondary"><summary>Metric Definitions</summary><div className="definition-grid">{Object.entries(data.metricDefinitions||{}).map(([key,value])=><p key={key}><strong>{key.replaceAll("_"," ")}</strong>{value}</p>)}</div></details>
-
+      {data.metricDefinitions && <details className="panel dashboard-definitions"><summary>Metric Definitions</summary><dl>{Object.entries(data.metricDefinitions).map(([key,definition])=><div key={key}><dt>{key.replaceAll("_"," ")}</dt><dd>{definition}</dd></div>)}</dl></details>}
       <section className="dashboard-quick-actions">
-        <button onClick={()=>navigate("/sales/leads?create=true")}><Plus size={15}/>New Lead</button>
-        <button onClick={()=>navigate("/sales/proposals/new")}><Plus size={15}/>Create Proposal</button>
-        <button onClick={()=>navigate("/finance/invoices/new")}><Plus size={15}/>Create Invoice</button>
-        <button onClick={()=>navigate("/events/events?create=true")}><Plus size={15}/>New Event</button>
+        {can("write:sales") && <button onClick={()=>navigate("/sales/leads?create=true")}><Plus size={15}/>New Lead</button>}
+        {can("write:sales") && <button onClick={()=>navigate("/sales/proposals/new")}><Plus size={15}/>Create Proposal</button>}
+        {can("write:finance") && <button onClick={()=>navigate("/finance/invoices/new")}><Plus size={15}/>Create Invoice</button>}
+        {can("write:events") && <button onClick={()=>navigate("/events/events?create=true")}><Plus size={15}/>New Event</button>}
       </section>
     </main>
   );

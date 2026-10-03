@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/WorkspaceUI.jsx";
 import { GALLERY_ENABLED } from "../utils/features.js";
 import {useAuth} from "../context/AuthContext.jsx";
 import AsyncState from "../components/AsyncState.jsx";
@@ -21,12 +22,7 @@ export default function Analytics() {
 
   return (
     <main className="page analytics-redesign">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Insights</p>
-          <h1>Reports & Analytics</h1><p className="lede">Insights for growth, revenue, demand, and lead performance.</p>
-        </div>
-      </div>
+      <PageHeader eyebrow="Insights" title="Reports & Analytics" description="Understand revenue, demand, and lead performance over time." />
       <div className="analytics-range">{[["today","Today"],["week","This Week"],["mtd","Month to Date"],["ytd","Year to Date"]].map(([key,label])=><button key={key} className={range===key?"active":""} onClick={()=>setRange(key)}>{label}</button>)}</div><p className="note-text">Revenue and average booking value share the Dashboard definitions and selected period. Outstanding is the current unpaid balance.</p>
       <section className="kpi-grid compact">
         {Object.entries(data.summary).map(([key, value]) => (

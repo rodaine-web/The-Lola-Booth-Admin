@@ -1,3 +1,4 @@
+import { TabNavigation, MetricCard as Metric, DetailSection as Panel } from "../components/WorkspaceUI.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import CustomerPreferences from "../components/CustomerPreferences.jsx";
 import AsyncState from "../components/AsyncState.jsx";
@@ -138,8 +139,7 @@ export default function LeadDetail() {
   const canConvert = lead.status !== "WON" && !lead.converted_event_id;
 
   return (
-    <main className="page">
-      {tab==="Overview"&&<CustomerPreferences record={lead} type="lead" onSaved={loadLead}/>}
+    <main className="page record-workspace leaddetail-workspace">
       <div className="detail-back"><Link to="/sales/leads"><ArrowLeft size={16} />Back to leads</Link></div>
       <div className="page-heading detail-heading">
         <div>
@@ -168,9 +168,7 @@ export default function LeadDetail() {
         <Metric label="Response SLA" value={responseLabel(lead)} />
       </section>
 
-      <div className="tabs">
-        {tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}
-      </div>
+      <TabNavigation items={tabs} value={tab} onChange={setTab} />
 
       {tab === "Overview" && (
         <section className="detail-grid">
@@ -269,6 +267,7 @@ export default function LeadDetail() {
           </div>
         </div>
       )}
+      {tab==="Overview"&&<CustomerPreferences record={lead} type="lead" onSaved={loadLead}/>}
       {pendingMerge && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal">
@@ -305,20 +304,16 @@ function DuplicateList({ duplicates, busy, onMerge }) {
             <span>{item.email || item.phone || "No contact"} · {item.match_reason?.replaceAll("_", " ")}</span>
             <small>{item.event_type || "Event TBD"} · {formatDate(item.event_date)} · {linkedCountLabel(item.linked_counts)}</small>
           </div>
-          <button className="table-action" disabled={busy} onClick={() => onMerge(item.id)}>Merge</button>
+          <button className="table-action" disabled={busy} onClick={() => onMerge(item)}>Merge</button>
         </article>
       ))}
     </div>
   );
 }
 
-function Metric({ label, value }) {
-  return <article className="metric"><span>{label}</span><strong>{value}</strong></article>;
-}
 
-function Panel({ title, children }) {
-  return <section className="panel"><h2>{title}</h2>{children}</section>;
-}
+
+
 
 function Field({ label, value }) {
   return <div className="field-row"><span>{label}</span><strong>{value || "—"}</strong></div>;

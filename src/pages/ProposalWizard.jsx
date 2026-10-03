@@ -12,7 +12,11 @@ export default function ProposalWizard(){
   const navigate=useNavigate();
   const [params]=useSearchParams();
   const [step,setStep]=useState(1);
-  const [sourceMode,setSourceMode]=useState("existing");
+  const contextClientId = params.get("clientId") || "";
+  const contextEventId = params.get("eventId") || "";
+  const [context,setContext]=useState(null);
+  const [contextLoading,setContextLoading]=useState(Boolean(contextClientId || contextEventId));
+  const [sourceMode,setSourceMode]=useState(contextClientId || contextEventId ? "context" : "existing");
   const [lead,setLead]=useState(null);
   const [leadId,setLeadId]=useState(params.get("leadId")||"");
   const [experiences,setExperiences]=useState([]);
@@ -42,6 +46,29 @@ export default function ProposalWizard(){
   },[]);
 
   useEffect(()=>{if(leadId)hydrateLead(leadId);},[leadId]);
+
+  useEffect(()=>{
+    if(!contextClientId && !contextEventId)return;
+    let active=true;
+    async function loadContext(){
+      try{
+        const event=contextEventId ? await api.get("/events/"+contextEventId) : null;
+        const clientId=event?.client_id || contextClientId;
+        const client=clientId ? await api.get("/clients/"+clientId) : null;
+        if(!active)return;
+        if(!client)throw new Error("This event needs a linked client before creating a proposal.");
+        setContext({client,event});
+        const parts=(client.name||"").trim().split(/\s+/);
+        const type=normalizeEventType(event?.event_type||"");
+        setForm(current=>({...current,first_name:client.first_name||parts[0]||"",last_name:client.last_name||parts.slice(1).join(" "),email:client.email||"",phone:client.phone||"",
+          event_name:event?.event_name||"",event_type:type,custom_event_type:type==="Other"?(event?.event_type||""):"",event_date:dateOnly(event?.event_date),
+          start_time:event?.start_time||"",end_time:event?.end_time||"",guest_count:event?.guest_count||"",venue_name:event?.venue_name||"",venue_address:event?.venue_address||"",city:event?.city||"",state:event?.state||"",notes:event?.client_notes||client.notes||""}));
+      }catch(err){if(active)setError(err.message);}
+      finally{if(active)setContextLoading(false);}
+    }
+    loadContext();
+    return()=>{active=false;};
+  },[contextClientId,contextEventId]);
 
   async function hydrateLead(id){
     setError("");
@@ -120,6 +147,7 @@ export default function ProposalWizard(){
   function eventTitle(){return form.event_name||[actualEventType(),[form.first_name,form.last_name].filter(Boolean).join(" ")].filter(Boolean).join(" · ")||"Event";}
 
   function validateStepOne(){
+    if(contextLoading || (sourceMode==="context" && !context)){setError("Wait for the linked client and event to load, then try again.");return false;}
     const required=sourceMode==="existing"?[[leadId,"Select a lead"]]:[
       [form.first_name,"First name"],[form.last_name,"Last name"],[form.email,"Email"],[form.phone,"Phone"],[form.event_date,"Event date"],[form.event_type,"Event type"]
     ];
@@ -137,6 +165,7 @@ export default function ProposalWizard(){
   }
 
   async function createClientFromForm(){
+    if(context?.client)return context.client.id;
     if(lead?.converted_client_id)return lead.converted_client_id;
     try{
       const client=await api.post("/clients",{
@@ -151,6 +180,7 @@ export default function ProposalWizard(){
   }
 
   async function createEventIfReady(clientId){
+    if(context?.event)return context.event.id;
     if(lead?.converted_event_id)return lead.converted_event_id;
     if(!form.event_date||!form.start_time||!form.end_time)return null;
     try{
@@ -172,6 +202,7 @@ export default function ProposalWizard(){
   }
 
   async function createLeadIfNeeded(){
+    if(context?.event)return null;
     if(leadId)return leadId;
     const created=await api.post("/leads",{
       first_name:form.first_name,last_name:form.last_name,email:form.email,phone:form.phone,
@@ -232,25 +263,26 @@ export default function ProposalWizard(){
     <div className="detail-back"><Link to="/sales/proposals"><ArrowLeft size={16}/>Back to proposals</Link></div>
     <section className="page-heading">
       <div><p className="eyebrow">Proposal Builder</p><h1>Create Proposal</h1><p className="lede">Simple. Flexible. Fast.</p></div>
-      <Link className="lola-secondary-button" to="/sales/proposals/new/advanced">Advanced editor</Link>
+      <Link className="lola-secondary-button" to={"/sales/proposals/new/advanced"+(params.toString()?"?"+params.toString():"")}>Advanced editor</Link>
     </section>
 
-    <div className="wizard-progress">
-      {[["1","Client & Event"],["2","Services & Pricing"],["3","Review & Send"]].map(([number,label])=><div key={number} className={step>=Number(number)?"active":""}><span>{step>Number(number)?<Check size={14}/>:number}</span><strong>{label}</strong></div>)}
+    <div className="wizard-progress" aria-label="Proposal progress">
+      {[["1","Client & Event"],["2","Services & Pricing"],["3","Review & Send"]].map(([number,label])=><div key={number} aria-current={step===Number(number)?"step":undefined} className={step>=Number(number)?"active":""}><span>{step>Number(number)?<Check size={14}/>:number}</span><strong>{label}</strong></div>)}
     </div>
     {error&&<div className="toast error">{error}</div>}
 
     {step===1&&<section className="wizard-panel">
       <div className="wizard-heading"><p className="eyebrow">Step 1 of 3</p><h2>Let’s get started</h2><p>Choose an existing lead or create a new one. We’ll prefill what we know and you can complete any gaps.</p></div>
-      <div className="source-choice">
+      {sourceMode!=="context" && <div className="source-choice">
         <button className={sourceMode==="existing"?"selected":""} onClick={()=>setSourceMode("existing")}><UsersRound size={20}/><strong>Select Existing Lead</strong></button>
         <button className={sourceMode==="new"?"selected":""} onClick={()=>{setSourceMode("new");setLead(null);setLeadId("");}}><UserPlus size={20}/><strong>Create New Lead</strong></button>
-      </div>
+      </div>}
+      {sourceMode==="context" && <div className="cms-guidance" role="status">{contextLoading?"Loading client and event…":context?`Creating a proposal for ${context.client.name}${context.event?" · "+context.event.event_name:""}. Existing records will stay linked.`:"Unable to load the linked records. Retry by reopening this page."}</div>}
       {sourceMode==="existing"&&<div className="wizard-section">
         <label>Search for a lead *<RelationshipSelect resource="leads" value={leadId} placeholder="Lead" onChange={value=>setLeadId(value||"")}/></label>
         {lead&&<article className="lead-prefill-card"><div className="initial-badge">{initials((lead.first_name||"")+" "+(lead.last_name||""))}</div><div><strong>{lead.first_name} {lead.last_name}</strong><span>{lead.email} · {lead.phone}</span><small>{[lead.event_type,lead.event_date,lead.venue_name].filter(Boolean).join(" · ")}</small><p>{lead.message||lead.notes||"No notes provided."}</p></div><StatusBadge status={lead.status}/></article>}
       </div>}
-      {(sourceMode==="new"||lead)&&<div className="wizard-section">
+      {(sourceMode==="new"||lead||context)&&<div className="wizard-section">
         <h3>Client & Event Details</h3>
         <div className="form-grid">
           <label>First name *<input value={form.first_name} onChange={e=>setField("first_name",e.target.value)}/></label>
