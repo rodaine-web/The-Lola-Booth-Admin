@@ -36,7 +36,7 @@ export default function Calendar() {
     setDate(current.toISOString().slice(0,10));
   }
 
-  if (error) return <main className="page"><h1>Calendar</h1><AsyncState error={error} onRetry={()=>setRevision(r=>r+1)} noun="calendar"/></main>;
+  if (error) return <main className="page calendar-redesign"><h1>Calendar</h1><AsyncState error={error} onRetry={()=>setRevision(r=>r+1)} noun="calendar"/></main>;
 
   return (
     <main className="page">
