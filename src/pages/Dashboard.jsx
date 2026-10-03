@@ -1,164 +1,180 @@
 import AsyncState from "../components/AsyncState.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { formatMoney, formatDateOnly, formatPercent, formatCount } from "../utils/display.js";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, CircleDot, ExternalLink } from "lucide-react";
+import {
+  ArrowRight, CalendarDays, CircleDollarSign, FileText, Plus, UsersRound,
+  AlertCircle, Sparkles
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { Bar, BarChart, Cell, Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis
+} from "recharts";
 import { api } from "../api/client.js";
 import { funnelHref, sourceHref, metricHref } from "../utils/dashboard-links.js";
-import DataTable from "../components/DataTable.jsx";
 
-const primaryKeys = ["new_leads", "bookings_won", "booked_revenue", "collected_revenue", "outstanding_balance", "upcoming_events"];
-
-const ranges = [
-  ["today", "Today"],
-  ["week", "This Week"],
-  ["mtd", "Month To Date"],
-  ["ytd", "Year To Date"]
-];
+const ranges = [["today","Today"],["week","This Week"],["mtd","Month To Date"],["ytd","Year To Date"]];
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const range = searchParams.get("range") || "today";
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
+  const [searchParams,setSearchParams]=useSearchParams();
+  const range=searchParams.get("range")||"mtd";
+  const [data,setData]=useState(null);
+  const [recentLeads,setRecentLeads]=useState([]);
+  const [recentProposals,setRecentProposals]=useState([]);
+  const [error,setError]=useState("");
   const [revision,setRevision]=useState(0);
-  const [revenueSeries,setRevenueSeries]=useState("both");
-  const [revenueRecords,setRevenueRecords]=useState(null),[revenueError,setRevenueError]=useState("");
-  async function showRevenue(bucket){if(!bucket)return;setRevenueError("");try{setRevenueRecords(await api.get('/dashboard/revenue-records?'+new URLSearchParams({from:data.sqlRange.start,to:data.sqlRange.end,bucket})));}catch(e){setRevenueError(e.message);}}
 
-  useEffect(() => {
+  useEffect(()=>{
+    let active=true;
     setError("");
-    api.get(`/dashboard?range=${range}`).then(setData).catch((err) => setError(err.message));
-  }, [range,revision]);
+    Promise.all([
+      api.get(`/dashboard?range=${range}`),
+      api.get("/leads?pageSize=5&sort_by=created_at"),
+      api.get("/proposals?pageSize=5&sort_by=created_at")
+    ]).then(([dashboard,leads,proposals])=>{
+      if(!active)return;
+      setData(dashboard);
+      setRecentLeads(leads.data||[]);
+      setRecentProposals(proposals.data||[]);
+    }).catch(err=>active&&setError(err.message));
+    return()=>{active=false;};
+  },[range,revision]);
 
-  const trend = useMemo(() => data?.trends || [], [data]);
+  const metricMap=useMemo(()=>Object.fromEntries(
+    (data?.groups||[]).flatMap(group=>group.metrics||[]).map(metric=>[metric.key,metric])
+  ),[data]);
 
-  if (error) return <main className="page"><AsyncState error={error} onRetry={()=>setRevision(r=>r+1)} noun="dashboard"/></main>;
-  if (!data) return <main className="page"><div className="empty-state">Loading dashboard...</div></main>;
+  const salesTrend=useMemo(()=>(data?.trends||[]).map(row=>({
+    ...row,
+    label:String(row.bucket||"").slice(5)
+  })),[data]);
+
+  if(error)return <main className="page"><AsyncState error={error} onRetry={()=>setRevision(v=>v+1)} noun="dashboard"/></main>;
+  if(!data)return <main className="page"><AsyncState loading noun="dashboard"/></main>;
+
+  const cards=[
+    ["upcoming_events","Upcoming Events",CalendarDays],
+    ["new_leads","New Leads",UsersRound],
+    ["proposals_sent","Proposals Sent",FileText],
+    ["collected_revenue","Revenue",CircleDollarSign]
+  ];
 
   return (
-    <main className="page operations-dashboard">
-      <div className="page-heading">
+    <main className="page lola-dashboard">
+      <section className="dashboard-hero-row">
         <div>
-          <p className="eyebrow">Executive dashboard</p>
-          <h1>{data.label}</h1>
-          <p className="lede">{formatRange(data.sqlRange)} · {data.timeZone}</p>
+          <p className="eyebrow">Dashboard</p>
+          <h1>Good morning, {firstName(data?.viewerName)||"Wande"}!</h1>
+          <p className="lede">Here’s what’s happening with The Lola Booth today.</p>
         </div>
-        <div className="quick-actions">
-          <Link to="/sales/leads">New Lead</Link>
-          <Link to="/events/events">New Event</Link>
-          <Link to="/sales/clients">New Client</Link>
-          <Link to="/operations/live">Live operations</Link>
+        <div className="dashboard-range-picker">
+          {ranges.map(([key,label])=><button key={key} className={range===key?"active":""} onClick={()=>setSearchParams({range:key})}>{label}</button>)}
         </div>
-      </div>
-
-      {data.dataScope&&<p className="note-text">Explicit QA, seed and legacy fixture records are excluded from reporting.{data.dataScope.unreviewedLeads>0?` ${data.dataScope.unreviewedLeads} older leads are unreviewed and remain included until classified.`:""}</p>}
-      <div className="segmented dashboard-ranges">
-        {ranges.map(([key, label]) => <button key={key} className={range === key ? "active" : ""} onClick={() => setSearchParams({ range: key })}>{label}</button>)}
-      </div>
-
-      <section className="kpi-grid dashboard-priority" aria-label="Key performance indicators">
-        {primaryKeys.map(key => data.groups.flatMap(group => group.metrics).find(metric => metric.key === key)).filter(Boolean).map(metric => <Kpi key={metric.key} metric={metric} range={data.sqlRange} />)}
       </section>
-      <section className="dashboard-revenue">
-        <Panel title="Revenue Trend"><p className="note-text" role="status">{trend.length} revenue periods. Booked {formatMoney(trend.reduce((sum,row)=>sum+Number(row.booked_revenue||0),0))}; collected {formatMoney(trend.reduce((sum,row)=>sum+Number(row.collected_revenue||0),0))}. Use Inspect revenue period for keyboard access to exact records.</p><div className="segmented-control" aria-label="Revenue series">{[["both","Both series"],["booked","Booked"],["collected","Collected"]].map(([key,label])=><button aria-pressed={revenueSeries===key} key={key} onClick={()=>setRevenueSeries(key)}>{label}</button>)}</div>
-          {trend.length ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={trend} onClick={point=>showRevenue(point?.activeLabel)} accessibilityLayer>
-                <CartesianGrid stroke="#E8DDD0" />
-                <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={value=>formatMoney(value)}/>
-                <Tooltip formatter={value=>formatMoney(value)}/>
-                {revenueSeries!=="collected"&&<Area dataKey="booked_revenue" name="Booked" stroke="#1A1A1A" fill="#E8DDD0" />}
-                {revenueSeries!=="booked"&&<Area dataKey="collected_revenue" name="Collected" stroke="#B89B6B" fill="#D9C6A8" />}
-              </AreaChart>
+
+      <section className="dashboard-top-grid">
+        <div className="dashboard-kpi-row">
+          {cards.map(([key,label,Icon])=>{
+            const metric=metricMap[key]||{};
+            return <Link key={key} className="dashboard-kpi-card" to={metricHref(metric,data.sqlRange)}>
+              <span className="dashboard-kpi-icon"><Icon size={20}/></span>
+              <div><strong>{metric.format==="money"?formatMoney(metric.value||0):formatCount(metric.value||0)}</strong><span>{label}</span><small>{metric.comparison?.label||"Current period"}</small></div>
+            </Link>;
+          })}
+        </div>
+        <aside className="dashboard-brand-card">
+          <div>
+            <span>THE LOLA BOOTH</span>
+            <h2>Good people.<br/>Better photos.</h2>
+            <Link to="/operations/galleries">View Gallery <ArrowRight size={15}/></Link>
+          </div>
+          <Sparkles size={54}/>
+        </aside>
+      </section>
+
+      <section className="dashboard-main-grid">
+        <article className="panel dashboard-chart-card">
+          <div className="dashboard-card-heading">
+            <div><h2>Sales Overview</h2><p>Revenue, proposals and bookings over time.</p></div>
+            <span>{data.label}</span>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={salesTrend}>
+              <defs>
+                <linearGradient id="revenueFade" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#b28745" stopOpacity={.3}/><stop offset="95%" stopColor="#b28745" stopOpacity={0}/></linearGradient>
+              </defs>
+              <CartesianGrid stroke="#eee9e2" vertical={false}/>
+              <XAxis dataKey="label" tick={{fontSize:11}} axisLine={false} tickLine={false}/>
+              <YAxis tick={{fontSize:11}} axisLine={false} tickLine={false} tickFormatter={v=>formatMoney(v)}/>
+              <Tooltip formatter={v=>formatMoney(v)}/>
+              <Area type="monotone" dataKey="booked_revenue" name="Booked" stroke="#171717" fill="transparent" strokeWidth={2}/>
+              <Area type="monotone" dataKey="collected_revenue" name="Collected" stroke="#b28745" fill="url(#revenueFade)" strokeWidth={2}/>
+            </AreaChart>
+          </ResponsiveContainer>
+        </article>
+
+        <article className="panel dashboard-source-card">
+          <div className="dashboard-card-heading"><div><h2>Leads by Source</h2><p>Where your leads are coming from.</p></div></div>
+          <div className="dashboard-source-layout">
+            <ResponsiveContainer width="48%" height={220}>
+              <PieChart>
+                <Pie data={data.leadSources||[]} dataKey="leads" nameKey="source" innerRadius={58} outerRadius={88} paddingAngle={2}>
+                  {(data.leadSources||[]).map((_,i)=><Cell key={i} fill={["#e3c79d","#171717","#e7a1aa","#d6b4cf","#b6b8bb","#eadfd2"][i%6]}/>)}
+                </Pie>
+                <Tooltip/>
+              </PieChart>
             </ResponsiveContainer>
-          ) : <div className="empty-state">No revenue movement in this period.</div>}
-          <p className="note-text">Booked and collected revenue in the business timezone. Select a chart point or a period below to inspect matching records.</p>
-          {trend.length>0&&<label>Inspect revenue period<select value={revenueRecords?.bucket||''} onChange={e=>showRevenue(e.target.value)}><option value="">Choose a period</option>{trend.map(point=><option key={point.bucket} value={point.bucket}>{point.bucket}</option>)}</select></label>}
-          {revenueError&&<p role="alert">{revenueError}</p>}
-          {revenueRecords&&<section><h3>Revenue records · {revenueRecords.bucket}</h3><h4>Booked</h4>{revenueRecords.bookings.length?revenueRecords.bookings.map(row=><p key={row.id}><Link to={'/events/events/'+row.event_id}>{row.label||'Booked event'}</Link> · {formatMoney(row.amount)}</p>):<p>No bookings in this period.</p>}<h4>Collected</h4>{revenueRecords.payments.length?revenueRecords.payments.map(row=><p key={row.id}><Link to={'/finance/payments/'+row.id}>{row.label||'Payment receipt'}</Link> · {formatMoney(row.amount)}</p>):<p>No collections in this period.</p>}</section>}
-          <div className="chart-links"><Link to="/events/events">View booked events</Link><Link to="/finance/invoices?balance=open">Review outstanding invoices</Link></div>
-        </Panel>
-
-      </section>
-
-      <section className="dashboard-grid dashboard-charts-first">
-        <Panel title="Sales pipeline"><ResponsiveContainer width="100%" height={260}><BarChart data={data.funnel.stages} layout="vertical" margin={{left:15,right:25}}><CartesianGrid horizontal={false} stroke="#e8ddd0"/><XAxis type="number" allowDecimals={false}/><YAxis dataKey="label" type="category" width={115} tick={{fontSize:12}}/><Tooltip/><Bar dataKey="count" name="Records" fill="#b89b6b" radius={[0,4,4,0]} onClick={entry=>navigate(funnelHref(entry.key,data.sqlRange))}/></BarChart></ResponsiveContainer><div className="chart-links">{data.funnel.stages.map(stage=><Link key={stage.key} to={funnelHref(stage.key,data.sqlRange)}>{stage.label} <strong>{stage.count}</strong></Link>)}</div><p className="note-text">{data.funnel.attribution}</p></Panel>
-        <Panel title="Lead sources"><ResponsiveContainer width="100%" height={260}><BarChart data={data.leadSources}><CartesianGrid vertical={false} stroke="#e8ddd0"/><XAxis dataKey="source" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="leads" name="Leads" fill="#514a40" radius={[4,4,0,0]} onClick={entry=>navigate(sourceHref(entry.source,data.sqlRange))}/></BarChart></ResponsiveContainer><div className="chart-links">{data.leadSources.map(source=><Link key={source.source} to={sourceHref(source.source,data.sqlRange)}>{source.source} <strong>{source.leads}</strong></Link>)}</div>{!data.leadSources.length&&<p className="note-text">No leads in the selected period.</p>}</Panel>
-      </section>
-      <section className="dashboard-grid dashboard-operations">
-        <Panel title="Needs Attention">
-          <div className="attention-list">
-            {data.needsAttention.map((item) => <Link key={`${item.type}-${item.href}-${item.date}`} to={item.href}><StatusBadge status={item.severity||"NEEDS_ATTENTION"}/><span>{item.message}</span><small>{item.type.replaceAll("_", " ")}</small></Link>)}
-            {!data.needsAttention.length && <div className="empty-state">No urgent operational issues.</div>}
+            <div className="dashboard-source-list">
+              {(data.leadSources||[]).slice(0,6).map(source=><Link key={source.source} to={sourceHref(source.source,data.sqlRange)}><span>{source.source}</span><strong>{source.leads}</strong></Link>)}
+            </div>
           </div>
-        </Panel>
-        <Panel title="Upcoming Readiness">
-          <div className="attention-list">
-            {(data.upcomingEvents || data.readiness).map((event) => <Link key={event.id} to={`/events/events/${event.id}`}><StatusBadge status={event.operational_readiness ? (event.operational_readiness.critical ? "BLOCKED" : event.operational_readiness.score<100 ? "NEEDS_ATTENTION" : "READY") : event.readiness_issues?.length ? "NEEDS_ATTENTION" : "READY"}/><span>{event.event_name}</span><small>{event.operational_readiness ? `${event.operational_readiness.complete} of ${event.operational_readiness.total} checks complete` : `${event.readiness_issues?.length||0} readiness checks outstanding`}</small></Link>)}
-            {!data.readiness.length && <div className="empty-state">Upcoming events look ready.</div>}
+        </article>
+
+        <article className="panel dashboard-today-card">
+          <div className="dashboard-card-heading"><div><h2>Today</h2><p>{formatDateOnly(new Date().toISOString())}</p></div><Link to="/events/calendar">View Calendar <ArrowRight size={14}/></Link></div>
+          <div className="today-list">
+            {(data.todaysEvents||[]).slice(0,5).map(event=><Link key={event.id} to={`/events/events/${event.id}`}><time>{event.start_time||"TBD"}</time><div><strong>{event.event_name}</strong><span>{event.client_name||"Client pending"} · {event.venue_name||"Venue TBD"}</span></div><StatusBadge status={event.operational_status||event.status}/></Link>)}
+            {!data.todaysEvents?.length&&<div className="mini-empty">No events scheduled today.</div>}
           </div>
-        </Panel>
-      </section>
-      <section className="dashboard-grid">
-        <Panel title={range === "today" ? "Today's Events" : "Event Schedule"}>
-          <DataTable rows={range === "week" ? flattenWeekly(data.weeklySchedule) : data.todaysEvents} columns={["event_date", "start_time", "client_name", "event_name", "venue_name", "experience_name", "package_name", "payment_status", "status"]} getRowHref={(row) => `/events/events/${row.id}`} empty="Nothing is booked for this period." />
-        </Panel>
-        <Panel title={range === "today" ? "Today's Tasks" : "Tasks Due"}>
-          <DataTable rows={data.tasksDue} columns={["due_date", "title", "owner_name", "priority", "client_name", "event_name", "status"]} empty="No tasks due in this period." />
-        </Panel>
-
+        </article>
       </section>
 
-      <details className="panel dashboard-secondary"><summary>Source performance and recent activity</summary><section className="dashboard-grid">
-        <Panel title="Lead Source Performance">
-          <DataTable rows={data.leadSources} columns={["source", "leads", "qualified", "proposals", "bookings", "conversion_rate", "booked_revenue"]} empty="No leads in this period." />
-        </Panel>
-        <Panel title="Recent Activity">
-          <DataTable rows={data.recentActivity} columns={["action", "summary", "entity_type", "created_at"]} empty="No recent activity." />
-        </Panel>
+      <section className="dashboard-bottom-grid">
+        <article className="panel">
+          <div className="dashboard-card-heading"><h2>Recent Leads</h2><Link to="/sales/leads">View All <ArrowRight size={14}/></Link></div>
+          <div className="dashboard-list">
+            {recentLeads.map(lead=><Link key={lead.id} to={`/sales/leads/${lead.id}`}><span className="initial-badge">{initials(`${lead.first_name||""} ${lead.last_name||""}`)}</span><div><strong>{lead.first_name} {lead.last_name}</strong><small>{lead.email}</small></div><span>{lead.event_type||"Event TBD"}</span><small>{lead.created_at?relativeTime(lead.created_at):""}</small></Link>)}
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="dashboard-card-heading"><h2>Recent Proposals</h2><Link to="/sales/proposals">View All <ArrowRight size={14}/></Link></div>
+          <div className="dashboard-list">
+            {recentProposals.map(proposal=><Link key={proposal.id} to={`/sales/proposals/${proposal.id}`}><div><strong>{proposal.proposal_number}</strong><small>{proposal.client_name||"Client"}</small></div><span>{formatMoney(proposal.total||0)}</span><StatusBadge status={proposal.status}/><small>{proposal.created_at?formatDateOnly(proposal.created_at):""}</small></Link>)}
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="dashboard-card-heading"><h2>Tasks & Attention</h2><Link to="/operations/tasks">View All <ArrowRight size={14}/></Link></div>
+          <div className="attention-list dashboard-attention">
+            {(data.needsAttention||[]).slice(0,6).map((item,index)=><Link key={index} to={item.href||"/"}><span className="attention-icon"><AlertCircle size={16}/></span><div><strong>{item.message}</strong><small>{String(item.type||"Attention").replaceAll("_"," ")}</small></div></Link>)}
+            {!data.needsAttention?.length&&<div className="mini-empty">Nothing urgent needs your attention.</div>}
+          </div>
+        </article>
       </section>
 
-      </details>
-      <details className="panel dashboard-secondary"><summary>Additional performance metrics</summary>
-      <section className="dashboard-more-metrics" aria-label="Detailed metrics">
-        {data.groups.map(group => <details key={group.title} className="panel"><summary>{group.title} details</summary><div className="kpi-grid kpi-grid-phase7">{group.metrics.filter(metric => !primaryKeys.includes(metric.key)).map(metric => <Kpi key={metric.key} metric={metric} range={data.sqlRange} />)}</div></details>)}
+      <section className="dashboard-quick-actions">
+        <button onClick={()=>navigate("/sales/leads?create=true")}><Plus size={15}/>New Lead</button>
+        <button onClick={()=>navigate("/sales/proposals/new")}><Plus size={15}/>Create Proposal</button>
+        <button onClick={()=>navigate("/finance/invoices/new")}><Plus size={15}/>Create Invoice</button>
+        <button onClick={()=>navigate("/events/events?create=true")}><Plus size={15}/>New Event</button>
       </section>
-      </details>
-
-      <details className="panel">
-        <summary>Metric Definitions</summary>
-        <div className="definition-grid">
-          {Object.entries(data.metricDefinitions).map(([key, value]) => <p key={key}><strong>{key.replaceAll("_", " ")}</strong>{value}</p>)}
-        </div>
-      </details>
     </main>
   );
 }
 
-function Kpi({metric,range}) {
-  return <Link className="kpi kpi-link" to={metricHref(metric,range)}><span>{metric.label}</span><strong>{formatMetric(metric)}</strong><small className={`comparison ${metric.comparison.direction}`}>{metric.comparison.direction === "up" ? <ArrowUpRight size={14}/> : metric.comparison.direction === "down" ? <ArrowDownRight size={14}/> : <CircleDot size={14}/>} {metric.comparison.label}</small></Link>;
-}
-
-function Panel({ title, children }) {
-  return <section className="panel"><h2>{title}</h2>{children}</section>;
-}
-
-function formatMetric(metric) {
-  if (metric.format === "money") return formatMoney(metric.value || 0);
-  if (metric.format === "percent") return formatPercent(metric.value);
-  if (metric.format === "minutes") return `${Number(metric.value || 0).toFixed(0)} min`;
-  return formatCount(metric.value);
-}
-
-function formatRange(range) {
-  return `${formatDateOnly(range.start)} to ${formatDateOnly(range.end)}`;
-}
-
-function flattenWeekly(schedule = {}) {
-  return Object.values(schedule).flat();
-}
+function firstName(name=""){return name.trim().split(/\s+/)[0]||"";}
+function initials(name=""){return name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()).join("")||"LO";}
+function relativeTime(value){const diff=Date.now()-new Date(value).getTime();const hours=Math.floor(diff/3600000);if(hours<1)return"Just now";if(hours<24)return`${hours} hr ago`;const days=Math.floor(hours/24);return`${days} day${days===1?"":"s"} ago`;}
