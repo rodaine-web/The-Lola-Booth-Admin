@@ -112,3 +112,9 @@ Database tests use mocked PostgreSQL responses. They do not prove that migration
 - Existing media library can provide hosted URLs; an embedded campaign media picker is not included.
 - The test preview token intentionally cannot register interest. A QA-only campaign is needed for end-to-end submission testing.
 - Existing notification email delivery behavior is reused. Its external email side effect occurs within the interest transaction; provider review may be needed after a crash during notification delivery.
+
+## Staging database verification update
+
+The user ran the prepared Railway SSH checks from their Terminal. The service confirmed `APP_ENV=staging` and the staging admin origin before connecting. PostgreSQL 18.6 was reachable. Migration 037 passed its rollback trial and was then applied to the staging database. All 14 reported checks passed: migration SQL, draft/channel defaults, duplicate recipient and interest constraints, invalid status/package constraints, hashed token resolution, event idempotency, suppression, six permissions and administrator grants, test rollback, final migration application and draft seed. All five tables now exist. No synthetic records remain and no emails were sent.
+
+The hosted `/communications/campaigns` route currently returns Page not found, so browser/API end-to-end tests still await deployment of the campaign application commit. Local GitHub access is blocked by this session's DNS/network restrictions. The branch has not been pushed. Earlier statements about migration not being executed refer to the initial implementation checks, before this staging verification.
