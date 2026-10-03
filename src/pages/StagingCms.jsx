@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import {Link} from 'react-router-dom';
 import {api} from '../api/client.js';
 import {useAuth} from '../context/AuthContext.jsx';
 import AsyncState from '../components/AsyncState.jsx';
@@ -29,7 +30,7 @@ export default function StagingCms({section}){
  async function action(row,act){if(busy)return;setBusy(true);try{await api.post(`/website/staging/${type}/${row.id}/${act}`,{});setNotice(`${act==='unpublish'?'Unpublished':act==='publish'?'Published':'Archived'} in STAGING only.`);await load();}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function upload(file){if(!file||busy)return;setBusy(true);try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(file);});await api.post('/website/staging/upload',{filename:file.name,mimeType:file.type,data});setNotice('Uploaded to staging media.');await load();}catch(e){setError(e.message);}finally{setBusy(false);}}
  const visible=(rows||[]).filter(r=>JSON.stringify(r.payload).toLowerCase().includes(search.toLowerCase())||r.entity_key.includes(search));
- return <main className="page cms-workspace"><div className="page-heading"><div><p className="eyebrow">Website CMS · STAGING</p><h1>{titles[type]||type}</h1><p>Edits and publication apply only to the staging website. Public V1 is read-only.</p><a href="https://staging.thelolabooth.com" target="_blank" rel="noreferrer">Open staging website ↗</a></div>{can('write:website')&&<button onClick={()=>edit(null)}>Add record</button>}</div>
+ return <main className="page cms-workspace"><div className="page-heading lola-page-heading"><div><p className="eyebrow">Website CMS · STAGING</p><h1>{titles[type]||type}</h1><p className="lede">Update staging website content visually while keeping public V1 unchanged.</p></div><div className="button-row"><a className="lola-secondary-button" href="https://staging.thelolabooth.com" target="_blank" rel="noreferrer">Open staging website ↗</a>{can('write:website')&&<button className="primary-action" onClick={()=>edit(null)}>Add record</button>}</div></div><nav className="cms-section-nav">{[["homepage","Homepage"],["hero-slides","Hero Slides"],["experiences","Experiences"],["packages","Packages"],["events","Event Types"],["gallery","Gallery"],["testimonials","Testimonials"],["faq","FAQs"],["media-library","Media"],["site-settings","Site Settings"]].map(([path,label])=><Link className={section===path?"active":""} key={path} to={"/website/"+path}>{label}</Link>)}</nav>
  {notice&&<p role="status">{notice}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
  <label>Search staging records<input value={search} onChange={e=>setSearch(e.target.value)}/></label>
  {type==='media'&&can('write:website')&&<label>Upload staging image<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e=>upload(e.target.files[0])}/></label>}
