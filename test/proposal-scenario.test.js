@@ -79,3 +79,27 @@ test('public scenario excludes internal client and event fields',()=>{
  const result=composeProposal({input:{event_type:'Wedding',notes:'PRIVATE_NOTE'},client:{name:'Public Client',email:'private@example.com',notes:'PRIVATE_CLIENT_NOTE'},event:{event_name:'Public Event',internal_notes:'PRIVATE_EVENT_NOTE',owner_user_id:'PRIVATE_OWNER'},experiences:[catalog[0]],pricing:{},lines:[]});
  const serialized=JSON.stringify(result);assert.doesNotMatch(serialized,/PRIVATE_|private@example/);assert.equal(result.variables.client_name,'Public Client');
 });
+
+test('editorial renderer embeds fonts, vector icons and preserves all event details',()=>{
+ const result=model('Wedding',[catalog[0]],{event_details:{event_name:'QA celebration',event_date:'2026-12-12',start_time:'17:00',end_time:'22:00',venue_name:'The Laurel',venue_address:'123 Main Street',city:'Austin',state:'TX',zip:'78701',special_requests:'Gold backdrop'}});
+ const html=proposalHtml({content:{scenario:result}});
+ assert.match(html,/font-family:LolaEditorial/);
+ assert.match(html,/font-family:LolaSignature/);
+ assert.match(html,/data:font\/ttf;base64/);
+ assert.match(html,/<svg viewBox="0 0 24 24"/);
+ assert.match(html,/December 12, 2026/);
+ assert.match(html,/5:00 PM/);
+ assert.match(html,/78701/);
+ assert.match(html,/Gold backdrop/);
+ assert.match(html,/data-kind="cover"/);
+});
+test('event imagery never falls back to a selected booth hero',async()=>{
+ const {scenarioImage}=await import('../server/src/services/proposal-scenario-document.js');
+ const hero='data:image/jpeg;base64,Ym9vdGg=';
+ const result=model('Wedding',[{...catalog[0],visuals:{hero}}]);
+ assert.equal(scenarioImage(result,'cover'),null);
+ assert.equal(scenarioImage(result,'event'),null);
+ assert.equal(scenarioImage(result,'experience:glam',result.experiences[0]),hero);
+ result.mediaImages={event:[{dataUri:'data:image/jpeg;base64,ZXZlbnQ='}]};
+ assert.equal(scenarioImage(result,'cover'),'data:image/jpeg;base64,ZXZlbnQ=');
+});
