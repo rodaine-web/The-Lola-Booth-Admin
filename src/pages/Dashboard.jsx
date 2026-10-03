@@ -12,12 +12,14 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis
 } from "recharts";
 import { api } from "../api/client.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import { funnelHref, sourceHref, metricHref } from "../utils/dashboard-links.js";
 
 const ranges = [["today","Today"],["week","This Week"],["mtd","Month To Date"],["ytd","Year To Date"]];
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams,setSearchParams]=useSearchParams();
   const range=searchParams.get("range")||"mtd";
   const [data,setData]=useState(null);
@@ -66,7 +68,7 @@ export default function Dashboard() {
       <section className="dashboard-hero-row">
         <div>
           <p className="eyebrow">Dashboard</p>
-          <h1>Good morning, {firstName(data?.viewerName)||"Wande"}!</h1>
+          <h1>Good morning, {firstName(user?.name)||"there"}!</h1>
           <p className="lede">Here’s what’s happening with The Lola Booth today.</p>
         </div>
         <div className="dashboard-range-picker">
