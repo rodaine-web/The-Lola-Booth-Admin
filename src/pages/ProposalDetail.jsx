@@ -17,6 +17,8 @@ export default function ProposalDetail() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy,setBusy]=useState(false);
+  const [sendOpen,setSendOpen]=useState(false);
+  const [recipient,setRecipient]=useState("");
 
   useEffect(() => { load(); }, [id]);
 
@@ -69,7 +71,7 @@ export default function ProposalDetail() {
         <div className="detail-actions">
           {can("write:sales") && ["DRAFT", "READY"].includes(proposal.status) && proposal.proposal_source !== "UPLOADED" && <Link className="primary-action" to={`/sales/proposals/${id}/edit`}>Edit proposal</Link>}
           {accessAvailable && proposal.public_url && <a href={proposal.public_url} target="_blank" rel="noreferrer">Public proposal</a>}
-          <button disabled={busy || !accessAvailable} className="primary-action" onClick={() => action(() => api.post(`/proposals/${id}/send`, {}), "Proposal submitted to the email provider.")}><Mail size={16} />Send</button>
+          <button disabled={busy || !accessAvailable} className="primary-action" onClick={() => {setRecipient(proposal.client_email || "");setSendOpen(true);}}><Mail size={16} />Send</button>
           <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/pdf`, `${proposal.proposal_number}.pdf`), "PDF generated.")}><Download size={16} />PDF</button>
           <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/docx`, `${proposal.proposal_number}.docx`), "DOCX generated.")}><FileText size={16} />DOCX</button>
           <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/duplicate`, {}), "Proposal duplicated.")}><Copy size={16} />Duplicate</button>
@@ -78,6 +80,12 @@ export default function ProposalDetail() {
         </div>
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      {sendOpen && <form className="panel" onSubmit={event=>{event.preventDefault();action(async()=>{await api.post(`/proposals/${id}/send`,{recipient:recipient.trim()});setSendOpen(false);},"Proposal submitted to the email provider.");}}>
+        <h2>Send proposal</h2>
+        <p>The recipient will receive a link to this proposal and an attached PDF.</p>
+        <label>Recipient email<input type="email" required disabled={busy} value={recipient} onChange={event=>setRecipient(event.target.value)}/></label>
+        <div className="button-row"><button className="primary-action" disabled={busy}>{busy?"Sending…":"Send proposal email"}</button><button type="button" disabled={busy} onClick={()=>setSendOpen(false)}>Cancel</button></div>
+      </form>}
       {proposal.status === "ACCEPTED" && !proposal.linked_invoice_id && <section className="panel"><h2>Proposal accepted</h2><p><strong>Next step:</strong> create one invoice for this proposal. The invoice tracks the full proposal total, requests the configured deposit first, and then continues with the remaining balance.</p><div className="button-row"><button className="primary-action" disabled={busy} onClick={createInvoiceFromProposal}><ReceiptText size={16} />Create Invoice</button></div></section>}
       {proposal.linked_invoice_id && <section className="panel"><h2>Invoice created</h2><p>{proposal.linked_invoice_number || "The linked invoice"} · {proposal.linked_invoice_status || "Current"}. Deposit and remaining balance are managed on this single invoice.</p><Link className="primary-action" to={`/finance/invoices/${proposal.linked_invoice_id}`}><ReceiptText size={16} />Open Invoice</Link></section>}
       {!accessAvailable && <section className="panel"><p role="status">Public access not available.</p>{can("write:sales") && <button disabled={busy} onClick={()=>action(()=>api.post(`/proposals/${id}/ensure-access`,{}),"Secure access generated.")}>Generate Secure Access</button>}</section>}
