@@ -47,7 +47,7 @@ export default function LiveOperations() {
   }, [dashboard]);
 
   return (
-    <main className="page">
+    <main className="page live-operations-redesign">
       <div className="page-heading">
         <div>
           <p className="eyebrow">Operations</p>
