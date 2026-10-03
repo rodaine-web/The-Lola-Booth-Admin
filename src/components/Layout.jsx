@@ -1,46 +1,63 @@
 import { GALLERY_ENABLED } from "../utils/features.js";
 import EnvironmentBadge from "./EnvironmentBadge.jsx";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, BriefcaseBusiness, CalendarDays, CircleDollarSign, ClipboardList, Gauge, HeartPulse, LogOut, Package, Search, Shield, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  BarChart3, Bell, Boxes, CalendarDays, ChevronDown, CircleDollarSign, ContactRound,
+  FileText, Gauge, HeartPulse, Images, LogOut, MessageSquareText, Package, PanelsTopLeft,
+  Plug, Plus, ReceiptText, RadioTower, Search, Settings, ShieldCheck, Sparkles,
+  UserCog, UsersRound, Wrench
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import NotificationCenter from "./NotificationCenter.jsx";
 
-const originalSections = [
-  { label: "Dashboard", icon: Gauge, items: [{ label: "Dashboard", to: "/", permission: "read:dashboard" }] },
-  { label: "Sales", icon: BriefcaseBusiness, items: [{ label: "Leads", to: "/sales/leads", permission: "read:sales" }, { label: "Clients", to: "/sales/clients", permission: "read:sales" }, { label: "Proposals", to: "/sales/proposals", permission: "read:sales" }, { label: "Communications", to: "/sales/communications", permission: "read:sales" }] },
-  { label: "Events", icon: CalendarDays, items: [{ label: "Events", to: "/events/events", permission: "read:events" }, { label: "Calendar", to: "/events/calendar", permission: "read:events" }, { label: "Equipment", to: "/events/equipment", permission: "read:events" }, { label: "Staff", to: "/events/staff", permission: "read:events" }] },
-  { label: "Finance", icon: CircleDollarSign, items: [{ label: "Payments", to: "/finance/payments", permission: "read:finance" }, { label: "Invoices", to: "/finance/invoices", permission: "read:finance" }] },
-  { label: "Website", icon: Sparkles, items: [{label:"CMS Connection",to:"/website/connection",permission:"read:website"},{label:"Page Items",to:"/website/page-items",permission:"read:website"},{label:"Website Images",to:"/website/media-mappings",permission:"read:website"},{ label: "Page SEO", to: "/website/homepage", permission: "read:website" }, { label: "Hero Slides", to: "/website/hero-slides", permission: "read:website" }, { label: "Gallery", to: "/website/gallery", permission: "read:website" }, { label: "Packages", to: "/website/packages", permission: "read:website" }, { label: "Experiences", to: "/website/experiences", permission: "read:website" }, { label: "Event Types", to: "/website/events", permission: "read:website" }, { label: "Testimonials", to: "/website/testimonials", permission: "read:website" }, { label: "FAQ", to: "/website/faq", permission: "read:website" }, { label: "Media Library", to: "/website/media-library", permission: "read:website" }, { label: "SEO / Site Settings", to: "/website/site-settings", permission: "read:website" }] },
-  { label: "Catalog", icon: Package, items: [{ label: "Add-ons", to: "/content/addons", permission: "read:content" }] },
-  { label: "Operations", icon: ClipboardList, items: [{ label: "Live", to: "/operations/live", permission: "read:dashboard" }, { label: "Tasks", to: "/operations/tasks", permission: "read:tasks" }, { label: "Files", to: "/operations/files", permission: "read:tasks" }, { label: "Galleries", to: "/operations/galleries", permission: "read:events" }] },
-  { label: "Insights", icon: BarChart3, items: [{ label: "Analytics", to: "/insights/analytics", permission: "read:analytics" }] },
-  { label: "System", icon: Shield, items: [{ label: "Users", to: "/system/users", permission: "view:users" }, { label: "Integrations", to: "/system/integrations", permission: "read:integrations" }, { label: "Health", to: "/system/health", permission: "read:settings", icon: HeartPulse }, { label: "Audit Log", to: "/system/audit-log", permission: "read:audit" }, { label: "Settings", to: "/system/settings", permission: "read:settings" }] }
-];
-// Routes remain stable; incomplete standalone modules are omitted from primary navigation.
-const items = originalSections.flatMap(section=>section.items);
-const pick = paths => paths.map(to=>items.find(item=>item.to===to)).filter(Boolean);
-const sections = [
- {label:'Dashboard',icon:Gauge,items:pick(['/'])},
- {label:'Sales',icon:BriefcaseBusiness,items:pick(['/sales/leads','/sales/clients','/sales/proposals','/finance/invoices','/finance/payments','/content/addons'])},
- {label:'Events',icon:CalendarDays,items:pick(['/events/events','/events/calendar','/operations/tasks'])},
- {label:'Operations',icon:ClipboardList,items:pick(['/operations/live','/events/staff','/events/equipment','/operations/galleries'])},
- {label:'Communications',icon:BriefcaseBusiness,items:pick(['/sales/communications'])},
- {label:'Website',icon:Sparkles,items:originalSections.find(s=>s.label==='Website').items},
- {label:'Reporting',icon:BarChart3,items:pick(['/insights/analytics'])},
- {label:'System',icon:Shield,items:originalSections.find(s=>s.label==='System').items}
+const navItems = [
+  { label: "Dashboard", to: "/", icon: Gauge, permission: "read:dashboard" },
+  { label: "Leads", to: "/sales/leads", icon: UsersRound, permission: "read:sales" },
+  { label: "Clients", to: "/sales/clients", icon: ContactRound, permission: "read:sales" },
+  { label: "Events", to: "/events/events", icon: CalendarDays, permission: "read:events" },
+  { label: "Proposals", to: "/sales/proposals", icon: FileText, permission: "read:sales" },
+  { label: "Invoices", to: "/finance/invoices", icon: ReceiptText, permission: "read:finance" },
+  { label: "Payments", to: "/finance/payments", icon: CircleDollarSign, permission: "read:finance" },
+  { label: "Calendar", to: "/events/calendar", icon: CalendarDays, permission: "read:events" },
+  { label: "Live Operations", to: "/operations/live", icon: RadioTower, permission: "read:dashboard" },
+  { label: "Communications", to: "/sales/communications", icon: MessageSquareText, permission: "read:sales" },
+  { label: "Gallery", to: "/operations/galleries", icon: Images, permission: "read:events", gallery: true },
+  { label: "Website CMS", to: "/website/homepage", icon: PanelsTopLeft, permission: "read:website", cms: true },
+  { label: "Experiences", to: "/content/experiences", icon: Sparkles, permission: "read:content" },
+  { label: "Packages", to: "/content/packages", icon: Package, permission: "read:content" },
+  { label: "Add-ons", to: "/content/addons", icon: Boxes, permission: "read:content" },
+  { label: "Staff", to: "/events/staff", icon: UsersRound, permission: "read:events" },
+  { label: "Equipment", to: "/events/equipment", icon: Wrench, permission: "read:events" },
+  { label: "Reports & Analytics", to: "/insights/analytics", icon: BarChart3, permission: "read:analytics" },
+  { label: "Integrations", to: "/system/integrations", icon: Plug, permission: "read:integrations" },
+  { label: "Users", to: "/system/users", icon: UserCog, permission: "view:users" },
+  { label: "System Health", to: "/system/health", icon: HeartPulse, permission: "read:settings" },
+  { label: "Audit Log", to: "/system/audit-log", icon: ShieldCheck, permission: "read:audit" },
+  { label: "Settings", to: "/system/settings", icon: Settings, permission: "read:settings" }
 ];
 
+const createItems = [
+  { label: "New Lead", to: "/sales/leads?create=true", permission: "write:sales" },
+  { label: "New Event", to: "/events/events?create=true", permission: "write:events" },
+  { label: "Create Proposal", to: "/sales/proposals/new", permission: "write:sales" },
+  { label: "Create Invoice", to: "/finance/invoices/new", permission: "write:finance" }
+];
 
 export default function Layout() {
   const { user, logout, can } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [navigationOpen, setNavigationOpen] = useState(false);
-  useEffect(() => setNavigationOpen(false), [pathname]);
+  const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
+
+  useEffect(() => {
+    setNavigationOpen(false);
+    setCreateOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -48,47 +65,82 @@ export default function Layout() {
       return;
     }
     const timer = setTimeout(() => {
-      api.get(`/search?q=${encodeURIComponent(query)}`).then((result) => setResults(result.data)).catch(() => setResults([]));
+      api.get(`/search?q=${encodeURIComponent(query)}`)
+        .then((result) => setResults(result.data || []))
+        .catch(() => setResults([]));
     }, 250);
     return () => clearTimeout(timer);
   }, [query]);
 
+  const visibleNav = useMemo(() => navItems.filter(item => {
+    if (!can(item.permission)) return false;
+    if (item.gallery && !GALLERY_ENABLED) return false;
+    if (item.cms && import.meta.env.VITE_CMS_ENABLED === "false") return false;
+    return true;
+  }), [can]);
+
+  const visibleCreate = createItems.filter(item => can(item.permission));
+
+  function openResult(item) {
+    setQuery("");
+    if (item.type === "lead") navigate(`/sales/leads/${item.id}`);
+    else if (item.type === "event") navigate(`/events/events/${item.id}`);
+    else if (item.type === "client") navigate(`/sales/clients/${item.id}`);
+    else if (item.type === "proposal") navigate(`/sales/proposals/${item.id}`);
+    else if (item.type === "invoice") navigate(`/finance/invoices/${item.id}`);
+    else navigate("/");
+  }
+
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <img className="brand-logo brand-logo-admin-stacked" src="/brand/LOLA_Primary_Light_Transparent.png" alt="The LOLA Booth" />
+    <div className="lola-app-shell">
+      <aside className={navigationOpen ? "lola-sidebar open" : "lola-sidebar"}>
+        <div className="lola-brand">
+          <img src="/brand/LOLA_Primary_Light_Transparent.png" alt="The LOLA Booth" />
           <div>
-            <span>Admin Portal</span><EnvironmentBadge/>
+            <strong>THE LOLA BOOTH</strong>
+            <span>Admin</span>
           </div>
         </div>
-        <button className="navigation-toggle" aria-expanded={navigationOpen} aria-controls="admin-navigation" onClick={() => setNavigationOpen(!navigationOpen)}>{navigationOpen ? "Close navigation" : "Menu"}</button>
-        <nav id="admin-navigation" className={navigationOpen ? "navigation-open" : ""} aria-label="Main navigation">
-          {sections.filter(section => import.meta.env.VITE_CMS_ENABLED !== "false" || section.label !== "Website").map((section) => {
-            const visibleItems = section.items.filter((item) => can(item.permission) && (GALLERY_ENABLED || item.to !== "/operations/galleries"));
-            if (!visibleItems.length) return null;
-            const Icon = section.icon;
+
+        <button className="lola-mobile-nav-toggle" onClick={() => setNavigationOpen(v => !v)}>
+          {navigationOpen ? "Close" : "Menu"}
+        </button>
+
+        <nav className="lola-nav" aria-label="Main navigation">
+          {visibleNav.map(item => {
+            const Icon = item.icon;
             return (
-              <details className="nav-section" key={section.label} open={section.items.some(item=>item.to===pathname || item.to!=="/"&&pathname.startsWith(item.to+"/")) || ["Sales","Events","Dashboard"].includes(section.label)}>
-                <summary><Icon size={15} />{section.label}</summary>
-                {visibleItems.map((item) => (
-                  <NavLink key={item.to} to={item.to} end={item.to === "/"}>{item.label}</NavLink>
-                ))}
-              </details>
+              <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({isActive}) => isActive ? "active" : ""}>
+                <Icon size={17} />
+                <span>{item.label}</span>
+              </NavLink>
             );
           })}
-          {import.meta.env.VITE_CMS_ENABLED === "false" && <a href="https://thelolabooth.com" target="_blank" rel="noreferrer">Open website ↗</a>}
         </nav>
+
+        <div className="lola-sidebar-footer">
+          <div className="lola-sidebar-tagline">
+            <span className="camera-dot">●</span>
+            <strong>Good people.<br/>Better photos.</strong>
+          </div>
+          <EnvironmentBadge />
+        </div>
       </aside>
-      <div className="workspace">
-        <header className="topbar">
-          <div className="searchbox">
-            <Search size={17} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search clients, leads, events, invoices..." />
+
+      <section className="lola-workspace">
+        <header className="lola-topbar">
+          <div className="lola-search">
+            <Search size={18} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search leads, clients, events, invoices..."
+              aria-label="Global search"
+            />
             {results.length > 0 && (
-              <div className="search-results">
-                {results.map((item) => (
-                  <button key={`${item.type}-${item.id}`} onClick={() => { setQuery(""); navigate(item.type === "lead" ? `/sales/leads/${item.id}` : item.type === "event" ? `/events/events/${item.id}` : item.type === "client" ? `/sales/clients/${item.id}` : "/finance/invoices"); }}>
+              <div className="search-results lola-search-results">
+                {results.map(item => (
+                  <button key={`${item.type}-${item.id}`} onClick={() => openResult(item)}>
                     <span>{item.title}</span>
                     <small>{item.type} · {item.subtitle}</small>
                   </button>
@@ -96,15 +148,36 @@ export default function Layout() {
               </div>
             )}
           </div>
-          <div className="user-menu">
+
+          <div className="lola-topbar-actions">
+            {visibleCreate.length > 0 && (
+              <div className="lola-create-menu">
+                <button className="lola-create-button" onClick={() => setCreateOpen(v => !v)}>
+                  <Plus size={16} /> Create <ChevronDown size={14} />
+                </button>
+                {createOpen && (
+                  <div className="lola-create-popover">
+                    {visibleCreate.map(item => <button key={item.to} onClick={() => navigate(item.to)}>{item.label}</button>)}
+                  </div>
+                )}
+              </div>
+            )}
             <NotificationCenter />
-            <Sparkles size={16} />
-            <span>{user?.name}</span>
-            <button aria-label="Sign out" onClick={logout}><LogOut size={17} /></button>
+            <div className="lola-user-chip">
+              <span className="lola-avatar">{initials(user?.name)}</span>
+              <div><strong>{user?.name || "User"}</strong><small>{user?.roles?.[0] || "Admin"}</small></div>
+            </div>
+            <button className="lola-icon-button" aria-label="Sign out" onClick={logout}><LogOut size={17} /></button>
           </div>
         </header>
-        <Outlet />
-      </div>
+        <div className="lola-page-stage">
+          <Outlet />
+        </div>
+      </section>
     </div>
   );
+}
+
+function initials(name = "") {
+  return name.split(/\s+/).filter(Boolean).slice(0,2).map(part => part[0]?.toUpperCase()).join("") || "LO";
 }
