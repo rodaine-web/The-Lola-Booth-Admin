@@ -1,11 +1,11 @@
-
 import { Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
-const paymentStatuses=["","SUCCEEDED","PROCESSING","FAILED","PARTIALLY_REFUNDED","REFUNDED"];
+const statuses=["","SUCCEEDED","PROCESSING","FAILED","PARTIALLY_REFUNDED","REFUNDED"];
+const providers=["","STRIPE","PAYPAL","MANUAL"];
 
 export default function Payments(){
   const [urlParams,setUrlParams]=useSearchParams();
@@ -33,20 +33,22 @@ export default function Payments(){
 
   return <main className="page lola-list-page">
     <section className="page-heading lola-page-heading">
-      <div><p className="eyebrow">Finance</p><h1>Payments</h1><p className="lede">Every payment, refund, and receipt in one place.</p></div>
+      <div><p className="eyebrow">Finance</p><h1>Payments</h1><p className="lede">All payments in one place.</p></div>
       <button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>
     </section>
 
     <section className="lola-status-tabs">
-      {paymentStatuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
+      {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
     </section>
 
-    <section className="lola-list-toolbar"><div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search invoice, client, payment reference..."/></div></section>
+    <section className="lola-list-toolbar">
+      <div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search payments by invoice, client or reference..."/></div>
+    </section>
 
     {filtersOpen&&<section className="lola-filter-drawer">
-      <label>Provider<select value={provider} onChange={e=>setFilter("provider",e.target.value)}><option value="">All providers</option><option>MANUAL</option><option>STRIPE</option><option>PAYPAL</option></select></label>
-      <label>Date from<input type="date" value={urlParams.get("from")?.slice(0,10)||""} onChange={e=>setFilter("from",e.target.value)}/></label>
-      <label>Date to<input type="date" value={urlParams.get("to")?.slice(0,10)||""} onChange={e=>setFilter("to",e.target.value)}/></label>
+      <label>Provider<select value={provider} onChange={e=>setFilter("provider",e.target.value)}>{providers.map(item=><option key={item||"all"} value={item}>{item||"All providers"}</option>)}</select></label>
+      <label>From<input type="date" value={urlParams.get("from")||""} onChange={e=>setFilter("from",e.target.value)}/></label>
+      <label>To<input type="date" value={urlParams.get("to")||""} onChange={e=>setFilter("to",e.target.value)}/></label>
     </section>}
 
     {error&&<div className="toast error">{error}</div>}
