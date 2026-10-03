@@ -98,7 +98,7 @@ export default function Layout() {
           <img src="/brand/LOLA_Primary_Light_Transparent.png" alt="The LOLA Booth" />
           <div>
             <strong>THE LOLA BOOTH</strong>
-            <span>Admin</span>
+            <span>Admin Portal</span>
           </div>
         </div>
 
