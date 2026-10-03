@@ -95,7 +95,10 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   }
 
   function eventPayload() {
-    const payload = eventPayload();
+    const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value === "" ? null : value]));
+    for (const [name, , type] of fields) if (type === "number" && payload[name] === null && name !== "starting_price") delete payload[name];
+    for (const [name, , type] of fields) if (type === "lines") payload[name] = String(form[name] || "").split("\n").map(value => value.trim()).filter(Boolean);
+    if (endpoint === "/packages" && payload.pricing_mode === "CUSTOM") payload.starting_price = null;
     return payload;
   }
 
@@ -185,10 +188,10 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   }
 
   return (
-    <main className="page">
+    <main className="page resource-redesign">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">{phase || "Operations module"}</p>
+          <p className="eyebrow">{phase || resourceEyebrow(endpoint)}</p>
           <h1>{title}</h1>
         </div>
         {fields.length > 0 && <button className="primary-action" onClick={openCreate}>New {title.replace(/s$/, "")}</button>}
@@ -272,4 +275,12 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
       )}
     </main>
   );
+}
+
+
+function resourceEyebrow(endpoint) {
+  if (["/experiences", "/packages", "/addons"].includes(endpoint)) return "Catalog";
+  if (endpoint === "/tasks") return "Operations";
+  if (endpoint === "/files") return "Operations";
+  return "Workspace";
 }
