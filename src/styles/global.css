@@ -1797,3 +1797,16 @@ input:focus,select:focus,textarea:focus{border-color:#c59d61;box-shadow:0 0 0 3p
 .wizard-panel .wizard-actions{margin-top:18px}.wizard-panel .wizard-actions>div{display:flex;gap:8px}.wizard-panel .wizard-actions button:not(.primary-action),.wizard-panel .wizard-actions a{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--lola-border);background:#fff;color:var(--lola-text);text-decoration:none;border-radius:8px;padding:9px 12px}
 @media(max-width:900px){.experience-card-grid,.package-card-grid{grid-template-columns:1fr 1fr}.wizard-panel>.review-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.source-choice,.experience-card-grid,.package-card-grid,.addon-choice-grid{grid-template-columns:1fr}.proposal-wizard-page>.wizard-progress strong{font-size:.62rem}.wizard-panel{padding:14px}}
+
+
+/* LOLA FINANCE REDESIGN */
+.invoice-wizard-page{max-width:1100px;margin:0 auto}
+.invoice-source-choice{max-width:780px}
+.invoice-source-choice button{position:relative}
+.invoice-source-choice button span{font-size:.65rem;color:var(--lola-muted);margin-left:auto}
+.invoice-proposal-panel{max-width:900px}
+.invoice-source-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;border:1px solid var(--lola-border);border-radius:12px;background:#faf9f6;padding:14px;margin:14px 0}
+.invoice-source-summary>div{display:grid;gap:4px}.invoice-source-summary span{font-size:.68rem;color:var(--lola-muted)}.invoice-source-summary strong{font-size:.78rem}
+.invoice-options-card{border:1px solid var(--lola-border);border-radius:12px;padding:15px;background:#fff}.invoice-options-card h3{margin:0 0 5px}.invoice-options-card p{margin:0 0 12px;color:var(--lola-muted);font-size:.78rem;line-height:1.5}
+.line-list{display:grid;gap:7px;margin-top:10px}.line-list>div{display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid var(--lola-border);border-radius:8px;padding:9px 10px;background:#fff}.line-list span{font-size:.76rem}.line-list button{border:0;background:transparent;color:var(--lola-red)}
+@media(max-width:800px){.invoice-source-summary{grid-template-columns:1fr 1fr}.invoice-source-summary>div:last-child{grid-column:1/-1}}
