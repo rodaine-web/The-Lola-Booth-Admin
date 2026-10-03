@@ -59,7 +59,7 @@ export default function ClientDetail() {
     }
   }
 
-  if (error) return <main className="page"><AsyncState error={error} noun="client" onRetry={()=>{setError("");loadClient();}}/></main>;
+  if (error) return <main className="page record-detail-redesign"><AsyncState error={error} noun="client" onRetry={()=>{setError("");loadClient();}}/></main>;
   if (!client) return <main className="page"><div className="empty-state">Loading client...</div></main>;
 
   return (
