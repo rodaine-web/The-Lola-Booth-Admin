@@ -5,6 +5,8 @@
   const qs=(s,r=document)=>r.querySelector(s), qsa=(s,r=document)=>[...r.querySelectorAll(s)];
   const apiAsset=(p)=>{
     if(!p)return null;
+    // CMS stores the bundled path; the staging website exposes that bundle at /assets.
+    if(p.startsWith('/staging-site/assets/')&&!location.pathname.startsWith('/staging-site/'))return p.replace('/staging-site/assets/','/assets/');
     const url=new URL(p,API_BASE||location.origin);
     const match=url.pathname.match(/^\/api\/public\/media\/([0-9a-f-]{36})$/i);
     if(match&&url.origin===new URL(API_BASE||location.origin).origin){const width=innerWidth<=600?960:1600;return `/api/media/${match[1]}?w=${width}`;}
