@@ -209,7 +209,7 @@ export default function Communications() {
   return (
     <main className="page communications-redesign">
       <div className="page-heading">
-        <div><p className="eyebrow">Communications</p><h1>Client communications in one place.</h1><p className="lede">Send, schedule, review, and troubleshoot every client message.</p></div>
+        <div><p className="eyebrow">Communications</p><h1>Client communications in one place.</h1><p className="lede">Communication Center for sending, scheduling, reviewing, and troubleshooting every client message.</p></div>
         <div className="button-row">
           <button className="lola-secondary-button" onClick={load}><RefreshCw size={16} />Refresh</button>
           <button className="primary-action" onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>New Message</button>
@@ -295,7 +295,7 @@ export default function Communications() {
       {section === "Automations" && (
         <>
           <section className="panel">
-            <div className="table-heading"><h2>Automations</h2></div>
+            <div className="table-heading"><div><h2>Automations</h2><p className="note-text">Rules and scheduled jobs.</p></div><button className="lola-secondary-button" onClick={processJobs}><Play size={15}/>Process Due Jobs</button></div>
             <div className="automation-list">
               {automations.data.map((row) => (
                 <article className="automation-row" key={row.id}>
