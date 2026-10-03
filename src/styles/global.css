@@ -1721,3 +1721,28 @@ input:focus,select:focus,textarea:focus{border-color:#c59d61;box-shadow:0 0 0 3p
 @media(max-width:1280px){.dashboard-top-grid{grid-template-columns:1fr}.dashboard-brand-card{min-height:140px}.dashboard-main-grid{grid-template-columns:1fr 1fr}.dashboard-today-card{grid-column:1/-1}.dashboard-bottom-grid{grid-template-columns:1fr 1fr}.dashboard-bottom-grid>article:last-child{grid-column:1/-1}}
 @media(max-width:900px){.dashboard-kpi-row{grid-template-columns:1fr 1fr}.dashboard-main-grid,.dashboard-bottom-grid{grid-template-columns:1fr}.dashboard-today-card,.dashboard-bottom-grid>article:last-child{grid-column:auto}.dashboard-hero-row{display:grid}.dashboard-range-picker{width:100%;overflow:auto}}
 @media(max-width:560px){.dashboard-kpi-row{grid-template-columns:1fr}.dashboard-source-layout{display:grid}.dashboard-source-layout .recharts-responsive-container{width:100%!important}.today-list>a{grid-template-columns:58px 1fr}.today-list .semantic-status{grid-column:2}}
+
+
+/* LOLA WORKSPACE LISTS */
+.lola-page-heading{align-items:center}
+.lola-secondary-button{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--lola-border);background:#fff;color:var(--lola-text);border-radius:8px;padding:9px 12px}
+.lola-status-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}
+.lola-status-tabs button{border:0;background:transparent;color:var(--lola-muted);padding:8px 11px;border-radius:7px;font-size:.76rem}
+.lola-status-tabs button.active{background:#171717;color:#fff}
+.lola-list-toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}
+.lola-list-search{display:flex;align-items:center;gap:8px;flex:1;max-width:520px;border:1px solid var(--lola-border);background:#fff;border-radius:9px;padding:0 11px}
+.lola-list-search input{border:0;box-shadow:none;background:transparent;padding:10px 0}
+.lola-list-search input:focus{box-shadow:none}
+.lola-view-toggle{display:flex;border:1px solid var(--lola-border);background:#fff;border-radius:8px;padding:3px}
+.lola-view-toggle button{border:0;background:transparent;border-radius:6px;padding:7px;color:var(--lola-muted)}
+.lola-view-toggle button.active{background:#f3eee6;color:#7b5929}
+.lola-filter-drawer{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;background:#fff;border:1px solid var(--lola-border);border-radius:12px;padding:12px;margin-bottom:12px}
+.lola-filter-drawer button{align-self:end;border:1px solid var(--lola-border);background:#fff;border-radius:8px;padding:10px}
+.lola-kanban{grid-template-columns:repeat(6,minmax(210px,1fr))}
+.lola-kanban section{border-radius:12px;background:#f7f5f1}
+.lola-create-modal{width:min(760px,calc(100vw - 28px));max-height:90vh;overflow:auto}
+.lola-create-modal h2{margin-bottom:0}
+.modal-heading{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:10px}
+.modal-heading button{border:0;background:transparent;color:var(--lola-muted)}
+.wide{grid-column:1/-1}
+@media(max-width:720px){.lola-list-toolbar{display:grid}.lola-view-toggle{width:max-content}.lola-filter-drawer{grid-template-columns:1fr}}
