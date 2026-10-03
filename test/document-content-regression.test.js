@@ -105,3 +105,27 @@ test('proposal pricing and terms paginate with continuous footers and preserve z
     assert.ok(body.every(item=>item.transform[5]>=118),'proposal content entered footer');
   }
 });
+
+test('client narrative is complete in PDF and HTML without disclosing internal notes', async () => {
+  const { proposalHtml } = await import('../server/src/services/document-service.js');
+  const record = {
+    ...proposal, proposal_type: 'CORPORATE', notes: 'PRIVATE_ADMIN_MARKER',
+    content: {introduction: 'FALLBACK_INTRO_MARKER', notes: 'PRIVATE_CONTENT_MARKER', terms: 'SAVED_TERMS_MARKER', closing: 'SIGNED_LOLA_MARKER'},
+    editable_sections: [
+      {title: 'Introduction', body: 'CUSTOM_INTRO_MARKER'},
+      {title: 'About the Event', body: 'CUSTOM_EVENT_MARKER'},
+      {title: 'Client Notes', body: `${'Client-facing planning detail. '.repeat(300)}END_CLIENT_NOTES_MARKER`, items: ['CLIENT_BULLET_MARKER']},
+      {title: 'Conclusion', body: 'CUSTOM_CONCLUSION_MARKER'}
+    ]
+  };
+  const pages = await readPdf(await generateProposalPdf(record));
+  const pdfText = pages.map(p=>p.text).join(' ');
+  const html = proposalHtml(record);
+  for(const text of [pdfText,html]){
+    for(const marker of ['CUSTOM_INTRO_MARKER','CUSTOM_EVENT_MARKER','END_CLIENT_NOTES_MARKER','CLIENT_BULLET_MARKER','CUSTOM_CONCLUSION_MARKER','SIGNED_LOLA_MARKER'])assert.ok(text.includes(marker),`missing ${marker}`);
+    assert.doesNotMatch(text,/PRIVATE_ADMIN_MARKER|PRIVATE_CONTENT_MARKER|FALLBACK_INTRO_MARKER/);
+  }
+  for(const page of pages){
+    assert.ok(page.items.filter(item=>/Client-facing|END_CLIENT_NOTES/.test(item.str)).every(item=>item.transform[5]>=118),'notes entered footer');
+  }
+});

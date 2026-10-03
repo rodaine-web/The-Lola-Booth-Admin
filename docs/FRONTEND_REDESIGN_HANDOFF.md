@@ -48,3 +48,9 @@ The PDF renderer now uses consistent measured headings, shared margins and numbe
 A six-page representative TLBP-1005 demo PDF using the supplied Glam photographs was generated and visually reviewed. Size: 669,116 bytes (approximately 0.67 MB). It is a local preview of the updated renderer, not a replacement of the hosted download before deployment.
 
 Verification: 336 tests, 331 passed, 5 skipped, zero failures; staging frontend build passed. Added regressions check long pricing/terms pagination, continuous page numbering, zero deposit retention, and staging website route/config isolation.
+
+## Proposal narrative follow-up
+
+PDF and online proposal views now include a dedicated introduction, about-the-event narrative alongside the event facts, client-facing planning notes, and a conclusion with the LOLA sign-off. Saved Introduction, Event Details/About the Event, Client Notes/Notes, and Conclusion/Closing sections take precedence over default copy. The editor's internal `notes` field and legacy `content.notes` are never used for these public notes. Saved terms remain separate. All narrative copy is sanitized and long PDF notes paginate above the footer.
+
+The updated nine-page demo was regenerated and visually checked; approximately 0.67 MB. Verification: 337 tests, 332 passed, 5 skipped, no failures; staging build passed. These document renderer changes become live with the staging backend deployment.

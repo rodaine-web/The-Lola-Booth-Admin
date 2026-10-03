@@ -1,6 +1,9 @@
+import { proposalNarrative } from "./proposal-narrative.js";
+
 // Measured, paginated proposal layout. Every page shares one grid and footer.
 export function renderProposalPdf(doc, proposal, { brand, logo, experiences, features, image, strip, money, footer }) {
   let page = 0;
+  const narrative = proposalNarrative(proposal, experiences);
   const text = (value, x, y, width, size = 10, font = 'Helvetica', color = brand.charcoal) => {
     doc.fillColor(color).font(font).fontSize(size).text(String(value ?? ''), x, y, { width, lineGap: 3, characterSpacing: 0 });
     return doc.y;
@@ -59,11 +62,16 @@ export function renderProposalPdf(doc, proposal, { brand, logo, experiences, fea
   text(experiences.map(item=>item.name).filter(Boolean).join(' + ') || 'A custom LOLA experience',42,y,528,18,'Times-Roman');
   text('Good people. Better photos.',42,660,528,11,'Times-Italic',brand.gold);
 
-  y=start('Event overview','Made for your celebration.');
+  y=start('Introduction','Welcome to The LOLA Booth.');
+  y=flow(strip(narrative.introduction),y,'Introduction',11);
+  y=text('Thoughtful service. Beautiful memories.',42,y+26,528,20,'Times-Roman')+16;
+  flow('Every event starts with your vision. The pages that follow outline the event we are planning for, the experiences you have selected and the investment to bring them together.',y,'Introduction');
+
+  y=start('Event overview','About the event.');
   for(const [label,value] of facts){text(label,42,y,132,8,'Helvetica-Bold',brand.gold);const bottom=text(value,184,y-2,386,13,'Times-Roman');y=Math.max(y+46,bottom+18);doc.moveTo(42,y-12).lineTo(570,y-12).strokeColor(brand.taupe).stroke();}
   y+=20;
-  y=text('The event vision',42,y,528,20,'Times-Roman')+14;
-  y=flow(strip(proposal.content?.eventVision || 'An inviting guest experience, thoughtful creative and professional service from setup through breakdown.'),y,'The event vision');
+  y=flow(strip(narrative.aboutEvent),y,'About the event');
+  if(y+100>670)y=start('Event overview','About the event.');
   y=text('THE LOLA STANDARD',42,y+20,528,8,'Helvetica-Bold',brand.gold)+16;
   flow('Beautifully presented equipment and creative. Friendly professional service. Memories made to save and share.',y,'The LOLA standard');
 
@@ -121,7 +129,14 @@ export function renderProposalPdf(doc, proposal, { brand, logo, experiences, fea
     text(String(i+1).padStart(2,'0'),42,y,32,11,'Helvetica-Bold',brand.gold);
     text(title,92,y-2,478,18,'Times-Roman');y=text(body,92,y+26,478,10,'Helvetica',brand.muted)+27;
   }
-  y=text('Terms & notes',42,y+10,528,18,'Times-Roman')+16;
-  flow(strip(proposal.content?.terms || 'Booking is subject to confirmed event details and the required booking documents.'),y,'Terms & notes');
+  y=start('Notes','A few details to confirm.');
+  y=flow(strip(narrative.notes),y,'Notes');
+  if(y+65>670)y=start('Booking terms','Terms & conditions.');
+  y=text('Terms & conditions',42,y+22,528,18,'Times-Roman')+16;
+  flow(strip(proposal.content?.terms || 'Booking is subject to confirmed event details and the required booking documents.'),y,'Terms & conditions');
+  y=start('Conclusion','Let’s make something memorable.');
+  y=flow(strip(narrative.conclusion),y,'Conclusion',11);
+  if(y+90>670)y=start('Conclusion','Thank you.');
+  flow(strip(narrative.closing),y+28,'Conclusion',12);
   if(!proposal.proposal_type)for(const section of proposal.editable_sections||[]){y=start('Additional details',section.title||'Event details');flow(strip([section.body,...(section.items||[])].filter(Boolean).join('\n')),y,section.title||'Event details');}
 }
