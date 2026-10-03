@@ -1,3 +1,4 @@
+import {mappedProposalPhotos} from "../../shared/proposal-photo-mapping.js";
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { api } from "../api/client.js";
@@ -13,7 +14,7 @@ const types = [
   ["BRAND_ACTIVATION", "Brand Experience Preview"],
   ["TIMELINE", "Timeline"],
 ];
-function AssetImage({ id }) {
+export function AssetImage({ id, alt="Selected visual asset" }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
     let active = true,
@@ -32,12 +33,12 @@ function AssetImage({ id }) {
     };
   }, [id]);
   return url ? (
-    <img src={url} alt="Selected visual asset" />
+    <img src={url} alt={alt} />
   ) : (
     <span>Preview unavailable</span>
   );
 }
-export default function ProposalVisualEditor({ value = [], onChange }) {
+export default function ProposalVisualEditor({ value = [], onChange, experiences = [] }) {
   const [assets, setAssets] = useState([]),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -84,6 +85,25 @@ export default function ProposalVisualEditor({ value = [], onChange }) {
       setBusy(false);
     }
   }
+  async function uploadLibrary(files) {
+    setBusy(true);setError("");
+    try {
+      for (const file of files) {
+        if(file.size>10*1024*1024)throw new Error("Choose images up to 10 MB each.");
+        if(assets.some(asset=>asset.filename===file.name))continue;
+        const data=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(",")[1]);reader.onerror=reject;reader.readAsDataURL(file);
+        });
+        await api.post("/proposal-assets",{filename:file.name,mimeType:file.type,data});
+      }
+    } catch(e){setError(e.message);}
+    finally{await load().catch(e=>setError(e.message));setBusy(false);}
+  }
+  const matched=mappedProposalPhotos(experiences,assets,()=>crypto.randomUUID());
+  function addMappedPhotos(){
+    const titles=new Set(value.map(section=>section.title));
+    onChange([...value,...matched.filter(section=>!titles.has(section.title))].slice(0,16));
+  }
   return (
     <section className="panel proposal-visual-editor">
       <p className="eyebrow">WHAT IT WILL LOOK LIKE</p>
@@ -92,6 +112,11 @@ export default function ProposalVisualEditor({ value = [], onChange }) {
         Optional visual sections. Add only what helps your client picture the
         experience. These appear on the secure proposal and its PDF.
       </p>
+      <div className="form-grid">
+        <label>Import approved experience photos<input type="file" accept="image/jpeg,image/png" multiple disabled={busy} onChange={event=>{const files=Array.from(event.target.files||[]);event.target.value="";uploadLibrary(files);}}/></label>
+        <div><button type="button" disabled={busy||!matched.length} onClick={addMappedPhotos}>Add matching experience photos</button><p className="note-text">Matches reviewed library photos to the selected experiences. Vogue, audio, and custom activations need their own approved imagery.</p></div>
+      </div>
+      {busy&&<p role="status">Uploading experience photos…</p>}
       {error && (
         <p role="alert" className="form-error">
           {error}

@@ -1,3 +1,4 @@
+import {proposalPhotoKey,photoSectionTitle} from "../../../shared/proposal-photo-mapping.js";
 import { z } from "zod";
 import { query } from "../db/pool.js";
 import { getStorageProvider } from "./storage-service.js";
@@ -66,8 +67,17 @@ export async function hydrateProposalVisuals(proposal) {
       /* A removed asset must not reveal a path or break the commercial proposal. */
     }
   }
+  const selected_experiences=(proposal.selected_experiences||[]).map(item=>{
+    const section=sections.find(section=>section.kind==='EXPERIENCE'&&section.title===photoSectionTitle(item.name));
+    if(!section)return item;
+    const slots=proposalPhotoKey(item.name)==='360'?['hero','equipment','interaction']:['hero','equipment','customization','output'];
+    const visuals={...item.visuals};
+    section.media_ids.forEach((id,index)=>{const image=images.get(id);if(image&&slots[index])visuals[slots[index]]=image.dataUri;});
+    return {...item,visuals};
+  });
   return {
     ...proposal,
+    selected_experiences,
     visual_sections: sections.map((s) => ({
       ...s,
       images: (s.media_ids || []).map((id) => images.get(id)).filter(Boolean),

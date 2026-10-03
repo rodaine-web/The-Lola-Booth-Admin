@@ -1,3 +1,4 @@
+import {retainProposalPhotoSections} from "../../shared/proposal-photo-mapping.js";
 import {loadCatalog} from "../../shared/catalog-loading.js";
 import ProposalVisualEditor from "../components/ProposalVisualEditor.jsx";
 import {selectProposalPackage,selectProposalExperience} from '../../shared/proposal-catalog.js';
@@ -267,7 +268,7 @@ export default function ProposalEditor() {
     if(saving)return;setSaving(true);
     setError("");
     try {
-      const payload = compact({ ...form, ...upload, total_investment: form.package_amount });
+      const payload = compact({ ...form, visual_sections:retainProposalPhotoSections(form.visual_sections||[],form.selected_experiences||[]), ...upload, total_investment: form.package_amount });
       const created = id ? await api.patch(`/proposals/${id}`, payload) : mode === "upload" ? await api.post("/proposals/upload", payload) : await api.post("/proposals", payload);
       navigate(`/sales/proposals/${created.id}`);
     } catch (err) {
@@ -469,7 +470,7 @@ export default function ProposalEditor() {
           </>
         )}
 
-        {mode === "create" && <ProposalVisualEditor value={form.visual_sections||[]} onChange={value=>setField("visual_sections",value)}/>}
+        {mode === "create" && <ProposalVisualEditor experiences={form.selected_experiences||[]} value={form.visual_sections||[]} onChange={value=>setField("visual_sections",value)}/>}
         <section className="panel">
           <h2>Terms / Notes</h2>
           <div className="form-grid">

@@ -1,3 +1,4 @@
+import {AssetImage} from "../components/ProposalVisualEditor.jsx";
 import { documentAccessState } from "../../shared/document-access.js";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
@@ -95,6 +96,7 @@ export default function ProposalDetail() {
           </div>
           <button disabled={busy} onClick={() => action(() => api.download(`/proposals/${id}/pdf`, `${proposal.proposal_number}.pdf`), "PDF generated.")}><Download size={16} />Download PDF</button>
         </div>
+        {!!proposal.visual_sections?.length&&<section className="panel"><h2>Saved proposal photos</h2>{proposal.visual_sections.map(section=><article key={section.id}><h3>{section.title}</h3><p>{section.body}</p><div className="proposal-asset-grid">{section.media_ids.map((mediaId,index)=><figure key={mediaId}><AssetImage id={mediaId} alt={`${section.title} — photo ${index+1}`}/></figure>)}</div></article>)}</section>}
         <AdminProposalPreview id={id} />
       </section>
     </main>

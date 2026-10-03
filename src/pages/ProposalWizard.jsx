@@ -1,3 +1,4 @@
+import {mappedProposalPhotos} from "../../shared/proposal-photo-mapping.js";
 import {loadCatalog} from "../../shared/catalog-loading.js";
 import {experienceImage} from "../utils/experience-assets.js";
 
@@ -24,6 +25,8 @@ export default function ProposalWizard(){
   const [experiences,setExperiences]=useState([]);
   const [packages,setPackages]=useState([]);
   const [addons,setAddons]=useState([]);
+  const [photoAssets,setPhotoAssets]=useState([]);
+  useEffect(()=>{let live=true;api.get("/proposal-assets").then(result=>{if(live)setPhotoAssets(result.data||[]);}).catch(()=>{});return()=>{live=false;};},[]);
   const [selectedExperiences,setSelectedExperiences]=useState([]);
   const [selectedAddons,setSelectedAddons]=useState([]);
   const [advanced,setAdvanced]=useState(false);
@@ -258,6 +261,7 @@ export default function ProposalWizard(){
         lead_id:ensuredLeadId,client_id:clientId,event_id:eventId,
         experience_id:primaryExperience?.experience_id||null,package_id:primaryPackage?.package_id||null,
         selected_experiences:selectedExperiences,addons:selectedAddons,
+        visual_sections:mappedProposalPhotos(selectedExperiences,photoAssets,()=>crypto.randomUUID()),
         proposal_title:form.proposal_title||actualEventType()+" Proposal",proposal_type:proposalType(actualEventType()),
         status:"DRAFT",notes:form.notes||null,discount:Number(form.discount||0),travel:Number(form.travel||0),
         other_fees:Number(form.other_fees||0),deposit_type:"PERCENTAGE",
@@ -334,6 +338,7 @@ export default function ProposalWizard(){
         </div>
       </section>)}
       {!!addons.length&&<section className="wizard-section"><h3>Add-ons <small>Optional</small></h3><div className="addon-choice-grid">{addons.map(item=><label key={item.id}><input type="checkbox" checked={selectedAddons.some(entry=>entry.addon_id===item.id)} onChange={()=>chooseAddon(item)}/><span>{item.name}</span><strong>{money(item.price||0)}</strong></label>)}</div></section>}
+      {!!mappedProposalPhotos(selectedExperiences,photoAssets,()=>"preview").length&&<p role="status">Reviewed experience photos will be included in this proposal.</p>}
       <section className="wizard-pricing-summary">
         <div><span>Selected services</span><strong>{money(pricing.services)}</strong></div>
         <div><span>Add-ons</span><strong>{money(pricing.addonTotal)}</strong></div>
