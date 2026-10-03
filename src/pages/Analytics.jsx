@@ -16,7 +16,7 @@ export default function Analytics() {
     setError(""); api.get(`/analytics?range=${range}`).then(setData).catch(e=>setError(e.message));
   }, [range,revision]);
 
-  if(error)return <main className="page"><AsyncState error={error} noun="analytics" onRetry={()=>setRevision(r=>r+1)}/></main>;
+  if(error)return <main className="page analytics-workspace"><AsyncState error={error} noun="analytics" onRetry={()=>setRevision(r=>r+1)}/></main>;
   if (!data) return <main className="page"><div className="empty-state">Loading analytics...</div></main>;
 
   return (
@@ -24,10 +24,10 @@ export default function Analytics() {
       <div className="page-heading">
         <div>
           <p className="eyebrow">Insights</p>
-          <h1>Analytics</h1>
+          <h1>Reports & Analytics</h1><p className="lede">Insights for growth, revenue, demand, and lead performance.</p>
         </div>
       </div>
-      <label>Date range<select value={range} onChange={e=>setRange(e.target.value)}><option value="today">Today</option><option value="week">This week</option><option value="mtd">Month to date</option><option value="ytd">Year to date</option></select></label><p className="note-text">Revenue and average booking value share the Dashboard definitions and selected period. Outstanding is the current unpaid balance.</p>
+      <div className="analytics-range">{[["today","Today"],["week","This Week"],["mtd","Month to Date"],["ytd","Year to Date"]].map(([key,label])=><button key={key} className={range===key?"active":""} onClick={()=>setRange(key)}>{label}</button>)}</div><p className="note-text">Revenue and average booking value share the Dashboard definitions and selected period. Outstanding is the current unpaid balance.</p>
       <section className="kpi-grid compact">
         {Object.entries(data.summary).map(([key, value]) => (
           <article className="kpi" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatDisplay(value,key)}</strong></article>
