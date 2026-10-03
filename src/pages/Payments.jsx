@@ -1,44 +1,55 @@
-import { Search } from "lucide-react";
+
+import { Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
-export default function Payments() {
+const paymentStatuses=["","SUCCEEDED","PROCESSING","FAILED","PARTIALLY_REFUNDED","REFUNDED"];
+
+export default function Payments(){
   const [urlParams,setUrlParams]=useSearchParams();
-  const [rows, setRows] = useState([]);
-  const [search, setSearch] = useState("");
-  const provider = urlParams.get("provider") || "";
-  const status = urlParams.get("status") || "";
-  const [error, setError] = useState("");
+  const [rows,setRows]=useState([]);
+  const [search,setSearch]=useState("");
+  const [error,setError]=useState("");
+  const [filtersOpen,setFiltersOpen]=useState(false);
+  const provider=urlParams.get("provider")||"";
+  const status=urlParams.get("status")||"";
 
   function setFilter(name,value){setUrlParams(current=>{const next=new URLSearchParams(current);if(value)next.set(name,value);else next.delete(name);return next;});}
-  useEffect(() => { load(); }, [search, provider, status, urlParams.toString()]);
 
-  async function load() {
-    try {
-      const params = new URLSearchParams(urlParams);
-      params.set("search", search);
-      params.set("pageSize", "50");
-      if (provider) params.set("provider", provider); else params.delete("provider");
-      if (status) params.set("status", status); else params.delete("status");
-      const result = await api.get(`/payments?${params}`);
-      setRows(result.data || []);
-    } catch (err) {
-      setError(err.message);
-    }
+  useEffect(()=>{load();},[search,provider,status,urlParams.toString()]);
+
+  async function load(){
+    try{
+      const params=new URLSearchParams(urlParams);
+      params.set("search",search);params.set("pageSize","50");
+      if(provider)params.set("provider",provider);else params.delete("provider");
+      if(status)params.set("status",status);else params.delete("status");
+      const result=await api.get("/payments?"+params.toString());
+      setRows(result.data||[]);setError("");
+    }catch(err){setError(err.message);}
   }
 
-  return (
-    <main className="page">
-      <div className="page-heading"><div><p className="eyebrow">Finance</p><h1>Payments</h1></div></div>
-      {error && <div className="toast error">{error}</div>}
-      <div className="toolbar">
-        <label><span>Search</span><div className="input-icon"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Invoice, client, reference" /></div></label>
-        <label><span>Provider</span><select value={provider} onChange={(event) => setFilter("provider",event.target.value)}><option value="">All providers</option><option>MANUAL</option><option>STRIPE</option><option>PAYPAL</option></select></label>
-        <label><span>Status</span><select value={status} onChange={(event) => setFilter("status",event.target.value)}><option value="">All statuses</option><option>SUCCEEDED</option><option>PROCESSING</option><option>FAILED</option><option>PARTIALLY_REFUNDED</option><option>REFUNDED</option></select></label>
-      </div>
-      <DataTable rows={rows} columns={["payment_date", "client_name", "event_name", "invoice_number", "provider", "payment_method", "amount", "refunded_amount", "status", "reference_number"]} getRowHref={(row) => `/finance/payments/${row.id}`} empty="No payments found." />
-    </main>
-  );
+  return <main className="page lola-list-page">
+    <section className="page-heading lola-page-heading">
+      <div><p className="eyebrow">Finance</p><h1>Payments</h1><p className="lede">Every payment, refund, and receipt in one place.</p></div>
+      <button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>
+    </section>
+
+    <section className="lola-status-tabs">
+      {paymentStatuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
+    </section>
+
+    <section className="lola-list-toolbar"><div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search invoice, client, payment reference..."/></div></section>
+
+    {filtersOpen&&<section className="lola-filter-drawer">
+      <label>Provider<select value={provider} onChange={e=>setFilter("provider",e.target.value)}><option value="">All providers</option><option>MANUAL</option><option>STRIPE</option><option>PAYPAL</option></select></label>
+      <label>Date from<input type="date" value={urlParams.get("from")?.slice(0,10)||""} onChange={e=>setFilter("from",e.target.value)}/></label>
+      <label>Date to<input type="date" value={urlParams.get("to")?.slice(0,10)||""} onChange={e=>setFilter("to",e.target.value)}/></label>
+    </section>}
+
+    {error&&<div className="toast error">{error}</div>}
+    <DataTable rows={rows} columns={["payment_date","client_name","invoice_number","provider","payment_method","amount","refunded_amount","status","reference_number"]} getRowHref={row=>"/finance/payments/"+row.id} empty="No payments found."/>
+  </main>;
 }
