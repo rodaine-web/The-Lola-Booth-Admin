@@ -52,7 +52,7 @@ export default function InvoiceDetail() {
     setPayment((current) => ({ ...current, amount: "", reference_number: "", notes: "" }));
   }
 
-  if (error && !invoice) return <main className="page"><AsyncState error={error} noun="invoice" onRetry={()=>{setError("");load();}}/></main>;
+  if (error && !invoice) return <main className="page record-detail-redesign"><AsyncState error={error} noun="invoice" onRetry={()=>{setError("");load();}}/></main>;
   if (!invoice) return <main className="page"><div className="empty-state">Loading invoice...</div></main>;
 
   const accessAvailable = documentAccessState(invoice) === "AVAILABLE";
