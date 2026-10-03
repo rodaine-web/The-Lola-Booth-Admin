@@ -1828,3 +1828,24 @@ input:focus,select:focus,textarea:focus{border-color:#c59d61;box-shadow:0 0 0 3p
 .event-command-tabs{background:#fff;border:1px solid var(--lola-border);border-radius:10px;padding:4px 8px;margin-top:4px}
 @media(max-width:1050px){.event-command-grid{grid-template-columns:1fr 1fr}.event-readiness-card{grid-column:1/-1}}
 @media(max-width:700px){.event-command-grid,.event-finance-summary{grid-template-columns:1fr}.event-readiness-card{grid-template-columns:1fr;justify-items:center;text-align:center}}
+
+
+/* FINANCE REDESIGN */
+.invoice-wizard-page{max-width:1120px;margin:0 auto}
+.invoice-source-choice{max-width:760px;margin-bottom:18px}
+.invoice-source-choice button{position:relative;display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;justify-items:start;text-align:left}
+.invoice-source-choice button svg{grid-row:1/3}
+.invoice-source-choice button>span{font-size:.7rem;color:var(--lola-muted)}
+.invoice-source-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0}
+.invoice-source-summary>div{display:grid;gap:5px;border:1px solid var(--lola-border);border-radius:10px;padding:12px;background:#fbfaf8}
+.invoice-source-summary span{color:var(--lola-muted);font-size:.7rem}.invoice-source-summary strong{font-size:.84rem}
+.invoice-options-card{border-top:1px solid var(--lola-border);margin-top:18px;padding-top:18px}
+.invoice-options-card>p{color:var(--lola-muted);max-width:720px}
+.wizard-section-heading{display:flex;justify-content:space-between;gap:12px;align-items:center}.wizard-section-heading p{color:var(--lola-muted);margin-top:-8px}.wizard-section-heading>strong{font:600 1.2rem "Playfair Display",Georgia,serif}
+.invoice-line-form{grid-template-columns:minmax(220px,1fr) 100px 140px auto!important}
+.line-list{display:grid;gap:6px;margin-top:10px}.line-list>div{display:flex;justify-content:space-between;gap:10px;align-items:center;border:1px solid var(--lola-border);border-radius:8px;padding:9px 11px;background:#fff}.line-list button{border:0;background:transparent}
+.finance-detail-hero{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start;margin-bottom:16px}.finance-detail-amount{font:600 clamp(2rem,4vw,3.2rem) "Playfair Display",Georgia,serif}.finance-status-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.finance-detail-grid{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}.finance-side-stack{display:grid;gap:12px}
+.payment-action-card{background:#fff;border:1px solid var(--lola-border);border-radius:12px;padding:16px}.payment-action-card h2{margin-bottom:8px}.payment-action-card p{color:var(--lola-muted);font-size:.82rem}
+@media(max-width:900px){.invoice-source-summary{grid-template-columns:repeat(2,1fr)}.finance-detail-grid{grid-template-columns:1fr}}
+@media(max-width:600px){.invoice-source-summary{grid-template-columns:1fr}.invoice-line-form{grid-template-columns:1fr!important}}
