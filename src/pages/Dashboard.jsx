@@ -156,7 +156,7 @@ export default function Dashboard() {
           </div>
         </article>
 
-        <article className="panel">
+        <article className="panel" aria-label="Needs Attention">
           <div className="dashboard-card-heading"><h2>Tasks & Attention</h2><Link to="/operations/tasks">View All <ArrowRight size={14}/></Link></div>
           <div className="attention-list dashboard-attention">
             {(data.needsAttention||[]).slice(0,6).map((item,index)=><Link key={index} to={item.href||"/"}><span className="attention-icon"><AlertCircle size={16}/></span><div><strong>{item.message}</strong><small>{String(item.type||"Attention").replaceAll("_"," ")}</small></div></Link>)}
@@ -164,6 +164,8 @@ export default function Dashboard() {
           </div>
         </article>
       </section>
+
+      <details className="panel dashboard-secondary"><summary>Metric Definitions</summary><div className="definition-grid">{Object.entries(data.metricDefinitions||{}).map(([key,value])=><p key={key}><strong>{key.replaceAll("_"," ")}</strong>{value}</p>)}</div></details>
 
       <section className="dashboard-quick-actions">
         <button onClick={()=>navigate("/sales/leads?create=true")}><Plus size={15}/>New Lead</button>
