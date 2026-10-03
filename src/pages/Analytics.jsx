@@ -17,7 +17,7 @@ export default function Analytics() {
   }, [range,revision]);
 
   if(error)return <main className="page analytics-workspace"><AsyncState error={error} noun="analytics" onRetry={()=>setRevision(r=>r+1)}/></main>;
-  if (!data) return <main className="page"><div className="empty-state">Loading analytics...</div></main>;
+  if (!data) return <main className="page analytics-redesign"><div className="empty-state">Loading analytics...</div></main>;
 
   return (
     <main className="page">
