@@ -95,7 +95,7 @@ export default function Layout() {
     <div className="lola-app-shell">
       <aside className={navigationOpen ? "lola-sidebar open" : "lola-sidebar"}>
         <div className="lola-brand">
-          <img src="/brand/LOLA_Primary_Light_Transparent.png" alt="The LOLA Booth" />
+          <img className="brand-logo-admin-stacked" src="/brand/LOLA_Primary_Light_Transparent.png" alt="The LOLA Booth" />
           <div>
             <strong>THE LOLA BOOTH</strong>
             <span>Admin Portal</span>
