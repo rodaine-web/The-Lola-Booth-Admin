@@ -83,3 +83,25 @@ test('invoice QR decodes from the actual PDF rendering to the stable invoice URL
   assert.equal(decoded?.data, `${env.publicBaseUrl.replace(/\/$/, '')}/pay/qa-qr-token`);
   await loading.destroy();
 });
+
+test('proposal pricing and terms paginate with continuous footers and preserve zero deposit', async () => {
+  const pages = await readPdf(await generateProposalPdf({
+    ...proposal, proposal_type: 'CORPORATE', guest_count: 80, start_time: '18:00', end_time: '21:00',
+    selected_experiences: [{ name: 'Lola Glam', package_name: 'The Signature' }],
+    pricing_snapshot: {total: 899, deposit_amount: 0},
+    line_items_snapshot: Array.from({length: 40}, (_, i) => ({description: `SCOPE_ROW_${i} ${'Detailed event service '.repeat(5)}`, line_total: 20})),
+    content: {terms: `${'Saved booking terms and venue requirements. '.repeat(220)}END_SAVED_TERMS`}
+  }));
+  const all = pages.map(p => p.text).join(' ');
+  for(let i=0;i<40;i++) assert.ok(all.includes(`SCOPE_ROW_${i}`));
+  assert.ok(all.includes('END_SAVED_TERMS'));
+  assert.match(all, /Due to reserve your date: \$0\.00/);
+  assert.match(all, /November 21, 2026/);
+  assert.match(all, /6:00 PM - 9:00 PM/);
+  for(const [index,page] of pages.entries()) {
+    assert.match(page.text,/info@thelolabooth.com/);
+    assert.ok(page.items.some(item=>item.str===String(index+1)&&item.transform[4]>=548&&item.transform[5]<70),'missing page number');
+    const body=page.items.filter(item=>/SCOPE_ROW|Saved booking|END_SAVED/.test(item.str));
+    assert.ok(body.every(item=>item.transform[5]>=118),'proposal content entered footer');
+  }
+});

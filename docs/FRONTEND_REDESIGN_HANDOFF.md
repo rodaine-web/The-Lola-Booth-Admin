@@ -36,3 +36,15 @@ Prompt: “Extract/recreate ONLY the photograph inside the top-right black banne
 ## Manual deployment
 
 Use the staging Vercel project and `main-staging`; retain its current staging API URL and feature flags. Verify dashboard, leads/clients, proposal creation from a linked event, event actions, accepted-proposal invoicing, communications, galleries, CMS, staff/equipment, analytics and settings. Do not promote to production as part of this sprint.
+
+## Proposal email link and PDF follow-up (October 2, 2026)
+
+The delivered demo HTML email's secure link reached an older staging website proposal page with a hardcoded production API origin, resulting in `Failed to fetch`. The current `public/staging-site/proposal.html` reads `/config.js`, whose staging configuration points at `https://stagingapi.thelolabooth.com`. Host-scoped Vercel rewrites serve this page at `/proposal/:token`. Deploy the staging website as well as the admin and staging backend; deploying only the admin will not replace the hosted public page or PDF renderer. Do not alter production routing or configuration.
+
+The corrected local `/proposal/:token` route was verified against the real staging API with TLBP-1005: proposal details and HTML preview loaded, with a PDF download URL targeting the staging proxy. The hosted correction remains pending the user's manual deployment. After deployment, open the existing emailed link, confirm TLBP-1005 loads, download its PDF, and check the email's separate `?download=pdf` action. Do not accept or pay the demonstration proposal.
+
+The PDF renderer now uses consistent measured headings, shared margins and numbered footers, readable date/time, selected package labels, compressed experience photos, a deduplicated supporting photo gallery, and pagination for scope rows and saved terms. It preserves saved totals and zero deposits and displays subtotal/discount/tax when supplied. The proposal query now includes the linked event's guest count, avoiding a missing guest count in generated documents. No financial calculations or proposal lifecycle changes were made.
+
+A six-page representative TLBP-1005 demo PDF using the supplied Glam photographs was generated and visually reviewed. Size: 669,116 bytes (approximately 0.67 MB). It is a local preview of the updated renderer, not a replacement of the hosted download before deployment.
+
+Verification: 336 tests, 331 passed, 5 skipped, zero failures; staging frontend build passed. Added regressions check long pricing/terms pagination, continuous page numbering, zero deposit retention, and staging website route/config isolation.

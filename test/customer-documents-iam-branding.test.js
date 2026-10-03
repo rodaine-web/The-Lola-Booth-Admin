@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const migration = fs.readFileSync(new URL("../server/migrations/020_customer_documents_iam_branding.sql", import.meta.url), "utf8");
-const documentService = fs.readFileSync(new URL("../server/src/services/document-service.js", import.meta.url), "utf8");
+const documentService = fs.readFileSync(new URL("../server/src/services/document-service.js", import.meta.url), "utf8") + fs.readFileSync(new URL("../server/src/services/proposal-pdf-layout.js", import.meta.url), "utf8");
 const proposalService = fs.readFileSync(new URL("../server/src/services/proposal-service.js", import.meta.url), "utf8");
 const invoiceService = fs.readFileSync(new URL("../server/src/services/invoice-service.js", import.meta.url), "utf8");
 const automationService = fs.readFileSync(new URL("../server/src/services/automation-service.js", import.meta.url), "utf8");
@@ -47,7 +47,7 @@ test("proposal workflow supports generated and uploaded modes with custom sectio
 });
 
 test("documents and emails follow the screenshot-derived visual system and link-first URLs", () => {
-  for (const fragment of ["thin gold outer border", "Proposal Overview", "THE LOLA STANDARD", "DUE TO RESERVE DATE", "From proposal to booked.", "PAYMENT INFORMATION", "QRCode.create", "secureDocumentUrl"]) {
+  for (const fragment of ["thin gold outer border", "Proposal Overview", "THE LOLA STANDARD", "Due to reserve your date:", "From proposal to booked.", "PAYMENT INFORMATION", "QRCode.create", "secureDocumentUrl"]) {
     assert.match(documentService, new RegExp(fragment));
   }
   assert.match(automationService, /Events&nbsp;&nbsp; \| &nbsp;&nbsp;Brand Activations/);

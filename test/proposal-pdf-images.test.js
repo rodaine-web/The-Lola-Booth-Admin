@@ -39,3 +39,15 @@ test('website PDF email action downloads only after secure proposal loads',async
   assert.deepEqual(assigned,ok?['https://stagingapi.thelolabooth.com/api/public/proposals/qa-token/pdf']:[]);
  }
 });
+
+test('staging secure website routes use the staging API configuration',()=>{
+ const config=fs.readFileSync('public/staging-site/config.js','utf8');
+ assert.match(config,/apiBase: "https:\/\/stagingapi\.thelolabooth\.com"/);
+ const page=fs.readFileSync('public/staging-site/proposal.html','utf8');
+ assert.match(page,/src="\/config.js"/);
+ assert.doesNotMatch(page,/https:\/\/api\.thelolabooth\.com/);
+ const vercel=JSON.parse(fs.readFileSync('vercel.json','utf8'));
+ const route=vercel.rewrites.find(route=>route.source==='/proposal/:token');
+ assert.equal(route.destination,'/staging-site/proposal.html?token=:token');
+ assert.ok(route.has.some(rule=>rule.type==='host'&&rule.value==='staging.thelolabooth.com'));
+});

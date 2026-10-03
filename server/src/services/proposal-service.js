@@ -383,7 +383,7 @@ export async function createProposalVersion(client, proposal, userId) {
 export async function getProposal(idOrToken, { publicView = false } = {}) {
   const where = publicView ? "p.secure_token=$1" : "p.id=$1";
   const result = await query(
-    `SELECT p.*, c.name AS client_name, c.email AS client_email, e.event_name, e.event_type, e.event_date, e.start_time, e.end_time, e.venue_name,
+    `SELECT p.*, c.name AS client_name, c.email AS client_email, e.event_name, e.event_type, e.event_date, e.start_time, e.end_time, e.venue_name, e.guest_count,
       pkg.name AS package_name, x.name AS experience_name,
       linked_invoice.id AS linked_invoice_id, linked_invoice.invoice_number AS linked_invoice_number, linked_invoice.status AS linked_invoice_status
      FROM proposals p
