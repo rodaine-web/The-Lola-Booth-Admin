@@ -1,3 +1,4 @@
+import StatusBadge from "../components/StatusBadge.jsx";
 import { AlertTriangle, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
@@ -60,19 +61,7 @@ export default function SystemHealth() {
         <AlertTriangle size={18} />
         <div><strong>{health.status}</strong><span>Generated {new Date(health.generatedAt).toLocaleString()}</span></div>
       </section>}
-      <section className="health-grid">
-        {(health?.checks || []).map((item) => (
-          <article className={`health-card ${item.status.toLowerCase()}`} key={item.name}>
-            <small>{item.status}</small>
-            <strong>{item.name.replaceAll(".", " ")}{item.optional ? " · optional" : ""}</strong>
-            <p>{item.summary}</p>
-            {item.details && Object.keys(item.details).length > 0 && <details>
-              <summary>Details</summary>
-              <pre className="health-details">{JSON.stringify(item.details, null, 2)}</pre>
-            </details>}
-          </article>
-        ))}
-      </section>
+      <div className="table-wrap health-services-table"><table><thead><tr><th>Service</th><th>Status</th><th>Details</th></tr></thead><tbody>{(health?.checks||[]).map(item=><tr key={item.name}><td><span className={`health-service-dot ${item.status.toLowerCase()}`}/>{item.name.replaceAll("."," ")}{item.optional?" · optional":""}</td><td><StatusBadge status={item.status}/></td><td>{item.summary}{item.details&&Object.keys(item.details).length>0&&<details><summary>Details</summary><pre className="health-details">{JSON.stringify(item.details,null,2)}</pre></details>}</td></tr>)}</tbody></table></div>
       <section className="panel">
         <div className="table-heading">
           <h2>Automation Jobs</h2>

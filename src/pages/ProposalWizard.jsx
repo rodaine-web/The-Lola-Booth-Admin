@@ -1,3 +1,4 @@
+import {experienceImage} from "../utils/experience-assets.js";
 
 import { ArrowLeft, ArrowRight, Check, FileText, Plus, Send, UserPlus, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -285,20 +286,21 @@ export default function ProposalWizard(){
       {(sourceMode==="new"||lead||context)&&<div className="wizard-section">
         <h3>Client & Event Details</h3>
         <div className="form-grid">
-          <label>First name *<input value={form.first_name} onChange={e=>setField("first_name",e.target.value)}/></label>
+          <details className="wizard-contact-fields wide" open={sourceMode==="new"}><summary>Contact details</summary><div className="form-grid">          <label>First name *<input value={form.first_name} onChange={e=>setField("first_name",e.target.value)}/></label>
           <label>Last name *<input value={form.last_name} onChange={e=>setField("last_name",e.target.value)}/></label>
           <label>Email *<input type="email" value={form.email} onChange={e=>setField("email",e.target.value)}/></label>
           <label>Phone *<input type="tel" value={form.phone} onChange={e=>setField("phone",e.target.value)}/></label>
+</div></details>
           <label>Event title<input value={form.event_name} onChange={e=>setField("event_name",e.target.value)} placeholder="e.g. Sarah & Mike's Wedding"/></label>
           <label>Event type *<select value={form.event_type} onChange={e=>setField("event_type",e.target.value)}><option value="">Select event type</option>{eventTypes.map(type=><option key={type}>{type}</option>)}</select></label>
           {form.event_type==="Other"&&<label>Describe event type *<input value={form.custom_event_type} onChange={e=>setField("custom_event_type",e.target.value)}/></label>}
           <label>Event date *<input type="date" value={form.event_date} onChange={e=>setField("event_date",e.target.value)}/></label>
           <label>Start time <small>Optional</small><input type="time" value={form.start_time} onChange={e=>setField("start_time",e.target.value)}/></label>
           <label>End time <small>Optional</small><input type="time" value={form.end_time} onChange={e=>setField("end_time",e.target.value)}/></label>
-          <label>Number of guests <small>Optional</small><input type="number" min="1" value={form.guest_count} onChange={e=>setField("guest_count",e.target.value)}/></label>
+          <details className="wizard-optional-fields wide"><summary>Venue, guests & notes <small>Optional</small></summary><div className="form-grid">          <label>Number of guests <small>Optional</small><input type="number" min="1" value={form.guest_count} onChange={e=>setField("guest_count",e.target.value)}/></label>
           <label>Venue <small>Optional</small><input value={form.venue_name} onChange={e=>setField("venue_name",e.target.value)}/></label>
           <label className="wide">Event location <small>Optional</small><input value={form.venue_address} onChange={e=>setField("venue_address",e.target.value)}/></label>
-          <label className="wide">Notes <small>Optional</small><textarea value={form.notes} onChange={e=>setField("notes",e.target.value)} placeholder="Client requests, venue notes, creative ideas..."/></label>
+          <label className="wide">Notes <small>Optional</small><textarea value={form.notes} onChange={e=>setField("notes",e.target.value)} placeholder="Client requests, venue notes, creative ideas..."/></label></div></details>
         </div>
       </div>}
       <div className="wizard-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action" onClick={next}>Continue to Services <ArrowRight size={15}/></button></div>
@@ -307,7 +309,7 @@ export default function ProposalWizard(){
     {step===2&&<section className="wizard-panel">
       <div className="wizard-heading"><p className="eyebrow">Step 2 of 3</p><h2>Services & Pricing</h2><p>Select one or more LOLA experiences, packages, and optional enhancements.</p></div>
       <div className="experience-card-grid">
-        {experiences.map(item=>{const selected=selectedExperiences.some(entry=>entry.experience_id===item.id);return <button key={item.id} className={selected?"experience-card selected":"experience-card"} onClick={()=>chooseExperience(item)}><span className="experience-select">{selected?<Check size={15}/>:<Plus size={15}/>}</span><strong>{item.website_name||item.name}</strong><small>{item.website_short_description||item.description||"LOLA experience"}</small>{item.base_price!=null&&<b>Starting at {money(item.base_price)}</b>}</button>;})}
+        {experiences.map(item=>{const selected=selectedExperiences.some(entry=>entry.experience_id===item.id);return <button key={item.id} className={selected?"experience-card selected":"experience-card"} onClick={()=>chooseExperience(item)}><img className="wizard-experience-photo" src={item.image_url || item.image || experienceImage(item.name)} alt=""/><span className="experience-select">{selected?<Check size={15}/>:<Plus size={15}/>}</span><strong>{item.website_name||item.name}</strong><small>{item.website_short_description||item.description||"LOLA experience"}</small>{item.base_price!=null&&<b>Starting at {money(item.base_price)}</b>}</button>;})}
       </div>
       {selectedExperiences.map(item=><section className="wizard-section package-picker" key={item.experience_id}>
         <div><h3>{item.name} Packages</h3><p>Choose the package that best fits this event.</p></div>

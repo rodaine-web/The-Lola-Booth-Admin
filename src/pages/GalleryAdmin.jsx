@@ -188,11 +188,11 @@ export default function GalleryAdmin() {
       <div className="page-heading">
         <div>
           <p className="eyebrow">EXPERIENCE / GALLERIES</p>
-          <h1>{data ? data.album.title : "The moments, delivered."}</h1>
+          <h1>{data ? data.album.title : "Gallery"}</h1>
           <p className="lede">
             {data
               ? `${formatDateOnly(data.album.event_date)} · Private event gallery`
-              : "A beautiful home for every event. Private by design."}
+              : "Manage and deliver event galleries."}
           </p>
         </div>
         <div className="quick-actions">

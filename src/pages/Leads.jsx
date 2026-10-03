@@ -76,7 +76,7 @@ export default function Leads(){
     }finally{setSaving(false);}
   }
 
-  const columns=useMemo(()=>["first_name","last_name","email","event_type","event_date","lead_source","status"],[]);
+  const columns=useMemo(()=>["name","email","phone","event_type","status","created_at"],[]);
 
   return <main className="page lola-list-page">
     <section className="page-heading lola-page-heading">
@@ -88,12 +88,12 @@ export default function Leads(){
     </section>
 
     <section className="lola-status-tabs">
-      {statuses.slice(0,7).map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
+      {statuses.slice(0,7).map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
     </section>
 
     <section className="lola-list-toolbar">
       <div className="lola-list-search"><Search size={16}/><input aria-label="Search leads" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search leads by name, email, phone..."/></div>
-      <div className="lola-view-toggle"><button className={view==="table"?"active":""} onClick={()=>setView("table")}><Table2 size={15}/></button><button className={view==="kanban"?"active":""} onClick={()=>setView("kanban")}><Columns3 size={15}/></button></div>
+      <div className="lola-view-toggle"><button aria-label="Table view" className={view==="table"?"active":""} onClick={()=>setView("table")}><Table2 size={15}/></button><button aria-label="Board view" className={view==="kanban"?"active":""} onClick={()=>setView("kanban")}><Columns3 size={15}/></button></div>
     </section>
 
     {filtersOpen&&<section className="lola-filter-drawer">
@@ -105,7 +105,7 @@ export default function Leads(){
     {error&&<div className="toast error">{error}</div>}
 
     {view==="table"
-      ? <DataTable rows={leads} columns={columns} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
+      ? <DataTable rows={leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")}))} columns={columns} columnLabels={{event_type:"Event Type",created_at:"Created"}} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
       : <LeadBoard leads={leads}/>
     }
 

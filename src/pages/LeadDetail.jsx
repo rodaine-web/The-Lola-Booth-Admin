@@ -142,12 +142,15 @@ export default function LeadDetail() {
     <main className="page record-workspace leaddetail-workspace">
       <div className="detail-back"><Link to="/sales/leads"><ArrowLeft size={16} />Back to leads</Link></div>
       <div className="page-heading detail-heading">
-        <div>
+        <div className="lead-contact-profile">
+          <span className="lead-profile-avatar">{fullName.split(/\s+/).slice(0,2).map(part=>part[0]).join("")}</span>
           <p className="eyebrow">Lead profile</p>
           <h1>{fullName}</h1>
+          <p className="lead-contact-links"><a href={`mailto:${lead.email}`}>{lead.email}</a><a href={`tel:${lead.phone}`}>{lead.phone}</a></p>
           <p className="lede">{lead.event_type} · {formatDate(lead.event_date)} · {lead.city || "Location TBD"}{lead.state ? `, ${lead.state}` : ""}</p>
         </div>
-        <div className="detail-actions">
+        <div className="detail-actions lead-quick-actions">
+          <h2>Quick Actions</h2>
           <select aria-label="Lead status" value={lead.status} disabled={busy} onChange={(event) => updateStatus(event.target.value)}>
             {statuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
           </select>
@@ -160,7 +163,25 @@ export default function LeadDetail() {
 
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
 
-      <section className="detail-summary">
+      <TabNavigation items={tabs} value={tab} onChange={setTab} />
+
+      {tab === "Overview" && (<><section className="detail-grid lead-overview-grid">
+          <Panel title="Event Details">
+            <Field label="Date" value={formatDate(lead.event_date)} />
+            <Field label="Time" value={`${formatTime(lead.event_start_time)} - ${formatTime(lead.event_end_time)}`} />
+            <Field label="Type" value={lead.event_type} />
+            <Field label="Venue" value={lead.venue_name} />
+            <Field label="Address" value={[lead.venue_address, lead.city, lead.state, lead.zip].filter(Boolean).join(", ")} />
+          </Panel>
+          <Panel title="Notes">
+            <p className="note-text">{lead.message || "No notes yet."}</p>
+            <div className="inline-form note-form">
+              <input value={note} onChange={(event) => setNote(event.target.value)} aria-label="Internal note" placeholder="Add an internal note..." />
+              <button className="primary-action" onClick={addNote} disabled={!note.trim()}>Add Note</button>
+            </div>
+          </Panel>
+
+        </section><details className="lead-advanced-details"><summary>Assignment, source, preferences & conversion details</summary>      <section className="detail-summary">
         <Metric label="Preferred Package" value={lead.preferredPackage?.name || "Not selected"} />
         <Metric label="Experience" value={lead.preferredExperience?.name || "Not selected"} />
         <Metric label="Guest Count" value={lead.guest_count || "TBD"} />
@@ -168,11 +189,7 @@ export default function LeadDetail() {
         <Metric label="Response SLA" value={responseLabel(lead)} />
       </section>
 
-      <TabNavigation items={tabs} value={tab} onChange={setTab} />
-
-      {tab === "Overview" && (
-        <section className="detail-grid">
-          <Panel title="Assignment and experience"><RelationshipSelect resource="users" placeholder="Lead owner" value={lead.assigned_user_id} disabled={busy} onChange={value=>updateDetails({assigned_user_id:value})}/><RelationshipSelect resource="packages" placeholder="Preferred package" value={lead.preferred_package_id} disabled={busy} onChange={value=>updateDetails({preferred_package_id:value})}/></Panel>
+<section className="detail-grid">          <Panel title="Assignment and experience"><RelationshipSelect resource="users" placeholder="Lead owner" value={lead.assigned_user_id} disabled={busy} onChange={value=>updateDetails({assigned_user_id:value})}/><RelationshipSelect resource="packages" placeholder="Preferred package" value={lead.preferred_package_id} disabled={busy} onChange={value=>updateDetails({preferred_package_id:value})}/></Panel>
           <Panel title="Client Details">
             <Field label="Name" value={fullName} />
             <Field label="Email" value={lead.email} />
@@ -195,20 +212,6 @@ export default function LeadDetail() {
               <Field label="Ad ID" value={lead.ad_id} />
             </details>
           </Panel>
-          <Panel title="Event Details">
-            <Field label="Date" value={formatDate(lead.event_date)} />
-            <Field label="Time" value={`${formatTime(lead.event_start_time)} - ${formatTime(lead.event_end_time)}`} />
-            <Field label="Type" value={lead.event_type} />
-            <Field label="Venue" value={lead.venue_name} />
-            <Field label="Address" value={[lead.venue_address, lead.city, lead.state, lead.zip].filter(Boolean).join(", ")} />
-          </Panel>
-          <Panel title="Notes">
-            <p className="note-text">{lead.message || "No notes yet."}</p>
-            <div className="inline-form note-form">
-              <input value={note} onChange={(event) => setNote(event.target.value)} aria-label="Internal note" placeholder="Add an internal note..." />
-              <button className="primary-action" onClick={addNote} disabled={!note.trim()}>Add Note</button>
-            </div>
-          </Panel>
           <Panel title="Possible Duplicates">
             <DuplicateList duplicates={duplicates} busy={busy} onMerge={setPendingMerge} />
           </Panel>
@@ -230,8 +233,7 @@ export default function LeadDetail() {
               ))}
             </div>
             <div className="price-line"><CircleDollarSign size={16} />Selected add-ons: ${selectedTotal.toLocaleString()}</div>
-          </Panel>
-        </section>
+          </Panel></section></details></>
       )}
 
       {tab === "Activity" && <Panel title="Activity Timeline"><Timeline rows={lead.timeline} /></Panel>}

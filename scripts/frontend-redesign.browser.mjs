@@ -54,6 +54,7 @@ try{
  if(process.env.SCREENSHOT_DIR){await sections.getByRole('button',{name:'Overview',exact:true}).click();await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:process.env.SCREENSHOT_DIR+'/event-command-center.png',fullPage:true});}
  console.log('PASS: event sections, team subsection and unchanged creative API payload');
  await page.goto(origin+'/sales/proposals/new?eventId=event-1');
+ await page.getByText('Contact details',{exact:true}).click();
  await page.getByRole('textbox',{name:'First name',exact:false}).waitFor();
  assert.equal(await page.getByRole('textbox',{name:'First name',exact:false}).inputValue(),'Jessica');
  await page.getByRole('button',{name:'Continue to Services'}).click();
@@ -77,7 +78,7 @@ try{
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
  if(process.env.SCREENSHOT_DIR){await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:process.env.SCREENSHOT_DIR+'/cms-hero-slides.png',fullPage:true});}
  console.log('PASS: CMS visual record preview and unchanged editor fields');
- for(const [path,heading] of [['/sales/leads','Leads'],['/sales/clients','Clients'],['/events/events','Events'],['/sales/proposals','Proposals'],['/finance/invoices','Invoices'],['/finance/payments','Payments'],['/sales/communications','Client communications in one place.'],['/operations/galleries','The moments, delivered.'],['/events/staff','Staff'],['/events/equipment','Equipment'],['/insights/analytics','Reports & Analytics'],['/system/settings','Manage your business preferences.'],['/system/health','System Health']]){
+ for(const [path,heading] of [['/sales/leads','Leads'],['/sales/clients','Clients'],['/events/events','Events'],['/sales/proposals','Proposals'],['/finance/invoices','Invoices'],['/finance/payments','Payments'],['/sales/communications','Communications'],['/operations/galleries','Gallery'],['/events/staff','Staff'],['/events/equipment','Equipment'],['/insights/analytics','Reports & Analytics'],['/system/settings','Settings'],['/system/health','System Health']]){
    await page.goto(origin+path);
    await page.getByRole('heading',{name:heading,exact:true}).waitFor();
  }

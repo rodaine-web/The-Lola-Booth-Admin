@@ -2,7 +2,7 @@ import { formatDisplay, labelize } from "../utils/display.js";
 import StatusBadge from "./StatusBadge.jsx";
 import { useNavigate } from "react-router-dom";
 
-export default function DataTable({ columns, rows, empty = "No records found.", getRowHref, onEdit }) {
+export default function DataTable({ columns, rows, empty = "No records found.", getRowHref, onEdit, onView, columnLabels = {} }) {
   const navigate = useNavigate();
 
   if (!rows?.length) return <div className="empty-state">{empty}</div>;
@@ -12,8 +12,8 @@ export default function DataTable({ columns, rows, empty = "No records found.", 
       <table>
         <thead>
           <tr>
-            {columns.map((column) => <th key={column}>{labelize(column)}</th>)}
-            {onEdit && <th>Actions</th>}
+            {columns.map((column) => <th key={column}>{columnLabels[column] || labelize(column)}</th>)}
+            {(onEdit || onView) && <th>Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -27,7 +27,7 @@ export default function DataTable({ columns, rows, empty = "No records found.", 
               onClick={() => getRowHref && navigate(getRowHref(row))}
             >
               {columns.map((column) => <td key={column}>{/(^status$|_status$)/.test(column) ? <StatusBadge status={row[column]} /> : formatDisplay(row[column],column)}</td>)}
-              {onEdit && <td><button className="table-action" onClick={(event) => { event.stopPropagation(); onEdit(row); }}>Edit</button></td>}
+              {(onEdit || onView) && <td>{onView && <button className="table-action" onClick={event=>{event.stopPropagation();onView(row);}}>History</button>}{onEdit && <button className="table-action" onClick={(event) => { event.stopPropagation(); onEdit(row); }}>Edit</button>}</td>}
             </tr>
           ))}
         </tbody>

@@ -38,7 +38,7 @@ export default function Payments(){
     </section>
 
     <section className="lola-status-tabs">
-      {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
+      {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
     </section>
 
     <section className="lola-list-toolbar">

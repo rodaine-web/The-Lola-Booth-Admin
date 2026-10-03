@@ -1,40 +1,38 @@
-# LOLA Admin frontend redesign — staging handoff
+# LOLA Admin — supplied-design implementation
 
-Branch: `main-staging`. Deployment is manual. No deployment command was run.
+Branch: `main-staging`. User deploys staging manually. No production changes or deployment commands.
 
-## Result
+## Visual reference
 
-The combined staging branch uses the approved dark sidebar, cream/white canvas, and gold/black LOLA branding across the dashboard, sales, events, finance, communications, CMS/catalog, roster, analytics, and system workspaces. Existing redesign commits were retained and integrated.
+This revision follows the two images supplied by the user: **LOLA Photo Booth Dashboard.png** and **LOLA Booth Admin Dashboard Showcase.png**. These supersede the earlier interpretation based only on the written conversation.
 
-This sprint adds shared page headings, record sections, metrics and section navigation; reachable mobile navigation with Escape dismissal and accessible names; creation-menu dismissal; protection against outdated search responses; clearer event sections and subnavigation; lead/client profile hierarchy; linked client/event context in the three-step proposal wizard; and staging CMS cards with image previews in the editor.
+The admin now has the gold LOLA wordmark, black sidebar, white canvas, compact borders and spacing, serif page headings, understated tables, gold tabs, and consistent reusable controls. The dashboard uses the reference's four KPIs, greeting and script lettering, photographic banner, grouped bars, central-total doughnut, three-column cards, experience photographs, and proposal call to action.
 
-Existing event actions and proposal payload shapes remain in place. Linked-event proposal creation reuses the existing client/event and lets the existing server associate the opportunity. Advanced editors remain available. Duplicate-merge reviews receive the full selected record so their existing handlers submit the correct ID.
+Page changes include combined lead names and compact tables; a contact-led Lead Detail with quick actions and expandable advanced fields; calendar-first Events; compact Event Command Center with tabbed operations, selected-experience images and expandable venue/creative notes; simpler proposal steps with editable contact and optional fields folded away; compact invoice creation; photo-led catalog rows; table-based Staff/Equipment and System Health; CMS page navigation and large image previews; analytics report tabs and revenue line chart; and consistent finance, communications, gallery, settings and system presentation.
 
-No server, database, API contract, payment integration, worker, deployment configuration, or production branch changes were made by this sprint.
+## Preserved behavior
+
+Existing API endpoints, payloads, backend services, database schema, financial calculations, approval/sending behavior, duplicate handling, permissions and advanced editors remain in place. New calendar cells respect the API's business week range and use date-only UTC arithmetic. List requests and linked proposal creation continue using existing contracts.
+
+The charts use **booked and collected revenue**, which the existing API provides. The reference's mixed revenue/proposal/booking chart was not populated with invented series. The reference testimonial is replaced with brand copy because no authenticated testimonial data is available on the dashboard. Existing approved experience photos are reused. Invoice creation retains the existing deposit-request behavior rather than introducing different payment rules.
 
 ## Verification
 
-- `npm test`: 315 tests, 310 passed, 5 intentionally skipped, 0 failed.
-- `npm run build`: passed.
+- Final `npm test`: **319 tests; 314 passed; 5 intentionally skipped; 0 failed**.
+- Final staging frontend build: **passed** (`npm run build -- --configLoader runner`; runner avoids writing through the existing dependency symlink).
 - `git diff --check`: passed.
-- `scripts/frontend-redesign.browser.mjs`: passed against a local preview of the built assets with intercepted mock API responses.
-- Browser checks cover desktop/mobile navigation, event section visibility, the existing creative-update request, linked proposal creation without duplicate client/event creation, CMS preview/editor fields, and priority workspace rendering. No browser runtime errors were detected.
+- Browser checks of the built local preview: dashboard at 1536×1024, calendar month navigation, all seven Event Command Center operation sections, linked proposal client/event prefill, service/package selection and review, priority page rendering, and mobile menu opening/Escape dismissal at 390×844. Mobile document width remained 390px.
+- New calendar tests cover leap day, six-week months, API-specified Monday weeks, and date-only day selection.
+- Historical logo-text tests were updated for the supplied gold wordmark direction. Public document logo assertions remain in place.
 
-Browser verification uses fixtures. It does not certify real staging email delivery, Stripe payments, uploads, CMS publication, or external integrations. Perform a short staging UAT with existing records after your manual deployment.
+Browser verification uses local sample data and blocks every non-GET API request. It does not certify real staging email delivery, payments, uploads, or publication. After manual deployment, verify these with existing staging records. The reusable browser regression script has been updated for the new headings and folded contact section; this revision's interactive checks used the Codex browser.
 
-## Manual staging deployment
+## Generated banner asset
 
-1. Select `main-staging` in the staging Vercel project and deploy its latest commit.
-2. Keep the project's existing staging environment variables. In particular, use `VITE_APP_ENV=staging` and the staging API URL. Keep the current gallery/CMS feature flags.
-3. Verify login, dashboard, mobile menu, lead/client detail, proposal creation from a linked event, event staffing/equipment/checklist actions, accepted-proposal invoicing, communications, gallery, CMS, roster, analytics, and settings with staging data.
-4. Do not promote this deployment to production as part of this sprint.
+Saved project asset: `public/brand/admin/dashboard-banner.png`. Created with the built-in image-generation tool from the supplied full-dashboard reference. It recreates the photograph; the headline and button are HTML.
 
-## Repeating the browser check
+Prompt: “Extract/recreate ONLY the photograph inside the top-right black banner of this dashboard reference. Show the same glamorous Black woman wearing black oversized sunglasses, gold hoop earrings, black jacket, warm skin, facing slightly left looking up, positioned in right half of a wide landscape frame. Black studio background, entire left half pure dark black negative space for HTML text. Preserve closely her appearance, composition and lighting from the reference photograph. Remove ALL existing headline, button, UI borders and dashboard elements. Output just the clean photograph, landscape aspect about 2:1. No letters, no words, no buttons, no watermark.”
 
-Serve `dist` with SPA fallback at the root and its assets at `/customer-documents/assets/`, matching the existing application routing. Run:
+## Manual deployment
 
-```sh
-FRONTEND_PREVIEW_URL=http://127.0.0.1:4173 node scripts/frontend-redesign.browser.mjs
-```
-
-The script uses the installed Playwright browser by default. `BROWSER_EXECUTABLE` can select an existing browser executable, and `SCREENSHOT_DIR` can save desktop/mobile preview images. All API responses are intercepted within the test browser.
+Use the staging Vercel project and `main-staging`; retain its current staging API URL and feature flags. Verify dashboard, leads/clients, proposal creation from a linked event, event actions, accepted-proposal invoicing, communications, galleries, CMS, staff/equipment, analytics and settings. Do not promote to production as part of this sprint.

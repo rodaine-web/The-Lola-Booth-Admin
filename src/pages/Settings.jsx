@@ -67,7 +67,7 @@ export default function Settings(){
 
   return <main className="page settings-redesign">
     <section className="page-heading lola-page-heading">
-      <div><p className="eyebrow">Settings</p><h1>Manage your business preferences.</h1><p className="lede">Keep business, document, operational, and notification defaults organized in one place.</p></div>
+      <div><p className="eyebrow">Settings</p><h1>Settings</h1><p className="lede">Configure your business.</p></div>
       <div className="button-row"><button className="lola-secondary-button" onClick={()=>{setForm({...settings});setNotice("Unsaved changes reverted.");}}>Revert</button><button className="primary-action" disabled={busy} onClick={save}>{busy?"Saving...":"Save Changes"}</button></div>
     </section>
 

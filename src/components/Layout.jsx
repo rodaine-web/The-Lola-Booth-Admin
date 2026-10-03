@@ -1,8 +1,8 @@
 import { GALLERY_ENABLED } from "../utils/features.js";
 import EnvironmentBadge from "./EnvironmentBadge.jsx";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  BarChart3, Bell, Boxes, CalendarDays, ChevronDown, CircleDollarSign, ContactRound,
+  BarChart3, Bell, Camera, Boxes, CalendarDays, ChevronDown, CircleDollarSign, ContactRound,
   FileText, Gauge, HeartPulse, Images, LogOut, MessageSquareText, Package, PanelsTopLeft,
   Plug, Plus, ReceiptText, RadioTower, Search, Settings, ShieldCheck, Sparkles, Menu, X,
   UserCog, UsersRound, Wrench
@@ -118,13 +118,9 @@ export default function Layout() {
     <div className="lola-app-shell">
       <a className="lola-skip-link" href="#workspace-content">Skip to content</a>
       <aside id="lola-navigation" className={navigationOpen ? "lola-sidebar open" : "lola-sidebar"}>
-        <div className="lola-brand">
-          <img className="brand-logo-admin-stacked" src="/brand/LOLA_Primary_Light_Transparent.png" alt="The LOLA Booth" />
-          <div>
-            <strong>THE LOLA BOOTH</strong>
-            <span>Admin Portal</span>
-          </div>
-        </div>
+        <Link className="lola-brand" to="/" aria-label="LOLA home">
+          <strong>LOLA</strong><span>THE LOLA BOOTH</span>
+        </Link>
 
         <button className="lola-nav-close" aria-label="Close navigation" onClick={() => { setNavigationOpen(false); menuTrigger.current?.focus(); }}><X size={20}/></button>
 
@@ -142,7 +138,7 @@ export default function Layout() {
 
         <div className="lola-sidebar-footer">
           <div className="lola-sidebar-tagline">
-            <span className="camera-dot">●</span>
+            <Camera size={27} aria-hidden="true" />
             <strong>Good people.<br/>Better photos.</strong>
           </div>
           <EnvironmentBadge />

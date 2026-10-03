@@ -50,7 +50,7 @@ export default function Clients(){
 
   return <main className="page lola-list-page">
     <section className="page-heading lola-page-heading">
-      <div><p className="eyebrow">Sales</p><h1>Clients</h1><p className="lede">Manage the people and organizations behind every event.</p></div>
+      <div><p className="eyebrow">Sales</p><h1>Clients</h1><p className="lede">Manage your clients.</p></div>
       <div className="button-row">
         <button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>
         <button className="primary-action" onClick={()=>{setDraft({client_type:"INDIVIDUAL"});setCreating(true);}}><Plus size={15}/>New Client</button>

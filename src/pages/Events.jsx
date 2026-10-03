@@ -1,4 +1,5 @@
 
+import Calendar from "./Calendar.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { api } from "../api/client.js";
@@ -11,6 +12,7 @@ const eventTypes=["Wedding","Birthday","Private Party","Brand Activation","Corpo
 
 export default function Events(){
   const [urlParams,setUrlParams]=useSearchParams();
+  const [display,setDisplay]=useState("calendar");
   const [rows,setRows]=useState([]);
   const [search,setSearch]=useState("");
   const [error,setError]=useState("");
@@ -86,15 +88,15 @@ export default function Events(){
 
   return <main className="page lola-events-page">
     <section className="page-heading lola-page-heading">
-      <div><p className="eyebrow">Events</p><h1>Events</h1><p className="lede">Plan. Prepare. Execute.</p></div>
+      <div className="events-display-toggle"><button className={display==="calendar"?"active":""} onClick={()=>setDisplay("calendar")}>Calendar</button><button className={display==="list"?"active":""} onClick={()=>setDisplay("list")}>List</button></div>
       <div className="button-row">
-        <Link className="lola-secondary-button" to="/events/calendar"><CalendarDays size={15}/>Calendar</Link>
-        <button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>
+
+        {display==="list"&&<button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>}
         <button className="primary-action" onClick={openCreate}><Plus size={15}/>New Event</button>
       </div>
     </section>
 
-    <section className="lola-status-tabs">
+    {display==="list"&&<><section className="lola-status-tabs">
       {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setStatus(item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
     </section>
 
@@ -118,6 +120,8 @@ export default function Events(){
       </Link>)}
       {!rows.length&&<div className="empty-state">No events found.</div>}
     </section>
+    </>}
+    {display==="calendar"&&<Calendar embedded/>}
 
     {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Create event">
       <div className="modal lola-wizard-modal">

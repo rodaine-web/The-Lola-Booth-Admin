@@ -29,8 +29,8 @@ test("approved LOLA brand package assets are available and mapped", () => {
 });
 
 test("admin and public surfaces use approved logo variants", () => {
-  assert.match(layout, /LOLA_Primary_Light_Transparent\.png/);
-  assert.match(layout, /brand-logo-admin-stacked/);
+  assert.match(layout, /<strong>LOLA<\/strong>/);
+  assert.match(layout, /THE LOLA BOOTH/);
   assert.match(login, /LOLA_Primary_Dark_Transparent\.png/);
   assert.match(publicProposal, /LOLA_Primary_Dark_Transparent\.png/);
   assert.match(publicInvoice, /LOLA_Primary_Dark_Transparent\.png/);

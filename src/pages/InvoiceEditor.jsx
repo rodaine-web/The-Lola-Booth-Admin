@@ -58,7 +58,7 @@ export default function InvoiceEditor(){
 
   return <main className="page invoice-wizard-page">
     <div className="detail-back"><Link to="/finance/invoices"><ArrowLeft size={16}/>Back to invoices</Link></div>
-    <section className="page-heading"><div><p className="eyebrow">Create Invoice</p><h1>Quick and easy from a proposal.</h1><p className="lede">LOLA will carry the client, event, services, pricing and deposit forward automatically.</p></div></section>
+    <section className="page-heading"><div><p className="eyebrow">Create Invoice</p><h1>Create Invoice</h1><p className="lede">Quick and easy from a proposal.</p></div></section>
     {error&&<div className="toast error">{error}</div>}
 
     <section className="source-choice invoice-source-choice">

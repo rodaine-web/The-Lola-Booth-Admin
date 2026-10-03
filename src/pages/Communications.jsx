@@ -207,9 +207,9 @@ export default function Communications() {
   if (!templates || !automations || !communications) return <main className="page communications-center"><h1>Communications</h1><AsyncState loading={loading} error={error} requestId={requestId} onRetry={load} noun="communications" /></main>;
 
   return (
-    <main className="page communications-redesign">
+    <main className="page communications-redesign" aria-label="Communication Center">
       <div className="page-heading">
-        <div><p className="eyebrow">Communications</p><h1>Client communications in one place.</h1><p className="lede">Communication Center for sending, scheduling, reviewing, and troubleshooting every client message.</p></div>
+        <div><p className="eyebrow">Communications</p><h1>Communications</h1><p className="lede">Email and SMS in one place.</p></div>
         <div className="button-row">
           <button className="lola-secondary-button" onClick={load}><RefreshCw size={16} />Refresh</button>
           <button className="primary-action" onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>New Message</button>

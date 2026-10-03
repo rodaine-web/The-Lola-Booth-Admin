@@ -1,3 +1,4 @@
+import ExperienceStrip from "../components/ExperienceStrip.jsx";
 import { TabNavigation, MetricCard as Metric, DetailSection as Panel } from "../components/WorkspaceUI.jsx";
 import { GALLERY_ENABLED } from "../utils/features.js";
 import AsyncState from "../components/AsyncState.jsx";
@@ -102,6 +103,10 @@ export default function EventDetail() {
 
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
 
+      <TabNavigation items={tabs} value={primarySection(tab)} onChange={value => setTab(sectionGroups[value]?.[0] || value)} label="Event command center" className="event-command-tabs" />
+      {sectionGroups[primarySection(tab)]?.length > 1 && <TabNavigation items={sectionGroups[primarySection(tab)]} value={tab} onChange={setTab} label={`${primarySection(tab)} sections`} className="workspace-subtabs" />}
+
+      {tab === "Overview" && <>
       <section className="event-command-grid">
         <article className="event-readiness-card">
           <div className="readiness-ring" style={{"--score": String(event.operations?.readiness?.score ?? 0)}}><strong>{event.operations?.readiness?.score ?? 0}%</strong><span>Ready</span></div>
@@ -134,10 +139,9 @@ export default function EventDetail() {
         <Metric label="Operational" value={event.operational_status?.replaceAll("_", " ") || "PREPARING"} />
       </section>
 
-      <TabNavigation items={tabs} value={primarySection(tab)} onChange={value => setTab(sectionGroups[value]?.[0] || value)} label="Event command center" className="event-command-tabs" />
-      {sectionGroups[primarySection(tab)]?.length > 1 && <TabNavigation items={sectionGroups[primarySection(tab)]} value={tab} onChange={setTab} label={`${primarySection(tab)} sections`} className="workspace-subtabs" />}
+      </>}
 
-      {tab === "Overview" && (
+      {tab === "Overview" && (<><ExperienceStrip items={event.experiences || (event.experience_name?[{name:event.experience_name}]:[])}/><details className="event-advanced-details"><summary>Venue, creative & event notes</summary>
         <section className="detail-grid">
           <Panel title="Event Information">
             <Field label="Date" value={formatDate(event.event_date)} />
@@ -162,7 +166,7 @@ export default function EventDetail() {
             <p className="note-text"><strong>Internal:</strong> {event.internal_notes || "No internal notes."}</p>
             <p className="note-text"><strong>Client:</strong> {event.client_notes || "No client notes."}</p>
           </Panel>
-        </section>
+        </section></details></>
       )}
 
       {["Timeline", "Checklist", "Creative", "Gallery", "Overview"].includes(tab) && (

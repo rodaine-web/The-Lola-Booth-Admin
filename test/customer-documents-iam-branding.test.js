@@ -77,9 +77,9 @@ test("manual communication and user management routes include RBAC protections",
   assert.match(publicFormEmail, /CONTACT_MESSAGE_CONFIRMATION/);
 });
 
-test("admin branding uses the approved logo and Admin Portal label only", () => {
-  assert.match(layout, /LOLA_Primary_Light_Transparent\.png/);
-  assert.match(layout, /Admin Portal/);
+test("admin branding follows the approved gold wordmark and links home", () => {
+  assert.match(layout, /<strong>LOLA<\/strong>/);
+  assert.match(layout, /aria-label="LOLA home"/);
   assert.doesNotMatch(layout, /LOLA Admin/);
   assert.doesNotMatch(layout, /Private operations/);
 });
