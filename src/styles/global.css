@@ -1919,3 +1919,25 @@ input:focus,select:focus,textarea:focus{border-color:#c59d61;box-shadow:0 0 0 3p
 .cms-workspace>label{display:grid;gap:6px;max-width:520px;margin-bottom:12px}
 .cms-workspace>.table-wrap{border-radius:12px}
 .cms-workspace .environment-badge{border-radius:999px}
+
+
+/* LOLA CATALOG AND ADMIN POLISH */
+.resource-redesign>.page-heading,.roster-redesign>.page-heading,.analytics-redesign>.page-heading,.users-workspace>.page-heading{align-items:center}
+.resource-redesign>.toolbar,.roster-redesign>.toolbar,.analytics-redesign .analytics-range,.users-workspace>.toolbar{margin-bottom:14px}
+.resource-redesign .table-wrap,.roster-redesign .table-wrap,.users-workspace .table-wrap{border-radius:12px;background:#fff}
+.resource-redesign .modal,.roster-redesign .modal,.users-workspace .modal{border-radius:14px}
+.resource-redesign fieldset,.users-workspace fieldset{border:1px solid var(--lola-border);border-radius:10px;padding:12px}
+.resource-redesign fieldset legend,.users-workspace fieldset legend{font-size:.74rem;font-weight:700;color:#6c6257}
+.roster-redesign .roster-card,.roster-redesign .panel{border-radius:12px}
+.roster-redesign .status-grid{gap:10px}
+.analytics-redesign .analytics-range,.analytics-workspace .analytics-range{display:flex;gap:4px;background:#fff;border:1px solid var(--lola-border);padding:4px;border-radius:10px;width:max-content}
+.analytics-redesign .analytics-range button,.analytics-workspace .analytics-range button{border:0;background:transparent;padding:8px 11px;border-radius:7px;color:var(--lola-muted)}
+.analytics-redesign .analytics-range button.active,.analytics-workspace .analytics-range button.active{background:#171717;color:#fff}
+.analytics-redesign .kpi-grid.compact{grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px}
+.analytics-redesign .chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.analytics-redesign .chart-panel{min-width:0}
+.users-workspace .users-summary,.users-workspace .detail-summary{margin-bottom:14px}
+.users-workspace .user-card,.users-workspace .compact-record{border:1px solid var(--lola-border);border-radius:11px;background:#fff}
+.users-workspace .modal details{border:1px solid var(--lola-border);border-radius:9px;padding:9px}
+.system-admin-page .page-heading{align-items:center}
+@media(max-width:820px){.analytics-redesign .chart-grid{grid-template-columns:1fr}}
