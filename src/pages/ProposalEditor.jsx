@@ -1,3 +1,4 @@
+import {loadCatalog} from "../../shared/catalog-loading.js";
 import ProposalVisualEditor from "../components/ProposalVisualEditor.jsx";
 import {selectProposalPackage,selectProposalExperience} from '../../shared/proposal-catalog.js';
 import { ArrowDown, ArrowLeft, ArrowUp, FileUp, Plus, Trash2 } from "lucide-react";
@@ -54,18 +55,24 @@ export default function ProposalEditor() {
   const [hydratingSource,setHydratingSource]=useState(false);
 
   useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
+  const [catalogAttempt,setCatalogAttempt]=useState(0);
+  const [catalogError,setCatalogError]=useState("");
   useEffect(() => {
-    Promise.all([
-      api.get("/experiences?pageSize=100"),
-      api.get("/packages?pageSize=200")
-    ]).then(([experiences, packages]) => {
-      setExperienceOptions(experiences?.data || experiences || []);
-      setPackageOptions(packages?.data || packages || []);
-    }).catch(() => {
-      setExperienceOptions([]);
-      setPackageOptions([]);
+    let live=true;
+    setCatalogError("");
+    Promise.allSettled(["experiences","packages"].map(resource=>loadCatalog(api.get,resource))).then(results=>{
+      if(!live)return;
+      const setters=[setExperienceOptions,setPackageOptions];
+      const labels=["experiences","packages"];
+      const failures=[];
+      results.forEach((result,index)=>{
+        if(result.status==="fulfilled")setters[index](result.value);
+        else failures.push(labels[index]+": "+result.reason.message);
+      });
+      setCatalogError(failures.length?"Unable to load "+failures.join("; "):"");
     });
-  }, []);
+    return()=>{live=false;};
+  }, [catalogAttempt]);
 
   useEffect(() => {
     const leadId = params.get("leadId");
@@ -281,6 +288,7 @@ export default function ProposalEditor() {
           <button type="button" className={mode === "upload" ? "active" : ""} onClick={() => setMode("upload")}>Upload External Proposal</button>
         </div>
       </div>
+      {catalogError&&<div className="toast error" role="alert">{catalogError} <button onClick={()=>setCatalogAttempt(value=>value+1)}>Retry catalog</button></div>}
       {error && <div id="proposal-error" role="alert" className="toast error">{error}</div>}
       <form aria-describedby={error?"proposal-error":undefined} className="document-editor" onSubmit={save}>
         <section className="panel">

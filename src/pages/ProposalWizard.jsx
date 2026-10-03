@@ -1,3 +1,4 @@
+import {loadCatalog} from "../../shared/catalog-loading.js";
 import {experienceImage} from "../utils/experience-assets.js";
 
 import { ArrowLeft, ArrowRight, Check, FileText, Plus, Send, UserPlus, UsersRound } from "lucide-react";
@@ -34,17 +35,27 @@ export default function ProposalWizard(){
     notes:"",discount:"",travel:"",other_fees:"",deposit_value:"",valid_through:"",proposal_title:""
   });
 
+  const [catalogAttempt,setCatalogAttempt]=useState(0);
+  const [catalogLoading,setCatalogLoading]=useState(true);
+  const [catalogError,setCatalogError]=useState("");
   useEffect(()=>{
-    Promise.all([
-      api.get("/experiences?pageSize=100"),
-      api.get("/packages?pageSize=200"),
-      api.get("/addons?pageSize=100")
-    ]).then(([x,p,a])=>{
-      setExperiences((x.data||x||[]).filter(item=>item.active!==false));
-      setPackages((p.data||p||[]).filter(item=>item.active!==false));
-      setAddons((a.data||a||[]).filter(item=>item.active!==false));
-    }).catch(()=>{});
-  },[]);
+    let live=true;
+    setCatalogLoading(true);setCatalogError("");
+    Promise.allSettled(["experiences","packages","addons"].map(resource=>loadCatalog(api.get,resource)))
+      .then(results=>{
+        if(!live)return;
+        const setters=[setExperiences,setPackages,setAddons];
+        const labels=["experiences","packages","add-ons"];
+        const failures=[];
+        results.forEach((result,index)=>{
+          if(result.status==="fulfilled")setters[index](result.value.filter(item=>item.active!==false));
+          else failures.push(labels[index]+": "+result.reason.message);
+        });
+        setCatalogError(failures.length?"Unable to load "+failures.join("; "):"");
+        setCatalogLoading(false);
+      });
+    return()=>{live=false;};
+  },[catalogAttempt]);
 
   useEffect(()=>{if(leadId)hydrateLead(leadId);},[leadId]);
 
@@ -161,6 +172,7 @@ export default function ProposalWizard(){
 
   function next(){
     if(step===1&&!validateStepOne())return;
+    if(step===2&&(catalogLoading||catalogError)){setError("Wait for the catalog to load, or retry the failed request.");return;}
     if(step===2&&!selectedExperiences.length){setError("Select at least one LOLA experience.");return;}
     setError("");setStep(current=>Math.min(3,current+1));
   }
@@ -308,13 +320,17 @@ export default function ProposalWizard(){
 
     {step===2&&<section className="wizard-panel">
       <div className="wizard-heading"><p className="eyebrow">Step 2 of 3</p><h2>Services & Pricing</h2><p>Select one or more LOLA experiences, packages, and optional enhancements.</p></div>
+      {catalogLoading&&<p role="status">Loading experiences and packages…</p>}
+      {catalogError&&<div className="toast error" role="alert">{catalogError} <button onClick={()=>setCatalogAttempt(value=>value+1)}>Retry catalog</button></div>}
+      {!catalogLoading&&!catalogError&&!experiences.length&&<p role="status">No active experiences are available. Add an experience in the catalog before creating a proposal.</p>}
       <div className="experience-card-grid">
         {experiences.map(item=>{const selected=selectedExperiences.some(entry=>entry.experience_id===item.id);return <button key={item.id} className={selected?"experience-card selected":"experience-card"} onClick={()=>chooseExperience(item)}><img className="wizard-experience-photo" src={item.image_url || item.image || experienceImage(item.name)} alt=""/><span className="experience-select">{selected?<Check size={15}/>:<Plus size={15}/>}</span><strong>{item.website_name||item.name}</strong><small>{item.website_short_description||item.description||"LOLA experience"}</small>{item.base_price!=null&&<b>Starting at {money(item.base_price)}</b>}</button>;})}
       </div>
       {selectedExperiences.map(item=><section className="wizard-section package-picker" key={item.experience_id}>
         <div><h3>{item.name} Packages</h3><p>Choose the package that best fits this event.</p></div>
         <div className="package-card-grid">
-          {packages.filter(pkg=>pkg.experience_id===item.experience_id).map(pkg=>{const selected=(item.packages||[]).some(entry=>entry.package_id===pkg.id);return <button key={pkg.id} className={selected?"package-card selected":"package-card"} onClick={()=>choosePackage(item.experience_id,pkg)}><strong>{pkg.name}</strong>{pkg.most_popular&&<span>Most Popular</span>}<b>{pkg.pricing_mode==="CUSTOM"?"Let's create":money(pkg.starting_price||0)}</b><small>{pkg.short_description||pkg.description||""}</small></button>;})}
+          {!packages.some(pkg=>!pkg.experience_id||pkg.experience_id===item.experience_id)&&!catalogLoading&&!catalogError&&<p>No active packages are linked to this experience yet.</p>}
+          {packages.filter(pkg=>!pkg.experience_id||pkg.experience_id===item.experience_id).map(pkg=>{const selected=(item.packages||[]).some(entry=>entry.package_id===pkg.id);return <button key={pkg.id} className={selected?"package-card selected":"package-card"} onClick={()=>choosePackage(item.experience_id,pkg)}><strong>{pkg.name}</strong>{pkg.most_popular&&<span>Most Popular</span>}<b>{pkg.pricing_mode==="CUSTOM"?"Let's create":money(pkg.starting_price||0)}</b><small>{pkg.short_description||pkg.description||""}</small></button>;})}
         </div>
       </section>)}
       {!!addons.length&&<section className="wizard-section"><h3>Add-ons <small>Optional</small></h3><div className="addon-choice-grid">{addons.map(item=><label key={item.id}><input type="checkbox" checked={selectedAddons.some(entry=>entry.addon_id===item.id)} onChange={()=>chooseAddon(item)}/><span>{item.name}</span><strong>{money(item.price||0)}</strong></label>)}</div></section>}
