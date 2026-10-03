@@ -1764,3 +1764,36 @@ input:focus,select:focus,textarea:focus{border-color:#c59d61;box-shadow:0 0 0 3p
 .duplicate-review{margin-top:14px;border:1px solid #e6c990;background:#fff7e8;border-radius:10px;padding:12px}.duplicate-review p{margin:5px 0 10px}
 .wizard-actions{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--lola-border);margin-top:20px;padding-top:16px}.wizard-actions>button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--lola-border);background:#fff;border-radius:8px;padding:9px 13px}.wizard-actions>.primary-action{background:linear-gradient(180deg,#b78a45,#966d2f);color:#fff;border-color:#966d2f}
 @media(max-width:800px){.event-row-card{grid-template-columns:58px 1fr}.event-row-meta{grid-column:2;justify-items:start;display:flex;align-items:center;flex-wrap:wrap}.event-row-card>svg{display:none}.wizard-header{display:grid}.wizard-progress{width:100%;overflow:auto}.wizard-choice-grid,.review-grid{grid-template-columns:1fr}}
+
+
+/* LOLA PROPOSAL WIZARD */
+.proposal-wizard-page{max-width:1180px;margin:0 auto}
+.proposal-wizard-page>.page-heading{align-items:center}
+.proposal-wizard-page>.wizard-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 0 16px;padding:0;background:transparent;border:0}
+.proposal-wizard-page>.wizard-progress>div{position:relative;display:grid;justify-items:center;gap:5px;color:var(--lola-muted);font-size:.72rem}
+.proposal-wizard-page>.wizard-progress>div:before{content:"";position:absolute;height:1px;background:#ddd6cc;left:-50%;right:50%;top:13px;z-index:0}
+.proposal-wizard-page>.wizard-progress>div:first-child:before{display:none}
+.proposal-wizard-page>.wizard-progress span{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#d9d5cf;color:#7d7770;z-index:1}
+.proposal-wizard-page>.wizard-progress div.active span{background:#a77a3d;color:#fff}
+.proposal-wizard-page>.wizard-progress div.active strong{color:#755428}
+.proposal-wizard-page>.wizard-progress strong{font-weight:600;font-size:.71rem}
+.wizard-panel{background:#fff;border:1px solid var(--lola-border);border-radius:14px;padding:20px}
+.wizard-heading{margin-bottom:18px}.wizard-heading h2{font-size:1.35rem;margin-bottom:4px}.wizard-heading p{margin:0;color:var(--lola-muted);font-size:.82rem}
+.source-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.source-choice button{display:flex;align-items:center;justify-content:center;gap:9px;border:1px solid var(--lola-border);background:#fff;border-radius:10px;padding:15px;color:var(--lola-text)}
+.source-choice button.selected{border-color:#b88945;background:#fbf6ee;box-shadow:inset 0 0 0 1px #b88945}
+.wizard-section{border:1px solid var(--lola-border);border-radius:12px;padding:16px;margin:14px 0;background:#fff}
+.wizard-section h3{margin:0 0 12px;font-size:.9rem}.wizard-section h3 small{color:var(--lola-muted);font-weight:400}
+.lead-prefill-card{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;border:1px solid #e0cfb6;background:#faf5ed;border-radius:11px;padding:13px;margin-top:10px}.lead-prefill-card div:nth-child(2){display:grid;gap:3px}.lead-prefill-card span,.lead-prefill-card small,.lead-prefill-card p{font-size:.72rem;color:var(--lola-muted);margin:0}
+.experience-card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.experience-card{position:relative;display:grid;gap:7px;text-align:left;border:1px solid var(--lola-border);background:#fff;border-radius:12px;padding:15px;min-height:132px}
+.experience-card.selected{border-color:#b88945;background:#fbf6ee;box-shadow:inset 0 0 0 1px #b88945}.experience-card strong{font-size:.86rem}.experience-card small{font-size:.7rem;color:var(--lola-muted);line-height:1.35}.experience-card b{font-size:.72rem;color:#805d2b;margin-top:auto}.experience-select{position:absolute;right:9px;top:9px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#f0ece6;color:#8f672f}
+.experience-card.selected .experience-select{background:#a77a3d;color:#fff}
+.package-card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.package-card{position:relative;display:grid;gap:7px;text-align:left;border:1px solid var(--lola-border);background:#fff;border-radius:11px;padding:14px;min-height:125px}.package-card.selected{border-color:#b88945;background:#fff9ee;box-shadow:inset 0 0 0 1px #b88945}.package-card>span{position:absolute;right:8px;top:8px;background:#f0d9ad;color:#6d4b18;border-radius:999px;padding:3px 7px;font-size:.58rem}.package-card strong{font-size:.82rem}.package-card b{font:600 1rem "Playfair Display",Georgia,serif}.package-card small{font-size:.68rem;color:var(--lola-muted);line-height:1.35}
+.addon-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.addon-choice-grid label{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;border:1px solid var(--lola-border);border-radius:9px;padding:10px;color:var(--lola-text);text-transform:none}.addon-choice-grid input{width:auto}.addon-choice-grid strong{font-size:.74rem}
+.wizard-pricing-summary{border:1px solid var(--lola-border);border-radius:12px;background:#faf9f7;padding:15px;margin-top:15px}.wizard-pricing-summary>div:not(.form-grid){display:flex;justify-content:space-between;gap:10px;padding:6px 0;color:var(--lola-muted);font-size:.78rem}.wizard-pricing-summary>div.total{border-top:1px solid var(--lola-border);margin-top:6px;padding-top:11px;color:var(--lola-text)}.wizard-pricing-summary>div.total strong{font-size:1.2rem}.advanced-pricing{margin-top:12px;border-top:1px solid var(--lola-border);padding-top:12px}
+.wizard-panel>.review-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wizard-panel .review-card>div:first-child{display:flex;justify-content:space-between;align-items:center}.wizard-panel .review-card>div:first-child button{border:0;background:transparent;color:#8b642e;font-size:.72rem}
+.wizard-panel .wizard-actions{margin-top:18px}.wizard-panel .wizard-actions>div{display:flex;gap:8px}.wizard-panel .wizard-actions button:not(.primary-action),.wizard-panel .wizard-actions a{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--lola-border);background:#fff;color:var(--lola-text);text-decoration:none;border-radius:8px;padding:9px 12px}
+@media(max-width:900px){.experience-card-grid,.package-card-grid{grid-template-columns:1fr 1fr}.wizard-panel>.review-grid{grid-template-columns:1fr}}
+@media(max-width:620px){.source-choice,.experience-card-grid,.package-card-grid,.addon-choice-grid{grid-template-columns:1fr}.proposal-wizard-page>.wizard-progress strong{font-size:.62rem}.wizard-panel{padding:14px}}
