@@ -18,6 +18,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Leads = lazy(() => import("./pages/Leads.jsx"));
 const LeadDetail = lazy(() => import("./pages/LeadDetail.jsx"));
 const Clients = lazy(() => import("./pages/Clients.jsx"));
+const Events = lazy(() => import("./pages/Events.jsx"));
 const EventDetail = lazy(() => import("./pages/EventDetail.jsx"));
 const ClientDetail = lazy(() => import("./pages/ClientDetail.jsx"));
 const Calendar = lazy(() => import("./pages/Calendar.jsx"));
@@ -85,7 +86,7 @@ export default function App() {
         <Route path="sales/proposals/:id/edit" element={<ProposalEditor />} />
         <Route path="sales/proposals/new" element={<ProposalEditor />} />
         <Route path="sales/proposals/:id" element={<ProposalDetail />} />
-        <Route path="events/events" element={<ResourcePage title="Events" endpoint="/events" columns={["event_number", "event_name", "event_date", "venue_name", "status"]} rowHref={(row) => `/events/events/${row.id}`} fields={eventFields} />} />
+        <Route path="events/events" element={<Events />} />
         <Route path="events/events/:id" element={<EventDetail />} />
         <Route path="events/calendar" element={<Calendar />} />
         <Route path="events/equipment" element={<Roster kind="equipment"/>} />
