@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
 
 const tabs = ["Overview", "Operations", "Client", "Staff", "Equipment", "Tasks", "Files", "Finance", "Communications", "Activity", "Proposals", "Invoices"];
 const eventStatuses = ["INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "READY", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
@@ -68,39 +69,62 @@ export default function EventDetail() {
     await api.downloadPost("/equipment/qr-labels.pdf", { equipment_ids: event.operations?.equipment?.map((item) => item.equipment_record_id).filter(Boolean) || [] }, `lola-equipment-labels-${event.event_number || id.slice(0, 8)}.pdf`);
   }
 
-  if (error && !event) return <main className="page"><AsyncState error={error} noun="event" onRetry={()=>{setError("");load();}}/></main>;
+  if (error && !event) return <main className="page event-command-center"><AsyncState error={error} noun="event" onRetry={()=>{setError("");load();}}/></main>;
   if (!event) return <main className="page"><div className="empty-state">Loading event...</div></main>;
 
   return (
     <main className="page">
       <div className="detail-back"><Link to="/events/events"><ArrowLeft size={16} />Back to events</Link></div>
-      <div className="page-heading detail-heading">
+      <div className="page-heading detail-heading event-command-heading">
         <div>
           <p className="eyebrow">{event.event_number || "Event"}</p>
-          <h1>{event.event_name}</h1>
+          <div className="event-title-line"><h1>{event.event_name}</h1><StatusBadge status={event.status}/></div>
           <p className="lede">{event.client_name} · {event.event_type} · {formatDate(event.event_date)} · {event.venue_name || "Venue TBD"}</p>
         </div>
         <div className="detail-actions">
-          <select value={event.status} onChange={(e) => action(() => api.patch(`/events/${id}`, { status: e.target.value }), "Event status updated.")}>
+          <select aria-label="Event status" value={event.status} onChange={(e) => action(() => api.patch("/events/"+id, { status: e.target.value }), "Event status updated.")}>
             {eventStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
           </select>
-          <Link className="primary-action" to={`/sales/proposals/new?eventId=${event.id}`}>Create Proposal</Link>
-          <Link className="primary-action" to={`/finance/invoices/new?eventId=${event.id}&clientId=${event.client_id}`}>Create Invoice</Link>
+          <Link className="primary-action" to={"/sales/proposals/new?eventId="+event.id}>Create Proposal</Link>
+          <Link className="lola-secondary-button" to={"/finance/invoices/new?eventId="+event.id+"&clientId="+event.client_id}>Create Invoice</Link>
         </div>
       </div>
 
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
 
-      <section className="detail-summary">
-        <Metric label="Payment" value={event.payment_status || "Not booked"} />
+      <section className="event-command-grid">
+        <article className="event-readiness-card">
+          <div className="readiness-ring" style={{"--score": String(event.operations?.readiness?.score ?? 0)}}><strong>{event.operations?.readiness?.score ?? 0}%</strong><span>Ready</span></div>
+          <div><h2>Event Readiness</h2><p>{event.operations?.readiness?.incomplete || 0} items need attention · {event.operations?.readiness?.critical || 0} critical</p>
+            <div className="readiness-mini-list">{(event.operations?.readiness?.items||[]).slice(0,5).map(item=><span key={item.label} className={item.status?.toLowerCase()}>{item.status==="COMPLETED"||item.status==="READY"?"✓":"○"} {item.label}</span>)}</div>
+          </div>
+        </article>
+        <article className="event-facts-card">
+          <h2>Event Details</h2>
+          <Field label="Date" value={formatDate(event.event_date)} />
+          <Field label="Time" value={formatTime(event.start_time)+" – "+formatTime(event.end_time)} />
+          <Field label="Guests" value={event.guest_count} />
+          <Field label="Venue" value={event.venue_name || "TBD"} />
+          <Field label="Payment" value={event.payment_status || "Not booked"} />
+        </article>
+        <article className="event-quick-card">
+          <h2>Quick Actions</h2>
+          <Link to={"/sales/proposals/new?eventId="+event.id}>Create / View Proposal</Link>
+          <Link to={"/finance/invoices/new?eventId="+event.id+"&clientId="+event.client_id}>Create / View Invoice</Link>
+          <button onClick={downloadRunSheet}>Download Run Sheet</button>
+          <button onClick={() => setTab("Staff")}>Manage Team</button>
+          <button onClick={() => setTab("Operations")}>Operations Checklist</button>
+        </article>
+      </section>
+
+      <section className="detail-summary event-finance-summary">
         <Metric label="Outstanding" value={formatMoney(event.balance_due || 0)} />
         <Metric label="Experiences" value={event.experiences?.length ? event.experiences.map((item) => item.name).join(", ") : event.experience_name || "Not selected"} />
         <Metric label="Packages" value={event.packages?.length ? event.packages.map((item) => item.name).join(", ") : event.package_name || "Not selected"} />
         <Metric label="Operational" value={event.operational_status?.replaceAll("_", " ") || "PREPARING"} />
-        <Metric label="Readiness" value={`${event.operations?.readiness?.score ?? 0}%`} />
       </section>
 
-      <div className="tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
+      <div className="tabs event-command-tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
 
       {tab === "Overview" && (
         <section className="detail-grid">
