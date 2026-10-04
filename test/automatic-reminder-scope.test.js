@@ -13,7 +13,13 @@ test('staging reminders select fresh QA records; scheduled dispatch excludes bac
   calls.length=0;await processDueJobs();
   assert.ok(!calls.some(c=>c.sql.includes('FROM automation_jobs j')));
   const due=calls.find(c=>c.sql.includes('SELECT id FROM communications'));assert.deepEqual(due.params,[25,'2026-10-04T12:00:00.000Z',['qa@example.invalid']]);
-  const cancel=calls.find(c=>c.sql.includes("SET status='CANCELLED'"));assert.match(cancel.sql,/PAID/);assert.match(cancel.sql,/COMPLETED/);
+  const cancel=calls.find(c=>c.sql.includes("SET status='CANCELLED'"));assert.match(cancel.sql,/PAID/);assert.match(cancel.sql,/CONFIRMED/);assert.match(cancel.sql,/READY/);
   calls.length=0;delete process.env.STAGING_AUTOMATIONS_SINCE;assert.deepEqual(await queueDueReminders(),[]);assert.equal(calls.length,0);await assert.rejects(()=>processDueJobs(),e=>e.code==='STAGING_AUTOMATIONS_PAUSED');
  }finally{pool.query=originalQuery;pool.connect=originalConnect;for(const [k,v] of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;}
+});
+
+test('unconfirmed events cannot enter the automatic reminder window',async()=>{
+ const {queueEventReminder}=await import('../server/src/services/integration-jobs-service.js');const original=pool.query;let lookup='';
+ pool.query=async(sql)=>{lookup=sql;return {rows:[]};};
+ try{assert.deepEqual(await queueEventReminder('qa-event'),{queued:false,reason:'Event is outside the reminder window.'});assert.match(lookup,/status IN \('CONFIRMED','PREPARING','READY','IN_PROGRESS'\)/);}finally{pool.query=original;}
 });

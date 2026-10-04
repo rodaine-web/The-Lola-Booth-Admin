@@ -1143,7 +1143,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
           AND i.due_date<current_date AND i.balance_due>0 AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED')))
         OR (c.trigger_key='EVENT_24H_REMINDER' AND NOT EXISTS (
           SELECT 1 FROM events e WHERE e.id=c.event_id AND e.deleted_at IS NULL
-          AND e.status NOT IN ('CANCELLED','COMPLETED')
+          AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')
           AND ((e.event_date+COALESCE(e.start_time,'12:00'::time)) AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')) BETWEEN now() AND now()+interval '24 hours'))
       )`);
     const due = await client.query(
