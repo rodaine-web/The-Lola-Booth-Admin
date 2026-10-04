@@ -65,7 +65,7 @@ export default function ProposalDetail() {
       <div className="page-heading detail-heading">
         <div>
           <p className="eyebrow">{proposal.proposal_number}</p>
-          <h1>{proposal.client_name || "Proposal"}</h1>
+          <h1>{proposal.proposal_title || proposal.content?.scenario?.title || proposal.event_name || proposal.client_name || "Proposal"}</h1>
           <p className="lede">{proposal.event_name || "No event"} · {proposal.status} · Total {formatMoney(proposal.total || 0)}</p>
         </div>
         <div className="detail-actions">

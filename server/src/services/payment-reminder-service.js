@@ -13,17 +13,17 @@ export async function getPaymentReminderQueue() {
 
 export async function previewPaymentReminders() {
   const heartbeat=(await query(
-    "SELECT last_heartbeat_at,status,last_processing_error FROM worker_heartbeats WHERE worker_name='automation-worker' LIMIT 1"
+    "SELECT last_heartbeat_at,status,last_processing_error,metadata FROM worker_heartbeats WHERE worker_name='automation-worker' LIMIT 1"
   )).rows[0];
   const ageSeconds=heartbeat?.last_heartbeat_at
     ? Math.round((Date.now()-new Date(heartbeat.last_heartbeat_at).getTime())/1000)
     : null;
-  const activeWorker=Boolean(heartbeat && heartbeat.status!=="ERROR" && ageSeconds!==null && ageSeconds<=180);
+  const activeWorker=Boolean(heartbeat && heartbeat.status!=="ERROR" && heartbeat.metadata?.jobsPaused!==true && ageSeconds!==null && ageSeconds<=180);
   return {
     reminders: await getPaymentReminderQueue(),
     activeWorker,
     worker: heartbeat ? {
-      status: activeWorker ? "HEALTHY" : ageSeconds>300 ? "DOWN" : "STALE",
+      status: heartbeat.metadata?.jobsPaused ? "PAUSED" : activeWorker ? "HEALTHY" : ageSeconds>300 ? "DOWN" : "STALE",
       lastHeartbeatAt: heartbeat.last_heartbeat_at,
       ageSeconds,
       lastError: heartbeat.last_processing_error || null

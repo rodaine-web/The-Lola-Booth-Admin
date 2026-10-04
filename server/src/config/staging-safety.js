@@ -27,4 +27,11 @@ export function stagingEmailPolicy(message,config=process.env){
  const tag=`[LOLA ${prefix} QA] `;
  return {...message,subject:String(message.subject||'').startsWith(tag)?message.subject:`${tag}${message.subject||''}`};
 }
-export function stagingJobsPaused(config=process.env){return isStaging(config)||(config.APP_ENV==='production'&&config.PRODUCTION_AUTOMATIONS_ENABLED!=='true');}
+export function stagingAutomationScope(config=process.env){
+ if(!isStaging(config))return null;
+ const since=config.STAGING_AUTOMATIONS_SINCE;
+ const recipients=String(config.STAGING_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
+ if(config.STAGING_AUTOMATIONS_ENABLED!=='true'||config.STAGING_EMAIL_ENABLED!=='true'||!Number.isFinite(Date.parse(since||''))||!recipients.length)return null;
+ return {since:new Date(since).toISOString(),recipients};
+}
+export function stagingJobsPaused(config=process.env){return (isStaging(config)&&!stagingAutomationScope(config))||(config.APP_ENV==='production'&&config.PRODUCTION_AUTOMATIONS_ENABLED!=='true');}

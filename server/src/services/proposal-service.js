@@ -1,3 +1,4 @@
+import {freezeDefaultProposalMedia} from './proposal-default-media.js';
 import { composeProposal } from "../../../shared/proposal-scenario.js";
 import { compactProposalPhotos } from "./proposal-pdf-images.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
@@ -216,8 +217,8 @@ export async function buildProposalSnapshot(input) {
     snapshot.content.scenario_overrides = input.scenario_overrides || {};
     const scenario=snapshot.content.scenario;
     for(const item of scenario.experiences) { const slot='experience:'+item.experience_id; if(!scenario.media[slot])scenario.media[slot]=template.config?.experiences?.[item.key]?.media_ids||[]; }
-    const mediaSections=['cover','event',...selectedExperiences.map(item=>'experience:'+item.experience_id)].map(slot=>({id:crypto.randomUUID(),title:slot,kind:'REFERENCE',body:'',media_ids:(scenario.media[slot]|| (slot.startsWith('experience:') ? [] : [...scenario.media.event,...scenario.media.global])).slice(0,4)})).filter(section=>section.media_ids.length);
-    snapshot.visualSections = await validateProposalVisuals([...visualSections.filter(section=>!(section.kind==='REFERENCE' && /^(cover|event|experience:)/.test(section.title))),...mediaSections]);
+    const mediaSections=['cover','event','why',...selectedExperiences.map(item=>'experience:'+item.experience_id)].map(slot=>({id:crypto.randomUUID(),title:slot,kind:'REFERENCE',body:'',media_ids:(scenario.media[slot]|| (slot.startsWith('experience:') ? [] : [...scenario.media.event,...scenario.media.global])).slice(0,4)})).filter(section=>section.media_ids.length);
+    snapshot.visualSections = await validateProposalVisuals([...visualSections.filter(section=>!(section.kind==='REFERENCE' && /^(cover|event|why|experience:)/.test(section.title))),...mediaSections]);
     // Freeze approved media together with copy, facts and financials. Later CMS edits cannot change sent documents.
     const hydrated=await compactProposalPhotos(await hydrateProposalVisuals({selected_experiences:selectedExperiences,visual_sections:snapshot.visualSections}));
     scenario.experiences=scenario.experiences.map(item=>{
@@ -226,7 +227,7 @@ export async function buildProposalSnapshot(input) {
       return {...item,visuals:mappedSection?.images?.length?{hero:mappedSection.images[0].dataUri}: {}};
     });
     scenario.mediaImages=Object.fromEntries(mediaSections.map(section=>[section.title,hydrated.visual_sections.find(row=>row.id===section.id)?.images||[]]));
-    snapshot.content.scenario=scenario;
+    snapshot.content.scenario=freezeDefaultProposalMedia(scenario);
   }
   return snapshot;
 }
@@ -483,9 +484,9 @@ export async function sendProposal(req, proposal) {
   if (!rendered) await recordTemplateFallback({ templateKey: "PROPOSAL_DELIVERY", reason: "Active template was not found or could not render.", relatedEntityType: "proposal", relatedEntityId: proposal.id });
   const template = rendered?.template || null;
   const subject = req.body.subject || rendered?.subject || `Your LOLA Booths Proposal - ${proposal.event_name || proposal.event_date || proposal.proposal_number}`;
-  const body = req.body.body || rendered?.body || `THE LOLA BOOTH\nGood people. Better photos.\n\nHi ${firstName(proposal.client_name)},\n\nIt was great hearing about your event. We've prepared your LOLA Booths proposal based on the details you shared with us.\n\nReview and accept your proposal:\n${proposalUrl}\n\nYou can download a branded PDF copy from the proposal page.\n\nQuestions? Just reply to this email.\n\nYour event. Their favorite memory.\n\nLOLA Booths`;
+  const body = req.body.body || rendered?.body || `THE LOLA BOOTH\nGood people. Better photos.\n\nHi ${firstName(proposal.content?.scenario?.client?.name || proposal.client_name)},\n\nIt was great hearing about your event. We've prepared your LOLA Booths proposal based on the details you shared with us.\n\nReview and accept your proposal:\n${proposalUrl}\n\nYou can download a branded PDF copy from the proposal page.\n\nQuestions? Just reply to this email.\n\nYour event. Their favorite memory.\n\nLOLA Booths`;
   const html = brandedEmailHtml(body, {
-    firstName: firstName(proposal.client_name),
+    firstName: firstName(proposal.content?.scenario?.client?.name || proposal.client_name),
     kicker: "Your proposal is ready",
     ctaLabel: "View Your Proposal",
     ctaUrl: proposalUrl,
@@ -635,16 +636,16 @@ function buildEditableProposalSections(sectionNames = [], context = {}) {
 }
 
 function proposalMergeData(proposal, proposalUrl) {
-  const first = firstName(proposal.client_name);
+  const first = firstName(proposal.content?.scenario?.client?.name || proposal.client_name);
   return {
-    client_name: proposal.client_name,
+    client_name: proposal.content?.scenario?.client?.name || proposal.client_name,
     proposal_number: proposal.proposal_number,
     proposal_url: proposalUrl,
     event_date: proposal.event_date,
     venue: proposal.venue_name,
     client: {
       first_name: first,
-      name: proposal.client_name,
+      name: proposal.content?.scenario?.client?.name || proposal.client_name,
       email: proposal.client_email
     },
     event: {

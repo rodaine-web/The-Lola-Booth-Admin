@@ -8,7 +8,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
-import rateLimit from "express-rate-limit";
+import {createApiRateLimits} from "./middleware/api-rate-limits.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { errorHandler } from "./middleware/error-handler.js";
@@ -36,12 +36,7 @@ app.use(cors({
 app.use(pinoHttp({ logger, genReqId: (_req, res) => { const id = crypto.randomUUID(); res.setHeader("X-Request-ID", id); return id; }, serializers: { req: safeRequestLog } }));
 app.use("/api/webhooks", express.raw({ type: "application/json", limit: "1mb" }), webhookRouter);
 app.use(express.json({ limit: "14mb" }));
-// Public images have their own bounded quota so browsing a gallery cannot exhaust
-// the authenticated API/form quota. The media route still enforces public permission.
-const publicImageRequest = req => ["GET", "HEAD"].includes(req.method) && (/^\/api\/public\/(?:staging\/)?media\/[^/]+$/.test(req.path) || /^\/api\/(?:gallery|gallery-admin)\/media\/[^/]+$/.test(req.path));
-const mediaLimiter = rateLimit({ windowMs: 60000, limit: 600, standardHeaders: true, legacyHeaders: false });
-app.use((req, res, next) => publicImageRequest(req) ? mediaLimiter(req, res, next) : next());
-app.use(rateLimit({ windowMs: env.rateLimitWindowMs, limit: env.rateLimitMax, skip: publicImageRequest, standardHeaders: true, legacyHeaders: false }));
+app.use(createApiRateLimits({windowMs:env.rateLimitWindowMs,limit:env.rateLimitMax}));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, name: "LOLA Admin API", ...buildInfo() }));
 app.get("/api/setup/status", asyncHandler(async (_req, res) => res.json(await getSetupStatus())));

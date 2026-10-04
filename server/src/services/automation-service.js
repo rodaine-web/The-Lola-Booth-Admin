@@ -1,5 +1,5 @@
 import {documentOrigin} from '../utils/public-document-url.js';
-import {stagingJobsPaused,isStaging} from '../config/staging-safety.js';
+import {stagingJobsPaused,isStaging,stagingAutomationScope} from '../config/staging-safety.js';
 import { query, transaction } from "../db/pool.js";
 import { logger } from "../config/logger.js";
 import { env } from "../config/env.js";
@@ -1093,7 +1093,9 @@ async function executeAutomationJob(client, job) {
 export async function processDueJobs({ limit = 25 } = {}) {
   if(stagingJobsPaused())throw new AppError('Automatic job processing is paused in this environment.',409,'STAGING_AUTOMATIONS_PAUSED');
   const processed = [];
-  await transaction(async (client) => {
+  const scope=stagingAutomationScope();
+  // Staging qualification runs fresh scheduled emails, not historical automation jobs.
+  if(!isStaging())await transaction(async (client) => {
     await recoverStaleProcessingJobs(client);
     const jobs = await client.query(
       `SELECT j.*, a.action_config, a.name AS automation_name
@@ -1132,11 +1134,24 @@ export async function processDueJobs({ limit = 25 } = {}) {
     // A crash after claiming cannot silently strand a message. An unknown external
     // outcome requires operator review rather than an automatic duplicate send.
     await client.query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code='DELIVERY_OUTCOME_UNKNOWN',failure_message='Worker stopped during send. Check provider history before retrying.' WHERE status='PROCESSING' AND updated_at<now()-interval '5 minutes'");
+    // Recheck the business state at dispatch time. A paid invoice or cancelled
+    // event must not receive a reminder that was queued earlier.
+    await client.query(`UPDATE communications c SET status='CANCELLED',updated_at=now()
+      WHERE c.status='SCHEDULED' AND c.scheduled_at<=now() AND (
+        (c.trigger_key='OVERDUE_BALANCE_REMINDER' AND NOT EXISTS (
+          SELECT 1 FROM invoices i WHERE i.id=c.invoice_id AND i.deleted_at IS NULL
+          AND i.due_date<current_date AND i.balance_due>0 AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED')))
+        OR (c.trigger_key='EVENT_24H_REMINDER' AND NOT EXISTS (
+          SELECT 1 FROM events e WHERE e.id=c.event_id AND e.deleted_at IS NULL
+          AND e.status NOT IN ('CANCELLED','COMPLETED')
+          AND ((e.event_date+COALESCE(e.start_time,'12:00'::time)) AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')) BETWEEN now() AND now()+interval '24 hours'))
+      )`);
     const due = await client.query(
       `SELECT id FROM communications
        WHERE status='SCHEDULED' AND channel='EMAIL' AND scheduled_at <= now() AND deleted_at IS NULL
+       AND ($2::timestamptz IS NULL OR (created_at >= $2 AND lower(recipient)=ANY($3::text[])))
        ORDER BY scheduled_at LIMIT $1 FOR UPDATE SKIP LOCKED`,
-      [limit]
+      [limit,scope?.since||null,scope?.recipients||[]]
     );
     if (!due.rows.length) return [];
     await client.query(
