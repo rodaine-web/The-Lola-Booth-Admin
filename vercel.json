@@ -54,6 +54,26 @@
       "destination": "/:path*"
     },
     {
+      "source": "/proposal-viewer.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/proposal-viewer.js"
+    },
+    {
+      "source": "/payment-viewer.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/payment-viewer.js"
+    },
+    {
       "source": "/",
       "has": [
         {

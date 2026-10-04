@@ -185,7 +185,7 @@ test("October UAT: draft invoice edits preserve deposit and payment-choice metad
 });
 
 test("October UAT: payment page honors allowed checkout choices and completion state", () => {
-  const pay = source("public/staging-site/pay.html");
+  const pay = source("public/staging-site/pay.html") + source("public/staging-site/payment-viewer.js");
   assert.match(pay, /id="customChoice"/);
   assert.match(pay, /fullChoice\.style\.display=o\.allowPayInFull\?"flex":"none"/);
   assert.match(pay, /customChoice\.style\.display=o\.allowCustomAmount\?"flex":"none"/);

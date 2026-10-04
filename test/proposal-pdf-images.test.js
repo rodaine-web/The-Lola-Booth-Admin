@@ -30,7 +30,7 @@ test('HTML proposal email exposes review and download actions without payment co
  assert.match(html,/View Your Proposal/);assert.match(html,/Download PDF/);assert.match(html,/qa\?download=pdf/);assert.doesNotMatch(html,/payment link/);
 });
 test('website PDF email action downloads only after secure proposal loads',async()=>{
- const source=fs.readFileSync('public/staging-site/proposal.html','utf8').split('<script>')[1].split('</script>')[0];
+ const source=fs.readFileSync('public/staging-site/proposal-viewer.js','utf8');
  for(const ok of [true,false]){
   const elements=new Map();const assigned=[];
   const context={URLSearchParams,window:{LOLA_CONFIG:{apiBase:'https://stagingapi.thelolabooth.com'}},location:{search:'?download=pdf',pathname:'/proposal/qa-token',assign:url=>assigned.push(url)},document:{getElementById:id=>{if(!elements.has(id))elements.set(id,{style:{},className:'',value:'',textContent:''});return elements.get(id);}},fetch:async()=>({ok,json:async()=>({proposal:{status:'SENT',proposal_number:'QA'}}),text:async()=>'<p>Proposal</p>'})};

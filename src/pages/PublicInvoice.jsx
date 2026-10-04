@@ -70,7 +70,7 @@ export default function PublicInvoice() {
         {paymentOptions?.providers?.length ? (
           <div className="quick-actions">
             {paymentOptions.providers.map((provider) => (
-              <button key={provider.provider} className="primary-action" disabled={Boolean(busy)} onClick={() => pay(provider.provider)}>
+              <button key={provider.provider} className="primary-action" disabled={Boolean(busy) || (paymentSucceeded && !["CONFIRMED","RECORDED"].includes(confirmation?.status))} onClick={() => pay(provider.provider)}>
                 <CreditCard size={16} />{busy === provider.provider ? "Opening..." : provider.label}
               </button>
             ))}
