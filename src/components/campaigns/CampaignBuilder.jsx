@@ -12,7 +12,9 @@ export default function CampaignBuilder({draft,setDraft,contacts,audience,busy,i
  const content=(key,value)=>setDraft(d=>({...d,content_json:{...campaignContent(d.content_json),[key]:value}}));
  const audienceChange=(key,value)=>setDraft(d=>({...d,audience_json:{...d.audience_json,[key]:value}}));
  useEffect(()=>{let active=true;setCatalogError('');Promise.all(['experiences','packages','addons'].map(r=>loadCatalog(api.get,r))).then(([experiences,packages,addons])=>{if(active)setCatalog({experiences:experiences.filter(x=>x.active!==false&&x.is_active!==false),packages:packages.filter(x=>x.active!==false&&x.is_active!==false),addons:addons.filter(x=>x.active!==false&&x.is_active!==false)});}).catch(e=>active&&setCatalogError(e.message));return()=>{active=false;};},[attempt]);
- useEffect(()=>setPreview(null),[draft.content_json,draft.subject,draft.preview_text]);
+ const contentFingerprint=JSON.stringify(draft.content_json);
+ // Reloading a saved draft must not dismiss an identical generated preview.
+ useEffect(()=>setPreview(null),[contentFingerprint,draft.subject,draft.preview_text]);
  const updateOffer=(key,patch)=>content('offers',c.offers.map(o=>o.key===key?{...o,...patch}:o));
  function toggle(item,kind){const key=kind+'_'+item.id;content('offers',c.offers.some(o=>o.key===key)?c.offers.filter(o=>o.key!==key):[...c.offers,{key,kind,catalog_id:item.id,package_id:null,name:item.website_name||item.name,description:item.description||'',image_url:item.image_url||'',hours:kind==='EXPERIENCE'?4:0,original_price:Number(item.base_price??item.price??0),discount_type:'NONE',discount_value:0}]);}
  async function uploadContacts(file){if(!file)return;if(file.size>2*1024*1024)throw new Error('Choose a contact file up to 2 MB.');const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));setImported(await api.post('/campaigns/import-contacts',{filename:file.name,data:btoa(binary)}));}
