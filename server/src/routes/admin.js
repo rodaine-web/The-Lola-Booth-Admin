@@ -1,3 +1,4 @@
+import { eventFinanceSummary } from "../services/event-finance-summary.js";
 import {campaignRouter} from "./campaigns.js";
 import {scenarioConfigSchema,scenarioOverridesSchema} from "../services/proposal-scenario-schema.js";
 import { mergeDefaults } from "../../../shared/proposal-scenario.js";
@@ -1212,7 +1213,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query("SELECT ep.package_id AS id, p.name, p.starting_price, ep.display_order FROM event_packages ep JOIN packages p ON p.id=ep.package_id WHERE ep.event_id=$1 ORDER BY ep.display_order, p.name", [req.params.id]),
     query("SELECT ee.experience_id AS id, x.name, x.base_price, ee.display_order FROM event_experiences ee JOIN experiences x ON x.id=ee.experience_id WHERE ee.event_id=$1 ORDER BY ee.display_order, x.name", [req.params.id])
   ]);
-  res.json({ ...event.rows[0], package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
+  res.json({ ...eventFinanceSummary(event.rows[0], invoices.rows), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
 }));
 
 adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {

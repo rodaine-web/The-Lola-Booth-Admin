@@ -17,6 +17,7 @@ import { validate } from "../utils/validation.js";
 import { ingestProviderLead } from "../services/social-lead-service.js";
 import { sendPublicInquiryEmails } from "../services/public-form-email-service.js";
 import { requestInvoiceAccess, publicInvoiceSummary } from "../services/invoice-access-service.js";
+import { checkoutConfirmation } from "../services/checkout-confirmation.js";
 import { generatePaymentReceiptPdf } from "../services/document-service.js";
 import { generateInvoicePdf } from "../services/document-service.js";
 import { getInvoice } from "../services/invoice-service.js";
@@ -240,7 +241,8 @@ publicRouter.get("/invoices/:token", asyncHandler(async (req, res) => {
      WHERE id=$2`,
     [status, invoice.id]
   );
-  res.json({ invoice: publicInvoiceSummary({ ...invoice, status }), paymentOptions: await publicPaymentOptions({ ...invoice, status }) });
+  const sessionId = z.string().max(255).optional().parse(req.query.session_id);
+  res.set('Cache-Control', 'no-store').json({ invoice: publicInvoiceSummary({ ...invoice, status }), paymentOptions: await publicPaymentOptions({ ...invoice, status }), checkoutConfirmation: checkoutConfirmation(invoice, sessionId) });
 }));
 
 publicRouter.post("/invoices/:token/payment-session", asyncHandler(async (req, res) => {

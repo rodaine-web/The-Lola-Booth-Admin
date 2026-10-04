@@ -571,7 +571,7 @@ async function recordProviderRefund(input) {
 async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT") {
   const params = new URLSearchParams({
     mode: "payment",
-    success_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success`,
+    success_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=cancelled`,
     "line_items[0][price_data][currency]": currency.toLowerCase(),
     "line_items[0][price_data][product_data][name]": `LOLA Booths Invoice ${invoice.invoice_number}`,

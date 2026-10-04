@@ -11,13 +11,14 @@ export default function PublicInvoice() {
   const [searchParams] = useSearchParams();
   const [invoice, setInvoice] = useState(null);
   const [paymentOptions, setPaymentOptions] = useState(null);
+  const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const paymentKeys=useRef({}),paymentLock=useRef(false);
 
   async function load(){
     setError("");
-    try{const res=await fetch(`${API_URL}/public/invoices/${token}`);const payload=await res.json();if(!res.ok)throw new Error(payload.error?.message||"This invoice link is unavailable or has expired.");setInvoice(payload.invoice);setPaymentOptions(payload.paymentOptions);}
+    try{const session=searchParams.get('session_id');const res=await fetch(`${API_URL}/public/invoices/${token}${session?'?session_id='+encodeURIComponent(session):''}`,{cache:'no-store'});const payload=await res.json();if(!res.ok)throw new Error(payload.error?.message||"This invoice link is unavailable or has expired.");setInvoice(payload.invoice);setPaymentOptions(payload.paymentOptions);setConfirmation(payload.checkoutConfirmation);}
     catch(err){setError(err.message);}
   }
   useEffect(()=>{setInvoice(null);load();},[token]);
@@ -49,8 +50,8 @@ export default function PublicInvoice() {
         <section className="public-success">
           <CreditCard size={22} />
           <div>
-            <h2>{invoice.status==="PAID"?"Payment verified":"Checkout returned"}</h2>
-            <p>Your balance changes only after provider verification. Use Refresh status to check the latest result.</p>
+            <h2>{['CONFIRMED','RECORDED'].includes(confirmation?.status)?"Payment recorded":"Checking payment confirmation"}</h2>
+            <p>{['CONFIRMED','RECORDED'].includes(confirmation?.status)?`${formatMoney(confirmation.amount)} recorded. Remaining balance: ${formatMoney(amountDue)}.`:"Your balance changes only after provider verification. Use Refresh status to check the latest result. Please do not submit another payment while confirmation is pending."}</p>
           </div>
         </section>
       )}

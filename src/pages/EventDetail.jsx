@@ -111,7 +111,7 @@ export default function EventDetail() {
         <article className="event-readiness-card">
           <div className="readiness-ring" style={{"--score": String(event.operations?.readiness?.score ?? 0)}}><strong>{event.operations?.readiness?.score ?? 0}%</strong><span>Ready</span></div>
           <div><h2>Event Readiness</h2><p>{event.operations?.readiness?.incomplete || 0} items need attention · {event.operations?.readiness?.critical || 0} critical</p>
-            <div className="readiness-mini-list">{(event.operations?.readiness?.items||[]).slice(0,5).map(item=><span key={item.label} className={item.status?.toLowerCase()}>{item.status==="COMPLETED"||item.status==="READY"?"✓":"○"} {item.label}</span>)}</div>
+            <div className="readiness-mini-list">{(event.operations?.readiness?.items||[]).slice(0,5).map(item=><span key={item.label} className={item.status?.toLowerCase()}>{item.status==="COMPLETE"||item.status==="COMPLETED"||item.status==="READY"?"✓":"○"} {item.label}</span>)}</div>
           </div>
         </article>
         <article className="event-facts-card">

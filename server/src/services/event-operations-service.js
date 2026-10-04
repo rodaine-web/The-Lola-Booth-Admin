@@ -1,3 +1,4 @@
+import { eventFinanceSummary, requiredDepositPaid } from "./event-finance-summary.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,7 +94,9 @@ async function eventHeader(eventId) {
      WHERE e.id=$1 AND e.deleted_at IS NULL`,
     [eventId]
   );
-  return result.rows[0];
+  if (!result.rows[0]) return null;
+  const invoices = await query("SELECT * FROM invoices WHERE event_id=$1 AND deleted_at IS NULL", [eventId]);
+  return eventFinanceSummary(result.rows[0], invoices.rows);
 }
 
 function staffRows(eventId) {
@@ -148,8 +151,8 @@ async function readinessScore(event, data) {
     if (notRequired) items.push({ category, label, status: "NOT_REQUIRED", required: false, severity: "INFO" });
     else items.push({ category, label, status: complete ? "COMPLETE" : "INCOMPLETE", required, severity: complete ? "INFO" : proximitySeverity(event.event_date, severity) });
   };
-  add("BOOKING", "Booking confirmed", ["CONFIRMED", "PREPARING", "READY", "IN_PROGRESS", "COMPLETED"].includes(event.status) || Boolean(event.payment_status), { severity: "CRITICAL" });
-  add("BOOKING", "Required deposit paid", ["PARTIAL", "PAID", "REFUNDED"].includes(event.payment_status), { severity: "CRITICAL" });
+  add("BOOKING", "Booking confirmed", ["CONFIRMED", "PREPARING", "READY", "IN_PROGRESS", "COMPLETED"].includes(event.status), { severity: "CRITICAL" });
+  add("BOOKING", "Required deposit paid", requiredDepositPaid(event), { severity: "CRITICAL" });
   add("CLIENT", "Primary contact confirmed", data.contacts.some((contact) => contact.role === "DAY_OF_CONTACT" || contact.is_primary) || Boolean(event.client_phone), { severity: "WARNING" });
   add("CLIENT", "Phone available", Boolean(event.client_phone || data.contacts.some((contact) => contact.phone)), { severity: "CRITICAL" });
   add("CLIENT", "Final guest estimate", Boolean(event.guest_count), { severity: "INFO" });
