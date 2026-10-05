@@ -7,14 +7,14 @@ const round=n=>Math.round(Number(n)*100)/100;
 // Resolve advertised offers to catalog identities, including the approved two-experience bundle.
 export function composeCampaignOffers(campaign,experiences,packages){
  const c=campaignContent(campaign.content_json);
- const catalog=experiences.filter(e=>e.active!==false);
+ const catalog=experiences.filter(e=>e.active!==false&&!e.deleted_at);
  const raw=c.format==='CORPORATE'?campaignInterestOptions(c).map(o=>({...o,kind:'EXPERIENCE',original_price:o.price,discount_type:'NONE',hours:4,features:o.key==='DUO'?c.duo_features:c[o.key==='GLAM'?'glam_features':'360_features'],experience_ids:(o.key==='DUO'?['glam','360']:[o.key==='GLAM'?'glam':'360']).map(k=>catalog.find(e=>experienceKey(e)===k)?.id).filter(Boolean)})):c.offers;
  return raw.filter(o=>o.kind==='EXPERIENCE').map(o=>{
   const ids=o.experience_ids||[o.catalog_id];
   const expected=o.key==='DUO'?2:1;
   if(ids.length!==expected||ids.some(id=>!catalog.some(e=>e.id===id)))return null;
   const pricing=campaignOfferPrice(o);
-  const pkg=o.package_id?packages.find(p=>p.id===o.package_id&&p.active!==false&&(!p.experience_id||p.experience_id===ids[0])):null;
+  const pkg=o.package_id?packages.find(p=>p.id===o.package_id&&p.active!==false&&!p.deleted_at&&(!p.experience_id||p.experience_id===ids[0])):null;
   if(o.package_id&&!pkg)return null;
   const allocate=(total,index)=>index===ids.length-1?round(total-round(total/ids.length)*(ids.length-1)):round(total/ids.length);
   const selections=ids.map((id,index)=>{

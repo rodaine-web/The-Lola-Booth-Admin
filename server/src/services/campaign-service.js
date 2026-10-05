@@ -346,6 +346,7 @@ export async function submitCampaignInterest(token, input) {
     const r = await resolveCampaignToken(token);
     if (!campaignInterestOptions(r.content_json).some(o => o.key === data.package)) throw new AppError('Choose an experience offered in this campaign.',422,'INVALID_CAMPAIGN_OFFER');
     if (r.unsubscribed_at) throw new AppError('This marketing link has been unsubscribed.', 410, 'UNSUBSCRIBED');
+    await query('SELECT pg_advisory_xact_lock(hashtext($1))',[r.email.toLowerCase()]);
     const selectedOffer = campaignInterestOptions(r.content_json).find(o=>o.key===data.package);
     const inserted = (await query('INSERT INTO campaign_interests(campaign_id,campaign_recipient_id,package,event_date,event_time,location) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(campaign_recipient_id) DO NOTHING RETURNING *', [r.campaign_id, r.id, data.package, data.event_date, data.event_time, data.location || null])).rows[0];
     if (!inserted) { if(!r.lead_id)await linkCampaignInterest(r.campaign_id,(await query('SELECT id FROM campaign_interests WHERE campaign_recipient_id=$1',[r.id])).rows[0].id); return {

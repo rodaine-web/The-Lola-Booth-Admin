@@ -7,10 +7,13 @@ export async function linkCampaignInterest(campaignId,interestId,actorUserId=nul
  return transaction(async()=>{
   const i=(await query(`SELECT i.*,r.lead_id,r.client_id,r.email,r.first_name,r.last_name,r.phone,r.company,c.name campaign_name,c.created_by
    FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id JOIN campaigns c ON c.id=i.campaign_id
-   WHERE i.id=$1 AND i.campaign_id=$2 FOR UPDATE OF r,i`,[interestId,campaignId])).rows[0];
+   WHERE i.id=$1 AND i.campaign_id=$2`,[interestId,campaignId])).rows[0];
   if(!i)throw new AppError('Interest not found.',404,'NOT_FOUND');
   await query('SELECT pg_advisory_xact_lock(hashtext($1))',[i.email.toLowerCase()]);
+  await query('SELECT id FROM campaign_recipients WHERE id=$1 FOR UPDATE',[i.campaign_recipient_id]);
+  await query('SELECT id FROM campaign_interests WHERE id=$1 FOR UPDATE',[i.id]);
   let lead=i.lead_id?(await query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL',[i.lead_id])).rows[0]:null;
+  if(lead && lead.event_date!==i.event_date)lead=null;
   if(!lead)lead=(await query("SELECT * FROM leads WHERE lower(email)=lower($1) AND event_date=$2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1 FOR UPDATE",[i.email,i.event_date])).rows[0];
   const offer=i.offer_snapshot||(await campaignOffers(campaignId)).offers.find(o=>o.key===i.package)||null;
   if(!lead)lead=(await query(`INSERT INTO leads(first_name,last_name,email,phone,event_date,event_start_time,event_type,venue_name,company,lead_source,message,marketing_email_opt_in,assigned_user_id,preferred_experience_id,preferred_package_id,status,converted_client_id)
@@ -28,9 +31,11 @@ export async function convertPaidCampaignLead(client,invoice){
  if(!invoice.campaign_interest_id||!invoice.lead_id||['VOID','REFUNDED'].includes(invoice.status))return null;
  const required=Number(invoice.pricing_snapshot?.amount_due_now||0);
  if(!(required>0)||Math.round(Number(invoice.amount_paid)*100)<Math.round(required*100))return null;
+ const context=(await client.query('SELECT email FROM leads WHERE id=$1 AND deleted_at IS NULL',[invoice.lead_id])).rows[0];
+ if(!context)throw new AppError('Campaign lead is unavailable for payment conversion.',409,'LEAD_UNAVAILABLE');
+ await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[context.email.toLowerCase()]);
  const lead=(await client.query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[invoice.lead_id])).rows[0];
  if(!lead)throw new AppError('Campaign lead is unavailable for payment conversion.',409,'LEAD_UNAVAILABLE');
- await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[lead.email.toLowerCase()]);
  let customer=lead.converted_client_id?(await client.query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL',[lead.converted_client_id])).rows[0]:null;
  if(!customer)customer=(await client.query('SELECT * FROM clients WHERE lower(email)=lower($1) AND deleted_at IS NULL ORDER BY created_at LIMIT 1',[lead.email])).rows[0];
  if(!customer)customer=(await client.query("INSERT INTO clients(name,email,phone,company,client_type,referral_source) VALUES($1,$2,$3,$4,'CORPORATE','Campaign') RETURNING *",[[lead.first_name,lead.last_name].filter(Boolean).join(' '),lead.email,lead.phone,lead.company])).rows[0];
