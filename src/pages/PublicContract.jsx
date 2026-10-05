@@ -1,0 +1,20 @@
+import {useEffect,useState} from 'react';
+import {useParams} from 'react-router-dom';
+import {CONTRACT_CONSENT} from '../../shared/contracts.js';
+const API=window.location.hostname==='stagingadmin.thelolabooth.com'?'https://stagingapi.thelolabooth.com/api':import.meta.env.VITE_API_URL||'/api';
+async function request(path,options={}){const response=await fetch(`${API}/public/contracts/${path}`,options);const data=await response.json();if(!response.ok)throw new Error(data.error?.message||'Unable to open this agreement.');return data;}
+export default function PublicContract(){
+ const {token}=useParams();const [contract,setContract]=useState(null),[error,setError]=useState(''),[name,setName]=useState(''),[email,setEmail]=useState(''),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false);
+ useEffect(()=>{let current=true;setContract(null);setError('');setName('');setEmail('');setConsent(false);request(token).then(data=>{if(current){setContract(data);setEmail(data.snapshot.client_email);}}).catch(err=>current&&setError(err.message));return()=>{current=false;};},[token]);
+ async function sign(e){e.preventDefault();if(busy)return;setBusy(true);setError('');try{setContract(await request(`${token}/sign`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,consent,documentHash:contract.document_hash})}));}catch(err){setError(err.message);}finally{setBusy(false);}}
+ return <main className="public-document agreement-page"><article className="panel"><img src="/brand/LOLA_Primary_Dark_Transparent.png" alt="The Lola Booth" width="140"/><p className="eyebrow">Client agreement</p>
+ {error&&<p role="alert" className="toast error">{error}</p>}
+ {!contract&&!error&&<p role="status">Opening your agreement…</p>}
+ {contract&&new URLSearchParams(window.location.search).get('download')==='pdf'&&<p><a href={`${API}/public/contracts/${token}/pdf`}>Download your agreement PDF</a></p>}
+ {contract&&<><h1>{contract.title}</h1><p>{contract.snapshot.proposal_number} · Revision {contract.revision}</p><section className="panel"><h2>Your event</h2><dl>{[['Client',contract.snapshot.client_name],['Event',contract.snapshot.event_name],['Date',contract.snapshot.event_date],['Venue',contract.snapshot.venue_name],['Total',contract.snapshot.total]].filter(([,v])=>v!=null).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>
+ {Array.isArray(contract.snapshot.items)&&contract.snapshot.items.length>0&&<section className="panel"><h2>Selected services</h2><ul>{contract.snapshot.items.map((item,index)=><li key={index}>{item.description||item.label||'Service'} · {item.quantity??1} × {item.unit_price??item.amount??''}</li>)}</ul></section>}
+ <h2>Service terms</h2><div className="agreement-terms">{contract.terms}</div>
+ {contract.status==='SIGNED'?<section className="panel" role="status"><h2>Agreement signed</h2><p>{contract.signer_name} · {new Date(contract.signed_at).toLocaleString()}</p><p>{contract.consent_text}</p></section>:<form onSubmit={sign}><h2>Sign your agreement</h2><label>Full name<input autoComplete="name" required minLength={2} maxLength={200} disabled={busy} value={name} onChange={e=>setName(e.target.value)}/></label><label>Client email<input type="email" autoComplete="email" required disabled={busy} value={email} onChange={e=>setEmail(e.target.value)}/></label><label className="checkbox"><input type="checkbox" required checked={consent} disabled={busy} onChange={e=>setConsent(e.target.checked)}/>{CONTRACT_CONSENT}</label><button className="primary-action" disabled={busy||!consent}>{busy?'Signing…':'Sign agreement'}</button></form>}
+ <p><a href={`${API}/public/contracts/${token}/pdf`}>Download {contract.status==='SIGNED'?'signed copy':'agreement'} PDF</a></p><p className="note-text">Signing this agreement does not process a payment. Booking confirmation follows your proposal’s deposit requirements.</p></>}
+ </article></main>;
+}

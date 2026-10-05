@@ -1,3 +1,4 @@
+import ProposalAgreement from "../components/ProposalAgreement.jsx";
 import {AssetImage} from "../components/ProposalVisualEditor.jsx";
 import { documentAccessState } from "../../shared/document-access.js";
 import AsyncState from "../components/AsyncState.jsx";
@@ -89,6 +90,7 @@ export default function ProposalDetail() {
       {proposal.status === "ACCEPTED" && !proposal.linked_invoice_id && <section className="panel"><h2>Proposal accepted</h2><p><strong>Next step:</strong> create one invoice for this proposal. The invoice tracks the full proposal total, requests the configured deposit first, and then continues with the remaining balance.</p><div className="button-row"><button className="primary-action" disabled={busy} onClick={createInvoiceFromProposal}><ReceiptText size={16} />Create Invoice</button></div></section>}
       {proposal.linked_invoice_id && <section className="panel"><h2>Invoice created</h2><p>{proposal.linked_invoice_number || "The linked invoice"} · {proposal.linked_invoice_status || "Current"}. Deposit and remaining balance are managed on this single invoice.</p><Link className="primary-action" to={`/finance/invoices/${proposal.linked_invoice_id}`}><ReceiptText size={16} />Open Invoice</Link></section>}
       {!accessAvailable && <section className="panel"><p role="status">Public access not available.</p>{can("write:sales") && <button disabled={busy} onClick={()=>action(()=>api.post(`/proposals/${id}/ensure-access`,{}),"Secure access generated.")}>Generate Secure Access</button>}</section>}
+      <ProposalAgreement proposal={proposal} />
       <section className="detail-summary">
         <Metric label="Valid Through" value={proposal.valid_through ? formatDateOnly(proposal.valid_through) : "Unset"} />
         <Metric label="Sent" value={proposal.sent_at ? new Date(proposal.sent_at).toLocaleDateString() : "Not sent"} />

@@ -61,6 +61,9 @@ function PrivateRoute({ children }) {
   return children;
 }
 
+const ClientWorkspace = lazy(() => import("./pages/ClientWorkspace.jsx"));
+const PublicContract = lazy(() => import("./pages/PublicContract.jsx"));
+
 export default function App() {
   return (
     <Suspense fallback={<main className="boot-screen">Opening Admin Portal...</main>}>
@@ -69,6 +72,8 @@ export default function App() {
       <Route path="/unsubscribe/:token" element={<CampaignInterest unsubscribe/>}/>
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
+      <Route path="/client/:token" element={<ClientWorkspace />} />
+      <Route path="/contract/:token" element={<PublicContract />} />
       <Route path="/proposal/:token" element={<PublicProposal />} />
       <Route path="/receipt/:token/:id" element={<PublicReceipt />} />
       <Route path="/pay" element={<InvoiceLookup />} />

@@ -2029,3 +2029,18 @@ input:focus,select:focus,textarea:focus{border-color:#c59d61;box-shadow:0 0 0 3p
 @media(min-width:761px) and (max-width:1080px){.lola-brand strong,.lola-brand span{display:none}}
 
 .record-workspace>.detail-grid+.detail-grid{margin-top:16px}
+
+.agreement-page { max-width: 900px; margin: 32px auto; padding: 20px; }
+.agreement-terms { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; margin: 24px 0; }
+.agreement-page form { display: grid; gap: 20px; }
+.agreement-page .checkbox { display: flex; align-items: flex-start; gap: 12px; line-height: 1.6; }
+.agreement-page .checkbox input { width: auto; margin-top: 6px; }
+.agreement-page dl div { padding: 8px 0; }
+.agreement-page dt { font-weight: bold; }
+.agreement-page dd { margin: 4px 0; }
+
+.client-workspace { max-width: 1100px; margin: 32px auto; padding: 24px; }
+.client-workspace > header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; }
+.workspace-documents { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; margin-top: 28px; }
+.workspace-documents article + article { border-top: 1px solid #e6dfd3; margin-top: 20px; padding-top: 16px; }
+@media(max-width:700px) { .workspace-documents { grid-template-columns: 1fr; } .client-workspace { padding: 16px; } }
