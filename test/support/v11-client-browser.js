@@ -8,7 +8,7 @@ import {env} from '../../server/src/config/env.js';
 
 // Runs only with the disposable database API fixture. No hosted credentials or
 // external email/payment adapters are used by this browser qualification.
-export async function verifyClientBrowser({api,origin,proposalId,workspaceToken}){
+export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,ownerToken,campaignSales}){
  const root=fileURLToPath(new URL('../../',import.meta.url));
  const vite=await createServer({configFile:false,root,plugins:[react()],define:{__BUILD_REVISION__:JSON.stringify('v11-browser-qualification')},server:{host:'127.0.0.1',port:0,proxy:{'/api':origin}}});
  let browser;const previousOrigin=env.clientOrigin;
@@ -42,6 +42,26 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken}
   await page.screenshot({path:fileURLToPath(new URL('workspace-mobile.png',evidence)),fullPage:true});
   await api(`/proposals/${proposalId}/workspace/revoke`,{method:'POST'});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   assert.equal(await page.getByRole('heading',{name:'Your agreements',exact:true}).count(),0,'Revoked workspace clears customer records');
+  if(campaignSales){
+   await page.addInitScript(token=>localStorage.setItem('lola_access_token',token),ownerToken);
+   await page.setViewportSize({width:1440,height:1000});
+   await page.goto(`${base}/communications/campaigns/${campaignSales.campaignId}`);
+   await page.getByRole('button',{name:'Interested',exact:true}).click();
+   await page.getByRole('link',{name:'Open client',exact:true}).waitFor();
+   await page.getByRole('link',{name:/Open invoice/}).waitFor();
+   assert.equal(await page.getByRole('button',{name:/deposit email|deposit invoice/}).count(),0,'Paid deposits cannot be requested again');
+   await page.screenshot({path:fileURLToPath(new URL('campaign-won-client.png',evidence)),fullPage:true});
+   await page.goto(`${base}/sales/proposals/new?leadId=${campaignSales.leadId}&campaignId=${campaignSales.campaignId}&offerKey=${campaignSales.offerKey}`);
+   await page.getByRole('heading',{name:'Client & Event Details',exact:true}).waitFor();
+   await page.getByRole('button',{name:'Continue to Services'}).click();
+   const price=page.getByLabel('Selected price — Campaign sales isolated demo — Campaign 360 Signature');
+   await price.waitFor();assert.equal(await price.inputValue(),'800');assert.equal(await price.getAttribute('readonly'),'');
+   await page.getByRole('button',{name:'Select from campaign',exact:true}).click();
+   await page.getByLabel('Campaign',{exact:true}).selectOption(campaignSales.campaignId);
+   await page.getByRole('button',{name:/^Campaign 360 Signature/}).click();
+   assert.equal(await price.inputValue(),'800');
+   await page.screenshot({path:fileURLToPath(new URL('campaign-proposal-offer.png',evidence)),fullPage:true});
+  }
   assert.deepEqual(pageErrors,[],'No uncaught browser errors');
   await fs.writeFile(new URL('result.json',evidence),JSON.stringify({status:'passed',checks:['wrong-email rejected','explicit consent','browser signing','PDF download','reload persistence','desktop/mobile layout','workspace agreements','workspace revocation','no uncaught browser errors']},null,2));
  }finally{env.clientOrigin=previousOrigin;if(browser)await browser.close();await vite.close();}

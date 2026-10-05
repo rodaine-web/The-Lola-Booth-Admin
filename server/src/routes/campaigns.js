@@ -1,3 +1,5 @@
+import {proposalCampaignCatalog} from '../services/campaign-offers.js';
+import {campaignDepositInvoice} from '../services/campaign-sales-service.js';
 import {campaignSenders} from '../services/email-service.js';
 import {recordCampaignTracking,transparentPixel} from '../services/campaign-tracking.js';
 import { importCampaignContacts } from '../services/campaign-contact-import.js';
@@ -15,6 +17,8 @@ route('get', '/contacts', 'campaigns.read', () => campaignContacts());
 route('post', '/import-contacts', 'campaigns.create', req => importCampaignContacts(req.body));
 route('post', '/audience-preview', 'campaigns.read', req => resolveCampaignAudience(campaignSchema.shape.audience_json.parse(req.body)));
 route('post', '/', 'campaigns.create', req => saveCampaign(req.body, req));
+route('get','/offers-for-proposals','write:sales',()=>proposalCampaignCatalog());
+route('post','/:id/interests/:interestId/invoice','write:finance',req=>campaignDepositInvoice(z.uuid().parse(req.params.id),z.uuid().parse(req.params.interestId),req.body,req));
 route('get', '/:id', 'campaigns.read', req => campaignDetail(z.uuid().parse(req.params.id)));
 route('delete', '/:id', 'campaigns.edit', req => deleteCampaign(z.uuid().parse(req.params.id), req));
 route('patch', '/:id', 'campaigns.edit', req => saveCampaign(req.body, req, z.uuid().parse(req.params.id)));
