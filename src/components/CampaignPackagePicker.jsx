@@ -1,8 +1,9 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useId,useState} from 'react';
 import {api} from '../api/client.js';
 
 export {mergeCampaignSelections} from '../../shared/campaign-selection.js';
 export default function CampaignPackagePicker({experienceId,onSelect}){
+ const campaignSelectId=useId();
  const [open,setOpen]=useState(false),[campaigns,setCampaigns]=useState([]),[selected,setSelected]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);
  useEffect(()=>{
   if(!open)return;
@@ -16,7 +17,7 @@ export default function CampaignPackagePicker({experienceId,onSelect}){
   <button type="button" aria-expanded={open} onClick={()=>setOpen(v=>!v)}>Select from campaign</button>
   {open&&<><p>Campaign pricing and discounts are included automatically. Bundles select every included experience.</p>
    {loading&&<p role="status">Loading campaign offers…</p>}{error&&<p role="alert">{error}</p>}
-   <label>Campaign<select value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Choose campaign</option>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+   <label htmlFor={campaignSelectId}>Campaign</label><select id={campaignSelectId} value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Choose campaign</option>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
    {!loading&&!error&&!available.length&&<p>No campaigns offer this experience.</p>}
    {campaign?.offers.filter(o=>o.selections.some(s=>s.experience_id===experienceId)).map(o=><button type="button" className="package-card" key={o.key} onClick={()=>onSelect(o)}><strong>{o.name}</strong>{o.saving>0&&<s>${o.original.toFixed(2)}</s>} <b>${o.discounted.toFixed(2)}</b><small>{o.description}</small></button>)}
   </>}
