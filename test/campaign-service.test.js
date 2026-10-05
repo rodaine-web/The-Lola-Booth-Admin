@@ -275,6 +275,7 @@ test('duplicate interest does not create duplicate activity, notifications or ev
     campaign_id: id,
     lead_id: leadId,
     first_name: 'QA',
+    email:'qa@example.invalid',
     campaign_name: 'QA'
   };
   const calls = fixture(t, sql => sql.includes('WHERE token_hash=') ? [r] : sql.startsWith('SELECT * FROM campaign_interests') ? [{
