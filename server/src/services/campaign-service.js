@@ -1,3 +1,4 @@
+import {linkCampaignInterest} from './campaign-lead-service.js';
 import { randomBytes, createHash } from 'node:crypto';
 import sanitizeHtml from 'sanitize-html';
 import { z } from 'zod';
@@ -198,7 +199,7 @@ export async function duplicateCampaign(id, req) {
 }
 export async function campaignDetail(id) {
   const c = await getCampaign(id);
-  const [recipients, interests, events] = await Promise.all([query('SELECT r.*,m.failure_message,m.failure_code FROM campaign_recipients r LEFT JOIN communications m ON m.id=r.communication_id WHERE campaign_id=$1 ORDER BY r.company,r.first_name', [id]), query(`SELECT i.*,r.first_name,r.last_name,r.email,r.company,r.lead_id,r.client_id,l.status lead_status,l.assigned_user_id owner FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id LEFT JOIN leads l ON l.id=r.lead_id WHERE i.campaign_id=$1 ORDER BY submitted_at DESC`, [id]), query('SELECT * FROM campaign_events WHERE campaign_id=$1 ORDER BY created_at DESC LIMIT 300', [id])]);
+  const [recipients, interests, events] = await Promise.all([query('SELECT r.*,m.failure_message,m.failure_code FROM campaign_recipients r LEFT JOIN communications m ON m.id=r.communication_id WHERE campaign_id=$1 ORDER BY r.company,r.first_name', [id]), query(`SELECT i.*,r.first_name,r.last_name,r.email,r.company,r.lead_id,r.client_id,inv.id invoice_id,inv.status invoice_status,l.status lead_status,l.assigned_user_id owner FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id LEFT JOIN leads l ON l.id=r.lead_id LEFT JOIN invoices inv ON inv.campaign_interest_id=i.id AND inv.deleted_at IS NULL WHERE i.campaign_id=$1 ORDER BY submitted_at DESC`, [id]), query('SELECT * FROM campaign_events WHERE campaign_id=$1 ORDER BY created_at DESC LIMIT 300', [id])]);
   return {
     ...c,
     can_delete: c.can_delete && recipients.rowCount === 0,
@@ -347,10 +348,11 @@ export async function submitCampaignInterest(token, input) {
     if (r.unsubscribed_at) throw new AppError('This marketing link has been unsubscribed.', 410, 'UNSUBSCRIBED');
     const selectedOffer = campaignInterestOptions(r.content_json).find(o=>o.key===data.package);
     const inserted = (await query('INSERT INTO campaign_interests(campaign_id,campaign_recipient_id,package,event_date,event_time,location) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(campaign_recipient_id) DO NOTHING RETURNING *', [r.campaign_id, r.id, data.package, data.event_date, data.event_time, data.location || null])).rows[0];
-    if (!inserted) return {
+    if (!inserted) { if(!r.lead_id)await linkCampaignInterest(r.campaign_id,(await query('SELECT id FROM campaign_interests WHERE campaign_recipient_id=$1',[r.id])).rows[0].id); return {
       duplicate: true,
       interest: (await query('SELECT * FROM campaign_interests WHERE campaign_recipient_id=$1', [r.id])).rows[0]
-    };
+    }; }
+    const linked=await linkCampaignInterest(r.campaign_id,inserted.id);
     await query('UPDATE campaign_recipients SET interested_at=now() WHERE id=$1', [r.id]);
     await event(r.campaign_id, 'interest_submitted', data, r.id);
     if (r.lead_id || r.client_id) await recordActivity({
@@ -373,7 +375,7 @@ export async function submitCampaignInterest(token, input) {
       }
     });
     return {
-      interest: inserted
+      interest: inserted,lead_id:linked.lead_id,lead_status:linked.lead_status
     };
   });
 }
@@ -475,46 +477,7 @@ export async function processCampaignJobs({
     processed
   };
 }
-export async function convertCampaignInterest(campaignId, interestId, req) {
-  return transaction(async () => {
-    const i = (await query('SELECT i.*,r.* ,i.id interest_id,c.content_json FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id JOIN campaigns c ON c.id=i.campaign_id WHERE i.id=$1 AND i.campaign_id=$2 FOR UPDATE OF r', [interestId, campaignId])).rows[0];
-    if (!i) throw new AppError('Interest not found.', 404, 'NOT_FOUND');
-    if (i.lead_id) return {
-      lead_id: i.lead_id,
-      existing: true
-    };
-    // Serializes explicit conversion for the same email, including other campaigns.
-    await query('SELECT pg_advisory_xact_lock(hashtext($1))', [i.email]);
-    let lead = (await query('SELECT id FROM leads WHERE lower(email)=$1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1', [i.email])).rows[0];
-    if (!lead) {
-      const selected=campaignContent(i.content_json).offers.find(o=>o.key===i.package);
-      lead = (await query(`INSERT INTO leads(first_name,last_name,email,phone,event_date,event_start_time,event_type,venue_name,company,lead_source,message,marketing_email_opt_in,assigned_user_id,preferred_experience_id,preferred_package_id) VALUES($1,$2,$3,$10,$4,$5,'CORPORATE',$6,$7,'MANUAL',$8,false,$9,$11,$12) RETURNING id`, [i.first_name || 'Prospect', i.last_name || '', i.email, i.event_date, i.event_time, i.location || null, i.company, `Campaign interest: ${selected?.name || i.package}. Requested ${i.event_date} ${i.event_time}.`, req.user.id, i.phone || null, selected?.catalog_id || null, selected?.package_id || null])).rows[0];
-    }
-    await query('UPDATE campaign_recipients SET lead_id=$2 WHERE id=$1', [i.campaign_recipient_id, lead.id]);
-    await recordActivity({
-      actorUserId: req.user.id,
-      entityType: 'lead',
-      entityId: lead.id,
-      action: 'campaign_interest_converted',
-      summary: 'Campaign interest linked to lead',
-      metadata: {
-        package: i.package,
-        event_date: i.event_date,
-        event_time: i.event_time,
-        location: i.location,
-        campaign_id: campaignId
-      }
-    });
-    await audit(req, {
-      id: campaignId,
-      name: 'Campaign interest',
-      status: 'LINKED'
-    }, 'campaign_interest_converted');
-    return {
-      lead_id: lead.id
-    };
-  });
-}
+export async function convertCampaignInterest(campaignId,interestId,req){return linkCampaignInterest(campaignId,interestId,req.user.id);}
 // Provider adapters call this only AFTER authenticating the provider webhook.
 // Microsoft Graph sendMail does not expose these events in the current adapter.
 export async function recordCampaignProviderEvent({

@@ -1,3 +1,4 @@
+import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
 import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
 import ProposalScenarioReview from "../components/ProposalScenarioReview.jsx";
 import {retainProposalPhotoSections} from "../../shared/proposal-photo-mapping.js";
@@ -395,6 +396,7 @@ export default function ProposalEditor() {
                       <label>Display name<input value={item.name || ""} onChange={(event) => updateSelectedExperience(index, { name: event.target.value })} /></label>
                       <fieldset className="wide">
                         <legend>Packages</legend>
+                        <CampaignPackagePicker experienceId={item.experience_id} onSelect={offer=>setForm(current=>({...current,selected_experiences:mergeCampaignSelections(current.selected_experiences||[],offer),package_id:""}))}/>
                         {packageOptions
                           .filter((pkg) => !pkg.experience_id || pkg.experience_id === item.experience_id)
                           .map((pkg) => (
@@ -409,7 +411,7 @@ export default function ProposalEditor() {
                           ))}
                         {!packageOptions.some((pkg) => !pkg.experience_id || pkg.experience_id === item.experience_id) && <p className="note-text">No catalog packages are linked to this experience yet.</p>}
                       </fieldset>
-                      <label>Selected package total<input type="number" min="0" step="0.01" value={item.price ?? ""} onChange={(event) => updateSelectedExperience(index, { price: event.target.value })} /></label>
+                      <label>Selected package total<input type="number" min="0" step="0.01" readOnly={item.packages?.some(pkg=>pkg.campaign_id)} value={item.price ?? ""} onChange={(event) => updateSelectedExperience(index, { price: event.target.value })} /></label>
                       <label>Headline<input value={item.headline || ""} onChange={(event) => updateSelectedExperience(index, { headline: event.target.value })} /></label>
                       <label className="wide">Description<textarea value={item.description || ""} onChange={(event) => updateSelectedExperience(index, { description: event.target.value })} /></label>
                     </div>

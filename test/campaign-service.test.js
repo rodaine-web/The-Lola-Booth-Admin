@@ -294,14 +294,14 @@ test('new interest records CRM activity and notification without booking, invoic
     id: recipientId,
     campaign_id: id,
     lead_id: leadId,
-    first_name: 'QA',
+    email:'qa@example.invalid',first_name: 'QA',
     company: 'Synthetic',
     campaign_name: 'QA outreach'
   };
   const calls = fixture(t, sql => sql.includes('WHERE token_hash=') ? [r] : sql.startsWith('INSERT INTO campaign_interests') ? [{
     id: randomUUID(),
     package: 'DUO'
-  }] : sql.startsWith('INSERT INTO notifications') ? [{
+  }] : sql.includes('i.id=$1 AND i.campaign_id=$2') ? [{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',lead_id:leadId,offer_snapshot:{name:'Duo'},event_date:'2099-12-20'}] : sql.startsWith('SELECT * FROM leads') || sql.startsWith("UPDATE leads SET status='FOLLOW_UP'") ? [{id:leadId,status:'FOLLOW_UP'}] : sql.startsWith('INSERT INTO notifications') ? [{
     id: randomUUID()
   }] : []);
   await campaigns.submitCampaignInterest(campaigns.newCampaignToken(), {
@@ -359,7 +359,7 @@ test('provider failure remains visible and does not mark a campaign recipient se
  finally{env.emailProvider=previousProvider;if(previousFlag===undefined)delete process.env.CAMPAIGN_JOBS_ENABLED;else process.env.CAMPAIGN_JOBS_ENABLED=previousFlag;}
 });
 test('explicit conversion links to an existing email instead of creating a duplicate lead',async t=>{
- const interestId=randomUUID();const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',package:'DUO',event_date:'2099-12-20',event_time:'18:00'}]:sql.startsWith('SELECT id FROM leads')?[{id:leadId}]:[]);
+ const interestId=randomUUID();const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',package:'DUO',event_date:'2099-12-20',event_time:'18:00',offer_snapshot:{name:'Duo'}}]:sql.startsWith('SELECT * FROM leads')||sql.startsWith("UPDATE leads SET status='FOLLOW_UP'")?[{id:leadId,status:'FOLLOW_UP'}]:[]);
  const out=await campaigns.convertCampaignInterest(id,interestId,req);assert.equal(out.lead_id,leadId);assert.ok(calls.some(c=>c.sql.includes('pg_advisory_xact_lock')));assert.equal(calls.some(c=>c.sql.startsWith('INSERT INTO leads')),false);
 });
 test('unsubscribe token stays usable after campaign archive and interest token expiry',async t=>{
@@ -377,11 +377,11 @@ test('custom campaign rejects an experience outside its offers before recording 
 test('explicit conversion carries imported phone and selected catalog experience/package into the lead',async t=>{
  const experienceId=randomUUID(),packageId=randomUUID(),interestId=randomUUID();
  const offer={key:'EXPERIENCE_'+experienceId,kind:'EXPERIENCE',catalog_id:experienceId,package_id:packageId,name:'360 Signature',original_price:999,discount_type:'NONE',discount_value:0};
- const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',phone:'+1 312 555 0100',package:offer.key,event_date:'2099-12-20',event_time:'18:00',content_json:campaignContent({format:'TEXT',offers:[offer]})}]:sql.startsWith('INSERT INTO leads')?[{id:leadId}]:[]);
+ const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',phone:'+1 312 555 0100',package:offer.key,event_date:'2099-12-20',event_time:'18:00',offer_snapshot:{...offer,selections:[{experience_id:experienceId,packages:[{package_id:packageId}]}]}}]:sql.startsWith('INSERT INTO leads')?[{id:leadId}]:[]);
  const out=await campaigns.convertCampaignInterest(id,interestId,req);
  assert.equal(out.lead_id,leadId);
  const insert=calls.find(c=>c.sql.startsWith('INSERT INTO leads'));
- assert.equal(insert.args[9],'+1 312 555 0100');assert.equal(insert.args[10],experienceId);assert.equal(insert.args[11],packageId);assert.match(insert.args[7],/360 Signature/);
+ assert.equal(insert.args[3],'+1 312 555 0100');assert.equal(insert.args[10],experienceId);assert.equal(insert.args[11],packageId);assert.match(insert.args[8],/360 Signature/);assert.match(insert.sql,/'FOLLOW_UP'/);
 });
 
 test('draft deletion is staging-only and records removal without deleting contacts or suppressions',async t=>{

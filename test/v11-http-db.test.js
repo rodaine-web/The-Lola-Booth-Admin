@@ -98,6 +98,8 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM campaign_suppressions WHERE email=$1',['tracking@example.com'])).rows[0].n,1);
   assert.equal((await fetch(origin+'/api/public/campaigns/track/open/invalid')).status,200);
   assert.equal((await fetch(origin+'/api/public/campaigns/track/click/invalid?url=https://example.com',{redirect:'manual'})).status,404);
+  const {verifyCampaignSales}=await import('./support/campaign-sales-journey.js');
+  await verifyCampaignSales({api,pool,viewerToken});
   const productionDraft=(await pool.query("INSERT INTO campaigns(name) VALUES('Production gate QA draft') RETURNING id")).rows[0];
   process.env.APP_ENV='production';
   assert.equal((await api(`/campaigns/${productionDraft.id}`,{method:'DELETE'})).status,404);

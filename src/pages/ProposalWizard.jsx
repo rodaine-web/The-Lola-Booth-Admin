@@ -1,3 +1,4 @@
+import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
 import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
 import {experienceKey,normalizeScenarioEvent} from "../../shared/proposal-scenario.js";
 import ProposalScenarioReview from "../components/ProposalScenarioReview.jsx";
@@ -105,7 +106,7 @@ export default function ProposalWizard(){
       const prefill=proposalBookingPrefill(record,experiences,packages);
       setLead(record);
       setForm(current=>({...current,...prefill.fields}));
-      setSelectedExperiences(prefill.selectedExperiences);
+      if(params.get('campaignId')&&params.get('offerKey')){const campaigns=await api.get('/campaigns/offers-for-proposals');if(!isCurrent())return;const offer=campaigns.data?.find(c=>c.id===params.get('campaignId'))?.offers.find(o=>o.key===params.get('offerKey'));if(offer)setSelectedExperiences(offer.selections);else setError('The campaign offer is unavailable. Choose another package.');}else setSelectedExperiences(prefill.selectedExperiences);
     }catch(err){if(isCurrent())setError(err.message);}
   }
 
@@ -315,11 +316,12 @@ export default function ProposalWizard(){
       </div>
       {selectedExperiences.map(item=><section className="wizard-section package-picker" key={item.experience_id}>
         <div><h3>{item.name} Packages</h3><p>Choose the package that best fits this event.</p></div>
+        <CampaignPackagePicker experienceId={item.experience_id} onSelect={offer=>setSelectedExperiences(current=>mergeCampaignSelections(current,offer))}/>
         <div className="package-card-grid">
           {!packages.some(pkg=>!pkg.experience_id||pkg.experience_id===item.experience_id)&&!catalogLoading&&!catalogError&&<p>No active packages are linked to this experience yet.</p>}
           {packages.filter(pkg=>!pkg.experience_id||pkg.experience_id===item.experience_id).map(pkg=>{const selected=(item.packages||[]).some(entry=>entry.package_id===pkg.id);return <button key={pkg.id} className={selected?"package-card selected":"package-card"} onClick={()=>choosePackage(item.experience_id,pkg)}><strong>{pkg.name}</strong>{pkg.most_popular&&<span>Most Popular</span>}<b>{pkg.pricing_mode==="CUSTOM"?"Let's create":money(pkg.starting_price||0)}</b><small>{pkg.short_description||pkg.description||""}</small><small>{pkg.included_hours?pkg.included_hours+" hours":"Duration as agreed"}</small><small>{(pkg.items||pkg.website_features||[]).map(f=>typeof f==="string"?f:f.label).join(" · ")}</small></button>;})}
         </div>
-      <div className="form-grid">{(item.packages||[]).map(pkg=><label key={pkg.package_id}>Selected price — {pkg.name}<input type="number" min="0" step="0.01" value={pkg.price} onChange={e=>setSelectedExperiences(current=>current.map(row=>row.experience_id===item.experience_id?{...row,packages:row.packages.map(p=>p.package_id===pkg.package_id?{...p,price:Number(e.target.value)}:p)}:row))}/></label>)}</div>
+      <div className="form-grid">{(item.packages||[]).map(pkg=><label key={pkg.campaign_id?pkg.campaign_id+pkg.campaign_offer_key:pkg.package_id}>Selected price — {pkg.name}<input type="number" min="0" step="0.01" readOnly={!!pkg.campaign_id} value={pkg.price} onChange={e=>setSelectedExperiences(current=>current.map(row=>row.experience_id===item.experience_id?{...row,packages:row.packages.map(p=>p.package_id===pkg.package_id?{...p,price:Number(e.target.value)}:p)}:row))}/></label>)}</div>
       </section>)}
       {!!addons.length&&<section className="wizard-section"><h3>Add-ons <small>Optional</small></h3><div className="addon-choice-grid">{addons.map(item=><label key={item.id}><input type="checkbox" checked={selectedAddons.some(entry=>entry.addon_id===item.id)} onChange={()=>chooseAddon(item)}/><span>{item.name}</span><strong>{money(item.price||0)}</strong></label>)}</div></section>}
       {!!mappedProposalPhotos(selectedExperiences,photoAssets,()=>"preview").length&&<p role="status">Reviewed experience photos will be included in this proposal.</p>}
