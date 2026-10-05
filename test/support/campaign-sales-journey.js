@@ -11,7 +11,8 @@ export async function verifyCampaignSales({api,pool,viewerToken}){
  assert.equal((await api(`/campaigns/${id}/send`,{method:'POST'})).status,200);
  const recipient=(await pool.query('SELECT * FROM campaign_recipients WHERE campaign_id=$1',[id])).rows[0];
  const message=(await pool.query('SELECT * FROM communications WHERE id=$1',[recipient.communication_id])).rows[0];
- const token=message.rendered_html.match(/\/interest\/([A-Za-z0-9_-]{43})/)[1];
+ const destination=(await pool.query("SELECT destination FROM campaign_tracking_links WHERE recipient_id=$1 AND kind='CLICK' AND destination LIKE '%/interest/%'",[recipient.id])).rows[0].destination;
+ const token=new URL(destination).pathname.split('/').at(-1);
  await pool.query("UPDATE campaign_recipients SET status='SENT',sent_at=now() WHERE id=$1",[recipient.id]);
  const interestInput={package:key,event_date:'2099-12-18',event_time:'18:00',location:'Synthetic venue'};
  const interested=await api('/public/campaigns/interest/'+token,{method:'POST',token:null,body:interestInput});
