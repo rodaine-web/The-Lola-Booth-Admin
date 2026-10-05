@@ -40,11 +40,17 @@ export async function verifyCampaignSales({api,pool,viewerToken}){
  const pay=amount=>api('/payments',{method:'POST',body:{invoice_id:invoice.id,amount,payment_method:'BANK_TRANSFER',payment_date:'2099-12-18',idempotency_key:'campaign-sales-'+amount}});
  const partial=await pay(100);assert.equal(partial.status,201,JSON.stringify(partial.data));assert.equal(partial.data.client_id,null);
  assert.equal((await pool.query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'FOLLOW_UP');
+ await pool.query("INSERT INTO payments(invoice_id,amount,payment_method,payment_date,status) VALUES($1,1000,'CARD','2099-12-18','FAILED')",[invoice.id]);
+ const {reconcileInvoice}=await import('../../server/src/services/payment-reconciliation-service.js');await reconcileInvoice(invoice.id);
+ assert.equal((await pool.query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'FOLLOW_UP','Failed payments never convert the lead');
  const deposit=await pay(140);assert.equal(deposit.status,201,JSON.stringify(deposit.data));assert.ok(deposit.data.client_id);assert.ok(deposit.data.event_id);
  const won=(await pool.query('SELECT * FROM leads WHERE id=$1',[lead.id])).rows[0];assert.equal(won.status,'WON');assert.equal(won.converted_client_id,deposit.data.client_id);
- const {reconcileInvoice}=await import('../../server/src/services/payment-reconciliation-service.js');await reconcileInvoice(invoice.id);await reconcileInvoice(invoice.id);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM bookings WHERE event_id=$1',[deposit.data.event_id])).rows[0].n,1);
+ assert.equal((await pool.query('SELECT experience_id FROM event_experiences WHERE event_id=$1',[deposit.data.event_id])).rows[0].experience_id,exp.id);
+ const duplicatePayment=await pay(140);assert.equal(duplicatePayment.data.id,deposit.data.id);
+ await reconcileInvoice(invoice.id);await reconcileInvoice(invoice.id);
  assert.equal((await pool.query("SELECT count(*)::int n FROM clients WHERE email='campaign-sales@example.com'")).rows[0].n,1);
  assert.equal((await pool.query('SELECT count(*)::int n FROM events WHERE client_id=$1',[won.converted_client_id])).rows[0].n,1);
- assert.equal((await pool.query('SELECT count(*)::int n FROM payments WHERE invoice_id=$1 AND client_id=$2',[invoice.id,won.converted_client_id])).rows[0].n,2);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM payments WHERE invoice_id=$1 AND client_id=$2 AND status='SUCCEEDED'',[invoice.id,won.converted_client_id])).rows[0].n,2);
  assert.equal((await api(`/campaigns/${id}/interests/${interest.id}/invoice`,{method:'POST',body:{send:true}})).status,409,'No new deposit request after the deposit is paid');
 }
