@@ -7,7 +7,6 @@ import { recordActivity } from './activity-service.js';
 import { writeAudit } from './audit-service.js';
 import { createNotification } from './notification-service.js';
 import { sendCommunication, createCommunicationDraft } from './automation-service.js';
-import { stagingJobsPaused, isStaging } from '../config/staging-safety.js';
 import { campaignContent, eligibleAudience, campaignInterestOptions, campaignPackages } from '../../../shared/campaign-content.js';
 import { renderCampaignEmail } from './campaign-email.js';
 export const hashCampaignToken = token => createHash('sha256').update(token).digest('hex');
@@ -382,7 +381,8 @@ export async function unsubscribeCampaign(token) {
 export async function processCampaignJobs({
   limit = 25
 } = {}) {
-  if (process.env.CAMPAIGN_JOBS_ENABLED !== 'true' || stagingJobsPaused() && !isStaging()) return {
+  // Campaigns have their own opt-in; reminder processing remains independently paused.
+  if (process.env.CAMPAIGN_JOBS_ENABLED !== 'true') return {
     processed: [],
     paused: true
   };
