@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assertStagingConfiguration,stagingEmailPolicy,stagingJobsPaused,buildInfo} from '../server/src/config/staging-safety.js';
+import {assertStagingConfiguration,stagingEmailPolicy,stagingJobsPaused,stagingAutomationScope,buildInfo} from '../server/src/config/staging-safety.js';
 import {safeError} from '../server/src/utils/safe-error.js';
 import {dispatchMarketing} from '../server/src/services/marketing-adapters.js';
 test('staging rejects live or malformed Stripe keys, SMS and enabled marketing',()=>{
@@ -17,3 +17,12 @@ test('staging email defaults paused and allowlist covers cc/bcc and bulk limits'
 test('staging keeps automatic jobs paused and version output safe',()=>{assert.equal(stagingJobsPaused({APP_ENV:'staging',STAGING_AUTOMATIONS_ENABLED:'true'}),true);assert.deepEqual(buildInfo({APP_ENV:'staging',RAILWAY_GIT_COMMIT_SHA:'abc',JWT_SECRET:'hidden'}),{environment:'staging',revision:'abc'});});
 test('staging marketing never calls transport even if an enable flag is supplied',async()=>{let called=false;assert.equal((await dispatchMarketing({provider:'GA4'},{config:{APP_ENV:'staging',GA4_ENABLED:'true'},transport:()=>{called=true;}})).result,'DISABLED');assert.equal(called,false);});
 test('error logging redacts configured secrets and payment tokens',()=>{const result=safeError(new Error('failed sensitive-password sk_live_ABC whsec_DEF'),{JWT_SECRET:'sensitive-password'});assert.ok(!JSON.stringify(result).includes('sensitive-password'));assert.ok(!JSON.stringify(result).includes('sk_live_ABC'));assert.equal(result.stack,undefined);});
+
+test('staging automatic reminders require enable flag, email allowlist and fresh window',()=>{
+ const base={APP_ENV:'staging',STAGING_AUTOMATIONS_ENABLED:'true',STAGING_EMAIL_ENABLED:'true',STAGING_EMAIL_ALLOWLIST:'QA@EXAMPLE.INVALID',STAGING_AUTOMATIONS_SINCE:'2026-10-04T00:00:00Z'};
+ assert.equal(stagingJobsPaused(base),false);
+ assert.deepEqual(stagingAutomationScope(base),{since:'2026-10-04T00:00:00.000Z',recipients:['qa@example.invalid']});
+ for(const key of ['STAGING_AUTOMATIONS_ENABLED','STAGING_EMAIL_ENABLED','STAGING_EMAIL_ALLOWLIST','STAGING_AUTOMATIONS_SINCE'])assert.equal(stagingJobsPaused({...base,[key]:''}),true);
+ assert.equal(stagingJobsPaused({APP_ENV:'production'}),true);
+ assert.equal(stagingJobsPaused({APP_ENV:'production',PRODUCTION_AUTOMATIONS_ENABLED:'true'}),false);
+});

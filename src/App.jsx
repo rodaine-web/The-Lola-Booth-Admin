@@ -17,6 +17,8 @@ const Users = lazy(() => import("./pages/Users.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Leads = lazy(() => import("./pages/Leads.jsx"));
 const LeadDetail = lazy(() => import("./pages/LeadDetail.jsx"));
+const Clients = lazy(() => import("./pages/Clients.jsx"));
+const Events = lazy(() => import("./pages/Events.jsx"));
 const EventDetail = lazy(() => import("./pages/EventDetail.jsx"));
 const ClientDetail = lazy(() => import("./pages/ClientDetail.jsx"));
 const Calendar = lazy(() => import("./pages/Calendar.jsx"));
@@ -25,6 +27,8 @@ const Settings = lazy(() => import("./pages/Settings.jsx"));
 const ResourcePage = lazy(() => import("./pages/ResourcePage.jsx"));
 const Proposals = lazy(() => import("./pages/Proposals.jsx"));
 const ProposalEditor = lazy(() => import("./pages/ProposalEditor.jsx"));
+const ProposalTemplates = lazy(() => import("./pages/ProposalTemplates.jsx"));
+const ProposalWizard = lazy(() => import("./pages/ProposalWizard.jsx"));
 const ProposalDetail = lazy(() => import("./pages/ProposalDetail.jsx"));
 const Invoices = lazy(() => import("./pages/Invoices.jsx"));
 const InvoiceEditor = lazy(() => import("./pages/InvoiceEditor.jsx"));
@@ -36,6 +40,8 @@ const PublicReceipt = lazy(() => import("./pages/PublicReceipt.jsx"));
 const PublicInvoice = lazy(() => import("./pages/PublicInvoice.jsx"));
 const Integrations = lazy(() => import("./pages/Integrations.jsx"));
 const WebsiteCms = lazy(() => import.meta.env.VITE_APP_ENV === "production" ? import("./pages/WebsiteCms.jsx") : import("./pages/StagingCms.jsx"));
+const Campaigns=lazy(()=>import("./pages/Campaigns.jsx"));
+const CampaignInterest=lazy(()=>import("./pages/CampaignInterest.jsx"));
 const Communications = lazy(() => import("./pages/Communications.jsx"));
 const MyEvents = lazy(() => import("./pages/MyEvents.jsx"));
 const PublicDelivery = lazy(() => import("./pages/PublicDelivery.jsx"));
@@ -59,6 +65,8 @@ export default function App() {
   return (
     <Suspense fallback={<main className="boot-screen">Opening Admin Portal...</main>}>
     <Routes>
+      <Route path="/interest/:token" element={<CampaignInterest/>}/>
+      <Route path="/unsubscribe/:token" element={<CampaignInterest unsubscribe/>}/>
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
       <Route path="/proposal/:token" element={<PublicProposal />} />
@@ -77,14 +85,17 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="sales/leads" element={<Leads />} />
         <Route path="sales/leads/:id" element={<LeadDetail />} />
-        <Route path="sales/clients" element={<ResourcePage title="Clients" endpoint="/clients" columns={["name", "email", "phone", "client_type"]} rowHref={(row) => `/sales/clients/${row.id}`} fields={clientFields} />} />
+        <Route path="sales/clients" element={<Clients />} />
         <Route path="sales/clients/:id" element={<ClientDetail />} />
         <Route path="sales/proposals" element={<Proposals />} />
+        <Route path="communications/campaigns" element={<Campaigns/>}/>
+        <Route path="communications/campaigns/:id" element={<Campaigns/>}/>
         <Route path="sales/communications" element={<Communications />} />
         <Route path="sales/proposals/:id/edit" element={<ProposalEditor />} />
-        <Route path="sales/proposals/new" element={<ProposalEditor />} />
+        <Route path="sales/proposals/new" element={<ProposalWizard />} />
+        <Route path="sales/proposals/new/advanced" element={<ProposalEditor />} />
         <Route path="sales/proposals/:id" element={<ProposalDetail />} />
-        <Route path="events/events" element={<ResourcePage title="Events" endpoint="/events" columns={["event_number", "event_name", "event_date", "venue_name", "status"]} rowHref={(row) => `/events/events/${row.id}`} fields={eventFields} />} />
+        <Route path="events/events" element={<Events />} />
         <Route path="events/events/:id" element={<EventDetail />} />
         <Route path="events/calendar" element={<Calendar />} />
         <Route path="events/equipment" element={<Roster kind="equipment"/>} />
@@ -124,6 +135,7 @@ export default function App() {
         <Route path="system/health" element={<SystemHealth />} />
         <Route path="system/audit-log" element={<AuditLog/>} />
         <Route path="system/data-review" element={<DataReview/>}/>
+        <Route path="system/proposal-templates" element={<ProposalTemplates />} />
         <Route path="system/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={
@@ -141,11 +153,11 @@ export default function App() {
 }
 
 const clientFields = [
-  ["first_name", "First name"], ["last_name", "Last name"], ["email", "Email", "email"], ["phone", "Phone"], ["company", "Company"], ["preferred_contact_method", "Preferred contact method"], ["address", "Address"], ["city", "City"], ["state", "State"], ["zip", "ZIP"], ["notes", "Notes", "textarea"]
+  ["first_name", "First name"], ["last_name", "Last name"], ["email", "Email", "email"], ["phone", "Phone"], ["company", "Company"], ["preferred_contact_method", "Preferred contact method", "select", { options: ["EMAIL","PHONE","TEXT"] }], ["address", "Address"], ["city", "City"], ["state", "State", "select", { options: ["AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","PR","VI","GU","AS","MP"] }], ["zip", "ZIP"], ["notes", "Notes", "textarea"]
 ];
 
 const eventFields = [
-  ["client_id", "Client", "relationship", { resource: "clients" }], ["event_name", "Event title"], ["event_type", "Event type"], ["event_date", "Event date", "date"], ["start_time", "Start time", "time"], ["end_time", "End time", "time"], ["setup_time", "Setup time", "time"], ["breakdown_time", "Breakdown time", "time"], ["venue_name", "Venue"], ["venue_address", "Address"], ["city", "City"], ["state", "State"], ["zip", "ZIP"], ["guest_count", "Guest count", "number"], ["package_id", "Package", "relationship", { resource: "packages" }], ["experience_id", "Experience", "relationship", { resource: "experiences" }], ["internal_notes", "Internal notes", "textarea"], ["client_notes", "Client notes", "textarea"]
+  ["client_id", "Client", "relationship", { resource: "clients" }], ["event_name", "Event title", "text", { required: true }], ["event_type", "Event type"], ["event_date", "Event date", "date", { required: true }], ["start_time", "Start time", "time", { required: true }], ["end_time", "End time", "time", { required: true }], ["setup_time", "Setup time", "time"], ["breakdown_time", "Breakdown time", "time"], ["venue_name", "Venue"], ["venue_address", "Address"], ["city", "City"], ["state", "State", "select", { options: ["AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","PR","VI","GU","AS","MP"] }], ["zip", "ZIP"], ["guest_count", "Guest count", "number"], ["internal_notes", "Internal notes", "textarea"], ["client_notes", "Client notes", "textarea"]
 ];
 
 const packageFields = [

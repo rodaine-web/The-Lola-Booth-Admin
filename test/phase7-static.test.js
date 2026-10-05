@@ -46,7 +46,7 @@ test("dashboard service computes range groups, comparisons, funnel, alerts, and 
     "Operations",
     "salesFunnel",
     "leadSourcePerformance",
-    "Needs Attention",
+    "Tasks & Attention",
     "Metric Definitions",
     "Booked revenue is the sum of booking totals"
   ]) {

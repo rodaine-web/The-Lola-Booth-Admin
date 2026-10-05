@@ -1,5 +1,9 @@
+import { scenarioHtml, renderScenarioPdf } from "./proposal-scenario-document.js";
+import { proposalNarrative } from "./proposal-narrative.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {proposalVisualHtml} from "./proposal-visual-service.js";
+import { renderProposalPdf } from "./proposal-pdf-layout.js";
+import {compactProposalPhotos} from "./proposal-pdf-images.js";
 import { documentOrigin } from "../utils/public-document-url.js";
 import { normalizeInvoice } from "../../../shared/invoice-balance.js";
 import fs from "node:fs";
@@ -55,9 +59,11 @@ export function sanitizeContent(value) {
 }
 
 export function proposalHtml(proposal) {
+  if(proposal.content?.scenario) return scenarioHtml(proposal,logoDataUri("primaryDark"));
   const content = proposal.content || {};
   const pricing = proposal.pricing_snapshot || {};
   const experiences = proposalSelectedExperiences(proposal);
+  const narrative = proposalNarrative(proposal, experiences);
   const lineItems = proposal.line_items_snapshot || [];
   const first = experiences[0] || {};
   const second = experiences[1] || first;
@@ -81,6 +87,7 @@ export function proposalHtml(proposal) {
     ["03","Made to Share","Digital content is delivered quickly so guests can save and share their favorite moments."],
     ["04","Handled End to End","Delivery, setup, operation and breakdown are taken care of by LOLA."]
   ];
+  const narrativeHtml = value => sanitizeContent(value).replace(/\n/g, "<br>");
   const due = pricing.deposit_amount || pricing.total || proposal.total || 0;
   const terms = sanitizeContent(content.terms || "30% down payment is required to reserve the date. Cancellation requires at least 48 hours notice. Final scope is subject to confirmed event details.");
   const logo = logoDataUri("primaryDark");
@@ -102,11 +109,15 @@ export function proposalHtml(proposal) {
 </style></head><body><div class="shell">
 <header class="nav"><div class="navin"><div>${logo?`<img class="brand-logo" src="${logo}" alt="The LOLA Booth">`:"THE LOLA BOOTH"}</div><div style="font-size:12px;color:var(--muted)">${escapeProposalValue(proposalTypeLabel)} • ${escapeProposalValue(proposal.proposal_number||"")}</div><div><a class="btn" href="#investment">Investment</a> <a class="btn gold" href="#accept">Accept Proposal</a></div></div></header>
 <section class="hero print-page"><div class="hero-copy"><div class="kicker">${escapeProposalValue(proposalTypeLabel)}</div><h1>A LOLA experience created for ${client}.</h1><p class="lede">${selectedSummary}</p><div class="meta">${eventFacts.map(([label,value])=>`<div><span>${escapeProposalValue(label)}</span><strong>${escapeProposalValue(value)}</strong></div>`).join("")}</div></div><div class="hero-media"><div class="photo a" style="background-image:url('${heroA}')"></div><div class="photo" style="background-image:url('${heroB}')"></div><div class="c"><div><div class="kicker" style="color:#fff">Selected Experiences</div><h3 style="font-size:30px;margin-bottom:5px">${escapeProposalValue(selectedNames)}</h3><span style="font-size:12px;line-height:1.5">Beautiful moments. Thoughtful production. One unforgettable guest experience.</span></div></div></div></section>
-<section class="section alt print-page"><div class="section-head"><div><div class="kicker">Proposal Overview</div><h2>Let’s make this one worth remembering.</h2></div><p class="lede">A polished, interactive experience that feels intentional in the room and effortless for your guests.</p></div><div class="facts">${eventFacts.map(([label,value])=>`<div class="fact"><span>${escapeProposalValue(label)}</span><strong>${escapeProposalValue(value)}</strong></div>`).join("")}</div><div class="note"><div class="kicker">The Event Vision</div><h3>Elegant, interactive and easy for guests to enjoy.</h3><p class="lede">LOLA will coordinate the selected experiences as one guest journey, with professional attendants, event-ready presentation, custom creative and delivery from setup through breakdown.</p></div></section>
-${experiences.map((item,index)=>{const key=selectedExperienceKey(item);const features=selectedExperienceFeatures(key,item);const stories=key==="glam"?[["customization","Guest Interface","A welcome screen made for your event.","Your names, colors and event style can carry through the guest-facing screen so the experience feels personal before the first photo is taken."],["equipment","The Booth","Beautiful enough to belong in the room.","Clean equipment, professional lighting and a compact footprint make the experience easy to place without fighting the event design."],["output","Guest Output","A keepsake worth taking home.","Guests leave with a polished memory, delivered in the format included with your selected package."]]:key==="360"?[["equipment","The Platform","A moment built for motion.","A clean 360 platform creates a natural focal point without taking over the room."],["interaction","Guest Experience","Easy to step in. Hard not to share.","Attendants guide the flow while guests create energetic slow-motion content."],["output","Video Treatment","Branded and ready to share.","Custom overlays and finishing make each clip feel connected to your event."]]:key==="vogue"?[["equipment","The Installation","A full-size editorial moment.","The Vogue creates a dramatic, recognizable destination for guests."],["interaction","The Moment","Editorial, playful and instantly recognizable.","Wedding-party members, family, friends or brand guests get a dedicated space to create a fashion-forward memory."],["customization","Styling","Designed to complement the room.","The installation can be coordinated with the event palette, florals or creative direction."]]:[["equipment","The Phone","A familiar object with a meaningful purpose.","Guests simply pick up the phone and leave a message in their own voice."],["customization","Prompt & Signage","Make it easy to know what to say.","A clear prompt and signage help guests leave thoughtful, funny and heartfelt messages."],["output","Post-event Delivery","Keep the voices after the night is over.","Recordings are organized and delivered after the event for you to revisit anytime."]];return `<section class="exp ${index%2?"alt":""} print-page"><div class="exp-title"><div><div class="kicker">Experience ${String(index+1).padStart(2,"0")}</div><h2>${escapeProposalValue(item.name||"LOLA Experience")}</h2><p class="lede">${escapeProposalValue(item.description||"A premium LOLA experience designed around your event.")}</p></div>${item.package_name?`<span class="pill">${escapeProposalValue(item.package_name)}</span>`:""}</div><div class="exp-grid"><div class="main-photo" style="background-image:url('${safeProposalUrl(selectedExperienceVisual(proposal,item,"hero"))}')"></div><div><div class="kicker">The Experience</div><h3>${escapeProposalValue(item.headline||({glam:"Clean. Classic. Beautifully you.","360":"Turn moments into motion.",vogue:"Make your guests the cover story.",audio:"Some memories are better heard."}[key]))}</h3><p class="lede">${escapeProposalValue(item.description||"A premium LOLA experience designed around your event.")}</p><div class="checks">${features.map(feature=>`<div class="check">${escapeProposalValue(feature)}</div>`).join("")}</div></div></div><div class="visual-story">${stories.map(([slot,small,title,body])=>`<div class="story-row"><div class="story-image" style="background-image:url('${safeProposalUrl(selectedExperienceVisual(proposal,item,slot))}')"></div><div class="story-copy"><div class="smallcap">${small}</div><h3>${title}</h3><p>${body}</p></div></div>`).join("")}</div></section>`;}).join("")}
+<section class="section print-page"><div class="kicker">Introduction</div><h2>Welcome to The LOLA Booth.</h2><p class="lede">${narrativeHtml(narrative.introduction)}</p></section>
+<section class="section alt print-page"><div class="section-head"><div><div class="kicker">Proposal Overview</div><h2>Let’s make this one worth remembering.</h2><h3>About the event</h3><p class="lede">${narrativeHtml(narrative.aboutEvent)}</p></div><p class="lede">A polished, interactive experience that feels intentional in the room and effortless for your guests.</p></div><div class="facts">${eventFacts.map(([label,value])=>`<div class="fact"><span>${escapeProposalValue(label)}</span><strong>${escapeProposalValue(value)}</strong></div>`).join("")}</div><div class="note"><div class="kicker">The Event Vision</div><h3>Elegant, interactive and easy for guests to enjoy.</h3><p class="lede">LOLA will coordinate the selected experiences as one guest journey, with professional attendants, event-ready presentation, custom creative and delivery from setup through breakdown.</p></div></section>
+${proposalVisualHtml(proposal)}
+${experiences.map((item,index)=>{const key=selectedExperienceKey(item);const features=selectedExperienceFeatures(key,item);const stories=key==="glam"?[["customization","Guest Interface","A welcome screen made for your event.","Your names, colors and event style can carry through the guest-facing screen so the experience feels personal before the first photo is taken."],["equipment","The Booth","Beautiful enough to belong in the room.","Clean equipment, professional lighting and a compact footprint make the experience easy to place without fighting the event design."],["output","Guest Output","A keepsake worth taking home.","Guests leave with a polished memory, delivered in the format included with your selected package."]]:key==="360"?[["equipment","The Platform","A moment built for motion.","A clean 360 platform creates a natural focal point without taking over the room."],["interaction","Guest Experience","Easy to step in. Hard not to share.","Attendants guide the flow while guests create energetic slow-motion content."],["output","Video Treatment","Branded and ready to share.","Custom overlays and finishing make each clip feel connected to your event."]]:key==="digital"?[["equipment","The Digital Booth","A compact booth for your event.","A tablet booth gives guests an easy way to create and share."],["customization","Guest Screen","Ready for your guests.","Event creative can carry through the capture screen."],["output","Guest Experience","Made to enjoy and share.","Reference photography shows the guest experience; final creative is confirmed separately."]]:key==="custom"?[]:key==="vogue"?[["equipment","The Installation","A full-size editorial moment.","The Vogue creates a dramatic, recognizable destination for guests."],["interaction","The Moment","Editorial, playful and instantly recognizable.","Wedding-party members, family, friends or brand guests get a dedicated space to create a fashion-forward memory."],["customization","Styling","Designed to complement the room.","The installation can be coordinated with the event palette, florals or creative direction."]]:[["equipment","The Phone","A familiar object with a meaningful purpose.","Guests simply pick up the phone and leave a message in their own voice."],["customization","Prompt & Signage","Make it easy to know what to say.","A clear prompt and signage help guests leave thoughtful, funny and heartfelt messages."],["output","Post-event Delivery","Keep the voices after the night is over.","Recordings are organized and delivered after the event for you to revisit anytime."]];return `<section class="exp ${index%2?"alt":""} print-page"><div class="exp-title"><div><div class="kicker">Experience ${String(index+1).padStart(2,"0")}</div><h2>${escapeProposalValue(item.name||"LOLA Experience")}</h2><p class="lede">${escapeProposalValue(item.description||"A premium LOLA experience designed around your event.")}</p></div>${item.package_name?`<span class="pill">${escapeProposalValue(item.package_name)}</span>`:""}</div><div class="exp-grid"><div class="main-photo" style="background-image:url('${safeProposalUrl(selectedExperienceVisual(proposal,item,"hero"))}')"></div><div><div class="kicker">The Experience</div><h3>${escapeProposalValue(item.headline||({glam:"Clean. Classic. Beautifully you.","360":"Turn moments into motion.",vogue:"Make your guests the cover story.",audio:"Some memories are better heard.",digital:"Capture. Share. Celebrate.",custom:"Created around your event."}[key]))}</h3><p class="lede">${escapeProposalValue(item.description||"A premium LOLA experience designed around your event.")}</p><div class="checks">${features.map(feature=>`<div class="check">${escapeProposalValue(feature)}</div>`).join("")}</div></div></div><div class="visual-story">${stories.map(([slot,small,title,body])=>`<div class="story-row"><div class="story-image" style="background-image:url('${safeProposalUrl(selectedExperienceVisual(proposal,item,slot))}')"></div><div class="story-copy"><div class="smallcap">${small}</div><h3>${title}</h3><p>${body}</p></div></div>`).join("")}</div></section>`;}).join("")}
 <section class="section dark print-page"><div class="section-head"><div><div class="kicker">The LOLA Standard</div><h2>Easy for you. Memorable for them.</h2></div><p class="lede">The booth should feel like part of the celebration, not another thing you have to manage.</p></div><div class="value-grid">${standardValues.map(([n,t,b])=>`<div class="value"><div class="kicker">${n}</div><b>${t}</b><span>${b}</span></div>`).join("")}</div></section>
 <section class="section print-page" id="investment"><div class="section-head"><div><div class="kicker">Investment</div><h2>Your ${proposal.proposal_type==="WEDDING"?"wedding":"event"} experience.</h2></div><p class="lede">The investment below comes directly from the experiences, packages and adjustments selected for this proposal.</p></div><div class="invest"><div class="price">${lineItems.map(item=>`<div class="line"><span>${escapeProposalValue(item.description)}</span><strong>${money(item.line_total)}</strong></div>`).join("")}<div class="total"><span>Total Investment</span><strong>${money(pricing.total||proposal.total)}</strong></div></div><div class="due"><div class="kicker">Due to Reserve Date</div><div class="amt">${money(due)}</div><p>30% down payment. Your date is secured after the required booking documents and down payment are completed.</p><a class="btn gold" href="#accept">Accept & Continue</a></div></div></section>
 <section class="section alt print-page" id="accept"><div class="section-head"><div><div class="kicker">Next Steps</div><h2>From proposal to booked.</h2></div><p class="lede">Once you are ready, the booking flow stays simple.</p></div><div class="next"><div class="step"><div class="kicker">01</div><b>Accept Proposal</b><span>Confirm the selected experiences and scope.</span></div><div class="step"><div class="kicker">02</div><b>Receive Invoice</b><span>LOLA sends your deposit invoice immediately after acceptance.</span></div><div class="step"><div class="kicker">03</div><b>Pay 30% Down</b><span>Pay the deposit, pay in full, or choose another amount from the secure payment page.</span></div><div class="step"><div class="kicker">04</div><b>Approve Creative</b><span>Review your guest-facing creative before the event.</span></div></div><div class="terms"><div class="kicker">Terms</div><div class="lede">${terms}</div></div></section>
+<section class="section print-page"><div class="kicker">Notes</div><h2>A few details to confirm.</h2><p class="lede">${narrativeHtml(narrative.notes)}</p></section>
+<section class="section alt print-page"><div class="kicker">Conclusion</div><h2>Let’s make something memorable.</h2><p class="lede">${narrativeHtml(narrative.conclusion)}</p><p class="lede">${narrativeHtml(narrative.closing)}</p></section>
 </div></body></html>`;
 }
 
@@ -128,18 +139,18 @@ function drawBrandPage(doc, title, subtitle, { asset = "primaryDark", label = ""
 }
 
 export async function generateProposalPdf(proposal) {
+  proposal = await compactProposalPhotos(proposal);
   const chunks = [];
-  const pdf = new PDFDocument({ size: "LETTER", margin: 0 });
+  const pdf = new PDFDocument({ size: "LETTER", margin: 0, autoFirstPage: !proposal.content?.scenario, bufferPages: Boolean(proposal.content?.scenario) });
   pdf.on("data", (chunk) => chunks.push(chunk));
   const done = new Promise((resolve) => pdf.on("end", () => resolve(Buffer.concat(chunks))));
-  drawProposalCover(pdf, proposal);
-  pdf.addPage(); addProposalOverview(pdf, proposal);
-  addSelectedExperiencePages(pdf, proposal);
-  pdf.addPage(); addLolaStandardPage(pdf, proposal);
-  pdf.addPage(); addInvestmentPage(pdf, proposal);
-  pdf.addPage(); addNextStepsPage(pdf, proposal);
-  if (!proposal.proposal_type && Array.isArray(proposal.editable_sections) && proposal.editable_sections.length) addProposalSectionAppendix(pdf, proposal);
-  addProposalVisualPages(pdf,proposal);
+  if(proposal.content?.scenario) renderScenarioPdf(pdf,proposal,{logo:logoPath("primaryDark")});
+  else renderProposalPdf(pdf, proposal, {
+    brand, logo: logoPath("primaryDark"), experiences: proposalSelectedExperiences(proposal),
+    features: item => selectedExperienceFeatures(selectedExperienceKey(item), item),
+    image: item => { const source = proposalPdfExperienceImage(item); return Buffer.isBuffer(source) || (source && fs.existsSync(source)) ? source : null; },
+    strip, money, footer: footerText
+  });
   pdf.end();
   return done;
 }
@@ -195,41 +206,7 @@ function addPdfFooter(doc, pageNumber) {
   if (pageNumber) doc.font("Times-Italic").fontSize(10).text(`Page ${pageNumber}`, 526, 732, { lineBreak: false });
 }
 
-function drawProposalCover(doc, proposal) {
-  const experiences=proposalSelectedExperiences(proposal);
-  const first=experiences[0]||{};
-  const second=experiences[1]||first;
-  doc.rect(0,0,612,792).fill(brand.ivory);
-  doc.rect(318,0,294,792).fill("#171513");
-  const logo=logoPath("primaryDark"); if(logo) doc.image(logo,42,52,{width:145});
-  doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text(proposal.proposal_type==="WEDDING"?"WEDDING EXPERIENCE PROPOSAL":"EVENT EXPERIENCE PROPOSAL",42,175,{characterSpacing:2});
-  doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(30).text(`A LOLA experience created for ${proposal.client_name||"you"}.`,42,202,{width:240,lineGap:3});
-  doc.fillColor(brand.muted).font("Helvetica").fontSize(10).text(experiences.length>1?`A polished guest experience combining ${experiences.map(x=>x.name).filter(Boolean).join(" + ")} with thoughtful production and event-ready presentation.`:"A polished LOLA guest experience designed to feel effortless, elevated and worth remembering.",42,330,{width:235,lineGap:4});
-  const meta=[["EVENT",proposal.event_name||proposal.event_type||"Event"],["DATE",proposal.event_date||"TBD"],["VENUE",proposal.venue_name||"TBD"],["PROPOSAL",proposal.proposal_number||""]];
-  meta.forEach(([label,value],i)=>{const x=42+(i%2)*125,y=460+Math.floor(i/2)*62;doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(7).text(label,x,y,{characterSpacing:1.5});doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(11).text(String(value),x,y+14,{width:112});});
-  const image1=proposalPdfDefaultAsset(selectedExperienceKey(first)); if(fs.existsSync(image1)) doc.image(image1,338,32,{fit:[244,480],align:"center",valign:"center"});
-  const image2=proposalPdfDefaultAsset(selectedExperienceKey(second)); if(fs.existsSync(image2)) doc.image(image2,338,526,{fit:[116,190],align:"center",valign:"center"});
-  doc.roundedRect(466,526,116,190,10).fill(brand.gold);
-  doc.fillColor(brand.white).font("Helvetica-Bold").fontSize(7).text("SELECTED EXPERIENCES",476,548,{width:96,characterSpacing:1});
-  doc.font("Times-Roman").fontSize(18).text(experiences.map(x=>x.name).filter(Boolean).join(" + ")||"LOLA Experience",476,578,{width:96});
-  doc.font("Helvetica").fontSize(8).text("Beautiful moments. Thoughtful production. One unforgettable guest experience.",476,646,{width:96,lineGap:2});
-  doc.fillColor(brand.muted).font("Helvetica").fontSize(7).text(footerText,42,752,{width:240});
-}
 
-function addProposalOverview(doc, proposal) {
-  doc.rect(0,0,612,792).fill(brand.ivory);
-  const logo=logoPath("primaryDark"); if(logo) doc.image(logo,42,42,{width:125});
-  doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text("PROPOSAL OVERVIEW",42,150,{characterSpacing:2});
-  doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(30).text("Let’s make this one worth remembering.",42,175,{width:520});
-  doc.fillColor(brand.muted).font("Helvetica").fontSize(10).text("A polished, interactive experience that feels intentional in the room and effortless for your guests.",42,225,{width:470,lineGap:3});
-  const facts=[["EVENT",proposal.event_name||proposal.event_type||"Event"],["DATE",proposal.event_date||"TBD"],["VENUE",proposal.venue_name||"TBD"],["GUESTS",proposal.guest_count||"TBD"]];
-  facts.forEach(([label,value],i)=>{const x=42+i*132;doc.roundedRect(x,300,118,86,8).fillAndStroke(brand.white,brand.taupe);doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(7).text(label,x+12,316,{characterSpacing:1.2});doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(12).text(String(value),x+12,340,{width:94});});
-  doc.roundedRect(42,430,528,190,10).fillAndStroke(brand.white,brand.taupe);
-  doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text("THE EVENT VISION",64,454,{characterSpacing:2});
-  doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(22).text("Elegant, interactive and easy for guests to enjoy.",64,480,{width:465});
-  doc.fillColor(brand.muted).font("Helvetica").fontSize(10).text("LOLA will coordinate the selected experiences as one guest journey, with professional attendants, event-ready presentation, custom creative and delivery from setup through breakdown.",64,530,{width:450,lineGap:4});
-  addPdfFooter(doc,2);
-}
 
 function textHeight(doc, text, width, font, size) {
   return doc.font(font).fontSize(size).heightOfString(text, { width, lineGap: 1, characterSpacing: 0 });
@@ -532,7 +509,9 @@ function selectedExperienceKey(item={}) {
   if(value.includes("360")) return "360";
   if(value.includes("vogue")) return "vogue";
   if(value.includes("audio")) return "audio";
-  return "glam";
+  if(value.includes("digital")) return "digital";
+  if(value.includes("glam")) return "glam";
+  return "custom";
 }
 
 function selectedExperienceDefaults(key) {
@@ -557,6 +536,8 @@ function selectedExperienceFeatures(key,item) {
     glam:["Unlimited portrait sessions","Black-and-white or color capture","Custom welcome screen","Custom photo overlay","Instant digital sharing","Professional LOLA attendant","Delivery, setup & breakdown"],
     "360":["360 video capture","Unlimited sessions during service window","Custom video overlay","Custom video end card","Instant digital delivery","Professional attendant","Delivery, setup & breakdown"],
     vogue:["Full-size Vogue installation","Custom cover creative","Unlimited guest sessions","Professional attendant","Guest posing support","Digital content delivery","Delivery, setup & breakdown"],
+    digital:["Digital guest capture","Event creative","Instant digital sharing","Professional setup"],
+    custom:[],
     audio:["Vintage-style audio phone","Guest message prompt","Unlimited recordings during event","Event signage","Audio file handoff","Delivery, setup & breakdown"]
   }[key] || [];
 }
@@ -564,7 +545,7 @@ function selectedExperienceFeatures(key,item) {
 function selectedExperienceSection(proposal,item,index) {
   const key=selectedExperienceKey(item);
   const title=item.name||"LOLA Experience";
-  const headline=item.headline||({glam:"Clean. Classic. Beautifully you.","360":"Turn moments into motion.",vogue:"Make your guests the cover story.",audio:"Some memories are better heard."}[key]);
+  const headline=item.headline||({glam:"Clean. Classic. Beautifully you.","360":"Turn moments into motion.",vogue:"Make your guests the cover story.",audio:"Some memories are better heard.",digital:"Capture. Share. Celebrate.",custom:"Created around your event."}[key]);
   const description=item.description||"A premium LOLA experience designed around your event.";
   const features=selectedExperienceFeatures(key,item);
   const stories=key==="glam"
@@ -582,106 +563,25 @@ function escapeProposalValue(value) {
 }
 function safeProposalUrl(value) {
   const url=String(value||"").trim();
+  if(/^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(url))return url;
   return /^https:\/\//i.test(url) ? url.replace(/["'<>]/g,"") : "";
 }
 
 function proposalPdfDefaultAsset(key) {
   const root=path.resolve(__dirname,"../../../public/brand/proposals");
   const names={glam:"glam.jpg","360":"360.jpg",vogue:"vogue.jpg",audio:"audio.jpg"};
-  return path.join(root,names[key]||"glam.jpg");
+  return names[key]?path.join(root,names[key]):"";
 }
 
-function addSelectedExperiencePages(doc,proposal) {
-  for(const [index,item] of proposalSelectedExperiences(proposal).entries()) {
-    const key=selectedExperienceKey(item);
-    doc.addPage(); doc.rect(0,0,612,792).fill(index%2?brand.ivory:brand.white);
-    const logo=logoPath("primaryDark"); if(logo) doc.image(logo,42,38,{width:118});
-    doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text(`EXPERIENCE ${String(index+1).padStart(2,"0")}`,42,130,{characterSpacing:2});
-    doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(30).text(item.name||"LOLA Experience",42,154,{width:330});
-    if(item.package_name){doc.roundedRect(430,150,125,24,12).fill("#efe4d6");doc.fillColor("#6c5437").font("Helvetica-Bold").fontSize(7).text(String(item.package_name).toUpperCase(),440,158,{width:105,align:"center",characterSpacing:1});}
-    const image=proposalPdfDefaultAsset(key); if(fs.existsSync(image)) doc.image(image,42,218,{fit:[250,300],align:"center",valign:"center"});
-    const headline=item.headline||({glam:"Clean. Classic. Beautifully you.","360":"Turn moments into motion.",vogue:"Make your guests the cover story.",audio:"Some memories are better heard."}[key]);
-    doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text("THE EXPERIENCE",322,230,{characterSpacing:2});
-    doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(20).text(headline,322,254,{width:240});
-    doc.fillColor(brand.muted).font("Helvetica").fontSize(9).text(item.description||"A premium LOLA experience designed around your event.",322,314,{width:238,lineGap:3});
-    const features=selectedExperienceFeatures(key,item);
-    let y=382; features.slice(0,8).forEach(feature=>{doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(9).text("✓",322,y);doc.fillColor(brand.charcoal).font("Helvetica").fontSize(8.5).text(feature,338,y,{width:210});y+=25;});
-    const storyTitles=key==="glam"?["Guest Interface","The Booth","Guest Output"]:key==="360"?["The Platform","Guest Experience","Video Treatment"]:key==="vogue"?["The Installation","The Moment","Styling"]:["The Phone","Prompt & Signage","Post-event Delivery"];
-    storyTitles.forEach((title,i)=>{const x=42+i*176;doc.roundedRect(x,566,162,115,8).fillAndStroke(i%2?brand.ivory:brand.white,brand.taupe);doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(7).text(title.toUpperCase(),x+12,582,{width:138,characterSpacing:1});doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(12).text(i===0?"Designed for the room.":i===1?"Easy for guests to enjoy.":"A memory worth keeping.",x+12,606,{width:138});});
-    addPdfFooter(doc,index+3);
-  }
+function proposalPdfExperienceImage(item) {
+  return item.visuals?.hero?.startsWith("data:image/")?Buffer.from(item.visuals.hero.split(",")[1],"base64"):proposalPdfDefaultAsset(selectedExperienceKey(item));
 }
 
-function addLolaStandardPage(doc, proposal) {
-  doc.rect(0,0,612,792).fill(brand.charcoal);
-  const logo=logoPath("primaryDark"); if(logo) doc.image(logo,42,42,{width:125});
-  doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text("THE LOLA STANDARD",42,160,{characterSpacing:2});
-  doc.fillColor(brand.white).font("Times-Roman").fontSize(30).text("Easy for you. Memorable for them.",42,188,{width:520});
-  doc.fillColor("#d4cbc2").font("Helvetica").fontSize(10).text("The booth should feel like part of the celebration, not another thing you have to manage.",42,238,{width:460});
-  const values=[["01","Beautifully Presented","Equipment, lighting and creative that feel like they belong in the room."],["02","Guest Friendly","Attendants help guests, keep the experience moving and make it easy to enjoy."],["03","Made to Share","Digital content is delivered quickly so guests can save and share their favorite moments."],["04","Handled End to End","Delivery, setup, operation and breakdown are taken care of by LOLA."]];
-  values.forEach(([n,t,b],i)=>{const x=42+(i%2)*264,y=330+Math.floor(i/2)*160;doc.roundedRect(x,y,244,135,10).fillAndStroke("#24201d","#37312d");doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text(n,x+16,y+18);doc.fillColor(brand.white).font("Times-Roman").fontSize(16).text(t,x+16,y+40,{width:208});doc.fillColor("#d5cbc2").font("Helvetica").fontSize(8.5).text(b,x+16,y+76,{width:208,lineGap:2});});
-}
 
-function addInvestmentPage(doc, proposal) {
-  const pricing=proposal.pricing_snapshot||{}, items=proposal.line_items_snapshot||[];
-  doc.rect(0,0,612,792).fill(brand.white);
-  const logo=logoPath("primaryDark"); if(logo) doc.image(logo,42,42,{width:125});
-  doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text("INVESTMENT",42,145,{characterSpacing:2});
-  doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(30).text(`Your ${proposal.proposal_type==="WEDDING"?"wedding":"event"} experience.`,42,170,{width:480});
-  let y=255; items.forEach(item=>{doc.fillColor(brand.charcoal).font("Helvetica").fontSize(9).text(item.description||"Experience",54,y,{width:360});doc.fillColor(brand.charcoal).font("Helvetica-Bold").fontSize(9).text(money(item.line_total),440,y,{width:100,align:"right"});doc.moveTo(54,y+18).lineTo(540,y+18).strokeColor(brand.taupe).stroke();y+=38;});
-  doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(18).text("Total Investment",54,y+12);doc.font("Times-Roman").fontSize(20).text(money(pricing.total||proposal.total),420,y+12,{width:120,align:"right"});
-  doc.roundedRect(360,520,180,150,10).fill(brand.charcoal);doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(7).text("DUE TO RESERVE DATE",378,542,{characterSpacing:1.5});doc.fillColor(brand.white).font("Times-Roman").fontSize(26).text(money(pricing.deposit_amount||pricing.total||proposal.total),378,568,{width:144});doc.fillColor("#d9cfc6").font("Helvetica").fontSize(8).text("30% down payment. Your date is secured after the required booking documents and down payment are completed.",378,612,{width:144,lineGap:2});
-  addPdfFooter(doc,proposalSelectedExperiences(proposal).length+4);
-}
 
-function addNextStepsPage(doc, proposal) {
-  const content=proposal.content||{};
-  doc.rect(0,0,612,792).fill(brand.ivory);
-  const logo=logoPath("primaryDark"); if(logo) doc.image(logo,42,42,{width:125});
-  doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text("NEXT STEPS",42,145,{characterSpacing:2});
-  doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(30).text("From proposal to booked.",42,170,{width:450});
-  const steps=[["01","Accept Proposal","Confirm the selected experiences and scope."],["02","Receive Invoice","LOLA sends your deposit invoice after acceptance."],["03","Pay 30% Down","Pay the deposit, pay in full, or choose another amount from the secure payment page."],["04","Approve Creative","Review your guest-facing creative before the event."]];
-  steps.forEach(([n,t,b],i)=>{const x=42+(i%2)*264,y=270+Math.floor(i/2)*145;doc.roundedRect(x,y,244,120,8).fillAndStroke(brand.white,brand.taupe);doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text(n,x+15,y+16);doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(15).text(t,x+15,y+38,{width:210});doc.fillColor(brand.muted).font("Helvetica").fontSize(8.5).text(b,x+15,y+67,{width:210,lineGap:2});});
-  doc.roundedRect(42,588,508,110,8).fillAndStroke(brand.white,brand.taupe);doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(8).text("TERMS",58,606,{characterSpacing:1.5});doc.fillColor(brand.muted).font("Helvetica").fontSize(8.5).text(strip(content.terms||"30% down payment is required to reserve the date. Cancellation requires at least 48 hours notice. Final scope is subject to confirmed event details."),58,630,{width:475,lineGap:2});
-  addPdfFooter(doc,proposalSelectedExperiences(proposal).length+5);
-}
 
-function addProposalSectionAppendix(doc, proposal) {
-  const sections = proposal.editable_sections || [];
-  let page = proposalSelectedExperiences(proposal).length + 6;
-  const flow = {
-    x: 42, y: 182, width: 528, bottom: 674,
-    nextPage() {
-      addPdfFooter(doc, page++);
-      doc.addPage();
-      addPdfHeader(doc, proposal.proposal_number);
-      this.y = 182;
-    }
-  };
-  for (const [index, section] of sections.entries()) {
-    const title = `${String(index + 1).padStart(2, "0")}. ${String(section.title || "DETAIL").toUpperCase()}`;
-    if (flow.y + 38 > flow.bottom) flow.nextPage();
-    drawFlowText(doc, flow, title, "Helvetica-Bold", 10, brand.gold);
-    flow.y += 10;
-    drawFlowText(doc, flow, strip(section.body || ""), "Times-Roman", 10, brand.charcoal);
-    flow.y += 8;
-    for (const item of section.items || []) {
-      drawFlowText(doc, flow, `✓ ${strip(item)}`, "Helvetica", 9, brand.charcoal);
-      flow.y += 5;
-    }
-    flow.y += 16;
-  }
-  addPdfFooter(doc, page);
-}
+
 
 function strip(value) {
   return sanitizeContent(value).replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n");
-}
-
-function addProposalVisualPages(doc,proposal){
- for(const section of proposal.visual_sections||[]){
-  doc.addPage();doc.rect(0,0,612,792).fill(brand.ivory);doc.rect(30,30,552,732).fill(brand.white);if(logoPath('horizontalDark'))doc.image(logoPath('horizontalDark'),48,48,{width:125});doc.moveTo(48,86).lineTo(564,86).strokeColor(brand.gold).stroke();doc.font('Helvetica').fontSize(9).fillColor(brand.gold).text('YOUR LOLA EXPERIENCE',48,104);doc.font('Times-Roman').fontSize(27).fillColor(brand.charcoal).text(section.title,48,128,{width:516});
-  if(section.body){doc.moveDown(.7).font('Helvetica').fontSize(11).text(section.body,{width:516,lineGap:4});}
-  for(const image of section.images||[]){if(doc.y>450){doc.addPage();doc.y=48;}const y=doc.y+20;doc.image(Buffer.from(image.dataUri.split(',')[1],'base64'),48,y,{fit:[516,260],align:'center'});doc.y=y+275;}
- }
 }

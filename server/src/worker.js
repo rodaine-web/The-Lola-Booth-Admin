@@ -1,7 +1,8 @@
+import {processCampaignJobs} from "./services/campaign-service.js";
 import {processFormOwnerNotifications} from "./services/form-owner-notifications.js";
 import {assertDatabaseIdentity} from './config/database-identity.js';
 import {processStagingQualificationJobs} from './services/staging-email-qualification-service.js';
-import {buildInfo,stagingJobsPaused} from './config/staging-safety.js';
+import {buildInfo,stagingJobsPaused,isStaging} from './config/staging-safety.js';
 import {recoverPublicInquiryAcknowledgments} from "./services/public-form-email-service.js";
 import {processIntegrationJobs,queueDueReminders} from "./services/integration-jobs-service.js";
 import { logger } from "./config/logger.js";
@@ -11,9 +12,11 @@ import { recordWorkerHeartbeat, recordWorkerProcessingResult } from "./services/
 
 const databaseSystemId = await assertDatabaseIdentity(pool);
 let stopping = false;
+let running = false;
 
 async function tick() {
-  if (stopping) return;
+  if (stopping || running) return;
+  running = true;
   try {
     await recordWorkerHeartbeat("automation-worker", { pid: process.pid, ...buildInfo(), jobsPaused:stagingJobsPaused(), databaseSystemId });
     const formNotifications=await processFormOwnerNotifications();
@@ -21,17 +24,19 @@ async function tick() {
       logger.info({processed:formNotifications.processed},'Owner form notifications processed');
       await recordWorkerProcessingResult("automation-worker",{success:formNotifications.processed.every(item=>item.status==='SENT_TO_PROVIDER'),processed:formNotifications.processed.length,ownerFormsOnly:true});
     }
-    if(stagingJobsPaused()){const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:true,processed:result.processed.length,qualificationOnly:true});return;}
-    await recoverPublicInquiryAcknowledgments();
+    const campaigns=await processCampaignJobs({limit:25});
+    if(campaigns.processed.length)await recordWorkerProcessingResult("automation-worker",{success:campaigns.processed.every(item=>item.status==='SENT_TO_PROVIDER'),processed:campaigns.processed.length,campaignsOnly:true});
+    if(stagingJobsPaused()){const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:result.processed.every(item=>item.status!=='FAILED'),processed:result.processed.length,qualificationOnly:true});return;}
+    if(!isStaging())await recoverPublicInquiryAcknowledgments();
     await queueDueReminders();
     const result = await processDueJobs({ limit: 25 });
-    await processIntegrationJobs({limit:25});
-    await recordWorkerProcessingResult("automation-worker", { success: true, processed: result.processed.length });
+    if(!isStaging())await processIntegrationJobs({limit:25});
+    await recordWorkerProcessingResult("automation-worker", { success: result.processed.every(item=>item.status!=="FAILED"&& !item.error), processed: result.processed.length });
     if (result.processed.length) logger.info({ processed: result.processed.length }, "automation jobs processed");
   } catch (error) {
     await recordWorkerProcessingResult("automation-worker", { success: false, error: error.message }).catch(() => null);
     logger.error({ err: error }, "automation worker tick failed");
-  }
+  } finally { running = false; }
 }
 
 async function shutdown() {

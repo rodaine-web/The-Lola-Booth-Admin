@@ -137,13 +137,18 @@ async function dashboardMetrics([start, end]) {
       (SELECT COALESCE(sum(total),0)::numeric FROM bookings WHERE created_at >= $1 AND created_at < $2 AND deleted_at IS NULL) AS booked_revenue,
       (SELECT COALESCE(sum(amount - refunded_amount),0)::numeric FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL) AS collected_revenue,
       (SELECT COALESCE(sum(refunded_amount),0)::numeric FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND deleted_at IS NULL) AS refunds,
-      (SELECT COALESCE(sum(deposit_required),0)::numeric FROM bookings WHERE created_at >= $1 AND created_at < $2 AND amount_paid > 0 AND deleted_at IS NULL) AS deposits_collected,
+      (SELECT COALESCE(sum(LEAST(COALESCE(amount_paid,0),COALESCE(deposit_required,0))),0)::numeric
+         FROM bookings
+         WHERE created_at >= $1 AND created_at < $2
+           AND COALESCE(amount_paid,0) > 0
+           AND COALESCE(deposit_required,0) > 0
+           AND deleted_at IS NULL) AS deposits_collected,
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID') AS outstanding_balance,
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID' AND due_date >= current_date AND due_date < current_date + interval '7 days') AS due_this_week,
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID' AND due_date < current_date AND COALESCE(amount_outstanding,balance_due) > 0) AS overdue_balance,
       (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND deleted_at IS NULL) AS events_scheduled,
       (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND status='COMPLETED' AND deleted_at IS NULL) AS events_completed,
-      (SELECT count(*)::int FROM events WHERE event_date >= current_date AND event_date < $2::date AND status <> 'CANCELLED' AND deleted_at IS NULL) AS upcoming_events,
+      (SELECT count(*)::int FROM events WHERE event_date >= current_date AND event_date < $2::date AND status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS') AND deleted_at IS NULL) AS upcoming_events,
       (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND status='CANCELLED' AND deleted_at IS NULL) AS cancelled_events,
       (SELECT count(*)::int FROM tasks WHERE due_date >= $1::date AND due_date < $2::date AND status <> 'DONE' AND deleted_at IS NULL) AS tasks_due,
       (SELECT count(*)::int FROM tasks WHERE due_date < current_date AND status <> 'DONE' AND deleted_at IS NULL) AS overdue_tasks,
@@ -167,7 +172,7 @@ async function dashboardMetrics([start, end]) {
 async function dashboardLists([start, end], range, user) {
   const todayOnly = range === "today";
   const todayEvents = await eventRows(todayOnly ? "e.event_date >= $1::date AND e.event_date < $2::date" : "e.event_date >= $1::date AND e.event_date < $2::date", [start, end], 12);
-  const upcomingEvents = await eventRows("e.event_date >= current_date AND e.event_date < current_date + interval '30 days'", [], 10);
+  const upcomingEvents = await eventRows("e.event_date >= current_date AND e.event_date < current_date + interval '30 days' AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')", [], 10);
   const readinessDetails=await dashboardReadiness(upcomingEvents,user,{canAccess:userCanAccessEvent,readOperations:getEventOperations});
   const [tasks, attention, activity, weekly] = await Promise.all([
     query(`SELECT t.*, u.name AS owner_name, c.name AS client_name, e.event_name

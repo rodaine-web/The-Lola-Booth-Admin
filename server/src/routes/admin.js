@@ -1,3 +1,8 @@
+import {searchAdmin} from '../services/admin-search-service.js';
+import { eventFinanceSummary } from "../services/event-finance-summary.js";
+import {campaignRouter} from "./campaigns.js";
+import {scenarioConfigSchema,scenarioOverridesSchema} from "../services/proposal-scenario-schema.js";
+import { mergeDefaults } from "../../../shared/proposal-scenario.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import { documentOrigin } from "../utils/public-document-url.js";
 import { recoverDocumentAccess } from "../services/document-access-service.js";
@@ -14,6 +19,7 @@ import { normalizeInvoice, invoiceBalanceSql } from "../../../shared/invoice-bal
 import { assertManagedUser, assertGrantablePermissions, assignUserPermissions } from '../services/user-access-service.js';
 import { Router } from "express";
 import { env } from "../config/env.js";
+import { logger } from "../config/logger.js";
 import { proposalEditInput } from "../services/proposal-edit-input.js";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
@@ -47,7 +53,7 @@ import {
   getInvoice,
   sendInvoice
 } from "../services/invoice-service.js";
-import { generateInvoicePdf, generatePaymentReceiptPdf, generateProposalDocx, generateProposalPdf } from "../services/document-service.js";
+import { proposalHtml, generateInvoicePdf, generatePaymentReceiptPdf, generateProposalDocx, generateProposalPdf } from "../services/document-service.js";
 import {
   createRefund,
   getPayment,
@@ -165,7 +171,17 @@ export const adminRouter = Router();
 
 adminRouter.use(authenticate);
 adminRouter.use((req,_res,next)=>{
-  if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)&&freezesPublicMutation(req.path,req.body))return next(new AppError('Public website V1 is frozen. Use the STAGING CMS channel.',409,'PUBLIC_CONTENT_FROZEN'));
+  if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)){
+    if(req.path==='/settings'){
+      const publicKeys=new Set(['business_name','business_email','contact_email','phone','website','service_area','instagram_url','tiktok_url','facebook_url','pinterest_url','copyright_text','brand_line','site_title','default_meta_description','default_og_image_media_id','canonical_domain','social_share_title','social_share_description','show_starting_price']);
+      const keys=Object.keys(req.body||{});
+      const operationalKeys=keys.filter(key=>!publicKeys.has(key));
+      if(!operationalKeys.length&&keys.some(key=>publicKeys.has(key)))return next(new AppError('Public website V1 is frozen. Use the STAGING CMS channel.',409,'PUBLIC_CONTENT_FROZEN'));
+      for(const key of keys)if(publicKeys.has(key))delete req.body[key];
+    }else if(freezesPublicMutation(req.path,req.body)){
+      return next(new AppError('Public website V1 is frozen. Use the STAGING CMS channel.',409,'PUBLIC_CONTENT_FROZEN'));
+    }
+  }
   next();
 });
 adminRouter.use('/website/staging',(req,res,next)=>isStaging()?next():next(new AppError('Staging CMS is unavailable in this environment.',404,'NOT_FOUND')),stagingCmsRouter);
@@ -351,13 +367,37 @@ function listRoute(table, searchable = [], permission = "read:admin") {
           params.push(filters.event_type);
           where.push(`event_type = $${params.length}`);
         }
+        if (req.query.booking_from) {
+          params.push(req.query.booking_from);
+          where.push(`EXISTS (SELECT 1 FROM bookings b WHERE b.event_id=${table}.id AND b.deleted_at IS NULL AND b.created_at >= $${params.length}::timestamptz)`);
+        }
+        if (req.query.booking_to) {
+          params.push(req.query.booking_to);
+          where.push(`EXISTS (SELECT 1 FROM bookings b WHERE b.event_id=${table}.id AND b.deleted_at IS NULL AND b.created_at < $${params.length}::timestamptz)`);
+        }
+        if (req.query.upcoming === "true") {
+          where.push("event_date >= current_date");
+          where.push("status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')");
+          if (req.query.to) {
+            params.push(req.query.to);
+            where.push(`event_date < $${params.length}::date`);
+          }
+        }
         if (filters.experience) {
           params.push(filters.experience);
-          where.push(`experience_id = $${params.length}`);
+          where.push("(experience_id = $" + params.length + " OR EXISTS (SELECT 1 FROM event_experiences ee WHERE ee.event_id=" + table + ".id AND ee.experience_id=$" + params.length + "))");
         }
         if (filters.package) {
           params.push(filters.package);
-          where.push(`package_id = $${params.length}`);
+          where.push("(package_id = $" + params.length + " OR EXISTS (SELECT 1 FROM event_packages ep WHERE ep.event_id=" + table + ".id AND ep.package_id=$" + params.length + "))");
+        }
+        if (req.query.readiness === "staff") {
+          where.push("event_date >= current_date AND event_date < current_date + interval '30 days'");
+          where.push(`NOT EXISTS (SELECT 1 FROM staff_assignments sa WHERE sa.event_id=${table}.id AND sa.released_at IS NULL)`);
+        }
+        if (req.query.readiness === "equipment") {
+          where.push("event_date >= current_date AND event_date < current_date + interval '30 days'");
+          where.push(`NOT EXISTS (SELECT 1 FROM equipment_assignments ea WHERE ea.event_id=${table}.id AND ea.released_at IS NULL)`);
         }
       }
       if (table === "tasks") {
@@ -371,9 +411,17 @@ function listRoute(table, searchable = [], permission = "read:admin") {
           params.push(filters.assigned_user);
           where.push(`assigned_user_id = $${params.length}`);
         }
+        if (filters.due_from) {
+          params.push(filters.due_from);
+          where.push("due_date >= $"+params.length+"::date");
+        }
+        if (filters.due_to) {
+          params.push(filters.due_to);
+          where.push("due_date < $"+params.length+"::date");
+        }
         if (filters.due_before) {
           params.push(filters.due_before);
-          where.push(`due_date < $${params.length}`);
+          where.push("due_date < $"+params.length);
         }
         if (filters.overdue === "true" || filters.overdue === true) {
           where.push(`due_date < current_date AND status <> 'DONE'`);
@@ -393,6 +441,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       );
       const count = await query(`SELECT count(*)::int AS count FROM ${table} WHERE ${where.join(" AND ")}`, params.slice(0, -2));
       let data=rows.rows;
+      if(table==='packages'&&data.length){const items=(await query("SELECT package_id,label FROM package_items WHERE package_id=ANY($1::uuid[]) ORDER BY display_order",[data.map(row=>row.id)])).rows;data=data.map(row=>({...row,items:items.filter(item=>item.package_id===row.id).map(item=>item.label)}));}
       if(table==='tasks'&&data.length){const ids=data.map(r=>r.id);data=(await query(`SELECT t.*,u.name AS owner_name,e.event_name,c.name AS client_name FROM tasks t LEFT JOIN users u ON u.id=t.assigned_user_id LEFT JOIN events e ON e.id=t.event_id LEFT JOIN clients c ON c.id=t.client_id WHERE t.id=ANY($1::uuid[]) ORDER BY array_position($1::uuid[],t.id)`,[ids])).rows;}
       res.json({ data, pagination: { page, pageSize, total: count.rows[0].count } });
     })
@@ -426,12 +475,16 @@ async function pickerRows(search, sql) {
 }
 
 const proposalSchema = z.object({
+  scenario_enabled:z.boolean().optional(),
+  scenario_overrides:scenarioOverridesSchema.optional(),
   visual_sections: proposalVisualSchema.optional(),
   lead_id: uuid.optional().nullable(),
   client_id: uuid.optional().nullable(),
   event_id: uuid.optional().nullable(),
   package_id: uuid.optional().nullable(),
   experience_id: uuid.optional().nullable(),
+  package_ids: z.array(uuid).optional(),
+  experience_ids: z.array(uuid).optional(),
   status: z.enum(proposalStatuses).optional(),
   valid_through: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -457,6 +510,12 @@ const proposalSchema = z.object({
     key: z.string().optional().nullable(),
     name: z.string().optional().nullable(),
     package_name: z.string().optional().nullable(),
+    packages: z.array(z.object({
+      package_id: uuid,
+      name: z.string().optional().nullable(),
+      price: z.coerce.number().min(0).optional().nullable(),
+      description: z.string().optional().nullable()
+    }).passthrough()).optional(),
     price: z.coerce.number().min(0).optional().nullable(),
     headline: z.string().optional().nullable(),
     description: z.string().optional().nullable(),
@@ -609,7 +668,10 @@ adminRouter.post("/leads", requirePermission("write:sales"), validate(leadSchema
       [req.body.email, req.body.phone]
     );
     if (duplicate.rows[0]) {
-      throw new AppError("Possible duplicate lead found.", 409, "POSSIBLE_DUPLICATE", { duplicate: duplicate.rows[0] });
+      const matchReason = req.body.email && String(duplicate.rows[0].email || "").toLowerCase() === String(req.body.email).toLowerCase()
+        ? "EMAIL_MATCH"
+        : "PHONE_MATCH";
+      throw new AppError("Possible duplicate lead found.", 409, "POSSIBLE_DUPLICATE", { duplicate: { ...duplicate.rows[0], match_reason: matchReason } });
     }
   }
   const fields = Object.keys(req.body);
@@ -632,8 +694,8 @@ adminRouter.get("/leads/:id", requirePermission("read:sales"), asyncHandler(asyn
     query("SELECT * FROM proposals WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
     query("SELECT * FROM tasks WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY due_date NULLS LAST", [req.params.id]),
     query("SELECT * FROM files WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
-    query("SELECT id, name, starting_price, duration FROM packages WHERE id=$1", [lead.rows[0].preferred_package_id]),
-    query("SELECT id, name, base_price, default_duration FROM experiences WHERE id=$1", [lead.rows[0].preferred_experience_id])
+    query("SELECT p.*, COALESCE(json_agg(pi.label ORDER BY pi.display_order) FILTER (WHERE pi.id IS NOT NULL),'[]') AS items FROM packages p LEFT JOIN package_items pi ON pi.package_id=p.id WHERE p.id=$1 GROUP BY p.id", [lead.rows[0].preferred_package_id]),
+    query("SELECT * FROM experiences WHERE id=$1", [lead.rows[0].preferred_experience_id])
   ]);
   res.json({
     ...lead.rows[0],
@@ -894,7 +956,12 @@ adminRouter.post("/clients", requirePermission("write:sales"), validate(clientSc
        LIMIT 1`,
       [req.body.email || null, req.body.phone || null]
     );
-    if (duplicate.rows[0]) throw new AppError("Possible duplicate client found.", 409, "POSSIBLE_DUPLICATE", { duplicate: duplicate.rows[0] });
+    if (duplicate.rows[0]) {
+      const matchReason = req.body.email && String(duplicate.rows[0].email || "").toLowerCase() === String(req.body.email).toLowerCase()
+        ? "EMAIL_MATCH"
+        : "PHONE_MATCH";
+      throw new AppError("Possible duplicate client found.", 409, "POSSIBLE_DUPLICATE", { duplicate: { ...duplicate.rows[0], match_reason: matchReason } });
+    }
   }
   const body = { ...req.body, name, billing_address: [req.body.address, req.body.city, req.body.state, req.body.zip].filter(Boolean).join(", ") || null };
   const allowed = ["name", "first_name", "last_name", "email", "phone", "company", "preferred_contact_method", "address", "city", "state", "zip", "notes", "tags", "client_type", "referral_source", "billing_address"];
@@ -1074,14 +1141,47 @@ adminRouter.get("/my-events/:id", requirePermission("read:attendant"), asyncHand
 
 adminRouter.post("/events", requirePermission("write:events"), validate(eventSchema), asyncHandler(async (req, res) => {
   validateEventTimes(req.body);
+  if (!req.query.continueAnyway) {
+    const duplicate = await query(
+      `SELECT id, event_number, event_name, event_date, start_time, venue_name, status
+       FROM events
+       WHERE deleted_at IS NULL
+         AND client_id=$1
+         AND event_date=$2::date
+         AND COALESCE(start_time::text,'')=COALESCE($3::text,'')
+         AND lower(event_name)=lower($4)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [req.body.client_id, req.body.event_date, req.body.start_time || null, req.body.event_name]
+    );
+    if (duplicate.rows[0]) {
+      throw new AppError("Possible duplicate event found.", 409, "POSSIBLE_DUPLICATE", {
+        duplicate: { ...duplicate.rows[0], match_reason: "CLIENT_DATE_TIME_TITLE_MATCH" }
+      });
+    }
+  }
   const eventNumber = `EVT-${Date.now().toString().slice(-6)}`;
-  const fields = Object.keys({ ...req.body, event_number: eventNumber });
-  const body = { ...req.body, event_number: eventNumber };
-  const values = fields.map((field) => body[field]);
-  const inserted = await query(`INSERT INTO events (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values);
-  await recordActivity({ actorUserId: req.user.id, entityType: "event", entityId: inserted.rows[0].id, action: "event_created", summary: "Event created" });
-  await writeAudit({ req, action: "event_created", entity: "event", entityId: inserted.rows[0].id, after: inserted.rows[0] });
-  res.status(201).json(inserted.rows[0]);
+  const inserted = await transaction(async (client) => {
+    const body = { ...req.body };
+    delete body.package_ids;
+    delete body.experience_ids;
+    body.event_number = eventNumber;
+    const fields = Object.keys(body);
+    const values = fields.map((field) => body[field]);
+    const event = (await client.query(`INSERT INTO events (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values)).rows[0];
+    const packageIds = [...new Set([...(req.body.package_ids || []), req.body.package_id].filter(Boolean))];
+    const experienceIds = [...new Set([...(req.body.experience_ids || []), req.body.experience_id].filter(Boolean))];
+    for (const [index, packageId] of packageIds.entries()) {
+      await client.query("INSERT INTO event_packages (event_id, package_id, display_order) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [event.id, packageId, index]);
+    }
+    for (const [index, experienceId] of experienceIds.entries()) {
+      await client.query("INSERT INTO event_experiences (event_id, experience_id, display_order) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [event.id, experienceId, index]);
+    }
+    return event;
+  });
+  await recordActivity({ actorUserId: req.user.id, entityType: "event", entityId: inserted.id, action: "event_created", summary: "Event created" });
+  await writeAudit({ req, action: "event_created", entity: "event", entityId: inserted.id, after: inserted });
+  res.status(201).json(inserted);
 }));
 
 adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(async (req, res) => {
@@ -1098,7 +1198,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     [req.params.id]
   );
   if (!event.rows[0]) throw notFound("Event");
-  const [staff, equipment, tasks, files, payments, communications, activity, audit, addons, proposals, invoices, operations] = await Promise.all([
+  const [staff, equipment, tasks, files, payments, communications, activity, audit, addons, proposals, invoices, operations, packages, experiences] = await Promise.all([
     query(`SELECT sa.*, sp.name, sp.email, sp.phone FROM staff_assignments sa JOIN staff_profiles sp ON sp.id=sa.staff_profile_id WHERE sa.event_id=$1 AND sa.released_at IS NULL ORDER BY sa.created_at`, [req.params.id]),
     query(`SELECT ea.*, eq.name, eq.category, eq.status FROM equipment_assignments ea JOIN equipment eq ON eq.id=ea.equipment_id WHERE ea.event_id=$1 AND ea.released_at IS NULL ORDER BY ea.created_at`, [req.params.id]),
     query("SELECT * FROM tasks WHERE event_id=$1 AND deleted_at IS NULL ORDER BY due_date NULLS LAST", [req.params.id]),
@@ -1110,16 +1210,43 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query("SELECT ea.*, a.name, a.pricing_type FROM event_addons ea JOIN addons a ON a.id=ea.addon_id WHERE ea.event_id=$1", [req.params.id]),
     query("SELECT * FROM proposals WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
     query("SELECT * FROM invoices WHERE event_id=$1 AND deleted_at IS NULL ORDER BY due_date DESC", [req.params.id]),
-    getEventOperations(req.params.id, req.user)
+    getEventOperations(req.params.id, req.user),
+    query("SELECT ep.package_id AS id, p.name, p.starting_price, ep.display_order FROM event_packages ep JOIN packages p ON p.id=ep.package_id WHERE ep.event_id=$1 ORDER BY ep.display_order, p.name", [req.params.id]),
+    query("SELECT ee.experience_id AS id, x.name, x.base_price, ee.display_order FROM event_experiences ee JOIN experiences x ON x.id=ee.experience_id WHERE ee.event_id=$1 ORDER BY ee.display_order, x.name", [req.params.id])
   ]);
-  res.json({ ...event.rows[0], staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
+  res.json({ ...eventFinanceSummary(event.rows[0], invoices.rows), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
 }));
 
 adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {
-  validateEventTimes(req.body);
   const before = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Event");
-  const updated = await updateById({ table: "events", id: req.params.id, body: req.body, allowed: ["client_id", "event_name", "event_type", "event_date", "start_time", "end_time", "setup_time", "breakdown_time", "venue_name", "venue_address", "city", "state", "zip", "guest_count", "package_id", "experience_id", "status", "internal_notes", "client_notes", "backdrop", "print_template", "parking_loading_instructions", "access_instructions", "load_in_instructions", "special_restrictions", "setup_instructions", "room_name", "venue_contact_name", "venue_contact_phone", "power_requirements", "wifi_notes", "operational_status", "gallery_status", "gallery_url"] });
+  validateEventTimes({ ...before.rows[0], ...req.body });
+  const updated = await transaction(async (client) => {
+    const patch = { ...req.body };
+    delete patch.package_ids;
+    delete patch.experience_ids;
+    let event = before.rows[0];
+    const allowed = ["client_id", "event_name", "event_type", "event_date", "start_time", "end_time", "setup_time", "breakdown_time", "venue_name", "venue_address", "city", "state", "zip", "guest_count", "package_id", "experience_id", "status", "internal_notes", "client_notes", "backdrop", "print_template", "parking_loading_instructions", "access_instructions", "load_in_instructions", "special_restrictions", "setup_instructions", "room_name", "venue_contact_name", "venue_contact_phone", "power_requirements", "wifi_notes", "operational_status", "gallery_status", "gallery_url"];
+    const fields = Object.keys(patch).filter(key=>allowed.includes(key));
+    if (fields.length) {
+      const values = fields.map(field=>patch[field]);
+      values.push(req.params.id);
+      event = (await client.query(`UPDATE events SET ${fields.map((field,index)=>`${field}=$${index+1}`).join(", ")}, updated_at=now() WHERE id=$${values.length} AND deleted_at IS NULL RETURNING *`, values)).rows[0];
+    }
+    if (req.body.package_ids) {
+      await client.query("DELETE FROM event_packages WHERE event_id=$1", [req.params.id]);
+      for (const [index, packageId] of [...new Set(req.body.package_ids.filter(Boolean))].entries()) {
+        await client.query("INSERT INTO event_packages (event_id, package_id, display_order) VALUES ($1,$2,$3)", [req.params.id, packageId, index]);
+      }
+    }
+    if (req.body.experience_ids) {
+      await client.query("DELETE FROM event_experiences WHERE event_id=$1", [req.params.id]);
+      for (const [index, experienceId] of [...new Set(req.body.experience_ids.filter(Boolean))].entries()) {
+        await client.query("INSERT INTO event_experiences (event_id, experience_id, display_order) VALUES ($1,$2,$3)", [req.params.id, experienceId, index]);
+      }
+    }
+    return event;
+  });
   await recordActivity({ actorUserId: req.user.id, entityType: "event", entityId: req.params.id, action: req.body.status ? "event_status_changed" : "event_edited", summary: req.body.status ? `Event status changed to ${req.body.status}` : "Event edited" });
   await writeAudit({ req, action: req.body.status ? "event_status_changed" : "event_edited", entity: "event", entityId: req.params.id, before: before.rows[0], after: updated });
   res.json(updated);
@@ -1267,8 +1394,8 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
   if(filters.data_scope==="business")where.push("p.data_classification IN ('BUSINESS','UNREVIEWED')");
   const activity=filters.funnel||filters.activity;
   const timeColumn=activity==='accepted'?'p.accepted_at':activity==='sent'?'p.sent_at':'p.created_at';
-  if(filters.from){params.push(filters.from);where.push(`${timeColumn}>=$${params.length}::timestamptz`);}
-  if(filters.to){params.push(filters.to);where.push(`${timeColumn}<$${params.length}::timestamptz`);}
+  if(filters.from){params.push(filters.from);where.push(timeColumn+">=$"+params.length+"::timestamptz");}
+  if(filters.to){params.push(filters.to);where.push(timeColumn+"<$"+params.length+"::timestamptz");}
 
   if (filters.status) {
     params.push(filters.status);
@@ -1291,6 +1418,25 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
     : `${select} ORDER BY ${sortBy} ${direction} NULLS LAST LIMIT $${params.length-1} OFFSET $${params.length}`, params);
   const count = await query(`SELECT count(${grouped ? "DISTINCT COALESCE(p.lead_id,p.id)" : "*"})::int AS count ${from}`,params.slice(0,-2));
   res.json({ data: rows.rows, pagination: { page: filters.page, pageSize, total: count.rows[0].count } });
+}));
+
+adminRouter.post("/proposals/preview", requirePermission("write:sales"), validate(proposalSchema), asyncHandler(async (req,res)=>{
+  const snapshot=await buildProposalSnapshot({...req.body,scenario_enabled:true});
+  const proposal={content:snapshot.content,pricing_snapshot:snapshot.pricing,line_items_snapshot:snapshot.lineItems,selected_experiences:snapshot.selectedExperiences,proposal_title:snapshot.proposalTitle,proposal_date:snapshot.proposalDate,valid_through:snapshot.validThrough,proposal_type:snapshot.proposalType};
+  res.json({scenario:snapshot.content.scenario,pricing:snapshot.pricing,html:proposalHtml(proposal)});
+}));
+
+adminRouter.get("/proposal-scenario-template", requirePermission("read:sales"), asyncHandler(async(req,res)=>{
+  const row=(await query("SELECT * FROM proposal_document_templates WHERE key='scenario_composer' AND active=true")).rows[0];
+  if(!row)throw new AppError("Apply migration 036 to enable proposal scenarios.",503,"PROPOSAL_TEMPLATE_UNAVAILABLE");
+  res.json({...row,config:mergeDefaults(row.config)});
+}));
+adminRouter.patch("/proposal-scenario-template", requirePermission("write:settings"), validate(z.object({version:z.number().int(),config:scenarioConfigSchema})), asyncHandler(async(req,res)=>{
+  const before=(await query("SELECT * FROM proposal_document_templates WHERE key='scenario_composer'")).rows[0];
+  const row=(await query("UPDATE proposal_document_templates SET config=$1,version=version+1,updated_at=now() WHERE key='scenario_composer' AND version=$2 RETURNING *",[JSON.stringify(req.body.config),req.body.version])).rows[0];
+  if(!row)throw new AppError("Another user updated these defaults. Reload before saving.",409,"TEMPLATE_VERSION_CONFLICT");
+  await writeAudit({req,action:"proposal_template_updated",entity:"proposal_document_template",entityId:row.id,before,after:row});
+  res.json(row);
 }));
 
 adminRouter.post("/proposals", requirePermission("write:sales"), validate(proposalSchema), asyncHandler(async (req, res) => {
@@ -1502,10 +1648,10 @@ adminRouter.get("/payments", requirePermission("read:finance"), validate(paginat
   const offset = (filters.page - 1) * pageSize;
   const params = [];
   const where = ["p.deleted_at IS NULL"];
-  const activity=filters.funnel||filters.activity;
-  const timeColumn=activity==='accepted'?'p.accepted_at':activity==='sent'?'p.sent_at':'p.created_at';
-  if(filters.from){params.push(filters.from);where.push(`${timeColumn}>=$${params.length}::timestamptz`);}
-  if(filters.to){params.push(filters.to);where.push(`${timeColumn}<$${params.length}::timestamptz`);}
+  const paymentTime="COALESCE(p.paid_at,p.payment_date::timestamptz,p.created_at)";
+  if(filters.from){params.push(filters.from);where.push(paymentTime+">=$"+params.length+"::timestamptz");}
+  if(filters.to){params.push(filters.to);where.push(paymentTime+"<$"+params.length+"::timestamptz");}
+  if(filters.refunded==="true"||filters.refunded===true)where.push("COALESCE(p.refunded_amount,0)>0");
 
   if (filters.status) {
     params.push(filters.status);
@@ -1530,7 +1676,7 @@ adminRouter.get("/payments", requirePermission("read:finance"), validate(paginat
      ORDER BY p.payment_date DESC NULLS LAST, p.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
-  const count = await query(`SELECT count(*)::int AS count FROM payments p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN invoices i ON i.id=p.invoice_id WHERE ${where.join(" AND ")}`, params.slice(0, -2));
+  const count = await query(`SELECT count(*)::int AS count FROM payments p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id LEFT JOIN invoices i ON i.id=p.invoice_id WHERE ${where.join(" AND ")}`, params.slice(0, -2));
   res.json({ data: rows.rows, pagination: { page: filters.page, pageSize, total: count.rows[0].count } });
 }));
 
@@ -1721,7 +1867,7 @@ adminRouter.get("/files", ...listRoute("files", ["filename", "category", "storag
 adminRouter.get("/galleries", ...listRoute("galleries", ["gallery_name", "gallery_url", "status"], "read:tasks"));
 adminRouter.get("/users", requirePermission("view:users"), asyncHandler(async (req, res) => {
   const rows = await query(
-    `SELECT u.id, u.name, u.email, u.active, u.first_name, u.last_name, u.phone, u.business_role, u.invitation_status, u.invited_at, u.disabled_at, u.created_at,
+    `SELECT u.id, u.name, u.email, u.active, u.first_name, u.last_name, u.phone, u.business_role, u.invitation_status, u.invited_at, u.invitation_delivery_status, u.invitation_delivery_attempted_at, u.invitation_delivery_error_code, u.invitation_delivery_provider, u.invitation_delivery_message_id, u.disabled_at, u.created_at,
             COALESCE(json_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL),'[]') AS roles,
             COALESCE((SELECT json_agg(p.key) FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=u.id),'[]') AS permissions
      FROM users u
@@ -1753,7 +1899,7 @@ adminRouter.post("/users", requirePermission("create:users"), asyncHandler(async
     last_name: z.string().optional().nullable(),
     phone: z.string().optional().nullable(),
     business_role: z.string().optional().nullable(),
-    roles: z.array(z.string()).min(1).default(["ATTENDANT"]),
+    roles: z.array(z.string()).min(1, "Select at least one role."),
     permissions: z.array(z.string()).default([])
   }).parse(req.body);
   await assertAssignableRoles(req, body.roles);
@@ -1782,9 +1928,54 @@ adminRouter.post("/users", requirePermission("create:users"), asyncHandler(async
     subject: "Your LOLA Admin invitation",
     body: `You have been invited to LOLA Admin. Set your password here: ${setupUrl}`,
     html: brandedEmailHtml("You have been invited to LOLA Admin. Use the secure link below to set your password.", { firstName: body.first_name || body.name.split(" ")[0], ctaLabel: "Set Password", ctaUrl: setupUrl })
-  }).then(() => ({ok:true})).catch(() => ({ok:false}));
-  await writeAudit({ req, action: "user_invited", entity: "user", entityId: created.id, after: { ...created, roles: body.roles, email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED" } });
-  res.status(201).json({ ...created, roles: body.roles, deliveryError: !delivery.ok });
+  }).then((result) => ({ ok: true, result })).catch((error) => {
+    logger.error({
+      err: error,
+      action: "user_invitation_send",
+      userId: created.id,
+      recipient: body.email,
+      code: error?.code,
+      statusCode: error?.statusCode
+    }, "LOLA Admin invitation email delivery failed");
+    return { ok: false, errorCode: error?.code || "EMAIL_SEND_FAILED" };
+  });
+  await query(
+    `UPDATE users
+     SET invitation_delivery_status=$2,
+         invitation_delivery_attempted_at=now(),
+         invitation_delivery_error_code=$3,
+         invitation_delivery_provider=$4,
+         invitation_delivery_message_id=$5,
+         updated_at=now()
+     WHERE id=$1`,
+    [
+      created.id,
+      delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      delivery.ok ? null : delivery.errorCode,
+      delivery.ok ? delivery.result?.provider || null : null,
+      delivery.ok ? delivery.result?.providerMessageId || null : null
+    ]
+  );
+  await writeAudit({
+    req,
+    action: delivery.ok ? "user_invited" : "user_invitation_delivery_failed",
+    entity: "user",
+    entityId: created.id,
+    after: {
+      ...created,
+      roles: body.roles,
+      email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      email_error_code: delivery.ok ? null : delivery.errorCode
+    }
+  });
+  res.status(201).json({
+    ...created,
+    roles: body.roles,
+    deliveryError: !delivery.ok,
+    deliveryErrorCode: delivery.ok ? null : delivery.errorCode,
+    deliveryStatus: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+    deliveryProvider: delivery.ok ? delivery.result?.provider || null : null
+  });
 }));
 
 adminRouter.patch("/users/:id", requirePermission("edit:users"), asyncHandler(async (req, res) => {
@@ -1863,9 +2054,49 @@ adminRouter.post("/users/:id/resend-invitation", requirePermission("invitations.
     subject: "Your LOLA Admin invitation",
     body: `You have been invited to LOLA Admin. Set your password here: ${setupUrl}`,
     html: brandedEmailHtml("You have been invited to LOLA Admin. Use the secure link below to set your password.", { firstName: user.first_name || user.name.split(" ")[0], ctaLabel: "Set Password", ctaUrl: setupUrl })
-  }).then(() => ({ok:true})).catch(() => ({ok:false}));
-  await writeAudit({ req, action: delivery.ok ? "user_invitation_resent" : "user_invitation_delivery_failed", entity: "user", entityId: user.id });
-  res.status(201).json({ ok: true, deliveryError: !delivery.ok });
+  }).then((result) => ({ ok: true, result })).catch((error) => {
+    logger.error({
+      err: error,
+      action: "user_invitation_resend",
+      userId: user.id,
+      recipient: user.email,
+      code: error?.code,
+      statusCode: error?.statusCode
+    }, "LOLA Admin invitation resend email delivery failed");
+    return { ok: false, errorCode: error?.code || "EMAIL_SEND_FAILED" };
+  });
+  await query(
+    `UPDATE users
+     SET invitation_delivery_status=$2,
+         invitation_delivery_attempted_at=now(),
+         invitation_delivery_error_code=$3,
+         invitation_delivery_provider=$4,
+         invitation_delivery_message_id=$5,
+         updated_at=now()
+     WHERE id=$1`,
+    [
+      user.id,
+      delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      delivery.ok ? null : delivery.errorCode,
+      delivery.ok ? delivery.result?.provider || null : null,
+      delivery.ok ? delivery.result?.providerMessageId || null : null
+    ]
+  );
+  await writeAudit({
+    req,
+    action: delivery.ok ? "user_invitation_resent" : "user_invitation_delivery_failed",
+    entity: "user",
+    entityId: user.id,
+    after: {
+      email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      email_error_code: delivery.ok ? null : delivery.errorCode
+    }
+  });
+  res.status(201).json({
+    ok: true,
+    deliveryError: !delivery.ok,
+    deliveryErrorCode: delivery.ok ? null : delivery.errorCode
+  });
 }));
 
 adminRouter.post("/users/:id/password-reset", requirePermission("password_resets.send"), asyncHandler(async (req, res) => {
@@ -1875,9 +2106,40 @@ adminRouter.post("/users/:id/password-reset", requirePermission("password_resets
   const { token, tokenHash } = createAccountToken();
   await query(`INSERT INTO user_account_tokens (user_id, token_hash, token_type, expires_at, created_by) VALUES ($1,$2,'PASSWORD_RESET',now() + interval '2 hours',$3)`, [user.id, tokenHash, req.user.id]);
   const resetUrl = setupPasswordUrl(token);
-  const delivery = await sendEmail({ to: user.email, subject: "Reset your LOLA Admin password", body: `Reset your password: ${resetUrl}`, html: brandedEmailHtml("A LOLA Admin password reset was requested. Use the secure link below to set a new password.", { firstName: user.name.split(" ")[0], ctaLabel: "Reset Password", ctaUrl: resetUrl }) }).then(() => ({ok:true})).catch(() => ({ok:false}));
-  await writeAudit({ req, action: delivery.ok ? "password_reset_sent" : "password_reset_delivery_failed", entity: "user", entityId: user.id });
-  res.status(201).json({ ok: true, deliveryError: !delivery.ok });
+  const delivery = await sendEmail({
+    to: user.email,
+    subject: "Reset your LOLA Admin password",
+    body: `Reset your password: ${resetUrl}`,
+    html: brandedEmailHtml(
+      "A LOLA Admin password reset was requested. Use the secure link below to set a new password.",
+      { firstName: user.name.split(" ")[0], ctaLabel: "Reset Password", ctaUrl: resetUrl }
+    )
+  }).then((result) => ({ ok: true, result })).catch((error) => {
+    logger.error({
+      err: error,
+      action: "user_password_reset_send",
+      userId: user.id,
+      recipient: user.email,
+      code: error?.code,
+      statusCode: error?.statusCode
+    }, "LOLA Admin password reset email delivery failed");
+    return { ok: false, errorCode: error?.code || "EMAIL_SEND_FAILED" };
+  });
+  await writeAudit({
+    req,
+    action: delivery.ok ? "password_reset_sent" : "password_reset_delivery_failed",
+    entity: "user",
+    entityId: user.id,
+    after: {
+      email_delivery: delivery.ok ? "SENT_TO_PROVIDER" : "FAILED",
+      email_error_code: delivery.ok ? null : delivery.errorCode
+    }
+  });
+  res.status(201).json({
+    ok: true,
+    deliveryError: !delivery.ok,
+    deliveryErrorCode: delivery.ok ? null : delivery.errorCode
+  });
 }));
 adminRouter.get("/media-library", ...listRoute("media_library", ["filename", "alt_text", "storage_key"], "read:website"));
 adminRouter.get("/website-content", ...listRoute("website_content", ["content_key", "title", "seo_title"], "read:website"));
@@ -2068,6 +2330,8 @@ adminRouter.post("/integrations/failed-inbound/:id/retry", requirePermission("wr
 adminRouter.post("/integrations/failed-inbound/:id/resolve", requirePermission("write:integrations"), asyncHandler(async (req, res) => {
   res.json(await resolveInboundLead(req.params.id));
 }));
+
+adminRouter.use("/campaigns",campaignRouter);
 
 adminRouter.get("/communications/templates", requireAnyPermission("templates.view", "read:sales"), asyncHandler(async (_req, res) => {
   res.json(await listEmailTemplates());
@@ -2384,7 +2648,7 @@ const paymentSchema = z.object({
   event_id: uuid,
   client_id: uuid,
   invoice_id: uuid.optional().nullable(),
-  amount: money,
+  amount: money.refine((value) => Number(value) > 0, "Payment amount must be greater than zero."),
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
   payment_method: z.enum(["CARD", "CASH", "CHECK", "BANK_TRANSFER", "ZELLE", "EXTERNAL_CARD", "OTHER"]),
   reference_number: z.string().optional().nullable(),
@@ -2407,8 +2671,8 @@ adminRouter.get("/analytics", requirePermission("read:analytics"), asyncHandler(
       (SELECT COALESCE(sum(balance_due),0)::text FROM bookings) AS outstanding_balance,
       (SELECT COALESCE(avg(total),0)::text FROM bookings) AS average_booking_value`),
     reportingQuery("SELECT to_char(created_at, 'YYYY-MM') AS month, sum(total)::text AS revenue FROM bookings GROUP BY 1 ORDER BY 1"),
-    reportingQuery("SELECT p.name, count(*)::int AS bookings FROM events e JOIN packages p ON p.id=e.package_id GROUP BY p.name ORDER BY bookings DESC"),
-    reportingQuery("SELECT x.name, count(*)::int AS bookings FROM events e JOIN experiences x ON x.id=e.experience_id GROUP BY x.name ORDER BY bookings DESC"),
+    reportingQuery("SELECT p.name, count(DISTINCT ep.event_id)::int AS bookings FROM event_packages ep JOIN events e ON e.id=ep.event_id AND e.deleted_at IS NULL JOIN packages p ON p.id=ep.package_id GROUP BY p.name ORDER BY bookings DESC, p.name"),
+    reportingQuery("SELECT x.name, count(DISTINCT ee.event_id)::int AS bookings FROM event_experiences ee JOIN events e ON e.id=ee.event_id AND e.deleted_at IS NULL JOIN experiences x ON x.id=ee.experience_id GROUP BY x.name ORDER BY bookings DESC, x.name"),
     reportingQuery("SELECT COALESCE(referral_source, lead_source, 'Unknown') AS source, count(*)::int AS leads, count(*) FILTER (WHERE status='WON')::int AS won FROM leads GROUP BY 1 ORDER BY leads DESC")
   ]);
   const [phase8, phase9] = await Promise.all([sourceQualityAnalytics(), operationsAnalytics()]);
@@ -2448,14 +2712,7 @@ function sampleProviderLead(provider) {
 }
 
 adminRouter.get("/search", requirePermission("read:admin"), asyncHandler(async (req, res) => {
-  const term = `%${req.query.q || ""}%`;
-  const [clients, leads, events, invoices] = await Promise.all([
-    query("SELECT 'client' AS type, id, name AS title, email AS subtitle FROM clients WHERE deleted_at IS NULL AND (name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) LIMIT 8", [term]),
-    query("SELECT 'lead' AS type, id, first_name || ' ' || last_name AS title, email AS subtitle FROM leads WHERE deleted_at IS NULL AND (first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) LIMIT 8", [term]),
-    query("SELECT 'event' AS type, id, event_name AS title, venue_name AS subtitle FROM events WHERE deleted_at IS NULL AND (event_name ILIKE $1 OR venue_name ILIKE $1) LIMIT 8", [term]),
-    query("SELECT 'invoice' AS type, id, invoice_number AS title, status AS subtitle FROM invoices WHERE deleted_at IS NULL AND invoice_number ILIKE $1 LIMIT 8", [term])
-  ]);
-  res.json({ data: [...clients.rows, ...leads.rows, ...events.rows, ...invoices.rows] });
+  res.json({ data: await searchAdmin(req.user,req.query.q) });
 }));
 
 adminRouter.get("/audit-logs",requirePermission("read:audit"),asyncHandler(async(req,res)=>{
@@ -2529,6 +2786,27 @@ const settingsSchema = z.object({
   other_review_url: z.string().optional().nullable()
 }).passthrough();
 
+adminRouter.patch("/settings/payment-checkout", requirePermission("write:settings"), validate(z.object({
+  stripe_enabled: z.boolean()
+})), asyncHandler(async (req, res) => {
+  const before = await query("SELECT id, stripe_enabled FROM business_settings LIMIT 1");
+  const existing = before.rows[0];
+  if (!existing) throw notFound("Settings");
+  const updated = await query(
+    "UPDATE business_settings SET stripe_enabled=$1, updated_at=now() WHERE id=$2 RETURNING id, stripe_enabled",
+    [req.body.stripe_enabled, existing.id]
+  );
+  await writeAudit({
+    req,
+    action: "payment_checkout_settings_changed",
+    entity: "business_settings",
+    entityId: existing.id,
+    before: existing,
+    after: updated.rows[0]
+  });
+  res.json(updated.rows[0]);
+}));
+
 adminRouter.patch("/settings", requirePermission("write:settings"), validate(settingsSchema), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM business_settings LIMIT 1");
   const existing = before.rows[0];
@@ -2562,7 +2840,7 @@ adminRouter.post('/invoices/:id/revoke-access',requirePermission('write:finance'
 adminRouter.get('/dashboard/revenue-records',requirePermission('read:finance'),asyncHandler(async(req,res)=>res.json(await revenueRecords(req.query))));
 
 adminRouter.get('/data-review',requirePermission('read:settings'),asyncHandler(async(req,res)=>res.json(await reviewData(req.query,req.user))));
-adminRouter.patch('/data-review/:type/:id',requirePermission('read:settings'),asyncHandler(async(req,res)=>res.json(await classifyData(req))));
+adminRouter.patch('/data-review/:type/:id',requirePermission('write:settings'),asyncHandler(async(req,res)=>res.json(await classifyData(req))));
 
 adminRouter.post('/invoices/:id/reissue-access',requirePermission('write:finance'),asyncHandler(async(req,res)=>{
  const token=crypto.randomBytes(24).toString('hex');

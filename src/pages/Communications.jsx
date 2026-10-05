@@ -1,5 +1,5 @@
 import {timestampInput} from "../utils/display.js";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { Archive, CheckCircle2, Clock, Copy, Edit3, Eye, Mail, Play, RefreshCw, Save, Search, Send, ToggleLeft, ToggleRight, XCircle } from "lucide-react";
@@ -8,7 +8,7 @@ import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
 const templateTabs = ["All", "Email", "SMS", "Proposal", "Invoice", "Document", "Internal"];
-const communicationTabs = ["SENT_TO_PROVIDER", "DRAFT", "SCHEDULED", "FAILED", "ALL"];
+const communicationTabs = ["ALL", "SCHEDULED", "SENT_TO_PROVIDER", "FAILED", "DRAFT"];
 const blankTemplate = {
   name: "",
   key: "",
@@ -25,7 +25,9 @@ const blankTemplate = {
 
 export default function Communications() {
   const [automationEdit,setAutomationEdit]=useState(null);
+  const location=useLocation();
   const [section, setSection] = useState("Communications");
+  useEffect(()=>{const params=new URLSearchParams(location.search);setSection(["Templates","Automations"].includes(params.get("section"))?params.get("section"):"Communications");if(params.get("status")==="SCHEDULED")setCommunicationTab("SCHEDULED");},[location.search]);
   const [templateTab, setTemplateTab] = useState("All");
   const [communicationTab, setCommunicationTab] = useState("SENT_TO_PROVIDER");
   const [communicationSearch,setCommunicationSearch]=useState(""),[communicationSort,setCommunicationSort]=useState("created_at"),[communicationPage,setCommunicationPage]=useState(1);
@@ -204,30 +206,31 @@ export default function Communications() {
     }
   }
 
-  if (!templates || !automations || !communications) return <main className="page"><h1>Communications</h1><AsyncState loading={loading} error={error} requestId={requestId} onRetry={load} noun="communications" /></main>;
+  if (!templates || !automations || !communications) return <main className="page communications-center"><h1>Communications</h1><AsyncState loading={loading} error={error} requestId={requestId} onRetry={load} noun="communications" /></main>;
 
   return (
-    <main className="page">
+    <main className="page communications-redesign" aria-label="Communication Center">
       <div className="page-heading">
-        <div><p className="eyebrow">Admin</p><h1>Communications</h1></div>
+        <div><p className="eyebrow">Communications</p><h1>Communications</h1><p className="lede">Email and SMS in one place.</p></div>
         <div className="button-row">
-          <button onClick={load}><RefreshCw size={16} />Refresh</button>
-          <button className="primary-action" onClick={processJobs}><Play size={16} />Process Due Jobs</button>
+          <button className="lola-secondary-button" onClick={load}><RefreshCw size={16} />Refresh</button>
+          <button className="primary-action" onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>New Message</button>
         </div>
       </div>
       {error ? <AsyncState error={error} requestId={requestId} onRetry={load} noun="communications" /> : notice && <div role="status" className="toast">{notice}</div>}
 
       <div className="segmented-control page-tabs">
-        {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item}</button>)}
+        <Link to="/communications/campaigns">Campaigns</Link>
+        {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item === "Communications" ? "Messages" : item}</button>)}
       </div>
 
       {section === "Communications" && (
         <>
           <section className="panel">
             <div className="table-heading">
-              <h2>Communication Center</h2><button onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>Compose Email</button>
+              <div><h2>Messages</h2><p className="note-text">All outbound and internal communication activity.</p></div>
               <div className="segmented-control">
-                {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => {setCommunicationPage(1);setCommunicationTab(tab);}}>{tab.toLowerCase().replaceAll("_"," ")}</button>)}
+                {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => {setCommunicationPage(1);setCommunicationTab(tab);}}>{tab === "SENT_TO_PROVIDER" ? "Sent" : tab.toLowerCase().replaceAll("_"," ")}</button>)}
               </div>
             </div>
             <div className="toolbar"><label>Search communications<input value={communicationSearch} onChange={e=>{setCommunicationPage(1);setCommunicationSearch(e.target.value);}} placeholder="Recipient or subject"/></label><label>Sort<select aria-label="Sort" value={communicationSort} onChange={e=>setCommunicationSort(e.target.value)}><option value="created_at">Newest first</option><option value="scheduled_at">Scheduled time</option><option value="recipient">Recipient</option></select></label></div>
@@ -242,30 +245,36 @@ export default function Communications() {
         <section className="template-admin-grid">
           <article className="panel">
             <div className="table-heading">
-              <h2>Email Templates</h2>
+              <h2>Templates</h2>
               <button className="primary-action" onClick={() => editTemplate()}><Edit3 size={15} />New</button>
             </div>
             <div className="segmented-control">
               {templateTabs.map((tab) => <button key={tab} className={templateTab === tab ? "active" : ""} onClick={() => setTemplateTab(tab)}>{tab}</button>)}
             </div>
-            <div className="template-table">
+            <div className="template-card-list">
               {filteredTemplates.map((template) => (
-                <div className="template-admin-row" key={template.id}>
-                  <strong>{template.name}</strong>
-                  <span>{template.key || template.template_key}</span>
-                  <span>{template.template_type || template.channel}</span>
-                  <span>{template.status || (template.active ? "ACTIVE" : "DRAFT")}</span>
-                  <span>{template.default_send_mode || "SEND_NOW"}</span>
-                  <span>v{template.version || 1}</span>
-                  <span>{template.updated_at ? new Date(template.updated_at).toLocaleDateString() : "New"}</span>
-                  <div className="icon-actions">
-                    <button title="Edit" onClick={() => editTemplate(template)}><Edit3 size={15} /></button>
-                    <button title="Preview" onClick={() => { editTemplate(template); previewTemplate(template.id); }}><Eye size={15} /></button>
-                    <button title="Duplicate" onClick={() => templateAction(template, "duplicate")}><Copy size={15} /></button>
-                    <button title="Activate" onClick={() => templateAction(template, "activate")}><CheckCircle2 size={15} /></button>
-                    <button title="Archive" onClick={() => templateAction(template, "archive")}><Archive size={15} /></button>
+                <article className="template-admin-card" key={template.id}>
+                  <div className="template-admin-card-heading">
+                    <div>
+                      <strong>{template.name}</strong>
+                      <small>{template.key || template.template_key}</small>
+                    </div>
+                    <span className="status-pill">{template.status || (template.active ? "ACTIVE" : "DRAFT")}</span>
                   </div>
-                </div>
+                  <dl className="template-admin-meta">
+                    <div><dt>Type</dt><dd>{template.template_type || template.channel}</dd></div>
+                    <div><dt>Send mode</dt><dd>{template.default_send_mode || "SEND_NOW"}</dd></div>
+                    <div><dt>Version</dt><dd>v{template.version || 1}</dd></div>
+                    <div><dt>Updated</dt><dd>{template.updated_at ? new Date(template.updated_at).toLocaleDateString() : "New"}</dd></div>
+                  </dl>
+                  <div className="icon-actions template-card-actions">
+                    <button title="Edit template" aria-label="Edit template" onClick={() => editTemplate(template)}><Edit3 size={15} />Edit</button>
+                    <button title="Preview template" aria-label="Preview template" onClick={() => { editTemplate(template); previewTemplate(template.id); }}><Eye size={15} />Preview</button>
+                    <button title="Duplicate template" aria-label="Duplicate template" onClick={() => templateAction(template, "duplicate")}><Copy size={15} />Duplicate</button>
+                    <button title="Activate template" aria-label="Activate template" onClick={() => templateAction(template, "activate")}><CheckCircle2 size={15} />Activate</button>
+                    <button title="Archive template" aria-label="Archive template" onClick={() => templateAction(template, "archive")}><Archive size={15} />Archive</button>
+                  </div>
+                </article>
               ))}
             </div>
           </article>
@@ -289,7 +298,7 @@ export default function Communications() {
       {section === "Automations" && (
         <>
           <section className="panel">
-            <div className="table-heading"><h2>Automations</h2></div>
+            <div className="table-heading"><div><h2>Automations</h2><p className="note-text">Rules and scheduled jobs.</p></div><button className="lola-secondary-button" onClick={processJobs}><Play size={15}/>Process Due Jobs</button></div>
             <div className="automation-list">
               {automations.data.map((row) => (
                 <article className="automation-row" key={row.id}>

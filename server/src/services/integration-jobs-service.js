@@ -1,4 +1,4 @@
-import {stagingJobsPaused} from '../config/staging-safety.js';
+import {stagingJobsPaused,stagingAutomationScope} from '../config/staging-safety.js';
 import crypto from 'node:crypto';
 import {MARKETING_PROVIDERS,marketingConfiguration,dispatchMarketing} from './marketing-adapters.js';
 import {query,transaction} from '../db/pool.js';
@@ -107,7 +107,7 @@ export async function processIntegrationJobs({limit=25,dispatch=defaultDispatch}
 
 export async function queueEventReminder(eventId){
  const event=(await query(`SELECT e.id,e.event_date,e.event_name,e.client_id,c.email FROM events e JOIN clients c ON c.id=e.client_id
- WHERE e.id=$1 AND e.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED')
+ WHERE e.id=$1 AND e.deleted_at IS NULL AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')
  AND ((e.event_date+COALESCE(e.start_time,'12:00'::time)) AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')) BETWEEN now() AND now()+interval '24 hours'`,[eventId])).rows[0];
  if(!event)return {queued:false,reason:'Event is outside the reminder window.'};
  const occurrence=String(event.event_date).slice(0,10),key=`event-reminder:${event.id}:${occurrence}`;
@@ -123,10 +123,11 @@ export async function queueEventReminder(eventId){
  return {queued:true,emailQueued:Boolean(event.email),sms};
 }
 export async function queueDueReminders(){
- if(env.nodeEnv==='production')return []; // Local qualification does not enable new production automations.
- const events=(await query("SELECT id FROM events WHERE deleted_at IS NULL AND event_date BETWEEN current_date AND current_date+2 AND status NOT IN ('CANCELLED','COMPLETED') LIMIT 100")).rows;
+ if(stagingJobsPaused())return [];
+ const scope=stagingAutomationScope();
+ const events=(await query("SELECT e.id FROM events e JOIN clients c ON c.id=e.client_id WHERE e.deleted_at IS NULL AND e.event_date BETWEEN current_date AND current_date+2 AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS') AND ($1::timestamptz IS NULL OR (e.created_at >= $1 AND lower(c.email)=ANY($2::text[]))) LIMIT 100",[scope?.since||null,scope?.recipients||[]])).rows;
  const results=[];for(const event of events)results.push(await queueEventReminder(event.id));
- const invoices=(await query("SELECT id FROM invoices WHERE deleted_at IS NULL AND due_date<current_date AND balance_due>0 AND status NOT IN ('DRAFT','VOID','PAID','REFUNDED') LIMIT 100")).rows;
+ const invoices=(await query("SELECT i.id FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.deleted_at IS NULL AND i.due_date<current_date AND i.balance_due>0 AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED') AND ($1::timestamptz IS NULL OR (i.created_at >= $1 AND lower(c.email)=ANY($2::text[]))) LIMIT 100",[scope?.since||null,scope?.recipients||[]])).rows;
  for(const invoice of invoices)results.push(await queueOverdueReminder(invoice.id));return results;
 }
 

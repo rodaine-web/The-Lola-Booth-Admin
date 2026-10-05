@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const blank = { first_name:'', last_name:'', email:'', phone:'', business_role:'', roles:['ATTENDANT'], permissions:[] };
+const blank = { first_name:'', last_name:'', email:'', phone:'', business_role:'', roles:[], permissions:[] };
 export default function Users() {
   const {user:actor,can} = useAuth();
   const [loading,setLoading]=useState(true),[viewing,setViewing]=useState(null);
@@ -22,17 +22,23 @@ export default function Users() {
   function field(key,value){setForm(f=>({...f,[key]:value}));}
   function toggle(key,value){field(key,form[key].includes(value)?form[key].filter(x=>x!==value):[...form[key],value]);}
   async function save(e){e.preventDefault();const body={first_name:form.first_name,last_name:form.last_name,name:`${form.first_name} ${form.last_name}`.trim(),phone:form.phone||null,business_role:form.business_role||null};if(editing==='new')body.email=form.email;if(can('assign:roles')){body.roles=form.roles;body.permissions=form.permissions;}if(await action(()=>editing==='new'?api.post('/users',body):api.patch(`/users/${editing}`,body),editing==='new'?'User created and invitation requested.':'User updated.'))setEditing(null);}
-  return <main className="page"><div className="page-heading"><div><p className="eyebrow">Access management</p><h1>Users</h1><p className="lede">Manage invitations, roles and additional privileges.</p></div>{can('create:users')&&<button data-dialog-trigger="user-create" className="primary-action" onClick={()=>{setForm({...blank});setEditing('new');}}>Create User</button>}</div>
+  return <main className="page system-admin-page users-workspace"><div className="page-heading"><div><p className="eyebrow">Access management</p><h1>Users</h1><p className="lede">Manage invitations, roles and additional privileges.</p></div>{can('create:users')&&<button data-dialog-trigger="user-create" className="primary-action" onClick={()=>{setForm({...blank});setEditing('new');}}>Create User</button>}</div>
     {error&&<AsyncState error={error} onRetry={()=>load().catch(e=>setError(e.message))} noun="users"/>}{notice&&<div role="status" className="toast">{notice}</div>}
     <div className="toolbar"><label>Search users<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name or email" /></label></div>
-    {loading&&<AsyncState loading noun="users"/>}{!loading&&!users.length&&<AsyncState empty noun="users"/>}<div className="panel table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Actions</th></tr></thead><tbody>{users.filter(u=>`${u.name} ${u.email}`.toLowerCase().includes(search.toLowerCase())).map(u=><tr key={u.id}><td>{u.name}</td><td>{u.email}</td><td>{u.roles.join(', ')||'No role'}</td><td><StatusBadge status={u.active?u.invitation_status:'DISABLED'}/></td><td><div className="button-row">
+    {loading&&<AsyncState loading noun="users"/>}{!loading&&!users.length&&<AsyncState empty noun="users"/>}<div className="panel table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Account</th><th>Invitation Delivery</th><th>Actions</th></tr></thead><tbody>{users.filter(u=>`${u.name} ${u.email}`.toLowerCase().includes(search.toLowerCase())).map(u=><tr key={u.id}><td>{u.name}</td><td>{u.email}</td><td>{u.roles.join(', ')||'No role'}</td><td><StatusBadge status={u.active?u.invitation_status:'DISABLED'}/></td><td><div><StatusBadge status={u.invitation_delivery_status||'NOT_SENT'}/>{u.invitation_delivery_attempted_at&&<small className="note-text"> {new Date(u.invitation_delivery_attempted_at).toLocaleString()}</small>}{u.invitation_delivery_error_code&&<small className="field-error"> {u.invitation_delivery_error_code}</small>}</div></td><td><div className="button-row">
       <button onClick={()=>setViewing(u)}>View</button>{manage(u)&&can('edit:users')&&<button disabled={busy} onClick={()=>edit(u)}>Edit</button>}
       {manage(u)&&can(u.active?'disable:users':'edit:users')&&<button disabled={busy} onClick={()=>action(()=>api.post(`/users/${u.id}/${u.active?'deactivate':'reactivate'}`,{}),u.active?'User deactivated.':'User reactivated.')}>{u.active?'Deactivate':'Reactivate'}</button>}
       {manage(u)&&u.active&&u.invitation_status!=='ACTIVE'&&can('invitations.send')&&<button disabled={busy} onClick={()=>action(()=>api.post(`/users/${u.id}/resend-invitation`,{}),'Invitation requested.')}>Resend invitation</button>}
       {manage(u)&&u.active&&can('password_resets.send')&&<button disabled={busy} onClick={()=>action(()=>api.post(`/users/${u.id}/password-reset`,{}),'Password reset email requested.')}>Password reset</button>}
       {u.id===actor.id&&<span>Your account</span>}
     </div></td></tr>)}</tbody></table></div>
-    {viewing&&<section className="panel"><div className="table-heading"><h2>{viewing.name}</h2><button onClick={()=>setViewing(null)}>Close details</button></div><p>{viewing.email} · {viewing.phone||'No phone supplied'}</p><p>{viewing.business_role||'No business role'} · {viewing.roles.join(', ')}</p><StatusBadge status={viewing.active?viewing.invitation_status:'DISABLED'}/></section>}
+    {viewing&&<section className="panel"><div className="table-heading"><h2>{viewing.name}</h2><button onClick={()=>setViewing(null)}>Close details</button></div><p>{viewing.email} · {viewing.phone||'No phone supplied'}</p><p>{viewing.business_role||'No business role'} · {viewing.roles.join(', ')}</p>
+    <p><strong>Account status:</strong> <StatusBadge status={viewing.active?viewing.invitation_status:'DISABLED'}/></p>
+    <p><strong>Invitation delivery:</strong> <StatusBadge status={viewing.invitation_delivery_status||'NOT_SENT'}/></p>
+    {viewing.invitation_delivery_attempted_at&&<p><strong>Last attempt:</strong> {new Date(viewing.invitation_delivery_attempted_at).toLocaleString()}</p>}
+    {viewing.invitation_delivery_provider&&<p><strong>Provider:</strong> {viewing.invitation_delivery_provider}</p>}
+    {viewing.invitation_delivery_error_code&&<p className="field-error"><strong>Delivery error:</strong> {viewing.invitation_delivery_error_code}</p>}
+    </section>}
     {editing&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="user-dialog-title"><form className="modal" onSubmit={save}><div className="modal-heading"><h2 id="user-dialog-title">{editing==='new'?'Create User':'Edit User'}</h2><button type="button" onClick={()=>setEditing(null)}>Close</button></div><div className="form-grid">
       {error&&<div role="alert" className="toast error wide">{error}</div>}
       <label>First Name<input required autoFocus value={form.first_name} onChange={e=>field('first_name',e.target.value)}/></label><label>Last Name<input required value={form.last_name} onChange={e=>field('last_name',e.target.value)}/></label>

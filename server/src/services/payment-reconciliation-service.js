@@ -17,13 +17,16 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
       [invoiceId]
     );
     const paid = money(payments.rows[0].net_paid);
-    const outstanding = money(Math.max(0, Number(invoice.rows[0].total || 0) - paid));
+    const refundedAmount = money(refunded.rows[0].refunded);
+    const fullyRefunded = refundedAmount > 0 && paid === 0;
+    const outstanding = fullyRefunded ? 0 : money(Math.max(0, Number(invoice.rows[0].total || 0) - paid));
     const previousStatus = invoice.rows[0].status;
     let status = previousStatus;
     if (previousStatus !== "VOID") {
-      if (outstanding === 0) status = refunded.rows[0].refunded > 0 ? "PAID" : "PAID";
+      if (fullyRefunded) status = "REFUNDED";
+      else if (outstanding === 0) status = "PAID";
       else if (paid > 0) status = "PARTIALLY_PAID";
-      else if (previousStatus === "PAID" || previousStatus === "PARTIALLY_PAID") status = "SENT";
+      else if (["PAID","PARTIALLY_PAID","PARTIAL","REFUNDED"].includes(previousStatus)) status = "SENT";
     }
     const updated = await client.query(
       "UPDATE invoices SET amount_paid=$1, balance_due=$2, amount_outstanding=$2, status=$3, updated_at=now() WHERE id=$4 RETURNING *",
@@ -54,7 +57,7 @@ export async function reconcileEventFinance(client, eventId) {
       COALESCE(sum(i.amount_paid),0)::numeric AS total_paid,
       COALESCE(sum(i.amount_outstanding),0)::numeric AS outstanding
      FROM invoices i
-     WHERE i.event_id=$1 AND i.deleted_at IS NULL AND i.status <> 'VOID'`,
+     WHERE i.event_id=$1 AND i.deleted_at IS NULL AND i.status NOT IN ('VOID','REFUNDED')`,
     [eventId]
   );
   const refunded = await client.query("SELECT COALESCE(sum(r.amount),0)::numeric AS refunded FROM refunds r WHERE r.event_id=$1 AND r.status='SUCCEEDED'", [eventId]);
@@ -79,13 +82,25 @@ export async function applyBookingConfirmationPolicy(eventId) {
   const event = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [eventId]);
   if (!event.rows[0] || event.rows[0].status === "CANCELLED") return null;
   const finance = await query(
-    `SELECT COALESCE(sum(amount_paid),0)::numeric AS paid, COALESCE(sum(amount_outstanding),0)::numeric AS outstanding
-     FROM invoices WHERE event_id=$1 AND deleted_at IS NULL AND status <> 'VOID'`,
+    `SELECT
+       COALESCE(sum(amount_paid),0)::numeric AS paid,
+       COALESCE(sum(amount_outstanding),0)::numeric AS outstanding,
+       COALESCE(sum(CASE WHEN pricing_snapshot->>'payment_mode'='DEPOSIT_REQUEST' THEN COALESCE(NULLIF(pricing_snapshot->>'amount_due_now','')::numeric,0) ELSE 0 END),0)::numeric AS invoice_deposit_required
+     FROM invoices WHERE event_id=$1 AND deleted_at IS NULL AND status NOT IN ('VOID','REFUNDED')`,
+    [eventId]
+  );
+  const booking = await query(
+    `SELECT COALESCE(sum(deposit_required),0)::numeric AS deposit_required
+     FROM bookings WHERE event_id=$1 AND deleted_at IS NULL`,
     [eventId]
   );
   const paid = Number(finance.rows[0].paid || 0);
   const outstanding = Number(finance.rows[0].outstanding || 0);
-  const shouldConfirm = policy === "PROPOSAL_ACCEPTED" || (policy === "DEPOSIT_PAID" && paid > 0) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
+  const invoiceDepositRequired = Number(finance.rows[0].invoice_deposit_required || 0);
+  const bookingDepositRequired = Number(booking.rows[0]?.deposit_required || 0);
+  const depositRequired = invoiceDepositRequired > 0 ? invoiceDepositRequired : bookingDepositRequired;
+  const depositSatisfied = depositRequired > 0 ? paid >= depositRequired : paid > 0;
+  const shouldConfirm = policy === "PROPOSAL_ACCEPTED" || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
   if (!shouldConfirm || !["TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
   const updated = await query("UPDATE events SET status='CONFIRMED', updated_at=now() WHERE id=$1 RETURNING *", [eventId]);
   await recordActivity({ entityType: "event", entityId: eventId, action: "booking_auto_confirmed", summary: `Booking auto-confirmed by ${policy} policy` });

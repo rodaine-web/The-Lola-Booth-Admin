@@ -1,3 +1,4 @@
+import { TabNavigation, MetricCard as Metric, DetailSection as Panel } from "../components/WorkspaceUI.jsx";
 import CustomerPreferences from "../components/CustomerPreferences.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatMoney } from "../utils/display.js";
@@ -59,12 +60,11 @@ export default function ClientDetail() {
     }
   }
 
-  if (error) return <main className="page"><AsyncState error={error} noun="client" onRetry={()=>{setError("");loadClient();}}/></main>;
+  if (error && !client) return <main className="page"><AsyncState error={error} noun="client" onRetry={()=>{setError("");loadClient();}}/></main>;
   if (!client) return <main className="page"><div className="empty-state">Loading client...</div></main>;
 
   return (
-    <main className="page">
-      {tab==="Overview"&&<CustomerPreferences record={client} type="client" onSaved={loadClient}/>}
+    <main className="page record-workspace record-detail-redesign clientdetail-workspace">
       <div className="detail-back"><Link to="/sales/clients"><ArrowLeft size={16} />Back to clients</Link></div>
       <div className="page-heading detail-heading">
         <div>
@@ -77,14 +77,14 @@ export default function ClientDetail() {
           <Link className="primary-action" to={`/finance/invoices/new?clientId=${client.id}`}>Create Invoice</Link>
         </div>
       </div>
-      {notice && <div className="toast">{notice}</div>}
+      {(notice || error) && <div role={error ? "alert" : "status"} className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <section className="detail-summary">
         <Metric label="Total Events" value={client.summary?.total_events || 0} />
         <Metric label="Lifetime Value" value={formatMoney(client.summary?.lifetime_value || 0)} />
         <Metric label="Outstanding" value={formatMoney(client.summary?.outstanding_balance || 0)} />
         <Metric label="Type" value={client.client_type} />
       </section>
-      <div className="tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
+      <TabNavigation items={tabs} value={tab} onChange={setTab} />
       {tab === "Overview" && <section className="detail-grid"><Panel title="Contact Info"><Field label="Name" value={client.name} /><Field label="Email" value={client.email} /><Field label="Phone" value={client.phone} /><Field label="Company" value={client.company} /><Field label="Preferred Contact" value={client.preferred_contact_method} /></Panel><Panel title="Profile"><Field label="Address" value={[client.address, client.city, client.state, client.zip].filter(Boolean).join(", ") || client.billing_address} /><Field label="Lead Source" value={client.referral_source} /><Field label="Tags" value={client.tags?.join(", ")} /><p className="note-text">{client.notes || "No client notes yet."}</p></Panel><Panel title="Possible Duplicates"><DuplicateList duplicates={duplicates} busy={busy} onMerge={setPendingMerge} /></Panel></section>}
       {tab === "Events" && <DataTable rows={client.events} columns={["event_name", "event_date", "venue_name", "status"]} getRowHref={(row) => `/events/events/${row.id}`} empty="No events yet." />}
       {tab === "Proposals" && <DataTable rows={client.proposals} columns={["proposal_number", "status", "total", "created_at"]} getRowHref={(row) => `/sales/proposals/${row.id}`} empty="No proposals linked." />}
@@ -94,6 +94,7 @@ export default function ClientDetail() {
       {tab === "Files" && <DataTable rows={client.files} columns={["filename", "category", "visibility", "created_at"]} empty="No files attached." />}
       {tab === "Communications" && <DataTable rows={client.communications} columns={["type", "direction", "subject", "message_summary", "occurred_at"]} empty="No communication logged." />}
       {tab === "Activity" && <Panel title="Activity">{client.activity?.length ? client.activity.map((item) => <p className="note-text" key={item.id}>{item.summary}</p>) : <div className="empty-state">No activity yet.</div>}</Panel>}
+      {tab==="Overview"&&<CustomerPreferences record={client} type="client" onSaved={loadClient}/>}
       {pendingMerge && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal">
@@ -119,8 +120,6 @@ export default function ClientDetail() {
   );
 }
 
-function Metric({ label, value }) { return <article className="metric"><span>{label}</span><strong>{value}</strong></article>; }
-function Panel({ title, children }) { return <section className="panel"><h2>{title}</h2>{children}</section>; }
 function Field({ label, value }) { return <div className="field-row"><span>{label}</span><strong>{value || "—"}</strong></div>; }
 
 function DuplicateList({ duplicates, busy, onMerge }) {
@@ -134,7 +133,7 @@ function DuplicateList({ duplicates, busy, onMerge }) {
             <span>{item.email || item.phone || "No contact"} · {item.match_reason?.replaceAll("_", " ")}</span>
             <small>{item.company || item.client_type} · {linkedCountLabel(item.linked_counts)}</small>
           </div>
-          <button className="table-action" disabled={busy} onClick={() => onMerge(item.id)}>Merge</button>
+          <button className="table-action" disabled={busy} onClick={() => onMerge(item)}>Merge</button>
         </article>
       ))}
     </div>

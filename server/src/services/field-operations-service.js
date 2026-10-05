@@ -8,7 +8,7 @@ import { query, transaction } from "../db/pool.js";
 import { AppError, notFound } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { sendEmail } from "./email-service.js";
-import { brandedEmailHtml, recordTemplateFallback, renderCommunicationTemplateByKey, triggerAutomations } from "./automation-service.js";
+import { brandedEmailHtml, recordTemplateFallback, renderCommunicationTemplateByKey, triggerAutomations, createCommunicationDraft, sendCommunication } from "./automation-service.js";
 import { createNotification, recordOfflineReceipt } from "./notification-service.js";
 import { getEventOperations, userCanAccessEvent, updateChecklistItem, transitionOperationalStatus, updateEquipmentLifecycle, addEventNote, createIncident, acknowledgeAssignment } from "./event-operations-service.js";
 
@@ -219,6 +219,7 @@ export async function createOrSendGalleryDelivery(eventId, body, user) {
   const settings = (await query("SELECT delivery_default_expiration_days, google_review_url, facebook_review_url, other_review_url FROM business_settings LIMIT 1")).rows[0] || {};
   const expiresAt = body.expires_at || (settings.delivery_default_expiration_days ? new Date(Date.now() + Number(settings.delivery_default_expiration_days) * 86400000).toISOString() : null);
   const delivery = await transaction(async (client) => {
+    await client.query('SELECT id FROM events WHERE id=$1 FOR UPDATE', [eventId]);
     const existing = (await client.query("SELECT * FROM gallery_deliveries WHERE event_id=$1 AND status='ACTIVE' ORDER BY created_at DESC LIMIT 1", [eventId])).rows[0];
     const row = existing || (await client.query(
       `INSERT INTO gallery_deliveries (event_id, client_id, gallery_id, thank_you_message, expires_at, created_by)
@@ -249,12 +250,18 @@ export async function createOrSendGalleryDelivery(eventId, body, user) {
       fallbackSubject: "Your LOLA photos are ready",
       fallbackBody: `Hi ${event.client_name?.split(" ")[0] || "there"},\n\nYour photos from ${event.event_name} are ready.\n\nView your photos: ${deliveryUrl}\n\nThanks for having LOLA be part of your event.\n\nGood people. Better photos.\n\nLOLA Booths`
     });
-    await sendEmail({
-      to: event.client_email,
-      subject: rendered.subject,
-      body: rendered.body,
-      html: rendered.html
+    const communication = await transaction(async (client) => {
+      await client.query('SELECT id FROM gallery_deliveries WHERE id=$1 FOR UPDATE', [delivery.id]);
+      const key = `event-gallery-delivery:${delivery.id}:${event.client_email.trim().toLowerCase()}`;
+      const existing = (await client.query('SELECT * FROM communications WHERE idempotency_key=$1', [key])).rows[0];
+      if (existing) return existing;
+      const draft = await createCommunicationDraft({recipient:event.client_email,event_id:eventId,
+        subject:rendered.subject,body:rendered.body,html:rendered.html,trigger_key:'GALLERY_DELIVERY',status:'DRAFT'},user);
+      await client.query('UPDATE communications SET idempotency_key=$2 WHERE id=$1',[draft.id,key]);
+      return draft;
     });
+    const sent = await sendCommunication(communication.id,user);
+    if (sent.communication.status === 'CANCELLED') throw new AppError('Gallery delivery link is revoked or expired.',409,'GALLERY_UNAVAILABLE');
     await query("UPDATE gallery_deliveries SET delivered_at=COALESCE(delivered_at, now()), updated_at=now() WHERE id=$1", [delivery.id]);
     await query("UPDATE events SET gallery_status='DELIVERED', updated_at=now() WHERE id=$1", [eventId]);
     await triggerAutomations({ triggerKey: "GALLERY_DELIVERED", entityType: "event", entityId: eventId, payload: { delivery_url: deliveryUrl } });

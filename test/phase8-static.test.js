@@ -11,6 +11,7 @@ const webhookRoutes = fs.readFileSync(new URL("../server/src/routes/webhooks.js"
 const layout = fs.readFileSync(new URL("../src/components/Layout.jsx", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 const integrations = fs.readFileSync(new URL("../src/pages/Integrations.jsx", import.meta.url), "utf8");
+const integrationCatalog = fs.readFileSync(new URL("../server/src/services/integration-catalog-service.js", import.meta.url), "utf8");
 const communications = fs.readFileSync(new URL("../src/pages/Communications.jsx", import.meta.url), "utf8");
 const leads = fs.readFileSync(new URL("../src/pages/Leads.jsx", import.meta.url), "utf8");
 const leadDetail = fs.readFileSync(new URL("../src/pages/LeadDetail.jsx", import.meta.url), "utf8");
@@ -114,8 +115,11 @@ test("frontend adds integrations and communications workflows without redesignin
   assert.match(app, /<Communications \/>/);
   assert.match(integrations, /Lead Sources/);
   assert.match(integrations, /Failed inbound leads/);
-  assert.match(integrations, /LinkedIn Lead Sync requires LinkedIn API approval/);
-  assert.match(communications, /Email Templates/);
+  assert.match(integrations, /Provider approval requirements are shown on the integration card above/);
+  assert.match(integrationCatalog, /status=initiated\?\'PENDING_APPROVAL\':\'NOT_CONFIGURED\'/);
+  assert.match(integrationCatalog, /mode=initiated\?\'SETUP_STARTED\':\'DISABLED\'/);
+  assert.match(integrationCatalog, /No LinkedIn setup has been initiated/);
+  assert.match(communications, /<h2>Templates<\/h2>/);
   assert.match(communications, /Automations/);
   assert.match(communications, /Process Due Jobs/);
 });

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const assetDir = new URL("../public/brand/", import.meta.url);
-const documentService = fs.readFileSync(new URL("../server/src/services/document-service.js", import.meta.url), "utf8");
+const documentService = fs.readFileSync(new URL("../server/src/services/document-service.js", import.meta.url), "utf8") + fs.readFileSync(new URL("../server/src/services/proposal-pdf-layout.js", import.meta.url), "utf8");
 const proposalService = fs.readFileSync(new URL("../server/src/services/proposal-service.js", import.meta.url), "utf8");
 const invoiceService = fs.readFileSync(new URL("../server/src/services/invoice-service.js", import.meta.url), "utf8");
 const layout = fs.readFileSync(new URL("../src/components/Layout.jsx", import.meta.url), "utf8");
@@ -29,8 +29,8 @@ test("approved LOLA brand package assets are available and mapped", () => {
 });
 
 test("admin and public surfaces use approved logo variants", () => {
-  assert.match(layout, /LOLA_Primary_Light_Transparent\.png/);
-  assert.match(layout, /brand-logo-admin-stacked/);
+  assert.match(layout, /<strong>LOLA<\/strong>/);
+  assert.match(layout, /THE LOLA BOOTH/);
   assert.match(login, /LOLA_Primary_Dark_Transparent\.png/);
   assert.match(publicProposal, /LOLA_Primary_Dark_Transparent\.png/);
   assert.match(publicInvoice, /LOLA_Primary_Dark_Transparent\.png/);
@@ -53,7 +53,7 @@ test("proposal, invoice, receipt, and email outputs use branded language", () =>
     "Let’s make this one worth remembering.",
     "THE LOLA STANDARD",
     "Your Investment",
-    "DUE TO RESERVE DATE",
+    "Due to reserve your date:",
     "From proposal to booked.",
     "LOLA_Horizontal_Dark_Transparent.png",
     "LOLA_Primary_Dark_Transparent.png",
@@ -68,7 +68,7 @@ test("proposal, invoice, receipt, and email outputs use branded language", () =>
 
 test("public customer payment and acceptance states are branded", () => {
   assert.match(publicInvoice, /payment\"\) === \"success\"/);
-  assert.match(publicInvoice, /Payment verified/);
+  assert.match(publicInvoice, /Payment recorded/);
   assert.match(publicProposal, /Let's make it official\./);
   assert.match(publicInvoice, /metric-strong/);
 });

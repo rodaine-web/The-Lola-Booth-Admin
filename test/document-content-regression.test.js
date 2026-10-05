@@ -83,3 +83,49 @@ test('invoice QR decodes from the actual PDF rendering to the stable invoice URL
   assert.equal(decoded?.data, `${env.publicBaseUrl.replace(/\/$/, '')}/pay/qa-qr-token`);
   await loading.destroy();
 });
+
+test('proposal pricing and terms paginate with continuous footers and preserve zero deposit', async () => {
+  const pages = await readPdf(await generateProposalPdf({
+    ...proposal, proposal_type: 'CORPORATE', guest_count: 80, start_time: '18:00', end_time: '21:00',
+    selected_experiences: [{ name: 'Lola Glam', package_name: 'The Signature' }],
+    pricing_snapshot: {total: 899, deposit_amount: 0},
+    line_items_snapshot: Array.from({length: 40}, (_, i) => ({description: `SCOPE_ROW_${i} ${'Detailed event service '.repeat(5)}`, line_total: 20})),
+    content: {terms: `${'Saved booking terms and venue requirements. '.repeat(220)}END_SAVED_TERMS`}
+  }));
+  const all = pages.map(p => p.text).join(' ');
+  for(let i=0;i<40;i++) assert.ok(all.includes(`SCOPE_ROW_${i}`));
+  assert.ok(all.includes('END_SAVED_TERMS'));
+  assert.match(all, /Due to reserve your date: \$0\.00/);
+  assert.match(all, /November 21, 2026/);
+  assert.match(all, /6:00 PM - 9:00 PM/);
+  for(const [index,page] of pages.entries()) {
+    assert.match(page.text,/info@thelolabooth.com/);
+    assert.ok(page.items.some(item=>item.str===String(index+1)&&item.transform[4]>=548&&item.transform[5]<70),'missing page number');
+    const body=page.items.filter(item=>/SCOPE_ROW|Saved booking|END_SAVED/.test(item.str));
+    assert.ok(body.every(item=>item.transform[5]>=118),'proposal content entered footer');
+  }
+});
+
+test('client narrative is complete in PDF and HTML without disclosing internal notes', async () => {
+  const { proposalHtml } = await import('../server/src/services/document-service.js');
+  const record = {
+    ...proposal, proposal_type: 'CORPORATE', notes: 'PRIVATE_ADMIN_MARKER',
+    content: {introduction: 'FALLBACK_INTRO_MARKER', notes: 'PRIVATE_CONTENT_MARKER', terms: 'SAVED_TERMS_MARKER', closing: 'SIGNED_LOLA_MARKER'},
+    editable_sections: [
+      {title: 'Introduction', body: 'CUSTOM_INTRO_MARKER'},
+      {title: 'About the Event', body: 'CUSTOM_EVENT_MARKER'},
+      {title: 'Client Notes', body: `${'Client-facing planning detail. '.repeat(300)}END_CLIENT_NOTES_MARKER`, items: ['CLIENT_BULLET_MARKER']},
+      {title: 'Conclusion', body: 'CUSTOM_CONCLUSION_MARKER'}
+    ]
+  };
+  const pages = await readPdf(await generateProposalPdf(record));
+  const pdfText = pages.map(p=>p.text).join(' ');
+  const html = proposalHtml(record);
+  for(const text of [pdfText,html]){
+    for(const marker of ['CUSTOM_INTRO_MARKER','CUSTOM_EVENT_MARKER','END_CLIENT_NOTES_MARKER','CLIENT_BULLET_MARKER','CUSTOM_CONCLUSION_MARKER','SIGNED_LOLA_MARKER'])assert.ok(text.includes(marker),`missing ${marker}`);
+    assert.doesNotMatch(text,/PRIVATE_ADMIN_MARKER|PRIVATE_CONTENT_MARKER|FALLBACK_INTRO_MARKER/);
+  }
+  for(const page of pages){
+    assert.ok(page.items.filter(item=>/Client-facing|END_CLIENT_NOTES/.test(item.str)).every(item=>item.transform[5]>=118),'notes entered footer');
+  }
+});

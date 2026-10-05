@@ -52,7 +52,7 @@ export default function InvoiceDetail() {
     setPayment((current) => ({ ...current, amount: "", reference_number: "", notes: "" }));
   }
 
-  if (error && !invoice) return <main className="page"><AsyncState error={error} noun="invoice" onRetry={()=>{setError("");load();}}/></main>;
+  if (error && !invoice) return <main className="page record-detail-redesign"><AsyncState error={error} noun="invoice" onRetry={()=>{setError("");load();}}/></main>;
   if (!invoice) return <main className="page"><div className="empty-state">Loading invoice...</div></main>;
 
   const accessAvailable = documentAccessState(invoice) === "AVAILABLE";
@@ -95,7 +95,7 @@ export default function InvoiceDetail() {
       <section className="panel">
         <h2>Record Manual Payment</h2>
         <div className="inline-form">
-          <input type="number" min="0" max={invoice.amount_outstanding || invoice.balance_due} value={payment.amount} onChange={(event) => setPayment((current) => ({ ...current, amount: event.target.value }))} placeholder="Amount" />
+          <input type="number" min="0.01" step="0.01" max={invoice.amount_outstanding || invoice.balance_due} value={payment.amount} onChange={(event) => setPayment((current) => ({ ...current, amount: event.target.value }))} placeholder="Amount" />
           <select value={payment.payment_method} onChange={(event) => setPayment((current) => ({ ...current, payment_method: event.target.value }))}>{["CASH", "CHECK", "BANK_TRANSFER", "ZELLE", "EXTERNAL_CARD", "OTHER"].map((item) => <option key={item}>{item}</option>)}</select>
           <input type="date" value={payment.payment_date} onChange={(event) => setPayment((current) => ({ ...current, payment_date: event.target.value }))} />
           <input value={payment.reference_number} onChange={(event) => setPayment((current) => ({ ...current, reference_number: event.target.value }))} placeholder="Reference" />

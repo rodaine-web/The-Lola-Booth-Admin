@@ -25,6 +25,7 @@ export default function ProposalPreview({ token }) {
     const frame = frameRef.current;
     const frameDocument = frame?.contentDocument;
     if (!frame || !frameDocument) return;
+    frameDocument.querySelectorAll('a[href="#accept"]').forEach(link=>{link.onclick=event=>{event.preventDefault();document.querySelector('.public-proposal-acceptance')?.scrollIntoView({behavior:'smooth'});document.querySelector('.public-proposal-acceptance input')?.focus();};});
     frame.style.height = `${Math.max(frameDocument.documentElement?.scrollHeight || 0, frameDocument.body?.scrollHeight || 0, 760) + 8}px`;
   }
 

@@ -20,6 +20,10 @@ export default function PublicProposal() {
     try {const response=await fetch(`${API_URL}/public/proposals/${token}`);if(!response.ok)throw new Error("This proposal could not be loaded. Please retry or contact the LOLA team.");setPayload(await response.json());}catch(err){setError(err.message);}
   }
   useEffect(() => { load(); }, [token]);
+  useEffect(()=>{
+    if(payload && new URLSearchParams(window.location.search).get("download")==="pdf")
+      window.location.assign(`${API_URL}/public/proposals/${encodeURIComponent(token)}/pdf`);
+  },[payload,token]);
 
   async function decide(path, body) {
     if(decisionLock.current)return;
@@ -46,7 +50,7 @@ export default function PublicProposal() {
           <span>{proposal.event_name || proposal.event_type} · {proposal.event_date ? formatDateOnly(proposal.event_date) : "Date TBD"}</span>
         </div>
         <div className="public-proposal-toolbar-actions">
-          <a href={`${API_URL}/public/proposals/${token}/pdf`}><Download size={15} />Download PDF</a>
+          <a id="download" href={`${API_URL}/public/proposals/${token}/pdf`}><Download size={15} />Download PDF</a>
           <a href={`mailto:info@thelolabooth.com?subject=${encodeURIComponent(`Question about ${proposal.proposal_number}`)}`}>Ask a Question</a>
         </div>
       </div>

@@ -8,12 +8,18 @@ Codebase certification status: **GO WITH CONDITIONS**.
 
 The core LOLA Admin workflows are implemented and covered by the automated suite. The local certification evidence is:
 
-- `npm test`: PASS, 127/127 tests
+- `npm test`: PASS, 310 passed / 0 failed / 5 intentionally skipped (315 total)
 - `npm run build`: PASS
 - Phase 13C communication hardening: PASS
 - SMS live sending: NO-GO until a real provider adapter, credentials, and consent capture are configured
 
 Status key: PASS, FAIL, MANUAL VERIFICATION REQUIRED, NOT APPLICABLE, GO WITH CONDITIONS, NO-GO.
+
+### October 2 staging remediation checkpoint
+
+Current `main-staging` code certification is **PASS** for the automated UAT suite and production client build. The latest verified checkpoint includes fixes for proposal-to-invoice state enforcement, single-invoice proposal billing, deposit threshold handling, Stripe webhook retry/idempotency, payment confirmation recording, fully refunded invoice closure, manual-payment integrity, event duplicate review, merged-time validation, multi-service proposal/event selections, dashboard drill-down filters, worker-health evidence, and System Health payment severity.
+
+Frontend browser verification remains pending because the Vercel staging build is temporarily rate-limited. These browser/provider checks remain manual and must not be treated as failed code tests. Production is intentionally untouched during this staging remediation.
 
 Production release remains conditional because this local workspace cannot verify the deployed frontend, deployed API, deployed PostgreSQL, deployed worker, live DNS/SSL, live file/media access, or provider webhooks without access to the production environment.
 
@@ -61,6 +67,8 @@ Production release remains conditional because this local workspace cannot verif
 Local/code certification: **PASS**.
 
 Production worker certification: **MANUAL VERIFICATION REQUIRED**.
+
+Staging infrastructure evidence: **PASS**. The Railway staging worker is deployed as a dedicated one-replica service, starts with `npm run worker`, reports `automation-worker` heartbeats, and has restart policy `ALWAYS`. A user-visible scheduled-send smoke test is still required after the frontend is deployed.
 
 Confirmed in code and tests:
 
@@ -141,6 +149,14 @@ Status: **MANUAL VERIFICATION REQUIRED** for provider callback, **PASS** for cod
 Covered locally:
 
 - Stripe hosted checkout is server-side.
+- Deposit choice becomes unavailable after the deposit threshold is satisfied.
+- Paid/fully-refunded invoices cannot reopen checkout accidentally.
+- Fully refunded invoices reconcile to `REFUNDED` with zero payable balance.
+- Payment confirmation and owner-notification communication inserts use validated SQL bindings.
+- Draft invoice edits preserve deposit/payment-choice metadata.
+- Manual payments must be positive and inherit client/event relationships from the invoice.
+- One active invoice is reused per accepted proposal; a fully refunded invoice may be intentionally replaced.
+- Booking confirmation under `DEPOSIT_PAID` requires the configured invoice/booking deposit threshold.
 - Payment sessions are scoped to trusted invoice amounts.
 - Webhook raw body is preserved for signature verification.
 - Success, failure, refund, and duplicate webhook handling are tested.
@@ -379,6 +395,20 @@ Required before unconditional go-live:
 Overall decision: **GO WITH CONDITIONS**.
 
 No code-level blocker was found by the automated certification suite. The remaining blockers are deployment and provider verification tasks that must be performed against the actual production/sandbox environment.
+
+## Remaining Staging Manual UAT
+
+These items require the refreshed staging frontend and/or an external provider/device. They are the remaining staging verification work, not unresolved code defects.
+
+- Deploy the current `main-staging` frontend manually when Vercel permits or through the approved manual deployment path.
+- Complete one fresh Stripe TEST checkout and confirm webhook HTTP 2xx, payment record, invoice reconciliation, booking/event state, receipt, audit/timeline activity, and no duplicate record on webhook replay.
+- Confirm the customer payment page hides satisfied deposit choices, honors allowed payment choices, and shows the payment-complete thank-you state after Stripe return.
+- Confirm customer payment confirmation and owner payment notification arrive in the approved QA inboxes.
+- Accept a staging proposal, confirm one linked invoice is created, and verify reopening the proposal opens that same invoice.
+- Create an event that intentionally duplicates another and verify the warning offers the existing event plus an explicit create-anyway path.
+- Schedule one controlled communication and confirm the staging worker processes it once; create one controlled failure and verify retry visibility.
+- Review System Health in the refreshed Admin UI, including Stripe webhook evidence, worker heartbeat details, failed communications, and automation backlog.
+- Smoke-test proposal/invoice PDFs, public proposal/invoice links, creative approval, gallery delivery, and mobile/real-device QR/offline behavior as applicable.
 
 ## Production Checklist
 

@@ -1,3 +1,4 @@
+import {proposalInvoiceSnapshot} from "../../../shared/proposal-invoice-snapshot.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import { documentOrigin } from "../utils/public-document-url.js";
 import { normalizeInvoice } from "../../../shared/invoice-balance.js";
@@ -33,8 +34,15 @@ export async function getInvoice(idOrToken, { publicView = false } = {}) {
 }
 
 export async function createInvoice(req) {
-  if (req.body.proposal_id && req.body.depositOnly) {
-    const existing = await query("SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status <> 'VOID' AND COALESCE(pricing_snapshot->>'payment_mode','')='DEPOSIT_REQUEST' ORDER BY created_at DESC LIMIT 1", [req.body.proposal_id]);
+  if (req.body.proposal_id) {
+    const proposal = await getProposal(req.body.proposal_id);
+    if (proposal.status !== "ACCEPTED" && proposal.status !== "CONVERTED") {
+      throw new AppError("Only an accepted proposal can be converted to an invoice.", 409, "PROPOSAL_NOT_ACCEPTED");
+    }
+    const existing = await query(
+      "SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1",
+      [req.body.proposal_id]
+    );
     if (existing.rows[0]) return existing.rows[0];
   }
   const invoice = await transaction(async (client) => {
@@ -52,7 +60,7 @@ export async function createInvoice(req) {
         discount: 0
       }));
     }
-    const totals = calculateInvoiceTotals(items);
+    const totals = proposalInvoiceSnapshot(source) || calculateInvoiceTotals(items);
     const amountDueNow = req.body.depositOnly && source.pricing_snapshot
       ? money(Math.min(Number(source.pricing_snapshot.deposit_amount || 0), Number(totals.total || 0)))
       : money(totals.total);
@@ -72,13 +80,19 @@ export async function createInvoice(req) {
     const invoice = await client.query(
       `INSERT INTO invoices (invoice_number, proposal_id, client_id, event_id, status, subtotal, discount, tax, total, amount_paid, balance_due, amount_outstanding, due_date, notes, terms, secure_token, pricing_snapshot, document_template_key, corporate_billing)
        VALUES ($1,$2,$3,$4,'DRAFT',$5,$6,$7,$8,0,$8,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling)]
+      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || source.content?.scenario?.copy.terms_intro || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, ...(source.content?.scenario?{proposal_scenario:source.content.scenario,deposit_amount:source.pricing_snapshot.deposit_amount,balance:source.pricing_snapshot.balance}:{}), payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling)]
     );
     for (const item of totals.items) {
       await client.query(
         `INSERT INTO invoice_items (invoice_id, label, description, quantity, unit_price, taxable, tax_rate, discount, total, line_total)
          VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$8)`,
         [invoice.rows[0].id, item.description, item.quantity, item.unit_price, item.taxable, item.tax_rate, item.discount, item.line_total]
+      );
+    }
+    if (req.body.proposal_id) {
+      await client.query(
+        "UPDATE proposals SET status='CONVERTED', updated_at=now() WHERE id=$1 AND status='ACCEPTED'",
+        [req.body.proposal_id]
       );
     }
     return invoice.rows[0];
@@ -97,7 +111,21 @@ export async function updateDraftInvoice(req) {
     const currentItems = await client.query("SELECT * FROM invoice_items WHERE invoice_id=$1", [before.id]);
     const totals = calculateInvoiceTotals(req.body.items ?? currentItems.rows);
     const values = [req.body.client_id === undefined ? before.client_id : req.body.client_id, req.body.event_id === undefined ? before.event_id : req.body.event_id, req.body.due_date === undefined ? before.due_date : req.body.due_date, req.body.notes === undefined ? before.notes : req.body.notes, req.body.terms === undefined ? before.terms : req.body.terms];
-    const updated = await client.query(`UPDATE invoices SET client_id=$1,event_id=$2,due_date=$3,notes=$4,terms=$5,subtotal=$6,discount=$7,tax=$8,total=$9,balance_due=$9,amount_outstanding=$9,pricing_snapshot=$10,updated_at=now() WHERE id=$11 RETURNING *`, [...values,totals.subtotal,totals.discount,totals.tax,totals.total,JSON.stringify(totals),before.id]);
+    const previousPricing = before.pricing_snapshot && typeof before.pricing_snapshot === "object" ? before.pricing_snapshot : {};
+    const previousMinimum = previousPricing.amount_due_now;
+    const preservedMinimum = previousMinimum === null || previousMinimum === undefined || previousMinimum === ""
+      ? totals.total
+      : money(Math.min(Number(previousMinimum), Number(totals.total)));
+    const pricingSnapshot = {
+      ...previousPricing,
+      ...totals,
+      amount_due_now: preservedMinimum,
+      proposal_total: totals.total,
+      payment_mode: previousPricing.payment_mode || "BALANCE_DUE",
+      allow_pay_in_full: previousPricing.allow_pay_in_full !== false,
+      allow_custom_amount: previousPricing.allow_custom_amount !== false
+    };
+    const updated = await client.query(`UPDATE invoices SET client_id=$1,event_id=$2,due_date=$3,notes=$4,terms=$5,subtotal=$6,discount=$7,tax=$8,total=$9,balance_due=$9,amount_outstanding=$9,pricing_snapshot=$10,updated_at=now() WHERE id=$11 RETURNING *`, [...values,totals.subtotal,totals.discount,totals.tax,totals.total,JSON.stringify(pricingSnapshot),before.id]);
     await client.query("DELETE FROM invoice_items WHERE invoice_id=$1", [before.id]);
     for (const item of totals.items) await client.query(`INSERT INTO invoice_items(invoice_id,label,description,quantity,unit_price,taxable,tax_rate,discount,total,line_total) VALUES($1,$2,$2,$3,$4,$5,$6,$7,$8,$8)`,[before.id,item.description,item.quantity,item.unit_price,item.taxable ?? true,item.tax_rate || 0,item.discount,item.line_total]);
     return {before,after:updated.rows[0]};

@@ -1,3 +1,6 @@
+import {freezeDefaultProposalMedia} from './proposal-default-media.js';
+import { composeProposal } from "../../../shared/proposal-scenario.js";
+import { compactProposalPhotos } from "./proposal-pdf-images.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {validateProposalVisuals,hydrateProposalVisuals} from "./proposal-visual-service.js";
 import {proposalCatalogError} from '../../../shared/proposal-catalog.js';
@@ -35,6 +38,8 @@ export async function nextNumber(client, column, prefixColumn, fallbackPrefix) {
 
 export async function buildProposalSnapshot(input) {
   const visualSections = await validateProposalVisuals(input.visual_sections || []);
+  if(input.scenario_enabled && !input.selected_experiences?.length)throw new AppError("Select at least one experience.",422,"EXPERIENCE_REQUIRED");
+  if(input.scenario_enabled && (['discount','travel','other_fees','tax_rate','deposit_value'].some(k=>input[k]!=null && (!Number.isFinite(Number(input[k]))||Number(input[k])<0)) || (input.deposit_type!=='FIXED' && Number(input.deposit_value)>100)))throw new AppError("Pricing adjustments must be positive; percentage deposits cannot exceed 100%.",422,"PRICING_INVALID");
   const [settings, client, event, pkg, exp, documentTemplate] = await Promise.all([
     query("SELECT * FROM business_settings LIMIT 1"),
     input.client_id ? query("SELECT * FROM clients WHERE id=$1", [input.client_id]) : { rows: [] },
@@ -49,18 +54,37 @@ export async function buildProposalSnapshot(input) {
   const pack = pkg.rows[0] || {};
   const experience = exp.rows[0] || {};
   const selectedInput = Array.isArray(input.selected_experiences) ? input.selected_experiences : [];
+  if(input.scenario_enabled && (new Set(selectedInput.map(item=>item.experience_id)).size!==selectedInput.length || selectedInput.length>4))throw new AppError("Select each experience once, up to four experiences.",422,"CATALOG_SELECTION_INVALID");
+  if(input.scenario_enabled && (input.custom_line_items||[]).some(line=>!String(line.description||'').trim() || !(Number(line.quantity||1)>0) || Number(line.unit_price||0)<0))throw new AppError("Custom line items need a description, positive quantity and a non-negative price.",422,"PRICING_INVALID");
   const selectedIds = selectedInput.map((item) => item?.experience_id).filter(Boolean);
-  const selectedExperienceRows = selectedIds.length
-    ? (await query("SELECT * FROM experiences WHERE id = ANY($1::uuid[])", [selectedIds])).rows
-    : [];
+  const selectedPackageIds = selectedInput.flatMap((item) => Array.isArray(item?.packages) ? item.packages.map((pkg) => pkg?.package_id).filter(Boolean) : []);
+  const [selectedExperienceRows, selectedPackageRows] = await Promise.all([
+    selectedIds.length ? query("SELECT * FROM experiences WHERE id = ANY($1::uuid[])", [selectedIds]).then(result => result.rows) : [],
+    selectedPackageIds.length ? query("SELECT p.*, COALESCE(json_agg(pi.label ORDER BY pi.display_order) FILTER (WHERE pi.id IS NOT NULL),'[]') AS items FROM packages p LEFT JOIN package_items pi ON pi.package_id=p.id WHERE p.id = ANY($1::uuid[]) GROUP BY p.id", [selectedPackageIds]).then(result => result.rows) : []
+  ]);
   const selectedExperiences = selectedInput.map((item, index) => {
     const catalog = selectedExperienceRows.find((row) => row.id === item.experience_id) || {};
+    if(input.scenario_enabled && (!catalog.id || catalog.active===false))throw new AppError("Choose an active catalog experience.",422,"CATALOG_SELECTION_INVALID");
+    const packages = (Array.isArray(item.packages) ? item.packages : []).map((selectedPackage) => {
+      const packageCatalog = selectedPackageRows.find((row) => row.id === selectedPackage.package_id) || {};
+      if (!packageCatalog.id || packageCatalog.active === false || (packageCatalog.experience_id && packageCatalog.experience_id !== item.experience_id)) throw new AppError("Choose an active package belonging to the selected experience.",422,"CATALOG_SELECTION_INVALID");
+      if (packageCatalog.pricing_mode === 'CUSTOM' && !(Number(selectedPackage.price)>0)) throw new AppError("Enter the agreed custom package price.",422,"CATALOG_SELECTION_INVALID");
+      return {
+        duration: packageCatalog.duration, included_hours: packageCatalog.included_hours,
+        features: packageCatalog.items?.length ? packageCatalog.items : (packageCatalog.website_features || []),
+        package_id: selectedPackage.package_id || packageCatalog.id || null,
+        name: selectedPackage.name || packageCatalog.name || "Package",
+        price: money(selectedPackage.price ?? packageCatalog.starting_price ?? 0),
+        description: selectedPackage.description || packageCatalog.proposal_description || packageCatalog.description || ""
+      };
+    });
     return {
       experience_id: item.experience_id || catalog.id || null,
       key: item.key || proposalExperienceKey(item.name || catalog.name || `experience-${index + 1}`),
       name: item.name || catalog.name || `Experience ${index + 1}`,
-      package_name: item.package_name || "",
-      price: money(item.price ?? item.unit_price ?? catalog.base_price ?? 0),
+      packages,
+      package_name: packages.length ? packages.map((pkg) => pkg.name).join(" + ") : (item.package_name || ""),
+      price: packages.length ? packages.reduce((sum, pkg) => sum + pkg.price, 0) : money(item.price ?? item.unit_price ?? catalog.base_price ?? 0),
       headline: item.headline || "",
       description: item.description || catalog.proposal_description || catalog.description || "",
       features: Array.isArray(item.features) ? item.features : [],
@@ -69,7 +93,7 @@ export async function buildProposalSnapshot(input) {
   });
   const addonIds = (input.addons || []).map((item) => item.addon_id).filter(Boolean);
   const addons = addonIds.length ? await query("SELECT * FROM addons WHERE id = ANY($1::uuid[])", [addonIds]) : { rows: [] };
-  const catalogError = proposalCatalogError(input, pack, addons.rows);
+  const catalogError = proposalCatalogError(selectedExperiences.length ? {...input, package_amount:selectedExperiences.flatMap(item=>item.packages).find(item=>item.package_id===input.package_id)?.price} : input, pack, addons.rows);
   if (catalogError) throw new AppError(catalogError,422,"CATALOG_SELECTION_INVALID");
   const addonRows = input.addons || [];
   const packageAmount = money(input.package_amount ?? pack.starting_price);
@@ -93,15 +117,29 @@ export async function buildProposalSnapshot(input) {
       taxable: item.taxable !== false
     };
   });
-  const selectedExperienceLines = selectedExperiences.map((item) => ({
-    type: "EXPERIENCE_SELECTED",
-    experience_id: item.experience_id,
-    description: [item.name, item.package_name].filter(Boolean).join(" - "),
-    detail: item.description || "",
-    quantity: 1,
-    unit_price: item.price,
-    line_total: item.price
-  }));
+  const selectedExperienceLines = selectedExperiences.flatMap((item) => {
+    if (item.packages?.length) {
+      return item.packages.map((pkg) => ({
+        type: "EXPERIENCE_SELECTED",
+        experience_id: item.experience_id,
+        package_id: pkg.package_id,
+        description: [item.name, pkg.name].filter(Boolean).join(" - "),
+        detail: pkg.description || item.description || "",
+        quantity: 1,
+        unit_price: pkg.price,
+        line_total: pkg.price
+      }));
+    }
+    return [{
+      type: "EXPERIENCE_SELECTED",
+      experience_id: item.experience_id,
+      description: [item.name, item.package_name].filter(Boolean).join(" - "),
+      detail: item.description || "",
+      quantity: 1,
+      unit_price: item.price,
+      line_total: item.price
+    }];
+  });
   const lines = [
     ...(!selectedExperiences.length && (input.package_id || packageAmount > 0 || pack.name) ? [{ type: "PACKAGE", package_id: input.package_id, description: input.package_name || pack.name || "Package", detail: input.package_description || pack.proposal_description || "", quantity: 1, unit_price: packageAmount, line_total: packageAmount }] : []),
     ...(!selectedExperiences.length && experienceAmount ? [{ type: "EXPERIENCE", experience_id: input.experience_id, description: `${experience.name || "Experience"} surcharge`, quantity: 1, unit_price: experienceAmount, line_total: experienceAmount }] : []),
@@ -132,7 +170,7 @@ export async function buildProposalSnapshot(input) {
     settings: s
   });
 
-  return {
+  const snapshot = {
     visualSections,
     client: customer,
     event: ev,
@@ -172,17 +210,155 @@ export async function buildProposalSnapshot(input) {
     selectedExperiences,
     proposalVisuals: input.proposal_visuals || {}
   };
+  if (input.scenario_enabled) {
+    const template = (await query("SELECT config,version FROM proposal_document_templates WHERE key='scenario_composer' AND active=true")).rows[0];
+    if (!template) throw new AppError("Apply the proposal scenario migration before creating a composed proposal.",503,"PROPOSAL_TEMPLATE_UNAVAILABLE");
+    snapshot.content.scenario = composeProposal({input:{...input,proposal_title:snapshot.proposalTitle,proposal_date:snapshot.proposalDate,valid_through:snapshot.validThrough},client:customer,event:ev,experiences:selectedExperiences,pricing:snapshot.pricing,lines,config:template.config,templateVersion:template.version,settings:s});
+    snapshot.content.scenario_overrides = input.scenario_overrides || {};
+    const scenario=snapshot.content.scenario;
+    for(const item of scenario.experiences) { const slot='experience:'+item.experience_id; if(!scenario.media[slot])scenario.media[slot]=template.config?.experiences?.[item.key]?.media_ids||[]; }
+    const mediaSections=['cover','event','why',...selectedExperiences.map(item=>'experience:'+item.experience_id)].map(slot=>({id:crypto.randomUUID(),title:slot,kind:'REFERENCE',body:'',media_ids:(scenario.media[slot]|| (slot.startsWith('experience:') ? [] : [...scenario.media.event,...scenario.media.global])).slice(0,4)})).filter(section=>section.media_ids.length);
+    snapshot.visualSections = await validateProposalVisuals([...visualSections.filter(section=>!(section.kind==='REFERENCE' && /^(cover|event|why|experience:)/.test(section.title))),...mediaSections]);
+    // Freeze approved media together with copy, facts and financials. Later CMS edits cannot change sent documents.
+    const hydrated=await compactProposalPhotos(await hydrateProposalVisuals({selected_experiences:selectedExperiences,visual_sections:snapshot.visualSections}));
+    scenario.experiences=scenario.experiences.map(item=>{
+      const mappedSection=hydrated.visual_sections.find(row=>row.kind==='EXPERIENCE' && row.title===`${item.name} · Experience photos`);
+      // Composed documents never trust arbitrary URLs or data supplied as a visual string.
+      return {...item,visuals:mappedSection?.images?.length?{hero:mappedSection.images[0].dataUri}: {}};
+    });
+    scenario.mediaImages=Object.fromEntries(mediaSections.map(section=>[section.title,hydrated.visual_sections.find(row=>row.id===section.id)?.images||[]]));
+    snapshot.content.scenario=freezeDefaultProposalMedia(scenario);
+  }
+  return snapshot;
+}
+
+
+async function resolveProposalRelationships(input = {}) {
+  if (!input.lead_id) return input;
+  const lead = (await query(
+    `SELECT id, converted_client_id, converted_event_id, preferred_package_id, preferred_experience_id
+     FROM leads WHERE id=$1 AND deleted_at IS NULL`,
+    [input.lead_id]
+  )).rows[0];
+  if (!lead) throw notFound("Lead");
+  return {
+    ...input,
+    client_id: input.client_id || lead.converted_client_id || null,
+    event_id: input.event_id || lead.converted_event_id || null,
+    package_id: input.package_id || lead.preferred_package_id || null,
+    experience_id: input.experience_id || lead.preferred_experience_id || null
+  };
+}
+
+async function ensureProposalLead(client, input = {}, actorUserId = null) {
+  if (input.lead_id) return input;
+  if (!input.client_id || !input.event_id) {
+    throw new AppError(
+      "Choose an existing lead, or choose/create both a client and an event before creating the proposal.",
+      422,
+      "PROPOSAL_RELATIONSHIPS_REQUIRED"
+    );
+  }
+
+  const [clientResult, eventResult] = await Promise.all([
+    client.query("SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL", [input.client_id]),
+    client.query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [input.event_id])
+  ]);
+  const customer = clientResult.rows[0];
+  const event = eventResult.rows[0];
+  if (!customer) throw notFound("Client");
+  if (!event) throw notFound("Event");
+
+  if (event.client_id && event.client_id !== customer.id) {
+    throw new AppError(
+      "The selected event belongs to a different client. Choose the matching client or event before creating the proposal.",
+      422,
+      "PROPOSAL_CLIENT_EVENT_MISMATCH"
+    );
+  }
+
+  const existing = (await client.query(
+    `SELECT id FROM leads
+     WHERE deleted_at IS NULL
+       AND converted_event_id=$1
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [event.id]
+  )).rows[0];
+  if (existing) return { ...input, lead_id: existing.id };
+
+  if (!customer.email) {
+    throw new AppError(
+      "The selected client needs an email address before a proposal-stage lead can be created.",
+      422,
+      "CLIENT_EMAIL_REQUIRED"
+    );
+  }
+  const name = String(customer.name || "").trim();
+  const pieces = name.split(/\s+/).filter(Boolean);
+  const firstName = customer.first_name || pieces[0] || "Client";
+  const lastName = customer.last_name || pieces.slice(1).join(" ") || "Contact";
+  const inserted = (await client.query(
+    `INSERT INTO leads (
+       first_name,last_name,email,phone,event_date,event_start_time,event_end_time,event_type,
+       guest_count,venue_name,venue_address,city,state,zip,preferred_experience_id,preferred_package_id,
+       referral_source,message,lead_source,assigned_user_id,status,converted_client_id,converted_event_id
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+       'Admin proposal', $17, 'MANUAL', $18, 'PROPOSAL_DRAFT', $19, $20
+     ) RETURNING id`,
+    [
+      firstName,
+      lastName,
+      customer.email,
+      customer.phone,
+      event.event_date,
+      event.start_time || null,
+      event.end_time || null,
+      event.event_type,
+      event.guest_count || null,
+      event.venue_name || null,
+      event.venue_address || null,
+      event.city || null,
+      event.state || null,
+      event.zip || null,
+      input.experience_id || event.experience_id || null,
+      input.package_id || event.package_id || null,
+      input.notes || event.client_notes || event.internal_notes || null,
+      actorUserId,
+      customer.id,
+      event.id
+    ]
+  )).rows[0];
+
+  return { ...input, lead_id: inserted.id };
+}
+
+async function syncLeadProposalStage(client, leadId, stage) {
+  if (!leadId) return;
+  const allowed = stage === "PROPOSAL_SENT"
+    ? ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_DRAFT", "FOLLOW_UP"]
+    : ["NEW", "CONTACTED", "QUALIFIED", "FOLLOW_UP"];
+  await client.query(
+    `UPDATE leads
+     SET status=$2, updated_at=now()
+     WHERE id=$1 AND deleted_at IS NULL AND status = ANY($3::text[])`,
+    [leadId, stage, allowed]
+  );
 }
 
 export async function createProposal(req) {
-  const snapshot = await buildProposalSnapshot(req.body);
+  const resolvedBody = await resolveProposalRelationships(req.body);
   const result = await transaction(async (client) => {
-    const proposalNumber = req.body.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
+    const linkedBody = await ensureProposalLead(client, resolvedBody, req.user.id);
+    const proposalNumber = linkedBody.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
+    const snapshot=await buildProposalSnapshot({...resolvedBody,proposal_number:proposalNumber});
     const inserted = await client.query(
       `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, proposal_type, selected_experiences, proposal_visuals)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'GENERATED',$18,$19,$20,$21,$22) RETURNING *`,
-      [proposalNumber, req.body.lead_id || null, req.body.client_id || snapshot.client.id || null, req.body.event_id || null, req.user.id, req.body.package_id || null, req.body.experience_id || null, crypto.randomBytes(24).toString("hex"), req.body.status || "DRAFT", req.body.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals)]
+      [proposalNumber, linkedBody.lead_id || null, linkedBody.client_id || snapshot.client.id || null, linkedBody.event_id || null, req.user.id, linkedBody.package_id || null, linkedBody.experience_id || null, crypto.randomBytes(24).toString("hex"), linkedBody.status || "DRAFT", linkedBody.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals)]
     );
+    await syncLeadProposalStage(client, linkedBody.lead_id, "PROPOSAL_DRAFT");
     await client.query('UPDATE proposals SET visual_sections=$2 WHERE id=$1',[inserted.rows[0].id,JSON.stringify(snapshot.visualSections)]);
     inserted.rows[0].visual_sections=snapshot.visualSections;
     await createProposalVersion(client, inserted.rows[0], req.user.id);
@@ -239,13 +415,21 @@ export async function createProposalVersion(client, proposal, userId) {
 export async function getProposal(idOrToken, { publicView = false } = {}) {
   const where = publicView ? "p.secure_token=$1" : "p.id=$1";
   const result = await query(
-    `SELECT p.*, c.name AS client_name, c.email AS client_email, e.event_name, e.event_type, e.event_date, e.start_time, e.end_time, e.venue_name,
-      pkg.name AS package_name, x.name AS experience_name
+    `SELECT p.*, c.name AS client_name, c.email AS client_email, e.event_name, e.event_type, e.event_date, e.start_time, e.end_time, e.venue_name, e.guest_count,
+      pkg.name AS package_name, x.name AS experience_name,
+      linked_invoice.id AS linked_invoice_id, linked_invoice.invoice_number AS linked_invoice_number, linked_invoice.status AS linked_invoice_status
      FROM proposals p
      LEFT JOIN clients c ON c.id=p.client_id
      LEFT JOIN events e ON e.id=p.event_id
      LEFT JOIN packages pkg ON pkg.id=p.package_id
      LEFT JOIN experiences x ON x.id=p.experience_id
+     LEFT JOIN LATERAL (
+       SELECT i.id, i.invoice_number, i.status
+       FROM invoices i
+       WHERE i.proposal_id=p.id AND i.deleted_at IS NULL AND i.status <> 'VOID'
+       ORDER BY i.created_at DESC
+       LIMIT 1
+     ) linked_invoice ON true
      WHERE ${where} AND p.deleted_at IS NULL`,
     [idOrToken]
   );
@@ -283,21 +467,12 @@ export async function proposalPdfBuffer(proposal, type = "pdf") {
   if (type !== "docx" && proposal.proposal_source === "UPLOADED" && proposal.external_document_storage_key) {
     return getStorageProvider().get(proposal.external_document_storage_key);
   }
-  const visualProposal = await hydrateProposalVisuals(proposal);
+  const visualProposal = proposal.content?.scenario ? {...proposal,public_url:publicProposalUrl(proposal)} : await hydrateProposalVisuals(proposal);
   return type === "docx" ? generateProposalDocx(visualProposal) : generateProposalPdf(visualProposal);
 }
 
 export async function sendProposal(req, proposal) {
   if (!publicProposalUrl(proposal)) throw new AppError("Public access not available. Generate secure access before sending.", 409, "DOCUMENT_ACCESS_UNAVAILABLE");
-  const pdfBuffer = await proposalPdfBuffer(proposal, "pdf");
-  const doc = {
-    filename: userDocumentFilename("Proposal", proposal.proposal_number, "pdf"),
-    mimeType: "application/pdf",
-    sizeBytes: pdfBuffer.length,
-    buffer: pdfBuffer,
-    storageProvider: null,
-    storageKey: null
-  };
   const proposalUrl = publicProposalUrl(proposal);
   const mergeData = proposalMergeData(proposal, proposalUrl);
   let rendered = null;
@@ -309,15 +484,16 @@ export async function sendProposal(req, proposal) {
   if (!rendered) await recordTemplateFallback({ templateKey: "PROPOSAL_DELIVERY", reason: "Active template was not found or could not render.", relatedEntityType: "proposal", relatedEntityId: proposal.id });
   const template = rendered?.template || null;
   const subject = req.body.subject || rendered?.subject || `Your LOLA Booths Proposal - ${proposal.event_name || proposal.event_date || proposal.proposal_number}`;
-  const body = req.body.body || rendered?.body || `THE LOLA BOOTH\nGood people. Better photos.\n\nHi ${firstName(proposal.client_name)},\n\nIt was great hearing about your event. We've prepared your LOLA Booths proposal based on the details you shared with us.\n\nReview and accept your proposal:\n${proposalUrl}\n\nWe've also attached a branded PDF copy for your records.\n\nQuestions? Just reply to this email.\n\nYour event. Their favorite memory.\n\nLOLA Booths`;
+  const body = req.body.body || rendered?.body || `THE LOLA BOOTH\nGood people. Better photos.\n\nHi ${firstName(proposal.content?.scenario?.client?.name || proposal.client_name)},\n\nIt was great hearing about your event. We've prepared your LOLA Booths proposal based on the details you shared with us.\n\nReview and accept your proposal:\n${proposalUrl}\n\nYou can download a branded PDF copy from the proposal page.\n\nQuestions? Just reply to this email.\n\nYour event. Their favorite memory.\n\nLOLA Booths`;
   const html = brandedEmailHtml(body, {
-    firstName: firstName(proposal.client_name),
+    firstName: firstName(proposal.content?.scenario?.client?.name || proposal.client_name),
     kicker: "Your proposal is ready",
     ctaLabel: "View Your Proposal",
     ctaUrl: proposalUrl,
-    event: proposalEmailEvent(proposal)
+    event: proposalEmailEvent(proposal),
+    secondaryCta: {label:"Download PDF",url:`${proposalUrl}?download=pdf`,copyLabel:"Or download your proposal PDF:"}
   });
-  const email = await sendEmail({ to: req.body.recipient || proposal.client_email, subject, body, html, attachments: [doc] });
+  const email = await sendEmail({ to: req.body.recipient || proposal.client_email, subject, body, html, attachments: [] });
   await transaction(async (client) => {
     await client.query(
       `UPDATE proposals
@@ -337,6 +513,7 @@ export async function sendProposal(req, proposal) {
        WHERE id=$1`,
       [proposal.id]
     );
+    await syncLeadProposalStage(client, proposal.lead_id, "PROPOSAL_SENT");
     await client.query(
       `INSERT INTO proposal_deliveries (proposal_id, recipient_email, delivery_method, status, sent_at)
        VALUES ($1,$2,'EMAIL',$3,now())`,
@@ -373,11 +550,12 @@ export async function sendProposal(req, proposal) {
       [communication.rows[0].id, email.provider, email.providerMessageId, req.body.recipient || proposal.client_email, subject, "SENT_TO_PROVIDER", body.slice(0, 500)]
     );
   });
-  return { email, document: doc };
+  // Delivery uses HTML and secure download links; no document attachment is generated here.
+  return { email };
 }
 
 export async function proposalPreviewHtml(proposal) {
-  return proposalHtml(await hydrateProposalVisuals(proposal));
+  return proposalHtml(proposal.content?.scenario ? proposal : await hydrateProposalVisuals(proposal));
 }
 
 function round(value) {
@@ -458,16 +636,16 @@ function buildEditableProposalSections(sectionNames = [], context = {}) {
 }
 
 function proposalMergeData(proposal, proposalUrl) {
-  const first = firstName(proposal.client_name);
+  const first = firstName(proposal.content?.scenario?.client?.name || proposal.client_name);
   return {
-    client_name: proposal.client_name,
+    client_name: proposal.content?.scenario?.client?.name || proposal.client_name,
     proposal_number: proposal.proposal_number,
     proposal_url: proposalUrl,
     event_date: proposal.event_date,
     venue: proposal.venue_name,
     client: {
       first_name: first,
-      name: proposal.client_name,
+      name: proposal.content?.scenario?.client?.name || proposal.client_name,
       email: proposal.client_email
     },
     event: {

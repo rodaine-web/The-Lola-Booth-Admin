@@ -1,3 +1,5 @@
+import ExperienceStrip from "../components/ExperienceStrip.jsx";
+import { TabNavigation, MetricCard as Metric, DetailSection as Panel } from "../components/WorkspaceUI.jsx";
 import { GALLERY_ENABLED } from "../utils/features.js";
 import AsyncState from "../components/AsyncState.jsx";
 import { formatDateOnly, formatMoney, formatTimestamp } from "../utils/display.js";
@@ -6,8 +8,18 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
 
-const tabs = ["Overview", "Operations", "Client", "Staff", "Equipment", "Tasks", "Files", "Finance", "Communications", "Activity", "Proposals", "Invoices"];
+const tabs = ["Overview", "Timeline", "Team & Equipment", "Checklist", "Creative", ...(GALLERY_ENABLED ? ["Gallery"] : []), "Finance", "Communications", "Activity"];
+const sectionGroups = {
+  "Team & Equipment": ["Staff", "Equipment"],
+  "Finance": ["Finance", "Proposals", "Invoices"],
+  "Overview": ["Overview", "Client", "Tasks", "Files"],
+  "Gallery": ["Gallery"],
+};
+function primarySection(tab) {
+  return Object.entries(sectionGroups).find(([, items]) => items.includes(tab))?.[0] || tab;
+}
 const eventStatuses = ["INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "READY", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const operationalStatuses = ["PREPARING", "READY", "EN_ROUTE", "ON_SITE", "SETTING_UP", "LIVE", "BREAKDOWN", "COMPLETED", "ISSUE_REPORTED"];
 
@@ -68,41 +80,68 @@ export default function EventDetail() {
     await api.downloadPost("/equipment/qr-labels.pdf", { equipment_ids: event.operations?.equipment?.map((item) => item.equipment_record_id).filter(Boolean) || [] }, `lola-equipment-labels-${event.event_number || id.slice(0, 8)}.pdf`);
   }
 
-  if (error && !event) return <main className="page"><AsyncState error={error} noun="event" onRetry={()=>{setError("");load();}}/></main>;
+  if (error && !event) return <main className="page event-command-center"><AsyncState error={error} noun="event" onRetry={()=>{setError("");load();}}/></main>;
   if (!event) return <main className="page"><div className="empty-state">Loading event...</div></main>;
 
   return (
-    <main className="page">
+    <main className="page record-workspace eventdetail-workspace">
       <div className="detail-back"><Link to="/events/events"><ArrowLeft size={16} />Back to events</Link></div>
-      <div className="page-heading detail-heading">
+      <div className="page-heading detail-heading event-command-heading">
         <div>
           <p className="eyebrow">{event.event_number || "Event"}</p>
-          <h1>{event.event_name}</h1>
+          <div className="event-title-line"><h1>{event.event_name}</h1><StatusBadge status={event.status}/></div>
           <p className="lede">{event.client_name} · {event.event_type} · {formatDate(event.event_date)} · {event.venue_name || "Venue TBD"}</p>
         </div>
         <div className="detail-actions">
-          <select value={event.status} onChange={(e) => action(() => api.patch(`/events/${id}`, { status: e.target.value }), "Event status updated.")}>
+          <select aria-label="Event status" value={event.status} onChange={(e) => action(() => api.patch("/events/"+id, { status: e.target.value }), "Event status updated.")}>
             {eventStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
           </select>
-          <Link className="primary-action" to={`/sales/proposals/new?eventId=${event.id}`}>Create Proposal</Link>
-          <Link className="primary-action" to={`/finance/invoices/new?eventId=${event.id}&clientId=${event.client_id}`}>Create Invoice</Link>
+          <Link className="primary-action" to={"/sales/proposals/new?eventId="+event.id}>Create Proposal</Link>
+          <Link className="lola-secondary-button" to={"/finance/invoices/new?eventId="+event.id+"&clientId="+event.client_id}>Create Invoice</Link>
         </div>
       </div>
 
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
 
-      <section className="detail-summary">
-        <Metric label="Payment" value={event.payment_status || "Not booked"} />
-        <Metric label="Outstanding" value={formatMoney(event.balance_due || 0)} />
-        <Metric label="Experience" value={event.experience_name || "Not selected"} />
-        <Metric label="Package" value={event.package_name || "Not selected"} />
-        <Metric label="Operational" value={event.operational_status?.replaceAll("_", " ") || "PREPARING"} />
-        <Metric label="Readiness" value={`${event.operations?.readiness?.score ?? 0}%`} />
+      <TabNavigation items={tabs} value={primarySection(tab)} onChange={value => setTab(sectionGroups[value]?.[0] || value)} label="Event command center" className="event-command-tabs" />
+      {sectionGroups[primarySection(tab)]?.length > 1 && <TabNavigation items={sectionGroups[primarySection(tab)]} value={tab} onChange={setTab} label={`${primarySection(tab)} sections`} className="workspace-subtabs" />}
+
+      {tab === "Overview" && <>
+      <section className="event-command-grid">
+        <article className="event-readiness-card">
+          <div className="readiness-ring" style={{"--score": String(event.operations?.readiness?.score ?? 0)}}><strong>{event.operations?.readiness?.score ?? 0}%</strong><span>Ready</span></div>
+          <div><h2>Event Readiness</h2><p>{event.operations?.readiness?.incomplete || 0} items need attention · {event.operations?.readiness?.critical || 0} critical</p>
+            <div className="readiness-mini-list">{(event.operations?.readiness?.items||[]).slice(0,5).map(item=><span key={item.label} className={item.status?.toLowerCase()}>{item.status==="COMPLETE"||item.status==="COMPLETED"||item.status==="READY"?"✓":"○"} {item.label}</span>)}</div>
+          </div>
+        </article>
+        <article className="event-facts-card">
+          <h2>Event Details</h2>
+          <Field label="Date" value={formatDate(event.event_date)} />
+          <Field label="Time" value={formatTime(event.start_time)+" – "+formatTime(event.end_time)} />
+          <Field label="Guests" value={event.guest_count} />
+          <Field label="Venue" value={event.venue_name || "TBD"} />
+          <Field label="Payment" value={event.payment_status || "Not booked"} />
+        </article>
+        <article className="event-quick-card">
+          <h2>Quick Actions</h2>
+          <Link to={"/sales/proposals/new?eventId="+event.id}>Create / View Proposal</Link>
+          <Link to={"/finance/invoices/new?eventId="+event.id+"&clientId="+event.client_id}>Create / View Invoice</Link>
+          <button onClick={downloadRunSheet}>Download Run Sheet</button>
+          <button onClick={() => setTab("Staff")}>Manage Team</button>
+          <button onClick={() => setTab("Checklist")}>Operations Checklist</button>
+        </article>
       </section>
 
-      <div className="tabs">{tabs.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
+      <section className="detail-summary event-finance-summary">
+        <Metric label="Outstanding" value={formatMoney(event.balance_due || 0)} />
+        <Metric label="Experiences" value={event.experiences?.length ? event.experiences.map((item) => item.name).join(", ") : event.experience_name || "Not selected"} />
+        <Metric label="Packages" value={event.packages?.length ? event.packages.map((item) => item.name).join(", ") : event.package_name || "Not selected"} />
+        <Metric label="Operational" value={event.operational_status?.replaceAll("_", " ") || "PREPARING"} />
+      </section>
 
-      {tab === "Overview" && (
+      </>}
+
+      {tab === "Overview" && (<><ExperienceStrip items={event.experiences || (event.experience_name?[{name:event.experience_name}]:[])}/><details className="event-advanced-details"><summary>Venue, creative & event notes</summary>
         <section className="detail-grid">
           <Panel title="Event Information">
             <Field label="Date" value={formatDate(event.event_date)} />
@@ -127,12 +166,12 @@ export default function EventDetail() {
             <p className="note-text"><strong>Internal:</strong> {event.internal_notes || "No internal notes."}</p>
             <p className="note-text"><strong>Client:</strong> {event.client_notes || "No client notes."}</p>
           </Panel>
-        </section>
+        </section></details></>
       )}
 
-      {tab === "Operations" && (
+      {["Timeline", "Checklist", "Creative", "Gallery", "Overview"].includes(tab) && (
         <section className="detail-grid">
-          <Panel title="Readiness">
+          {tab === "Checklist" && <Panel title="Readiness">
             <div className="readiness-score">
               <strong>{event.operations?.readiness?.status}</strong>
               <span>{event.operations?.readiness?.incomplete || 0} items need attention · {event.operations?.readiness?.critical || 0} critical</span>
@@ -141,9 +180,9 @@ export default function EventDetail() {
               {event.operations?.readiness?.items?.map((item) => <span key={`${item.category}-${item.label}`} className={`readiness-item ${item.status.toLowerCase()} ${item.severity.toLowerCase()}`}>{item.category}: {item.label} · {item.status.replaceAll("_", " ")}</span>)}
             </div>
             <button className="primary-action" onClick={() => action(() => api.post(`/events/${id}/checklists/instantiate`, {}), "Checklist template applied.")}><ClipboardList size={15} />Apply Checklist Template</button>
-          </Panel>
-          <Panel title="Reschedule event"><div className="form-grid">{['event_date','start_time','end_time'].map(key=><label key={key}>{key.replaceAll('_',' ')}<input type={key==='event_date'?'date':'time'} value={reschedule[key]} onChange={e=>{setReschedule({...reschedule,[key]:e.target.value});setReschedulePreview(null);}}/></label>)}</div><button disabled={!reschedule.event_date} onClick={()=>action(async()=>setReschedulePreview(await api.post(`/events/${id}/operations/reschedule`,reschedule)),"Reschedule checked.")}>Check reschedule</button>{reschedulePreview&&<><p>Staff conflicts: {reschedulePreview.warnings.staff_conflicts} · Equipment conflicts: {reschedulePreview.warnings.equipment_conflicts}</p><button disabled={Boolean(reschedulePreview.warnings.staff_conflicts+reschedulePreview.warnings.equipment_conflicts)} onClick={()=>action(()=>api.post(`/events/${id}/operations/reschedule`,{...reschedule,confirm:true}),"Event rescheduled.")}>Confirm reschedule</button></>}</Panel>
-          <Panel title="Operational Status">
+          </Panel>}
+          {tab === "Timeline" && <Panel title="Reschedule event"><div className="form-grid">{['event_date','start_time','end_time'].map(key=><label key={key}>{key.replaceAll('_',' ')}<input type={key==='event_date'?'date':'time'} value={reschedule[key]} onChange={e=>{setReschedule({...reschedule,[key]:e.target.value});setReschedulePreview(null);}}/></label>)}</div><button disabled={!reschedule.event_date} onClick={()=>action(async()=>setReschedulePreview(await api.post(`/events/${id}/operations/reschedule`,reschedule)),"Reschedule checked.")}>Check reschedule</button>{reschedulePreview&&<><p>Staff conflicts: {reschedulePreview.warnings.staff_conflicts} · Equipment conflicts: {reschedulePreview.warnings.equipment_conflicts}</p><button disabled={Boolean(reschedulePreview.warnings.staff_conflicts+reschedulePreview.warnings.equipment_conflicts)} onClick={()=>action(()=>api.post(`/events/${id}/operations/reschedule`,{...reschedule,confirm:true}),"Event rescheduled.")}>Confirm reschedule</button></>}</Panel>}
+          {tab === "Timeline" && <Panel title="Operational Status">
             <select value={event.operational_status || "PREPARING"} onChange={(e) => action(() => api.post(`/events/${id}/operations/status`, { status: e.target.value }), "Operational status updated.")}>
               {operationalStatuses.map((status) => <option key={status}>{status}</option>)}
             </select>
@@ -152,8 +191,8 @@ export default function EventDetail() {
               <button className="primary-action" onClick={downloadRunSheet}><Download size={15} />Download Run Sheet</button>
               <button onClick={() => action(() => api.post(`/events/${id}/staff-briefs/send`, {}), "Staff brief sent.")}>Send Staff Brief</button>
             </div>
-          </Panel>
-          <Panel title="Contacts">
+          </Panel>}
+          {tab === "Overview" && <Panel title="Contacts">
             <div className="inline-form">
               <select value={contact.role} onChange={(e) => setContact((c) => ({ ...c, role: e.target.value }))}>{["PRIMARY_CLIENT", "DAY_OF_CONTACT", "PLANNER", "VENUE_CONTACT", "OTHER"].map((role) => <option key={role}>{role}</option>)}</select>
               <input value={contact.name} onChange={(e) => setContact((c) => ({ ...c, name: e.target.value }))} placeholder="Name" />
@@ -161,8 +200,8 @@ export default function EventDetail() {
               <button className="primary-action" disabled={!contact.name} onClick={() => action(() => api.post(`/events/${id}/contacts`, contact), "Contact added.")}>Add Contact</button>
             </div>
             <DataTable rows={event.operations?.contacts || []} columns={["role", "name", "phone", "email", "is_primary"]} empty="No day-of contacts." />
-          </Panel>
-          <Panel title="Checklist">
+          </Panel>}
+          {tab === "Checklist" && <Panel title="Checklist">
             {event.operations?.checklists?.map((list) => (
               <div key={list.id} className="checklist-admin-group">
                 <h3>{list.name}</h3>
@@ -176,15 +215,15 @@ export default function EventDetail() {
                 ))}
               </div>
             ))}
-          </Panel>
-          <Panel title="Creative">
+          </Panel>}
+          {tab === "Creative" && <Panel title="Creative">
             <select value={creative.approval_status} onChange={(e) => setCreative((c) => ({ ...c, approval_status: e.target.value }))}>{["NOT_STARTED", "IN_PROGRESS", "AWAITING_CLIENT", "APPROVED", "READY"].map((status) => <option key={status}>{status}</option>)}</select>
             <input value={creative.backdrop_selection} onChange={(e) => setCreative((c) => ({ ...c, backdrop_selection: e.target.value }))} placeholder="Backdrop selection" />
             <input value={creative.overlay_template} onChange={(e) => setCreative((c) => ({ ...c, overlay_template: e.target.value }))} placeholder="Overlay/template" />
             <textarea value={creative.special_design_instructions} onChange={(e) => setCreative((c) => ({ ...c, special_design_instructions: e.target.value }))} placeholder="Special design instructions" />
             <button className="primary-action" onClick={() => action(() => api.patch(`/events/${id}/creative`, creative), "Creative updated.")}>Save Creative</button>
-          </Panel>
-          <Panel title="Incidents">
+          </Panel>}
+          {tab === "Timeline" && <Panel title="Incidents">
             <div className="inline-form">
               <select value={incident.quick_issue} onChange={(e) => setIncident((c) => ({ ...c, quick_issue: e.target.value }))}>{["Printer Offline", "Camera Issue", "Lighting Issue", "Internet Issue", "Software/App Issue", "360 Motor Issue", "Audio Guestbook Issue", "Other"].map((item) => <option key={item}>{item}</option>)}</select>
               <select value={incident.severity} onChange={(e) => setIncident((c) => ({ ...c, severity: e.target.value }))}>{["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((item) => <option key={item}>{item}</option>)}</select>
@@ -192,8 +231,8 @@ export default function EventDetail() {
               <button className="primary-action" disabled={!incident.description} onClick={() => action(() => api.post(`/events/${id}/incidents`, incident), "Incident reported.")}><TriangleAlert size={15} />Report</button>
             </div>
             <DataTable rows={event.operations?.incidents || []} columns={["severity", "type", "quick_issue", "description", "status"]} empty="No incidents." />{(event.operations?.incidents||[]).filter(item=>!['RESOLVED','CLOSED'].includes(item.status)).map(item=><button key={item.id} onClick={()=>action(()=>api.patch(`/events/${id}/incidents/${item.id}`,{status:'RESOLVED',resolution_notes:incident.description||'Resolved by operations manager'}),"Incident resolved.")}>Resolve {item.description}</button>)}
-          </Panel>
-          <Panel title={GALLERY_ENABLED ? "Gallery / Completion" : "Completion"}>
+          </Panel>}
+          {tab === (GALLERY_ENABLED ? "Gallery" : "Checklist") && <Panel title={GALLERY_ENABLED ? "Gallery & Completion" : "Completion"}>
             {GALLERY_ENABLED && <>
             <Link className="primary-action" to={`/operations/galleries?eventId=${id}`}>Manage private gallery</Link>
             <Field label="Gallery" value={event.gallery_status} />
@@ -210,7 +249,7 @@ export default function EventDetail() {
             <Field label="Open Incidents" value={event.operations?.completion?.open_incident_count} />
             <textarea value={completionReason} onChange={(e) => setCompletionReason(e.target.value)} placeholder="Override reason or post-event notes" />
             <button className="primary-action" onClick={() => action(() => api.post(`/events/${id}/operations/complete`, { override_reason: completionReason, completion_notes: completionReason }), "Event completed.")}><CheckCircle2 size={15} />Complete Event</button>
-          </Panel>
+          </Panel>}
         </section>
       )}
 
@@ -244,8 +283,6 @@ function CommunicationForm({ communication, setCommunication, onSubmit }) {
   return <div className="inline-form"><select value={communication.type} onChange={(e) => setCommunication((c) => ({ ...c, type: e.target.value }))}>{["EMAIL", "PHONE", "SMS", "OTHER"].map((type) => <option key={type}>{type}</option>)}</select><select value={communication.direction} onChange={(e) => setCommunication((c) => ({ ...c, direction: e.target.value }))}>{["INBOUND", "OUTBOUND", "INTERNAL"].map((d) => <option key={d}>{d}</option>)}</select><input value={communication.subject} onChange={(e) => setCommunication((c) => ({ ...c, subject: e.target.value }))} placeholder="Subject" /><input value={communication.summary} onChange={(e) => setCommunication((c) => ({ ...c, summary: e.target.value }))} placeholder="Summary" /><button className="primary-action" onClick={onSubmit} disabled={!communication.summary}><MessageSquare size={15} />Log</button></div>;
 }
 
-function Metric({ label, value }) { return <article className="metric"><span>{label}</span><strong>{value}</strong></article>; }
-function Panel({ title, children }) { return <section className="panel"><h2>{title}</h2>{children}</section>; }
 function Field({ label, value }) { return <div className="field-row"><span>{label}</span><strong>{value || "—"}</strong></div>; }
 function Timeline({ rows }) {
   if (!rows?.length) return <div className="empty-state">No activity yet.</div>;

@@ -526,7 +526,8 @@ export async function deliverGallery(id, recipient, user, send) {
     return draft;
   });
   if (send) {
-    await sendCommunication(c.id, user);
+    const sent = await sendCommunication(c.id, user);
+    if (sent.communication.status === 'CANCELLED') throw unavailable();
     await query(
       "UPDATE gallery_albums SET status='DELIVERED',updated_at=now() WHERE id=$1",
       [grant.album_id],

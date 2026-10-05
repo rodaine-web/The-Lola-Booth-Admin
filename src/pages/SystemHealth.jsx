@@ -1,3 +1,4 @@
+import StatusBadge from "../components/StatusBadge.jsx";
 import { AlertTriangle, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
@@ -7,20 +8,29 @@ export default function SystemHealth() {
   const [jobs, setJobs] = useState([]);
   const [selected, setSelected] = useState([]);
   const [error, setError] = useState("");
+  const [refreshing,setRefreshing]=useState(false);
+  const [lastRefreshed,setLastRefreshed]=useState(null);
+  const [notice,setNotice]=useState("");
 
-  async function load() {
+  async function load(manual = false) {
+    setRefreshing(true);
     setError("");
+    if (manual) setNotice("");
     try {
       const [healthResult, jobsResult] = await Promise.all([api.get("/system/health"), api.get("/system/jobs")]);
       setHealth(healthResult);
       setJobs(jobsResult.data || []);
       setSelected([]);
+      setLastRefreshed(new Date());
+      if (manual) setNotice("System health refreshed.");
     } catch (err) {
       setError(err.message);
+    } finally {
+      setRefreshing(false);
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(false); }, []);
 
   async function jobAction(id, action) {
     await api.post(`/system/jobs/${id}/${action}`, {});
@@ -37,29 +47,21 @@ export default function SystemHealth() {
   }
 
   return (
-    <main className="page">
+    <main className="page system-health-redesign">
       <div className="page-heading">
         <div>
           <p className="eyebrow">{health?.build?.environment==='staging'?'Staging baseline':'Environment readiness'}</p>
           <h1>System Health</h1>
         </div>
-        <button className="primary-action" onClick={load}><RefreshCw size={16} />Refresh</button>
+        <button className="primary-action" onClick={()=>load(true)} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "spin" : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
-      {health?.build&&<p className="note-text">Environment: {health.build.environment} · API revision: {health.build.revision.slice(0,12)} · Admin revision: {__BUILD_REVISION__.slice(0,12)}</p>}
-      {error && <div className="toast error">{error}</div>}
+      {health?.build&&<p className="note-text">Environment: {health.build.environment} · API revision: {health.build.revision.slice(0,12)} · Admin revision: {__BUILD_REVISION__.slice(0,12)}{lastRefreshed ? ` · Last refreshed ${lastRefreshed.toLocaleTimeString()}` : ""}</p>}
+      {notice && <div className="toast" role="status">{notice}</div>}{error && <div className="toast error">{error}</div>}
       {health && <section className={`health-banner ${health.status.toLowerCase()}`}>
         <AlertTriangle size={18} />
         <div><strong>{health.status}</strong><span>Generated {new Date(health.generatedAt).toLocaleString()}</span></div>
       </section>}
-      <section className="health-grid">
-        {(health?.checks || []).map((item) => (
-          <article className={`health-card ${item.status.toLowerCase()}`} key={item.name}>
-            <small>{item.status}</small>
-            <strong>{item.name.replaceAll(".", " ")}{item.optional ? " · optional" : ""}</strong>
-            <p>{item.summary}</p>
-          </article>
-        ))}
-      </section>
+      <div className="table-wrap health-services-table"><table><thead><tr><th>Service</th><th>Status</th><th>Details</th></tr></thead><tbody>{(health?.checks||[]).map(item=><tr key={item.name}><td><span className={`health-service-dot ${item.status.toLowerCase()}`}/>{item.name.replaceAll("."," ")}{item.optional?" · optional":""}</td><td><StatusBadge status={item.status}/></td><td>{item.summary}{item.details&&Object.keys(item.details).length>0&&<details><summary>Details</summary><pre className="health-details">{JSON.stringify(item.details,null,2)}</pre></details>}</td></tr>)}</tbody></table></div>
       <section className="panel">
         <div className="table-heading">
           <h2>Automation Jobs</h2>

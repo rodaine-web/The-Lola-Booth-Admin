@@ -1,3 +1,7 @@
+import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
+import ProposalScenarioReview from "../components/ProposalScenarioReview.jsx";
+import {retainProposalPhotoSections} from "../../shared/proposal-photo-mapping.js";
+import {loadCatalog} from "../../shared/catalog-loading.js";
 import ProposalVisualEditor from "../components/ProposalVisualEditor.jsx";
 import {selectProposalPackage,selectProposalExperience} from '../../shared/proposal-catalog.js';
 import { ArrowDown, ArrowLeft, ArrowUp, FileUp, Plus, Trash2 } from "lucide-react";
@@ -22,7 +26,15 @@ export default function ProposalEditor() {
   const [addon, setAddon] = useState({ addon_id: "", quantity: 1 });
   const [customLine, setCustomLine] = useState({ description: "", detail: "", quantity: 1, unit_price: "" });
   const [experienceOptions, setExperienceOptions] = useState([]);
+  const [packageOptions, setPackageOptions] = useState([]);
   const [upload, setUpload] = useState({ filename: "", pdf_base64: "" });
+  const [inlineClientOpen,setInlineClientOpen]=useState(false);
+  const [inlineEventOpen,setInlineEventOpen]=useState(false);
+  const [inlineClientSaving,setInlineClientSaving]=useState(false);
+  const [inlineEventSaving,setInlineEventSaving]=useState(false);
+  const [inlineDuplicateEvent,setInlineDuplicateEvent]=useState(null);
+  const [inlineClient,setInlineClient]=useState({first_name:"",last_name:"",email:"",phone:""});
+  const [inlineEvent,setInlineEvent]=useState({event_name:"",event_type:"",event_date:"",start_time:"",end_time:"",venue_name:"",venue_address:"",city:"",state:"",zip:""});
   const [form, setForm] = useState({
     lead_id: params.get("leadId") || "",
     client_id: params.get("clientId") || "",
@@ -43,19 +55,59 @@ export default function ProposalEditor() {
   });
   const [error, setError] = useState("");
   const [saving,setSaving]=useState(false);
+  const [hydratingSource,setHydratingSource]=useState(false);
 
   useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
+  const [catalogAttempt,setCatalogAttempt]=useState(0);
+  const [catalogError,setCatalogError]=useState("");
   useEffect(() => {
-    api.get("/experiences?pageSize=100").then((result) => setExperienceOptions(result?.data || result || [])).catch(() => setExperienceOptions([]));
-  }, []);
+    let live=true;
+    setCatalogError("");
+    Promise.allSettled(["experiences","packages"].map(resource=>loadCatalog(api.get,resource))).then(results=>{
+      if(!live)return;
+      const setters=[setExperienceOptions,setPackageOptions];
+      const labels=["experiences","packages"];
+      const failures=[];
+      results.forEach((result,index)=>{
+        if(result.status==="fulfilled")setters[index](result.value);
+        else failures.push(labels[index]+": "+result.reason.message);
+      });
+      setCatalogError(failures.length?"Unable to load "+failures.join("; "):"");
+    });
+    return()=>{live=false;};
+  }, [catalogAttempt]);
 
   useEffect(() => {
-    if (form.event_id && !form.client_id) {
+    const leadId = params.get("leadId");
+    if (!id && leadId) hydrateFromLead(leadId);
+  }, [id]);
+
+  useEffect(() => {
+    if (form.event_id) {
       api.get(`/events/${form.event_id}`).then((event) => {
-        setForm((current) => ({ ...current, client_id: event.client_id || current.client_id, package_id: event.package_id || current.package_id, experience_id: event.experience_id || current.experience_id }));
+        setForm((current) => ({
+          ...current,
+          client_id: event.client_id || current.client_id,
+          package_id: event.package_id || current.package_id,
+          experience_id: event.experience_id || current.experience_id
+        }));
       }).catch(() => {});
     }
   }, [form.event_id]);
+
+  async function hydrateFromLead(leadId) {
+    if (!leadId) return;
+    setHydratingSource(true);
+    setError("");
+    try {
+      const lead = await api.get(`/leads/${leadId}`);
+      setForm((current) => hydrateProposalFromLead(current, lead));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setHydratingSource(false);
+    }
+  }
 
   function setField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -71,12 +123,51 @@ export default function ProposalEditor() {
             experience_id: experience.id,
             name: experience.name,
             package_name: "",
+            packages: [],
             price: Number(experience.base_price || 0),
             headline: "",
             description: experience.proposal_description || experience.description || "",
             visuals: {}
           }];
-      return { ...current, selected_experiences: next, experience_id: next[0]?.experience_id || current.experience_id || "" };
+      return {
+        ...current,
+        selected_experiences: next,
+        experience_id: next[0]?.experience_id || "",
+        package_id: next.flatMap((item) => item.packages || [])[0]?.package_id || ""
+      };
+    });
+  }
+
+  function toggleExperiencePackage(index, pkg) {
+    setForm((current) => {
+      const selected_experiences = (current.selected_experiences || []).map((item, i) => {
+        if (i !== index) return item;
+        const selected = Array.isArray(item.packages) ? item.packages : [];
+        const exists = selected.some((entry) => entry.package_id === pkg.id);
+        const packages = exists
+          ? selected.filter((entry) => entry.package_id !== pkg.id)
+          : [...selected, {
+              package_id: pkg.id,
+              name: pkg.name,
+              price: Number(pkg.starting_price || 0),
+              description: pkg.proposal_description || pkg.description || ""
+            }];
+        const experience = experienceOptions.find((entry) => entry.id === item.experience_id);
+        return {
+          ...item,
+          packages,
+          package_name: packages.map((entry) => entry.name).join(" + "),
+          price: packages.length
+            ? packages.reduce((sum, entry) => sum + Number(entry.price || 0), 0)
+            : Number(experience?.base_price || 0)
+        };
+      });
+      return {
+        ...current,
+        selected_experiences,
+        experience_id: selected_experiences[0]?.experience_id || "",
+        package_id: selected_experiences.flatMap((item) => item.packages || [])[0]?.package_id || ""
+      };
     });
   }
 
@@ -101,6 +192,73 @@ export default function ProposalEditor() {
     });
   }
 
+  async function createInlineClient() {
+    if (inlineClientSaving) return;
+    setInlineClientSaving(true);
+    setError("");
+    try {
+      const created = await api.post("/clients", inlineClient);
+      setForm((current) => ({ ...current, client_id: created.id }));
+      setInlineClientOpen(false);
+      setInlineClient({first_name:"",last_name:"",email:"",phone:""});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setInlineClientSaving(false);
+    }
+  }
+
+  function inlineEventPayload() {
+    return {
+      ...inlineEvent,
+      client_id: form.client_id,
+      package_id: form.package_id || null,
+      experience_id: form.experience_id || null,
+      status: "TENTATIVE"
+    };
+  }
+
+  function finishInlineEvent(created) {
+    setForm((current) => ({ ...current, event_id: created.id }));
+    setInlineDuplicateEvent(null);
+    setInlineEventOpen(false);
+    setInlineEvent({event_name:"",event_type:"",event_date:"",start_time:"",end_time:"",venue_name:"",venue_address:"",city:"",state:"",zip:""});
+  }
+
+  async function createInlineEvent(continueAnyway = false) {
+    if (inlineEventSaving) return;
+    if (!form.client_id) {
+      setError("Choose or create a client before creating an event.");
+      return;
+    }
+    if (inlineEvent.start_time && inlineEvent.end_time && inlineEvent.end_time <= inlineEvent.start_time) {
+      setError("End time must be after start time.");
+      return;
+    }
+    setInlineEventSaving(true);
+    setError("");
+    try {
+      const created = await api.post(continueAnyway ? "/events?continueAnyway=true" : "/events", inlineEventPayload());
+      finishInlineEvent(created);
+    } catch (err) {
+      if (err.code === "POSSIBLE_DUPLICATE" && err.details?.duplicate) {
+        setInlineDuplicateEvent(err.details.duplicate);
+        setError("Possible duplicate event found. Use the existing event or explicitly create a separate event.");
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setInlineEventSaving(false);
+    }
+  }
+
+  function useInlineDuplicateEvent() {
+    if (!inlineDuplicateEvent) return;
+    setForm((current) => ({ ...current, event_id: inlineDuplicateEvent.id }));
+    setInlineDuplicateEvent(null);
+    setInlineEventOpen(false);
+  }
+
   async function chooseFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -112,7 +270,7 @@ export default function ProposalEditor() {
     if(saving)return;setSaving(true);
     setError("");
     try {
-      const payload = compact({ ...form, ...upload, total_investment: form.package_amount });
+      const payload = compact({ ...form, visual_sections:retainProposalPhotoSections(form.visual_sections||[],form.selected_experiences||[]), ...upload, total_investment: form.package_amount });
       const created = id ? await api.patch(`/proposals/${id}`, payload) : mode === "upload" ? await api.post("/proposals/upload", payload) : await api.post("/proposals", payload);
       navigate(`/sales/proposals/${created.id}`);
     } catch (err) {
@@ -133,14 +291,20 @@ export default function ProposalEditor() {
           <button type="button" className={mode === "upload" ? "active" : ""} onClick={() => setMode("upload")}>Upload External Proposal</button>
         </div>
       </div>
+      {catalogError&&<div className="toast error" role="alert">{catalogError} <button onClick={()=>setCatalogAttempt(value=>value+1)}>Retry catalog</button></div>}
       {error && <div id="proposal-error" role="alert" className="toast error">{error}</div>}
       <form aria-describedby={error?"proposal-error":undefined} className="document-editor" onSubmit={save}>
         <section className="panel">
           <h2>Proposal</h2>
           <div className="form-grid">
-            <label>Lead<RelationshipSelect resource="leads" value={form.lead_id} placeholder="Lead" onChange={(value) => setField("lead_id", value)} /></label>
-            <label>Client<RelationshipSelect resource="clients" value={form.client_id} placeholder="Client" onChange={(value) => setField("client_id", value)} /></label>
-            <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={(value) => setField("event_id", value)} /></label>
+            <label>Lead<RelationshipSelect resource="leads" value={form.lead_id} placeholder="Lead" onChange={(value) => { setField("lead_id", value); hydrateFromLead(value); }} /></label>
+            <label>Client<RelationshipSelect resource="clients" value={form.client_id} placeholder="Client" onChange={(value) => setField("client_id", value)} />
+              {!id && <button type="button" onClick={()=>setInlineClientOpen(value=>!value)}>{inlineClientOpen?"Cancel new client":"Create new client"}</button>}
+            </label>
+            <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={(value) => setField("event_id", value)} />
+              {!id && <button type="button" onClick={()=>{setInlineDuplicateEvent(null);setInlineEventOpen(value=>!value);}}>{inlineEventOpen?"Cancel new event":"Create new event"}</button>}
+            </label>
+            {form.scenario_enabled && <label>Event scenario<select value={form.event_type||'Other'} onChange={event=>setField('event_type',event.target.value)}>{['Wedding','Birthday','Private Party','Brand Activation','Corporate Event','Other'].map(type=><option key={type}>{type}</option>)}</select></label>}
             <label>Proposal type<select value={form.proposal_type || "PRIVATE_EVENT"} onChange={(event) => setField("proposal_type", event.target.value)}>
               <option value="WEDDING">Wedding</option>
               <option value="PRIVATE_EVENT">Private Event</option>
@@ -154,6 +318,50 @@ export default function ProposalEditor() {
             <label>Status<select value={form.status} onChange={(event) => setField("status", event.target.value)}>{["DRAFT", "READY"].map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
         </section>
+
+        {!id && inlineClientOpen && <section className="panel">
+          <h2>Create Client</h2>
+          <p className="lede">Create the client here and continue building the proposal without leaving this page.</p>
+          <div className="form-grid">
+            <label>First name<input required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
+            <label>Last name<input required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
+            <label>Email<input required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
+            <label>Phone (optional)<input type="tel" value={inlineClient.phone} onChange={(event)=>setInlineClient(current=>({...current,phone:event.target.value}))}/></label>
+          </div>
+          <div className="button-row">
+            <button type="button" onClick={()=>setInlineClientOpen(false)}>Cancel</button>
+            <button type="button" className="primary-action" disabled={inlineClientSaving||!inlineClient.first_name||!inlineClient.last_name||!inlineClient.email} onClick={createInlineClient}>{inlineClientSaving?"Creating…":"Create client & use"}</button>
+          </div>
+        </section>}
+
+        {!id && inlineEventOpen && <section className="panel">
+          <h2>Create Event</h2>
+          <p className="lede">Create and link the event here. A client must be selected first.</p>
+          <div className="form-grid">
+            <label>Event title<input required value={inlineEvent.event_name} onChange={(event)=>setInlineEvent(current=>({...current,event_name:event.target.value}))}/></label>
+            <label>Event type<input required value={inlineEvent.event_type} onChange={(event)=>setInlineEvent(current=>({...current,event_type:event.target.value}))}/></label>
+            <label>Event date<input required type="date" value={inlineEvent.event_date} onChange={(event)=>setInlineEvent(current=>({...current,event_date:event.target.value}))}/></label>
+            <label>Start time<input required type="time" value={inlineEvent.start_time} onChange={(event)=>setInlineEvent(current=>({...current,start_time:event.target.value}))}/></label>
+            <label>End time<input required type="time" value={inlineEvent.end_time} onChange={(event)=>setInlineEvent(current=>({...current,end_time:event.target.value}))}/></label>
+            <label>Venue<input value={inlineEvent.venue_name} onChange={(event)=>setInlineEvent(current=>({...current,venue_name:event.target.value}))}/></label>
+            <label>Address<input value={inlineEvent.venue_address} onChange={(event)=>setInlineEvent(current=>({...current,venue_address:event.target.value}))}/></label>
+            <label>City<input value={inlineEvent.city} onChange={(event)=>setInlineEvent(current=>({...current,city:event.target.value}))}/></label>
+            <label>State<input value={inlineEvent.state} onChange={(event)=>setInlineEvent(current=>({...current,state:event.target.value}))}/></label>
+            <label>ZIP<input value={inlineEvent.zip} onChange={(event)=>setInlineEvent(current=>({...current,zip:event.target.value}))}/></label>
+          </div>
+          {inlineDuplicateEvent && <div className="panel" role="alert">
+            <strong>Possible duplicate</strong>
+            <p>{inlineDuplicateEvent.event_name || "Existing event"}{inlineDuplicateEvent.event_number ? ` · ${inlineDuplicateEvent.event_number}` : ""}. Use the existing event unless this is intentionally a separate booking.</p>
+            <div className="button-row">
+              <button type="button" onClick={useInlineDuplicateEvent}>Use existing event</button>
+              <button type="button" disabled={inlineEventSaving} onClick={()=>createInlineEvent(true)}>Create separate event anyway</button>
+            </div>
+          </div>}
+          <div className="button-row">
+            <button type="button" onClick={()=>{setInlineDuplicateEvent(null);setInlineEventOpen(false);}}>Cancel</button>
+            <button type="button" className="primary-action" disabled={inlineEventSaving||!form.client_id||!inlineEvent.event_name||!inlineEvent.event_type||!inlineEvent.event_date||!inlineEvent.start_time||!inlineEvent.end_time} onClick={()=>createInlineEvent(false)}>{inlineEventSaving?"Creating…":"Create event & use"}</button>
+          </div>
+        </section>}
 
         {mode === "upload" && (
           <section className="panel">
@@ -185,8 +393,23 @@ export default function ProposalEditor() {
                     </div>
                     <div className="form-grid">
                       <label>Display name<input value={item.name || ""} onChange={(event) => updateSelectedExperience(index, { name: event.target.value })} /></label>
-                      <label>Package name<input value={item.package_name || ""} onChange={(event) => updateSelectedExperience(index, { package_name: event.target.value })} /></label>
-                      <label>Price<input type="number" min="0" step="0.01" value={item.price ?? ""} onChange={(event) => updateSelectedExperience(index, { price: event.target.value })} /></label>
+                      <fieldset className="wide">
+                        <legend>Packages</legend>
+                        {packageOptions
+                          .filter((pkg) => !pkg.experience_id || pkg.experience_id === item.experience_id)
+                          .map((pkg) => (
+                            <label className="check-row" key={pkg.id}>
+                              <input
+                                type="checkbox"
+                                checked={(item.packages || []).some((entry) => entry.package_id === pkg.id)}
+                                onChange={() => toggleExperiencePackage(index, pkg)}
+                              />
+                              <span>{pkg.name}{pkg.starting_price != null ? ` · ${Number(pkg.starting_price).toLocaleString()}` : ""}</span>
+                            </label>
+                          ))}
+                        {!packageOptions.some((pkg) => !pkg.experience_id || pkg.experience_id === item.experience_id) && <p className="note-text">No catalog packages are linked to this experience yet.</p>}
+                      </fieldset>
+                      <label>Selected package total<input type="number" min="0" step="0.01" value={item.price ?? ""} onChange={(event) => updateSelectedExperience(index, { price: event.target.value })} /></label>
                       <label>Headline<input value={item.headline || ""} onChange={(event) => updateSelectedExperience(index, { headline: event.target.value })} /></label>
                       <label className="wide">Description<textarea value={item.description || ""} onChange={(event) => updateSelectedExperience(index, { description: event.target.value })} /></label>
                     </div>
@@ -226,8 +449,8 @@ export default function ProposalEditor() {
               <div className="line-list">{form.custom_line_items.map((item, index) => <div key={`${item.description}-${index}`}><span>{item.description} · Qty {item.quantity} · ${item.unit_price || 0}</span><button type="button" aria-label="Remove service" onClick={() => setForm((current) => ({ ...current, custom_line_items: current.custom_line_items.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
             </section>
 
-            <section className="panel">
-              <h2>Content Sections</h2>
+            {!form.scenario_enabled && <section className="panel">
+              <h2>{form.scenario_enabled?"Legacy sections (not used by this composed document)":"Content Sections"}</h2>
               <div className="section-pills">
                 {corporateSections.map((title) => <button type="button" key={title} onClick={() => setForm((current) => ({ ...current, sections: [...current.sections, section(title, current.sections.length)] }))}><Plus size={13} />{title}</button>)}
               </div>
@@ -246,11 +469,13 @@ export default function ProposalEditor() {
                   </article>
                 ))}
               </div>
-            </section>
+            </section>}
           </>
         )}
 
-        {mode === "create" && <ProposalVisualEditor value={form.visual_sections||[]} onChange={value=>setField("visual_sections",value)}/>}
+        {form.scenario_enabled && <label>Client-facing notes<textarea value={form.customer_notes||''} onChange={event=>setField('customer_notes',event.target.value)}/></label>}
+        {form.scenario_enabled && <ProposalScenarioReview scenario={form.content?.scenario} overrides={form.scenario_overrides||{}} onChange={value=>setField('scenario_overrides',value)} experiences={form.selected_experiences||[]} onExperiencesChange={value=>setField('selected_experiences',value)}/>}
+        {mode === "create" && <ProposalVisualEditor experiences={form.selected_experiences||[]} value={form.visual_sections||[]} onChange={value=>setField("visual_sections",value)}/>}
         <section className="panel">
           <h2>Terms / Notes</h2>
           <div className="form-grid">
@@ -259,7 +484,7 @@ export default function ProposalEditor() {
             <label className="wide">Internal notes<textarea value={form.notes || ""} onChange={(event) => setField("notes", event.target.value)} /></label>
           </div>
         </section>
-        <div className="modal-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action" disabled={!loaded||saving}>{id ? "Save Proposal" : mode === "upload" ? "Upload Proposal" : "Create Proposal"}</button></div>
+        <div className="modal-actions"><Link to="/sales/proposals">Cancel</Link><button className="primary-action" disabled={!loaded||saving||hydratingSource}>{hydratingSource ? "Loading lead details…" : id ? "Save Proposal" : mode === "upload" ? "Upload Proposal" : "Create Proposal"}</button></div>
       </form>
     </main>
   );
@@ -267,6 +492,95 @@ export default function ProposalEditor() {
 
 function section(title, display_order = 0) {
   return { id: title.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""), title, body: "", items: [], display_order };
+}
+
+
+function hydrateProposalFromLead(current, lead) {
+  const bookingPrefill = proposalBookingPrefill(lead);
+  const preferredExperience = lead.preferredExperience || null;
+  const preferredPackage = lead.preferredPackage || null;
+  const selectedExperiences = preferredExperience
+    ? [{
+        experience_id: preferredExperience.id,
+        name: preferredExperience.name,
+        package_name: preferredPackage?.name || "",
+        packages: preferredPackage ? [{
+          package_id: preferredPackage.id,
+          name: preferredPackage.name,
+          price: Number(preferredPackage.starting_price || 0),
+          description: preferredPackage.proposal_description || preferredPackage.description || ""
+        }] : [],
+        price: Number(preferredPackage?.starting_price ?? preferredExperience.base_price ?? 0),
+        headline: "",
+        description: preferredExperience.proposal_description || preferredExperience.description || "",
+        visuals: {}
+      }]
+    : current.selected_experiences || [];
+
+  return {
+    ...current,
+    lead_id: lead.id || current.lead_id,
+    client_id: lead.converted_client_id || current.client_id,
+    event_id: lead.converted_event_id || current.event_id,
+    package_id: lead.preferred_package_id || current.package_id,
+    experience_id: lead.preferred_experience_id || current.experience_id,
+    package_amount: preferredPackage?.starting_price ?? current.package_amount,
+    selected_experiences: selectedExperiences,
+    customer_notes: lead.message || '',
+    client_details: {...current.client_details, ...Object.fromEntries(['first_name','last_name','email','phone','company'].map(key=>[key,lead[key] || '']))},
+    event_type: bookingPrefill.fields.event_type,
+    event_details: {...current.event_details, ...Object.fromEntries(['event_name','event_type','event_date','start_time','end_time','guest_count','venue_name','venue_address','city','state','zip'].map(key=>[key,bookingPrefill.fields[key]]))},
+    proposal_title: proposalTitleForLead(lead),
+    proposal_type: proposalTypeForLead(lead.event_type),
+    introduction: current.introduction || "The LOLA Booth creates polished, interactive photo experiences designed to bring people together and leave guests with something worth keeping. We combine thoughtful service, professional presentation, and memorable content for every event.",
+    next_steps: current.next_steps || "Review the proposed experience and investment, let us know any edits you would like, and approve the proposal when you are ready to move forward. Once approved, we will prepare the invoice and confirm the remaining event details.",
+    sections: hydrateLeadSections(current.sections || [], lead, preferredExperience, preferredPackage)
+  };
+}
+
+function hydrateLeadSections(sections, lead, experience, pkg) {
+  const clientName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "the client";
+  const eventName = lead.event_type ? `${lead.event_type} for ${clientName}` : `Event for ${clientName}`;
+  const eventDetails = [
+    lead.event_date ? `Date: ${lead.event_date}` : null,
+    lead.venue_name ? `Venue: ${lead.venue_name}` : null,
+    [lead.venue_address, lead.city, lead.state, lead.zip].filter(Boolean).length
+      ? `Location: ${[lead.venue_address, lead.city, lead.state, lead.zip].filter(Boolean).join(", ")}`
+      : null,
+    lead.guest_count ? `Estimated guests: ${lead.guest_count}` : null
+  ].filter(Boolean).join("\n");
+
+  const bodyByTitle = {
+    "Introduction": `Thank you, ${clientName}, for considering The LOLA Booth for ${eventName}. We are excited to create a polished, guest-friendly experience that fits the occasion and gives your guests memorable photos and moments to take with them.`,
+    "Event Details": eventDetails,
+    "Proposed Experience": experience
+      ? `Recommended experience: ${experience.name}. ${experience.proposal_description || experience.description || ""}`.trim()
+      : "Select one or more LOLA experiences for this event.",
+    "Package Includes": pkg
+      ? `${pkg.name}${pkg.starting_price != null ? ` starting at ${Number(pkg.starting_price).toLocaleString()}` : ""}.`
+      : "Select the package and any enhancements that best fit the event.",
+    "Next Steps": "Review the experience, pricing, and event details. Request any edits you need, then approve the proposal when you are ready to proceed.",
+    "Terms": "Final scope, pricing, availability, and event logistics remain subject to the approved proposal and invoice."
+  };
+
+  return sections.map((item) => ({
+    ...item,
+    body: item.body || bodyByTitle[item.title] || ""
+  }));
+}
+
+function proposalTitleForLead(lead) {
+  const clientName = [lead.first_name, lead.last_name].filter(Boolean).join(" ");
+  return [lead.event_type, clientName].filter(Boolean).join(" · ") || "Custom Experience Proposal";
+}
+
+function proposalTypeForLead(eventType = "") {
+  const value = String(eventType).toLowerCase();
+  if (value.includes("wedding")) return "WEDDING";
+  if (value.includes("corporate")) return "CORPORATE";
+  if (value.includes("brand")) return "BRAND_ACTIVATION";
+  if (value.includes("private") || value.includes("birthday") || value.includes("shower") || value.includes("graduation")) return "PRIVATE_EVENT";
+  return "CUSTOM";
 }
 
 function compact(value) {

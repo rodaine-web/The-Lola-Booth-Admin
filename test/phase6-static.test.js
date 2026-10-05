@@ -9,6 +9,7 @@ const cmsService = fs.readFileSync(new URL("../server/src/services/website-cms-s
 const app = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 const layout = fs.readFileSync(new URL("../src/components/Layout.jsx", import.meta.url), "utf8");
 const websiteCms = fs.readFileSync(new URL("../src/pages/WebsiteCms.jsx", import.meta.url), "utf8");
+const stagingCms = fs.readFileSync(new URL("../src/pages/StagingCms.jsx", import.meta.url), "utf8");
 const serverIndex = fs.readFileSync(new URL("../server/src/index.js", import.meta.url), "utf8");
 
 test("phase 6 migration extends CMS, media, SEO, and website event schema", () => {
@@ -84,8 +85,8 @@ test("media upload validation and usage safety are implemented", () => {
 });
 
 test("frontend adds Website CMS navigation and screens", () => {
-  for (const label of ["Page SEO", "Hero Slides", "Gallery", "Packages", "Experiences", "Event Types", "Testimonials", "FAQ", "Media Library", "SEO / Site Settings"]) {
-    assert.match(layout, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const label of ["Page SEO", "Hero Slides", "Gallery", "Packages", "Experiences", "Event Types", "Testimonials", "FAQ", "Media Library", "Site Settings"]) {
+    assert.match(layout + stagingCms + websiteCms, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   for (const route of ["website/homepage", "website/hero-slides", "website/gallery", "website/packages", "website/experiences", "website/events", "website/testimonials", "website/faq", "website/media-library", "website/site-settings"]) {
     assert.match(app, new RegExp(route.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

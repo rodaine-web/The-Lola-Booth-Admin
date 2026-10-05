@@ -1,11 +1,12 @@
 import {documentOrigin} from '../utils/public-document-url.js';
-import {stagingJobsPaused,isStaging} from '../config/staging-safety.js';
+import {stagingJobsPaused,isStaging,stagingAutomationScope} from '../config/staging-safety.js';
 import { query, transaction } from "../db/pool.js";
 import { logger } from "../config/logger.js";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { sendEmail } from "./email-service.js";
+import { dispatchDecision, scheduledRetry } from './communication-dispatch-policy.js';
 
 export const implementedAutomationJobTypes = [
   "SEND_EMAIL_TEMPLATE",
@@ -17,6 +18,7 @@ export const futureAutomationJobTypes = ["CREATE_TASK", "ASSIGN_LEAD", "CHANGE_L
 const staleProcessingMinutes = 10;
 
 export const allowedTemplateVariables = [
+  "contact.first_name", "contact.last_name", "contact.full_name", "contact.email", "company.name",
   "subject", "body", "proposal.public_url", "invoice.public_url",
   "first_name", "client_name", "event_type", "event_date", "venue", "proposal_number",
   "proposal_url", "invoice_number", "invoice_url", "amount_due", "due_date",
@@ -426,7 +428,7 @@ export function brandedEmailHtml(body, options = {}) {
         <div style="font-size:32px;line-height:1.1;color:#090909">Hi ${htmlEscape(firstName)},</div>
         ${kicker ? `<div class="kicker" style="font-family:Arial,sans-serif;font-size:15px;letter-spacing:7px;text-transform:uppercase;color:#a8753b;margin-top:18px">${htmlEscape(kicker)}</div>` : ""}
         <div class="content-copy" style="font-size:16px;line-height:1.65;margin-top:18px;color:#101a36;overflow-wrap:anywhere">${bodyToHtml(contentBody)}</div>
-        ${secondaryCta?.url ? `<div style="text-align:center;margin:24px 0"><a class="cta-button" href="${htmlEscape(secondaryCta.url)}" style="display:inline-block;background:#101a36;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;letter-spacing:3px;text-transform:uppercase;padding:17px 36px;border-radius:2px">${htmlEscape(secondaryCta.label)}</a><div class="copy-link" style="font-size:13px;margin-top:14px">Or copy and paste this payment link into your browser:<br>${htmlEscape(secondaryCta.url)}</div></div>` : ""}
+        ${secondaryCta?.url ? `<div style="text-align:center;margin:24px 0"><a class="cta-button" href="${htmlEscape(secondaryCta.url)}" style="display:inline-block;background:#101a36;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;letter-spacing:3px;text-transform:uppercase;padding:17px 36px;border-radius:2px">${htmlEscape(secondaryCta.label)}</a><div class="copy-link" style="font-size:13px;margin-top:14px">${htmlEscape(secondaryCta.copyLabel || "Or copy and paste this payment link into your browser:")}<br>${htmlEscape(secondaryCta.url)}</div></div>` : ""}
         ${ctaUrl ? `<div style="text-align:center;margin:28px 0 8px"><a class="cta-button" href="${htmlEscape(ctaUrl)}" style="display:inline-block;background:#b1844c;color:#fff;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;letter-spacing:6px;text-transform:uppercase;padding:17px 54px;border-radius:2px">${htmlEscape(ctaLabel)} &rarr;</a><div class="copy-link" style="font-size:13px;margin-top:14px;color:#101a36">Or copy and paste this link into your browser:<br><span style="color:#a8753b">${htmlEscape(ctaUrl)}</span></div></div>` : ""}
       </td></tr>
       ${summaryCells ? `<tr><td style="padding:0 30px 22px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3efe8"><tr>${summaryCells}</tr></table></td></tr>` : ""}
@@ -619,12 +621,21 @@ export async function createCommunicationDraft(input = {}, user = {}) {
 
 export async function sendCommunication(id, user = {}, { workerClaim = false, qualificationClaim = false } = {}) {
   if(stagingJobsPaused()&&!qualificationClaim&&(await query('SELECT 1 FROM staging_email_qualification_jobs WHERE communication_id=$1',[id])).rowCount)throw new AppError('This QA message is controlled by its qualification job.',409,'STAGING_JOB_REQUIRED');
-  const result = await transaction(async (client) => {
-    const communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
+
+  const claim = await transaction(async (client) => {
+    let communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!communication) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
     if (communication.status === "SENT" || communication.status === "SENT_TO_PROVIDER") {
       logger.warn({ communicationId: id, providerMessageId: communication.provider_message_id }, "Duplicate communication send prevented");
-      return { communication, delivery: { status: communication.status, provider: communication.provider, providerMessageId: communication.provider_message_id, duplicatePrevented: true } };
+      return { duplicate: true, communication };
+    }
+    if(communication.campaign_recipient_id){
+      const recipient=(await client.query("SELECT status FROM campaign_recipients WHERE id=$1",[communication.campaign_recipient_id])).rows[0];
+      if(!workerClaim||recipient?.status!=="PROCESSING")throw new AppError("Campaign messages must be sent by the campaign worker.",409,"CAMPAIGN_WORKER_REQUIRED",{retryable:false});
+    }
+    if (await dispatchDecision(client, communication) === 'CANCELLED') {
+      const cancelled = (await client.query("UPDATE communications SET status='CANCELLED',updated_at=now() WHERE id=$1 RETURNING *", [id])).rows[0];
+      return { blocked: true, communication: cancelled };
     }
     if(communication.failure_code==="DELIVERY_OUTCOME_UNKNOWN")throw new AppError("Delivery outcome is unknown. Review provider history before any retry.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
     if (!["DRAFT", "SCHEDULED", "FAILED", ...(workerClaim ? ["PROCESSING"] : [])].includes(communication.status)) throw new AppError("This communication cannot be sent.", 409, "COMMUNICATION_IMMUTABLE");
@@ -632,22 +643,54 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
     if (communication.channel !== "EMAIL") throw new AppError("Only email sending is currently enabled.", 422, "CHANNEL_NOT_IMPLEMENTED", { retryable: false });
     if (!communication.recipient) throw new AppError("Recipient is required before sending.", 422, "COMMUNICATION_RECIPIENT_REQUIRED", { retryable: false });
     if (!communication.subject || !communication.rendered_body) throw new AppError("Subject and body are required before sending.", 422, "COMMUNICATION_CONTENT_REQUIRED", { retryable: false });
-    let delivery;
-    try { delivery = await sendEmail({
+    if (communication.status !== "PROCESSING") {
+      communication=(await client.query(
+        "UPDATE communications SET status='PROCESSING', queued_at=COALESCE(queued_at,now()), failure_code=NULL, failure_message=NULL, updated_at=now() WHERE id=$1 RETURNING *",
+        [id]
+      )).rows[0];
+    }
+    return { duplicate: false, communication };
+  });
+
+  if (claim.blocked) return { communication: claim.communication, delivery: { status: 'CANCELLED', suppressed: true } };
+  if (claim.duplicate) {
+    return { communication: claim.communication, delivery: { status: claim.communication.status, provider: claim.communication.provider, providerMessageId: claim.communication.provider_message_id, duplicatePrevented: true } };
+  }
+
+  const communication = claim.communication;
+  let delivery;
+  try {
+    delivery = await sendEmail({
       to: communication.recipient,
       cc: communication.cc,
       bcc: communication.bcc,
       subject: communication.rendered_subject || communication.subject,
       body: communication.rendered_body,
       html: communication.rendered_html,
+      replyTo: communication.reply_to || undefined,
+      senderName:communication.sender_name || undefined,
       formOwnerNotification: communication.trigger_key === "PUBLIC_FORM" && /^public-form:[a-f0-9-]+:owner$/.test(communication.idempotency_key || "")
     });
-    } catch (error) {
-      const unknown=error.details?.outcomeUnknown===true;
-      const code=unknown?'DELIVERY_OUTCOME_UNKNOWN':(error.code||'EMAIL_SEND_FAILED');
-      const message=unknown?'Delivery outcome is unknown. Review provider history; automatic retry is blocked.':'Email delivery failed. The saved message can be reviewed and retried.';
-      await client.query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$2,failure_message=$3,updated_at=now() WHERE id=$1",[id,code,message]);
-      return {sendError:new AppError(message,502,code,{retryable:!unknown&&error.details?.retryable!==false})};
+  } catch (error) {
+    const unknown=error.details?.outcomeUnknown===true;
+    const code=unknown?'DELIVERY_OUTCOME_UNKNOWN':(error.code||'EMAIL_SEND_FAILED');
+    const message=unknown?'Delivery outcome is unknown. Review provider history; automatic retry is blocked.':'Email delivery failed. The saved message can be reviewed and retried.';
+    await query(
+      "UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$2,failure_message=$3,updated_at=now() WHERE id=$1",
+      [id,code,message]
+    );
+    throw new AppError(message,502,code,{retryable:!unknown&&error.details?.retryable!==false,retryAfter:error.details?.retryAfter});
+  }
+
+  let result;
+  try { result = await transaction(async (client) => {
+    const current=(await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",[id])).rows[0];
+    if (!current) throw new AppError("Communication not found.",404,"COMMUNICATION_NOT_FOUND");
+    if (current.status === "SENT" || current.status === "SENT_TO_PROVIDER") {
+      return { communication: current, duplicateFinalization: true };
+    }
+    if (current.status !== "PROCESSING") {
+      throw new AppError("Communication state changed while sending. Review provider history before retrying.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
     }
     const updated = await client.query(
       `UPDATE communications
@@ -658,13 +701,17 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
     await client.query(
       `INSERT INTO email_messages (communication_id, provider, provider_message_id, to_email, subject, status, body_preview, sent_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,now())`,
-      [id, delivery.provider, delivery.providerMessageId, communication.recipient, communication.rendered_subject || communication.subject, delivery.status || "SENT", communication.rendered_body.slice(0, 500)]
+      [id, delivery.provider, delivery.providerMessageId, current.recipient, current.rendered_subject || current.subject, delivery.status || "SENT", current.rendered_body.slice(0, 500)]
     );
-    await recordActivity({ actorUserId: user.id, entityType: "communication", entityId: id, action: "communication_sent_to_provider", summary: `${communication.channel} sent to provider for ${communication.recipient}` });
-    return { communication: updated.rows[0], delivery };
-  });
-  if (result.sendError) throw result.sendError;
-  return result;
+    return { communication: updated.rows[0] };
+  }); } catch (error) {
+    // The provider accepted the request, but persistence failed. Retrying could
+    // send it twice; keep this outcome for operator reconciliation.
+    await query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code='DELIVERY_OUTCOME_UNKNOWN',failure_message='Provider accepted the message but recording failed. Review provider history before retrying.',updated_at=now() WHERE id=$1 AND status='PROCESSING'", [id]).catch(() => {});
+    throw new AppError('Provider acceptance could not be recorded. Review provider history before retrying.',502,'DELIVERY_OUTCOME_UNKNOWN',{retryable:false,outcomeUnknown:true});
+  }
+  await recordActivity({ actorUserId: user.id, entityType: "communication", entityId: id, action: "communication_sent_to_provider", summary: `${communication.channel} sent to provider for ${communication.recipient}` }).catch(error => logger.error({communicationId:id,error:error.message},'Communication accepted; activity recording failed'));
+  return { ...result, delivery };
 }
 
 export async function scheduleCommunication(id, scheduledAt, user = {}) {
@@ -996,40 +1043,53 @@ async function scheduleCommunicationJob(client, job) {
   return { communication: result.rows[0] };
 }
 
-async function sendAndRecordEmail(client, job, { to, subject, body, template = null, mergeData = {} }) {
-  const html = brandedEmailHtml(body);
-  const delivery = await sendEmail({ to, subject, body, html });
-  const communication = await client.query(
-    `INSERT INTO communications (
-       lead_id, client_id, type, channel, direction, subject, rendered_subject, message_summary, rendered_body, rendered_html,
-       recipient, template_id, template_key, template_version, merge_data, send_mode, status, trigger_key,
-       sent_at, provider, provider_message_id
-     )
-     VALUES ($1,$2,'EMAIL','EMAIL','OUTBOUND',$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,'SEND_NOW','SENT_TO_PROVIDER',$12,now(),$13,$14)
-     RETURNING *`,
-    [
-      job.related_entity_type === "lead" ? job.related_entity_id : null,
-      job.related_entity_type === "client" ? job.related_entity_id : null,
-      subject,
-      body.slice(0, 500),
-      body,
-      html,
-      to,
-      template?.id || null,
-      template?.key || template?.template_key || job.action_config?.template_key || null,
-      template?.version || null,
-      mergeData,
-      job.job_type,
-      delivery.provider,
-      delivery.providerMessageId
-    ]
-  );
-  await client.query(
-    `INSERT INTO email_messages (communication_id, provider, provider_message_id, to_email, subject, status, body_preview, sent_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,now())`,
-    [communication.rows[0].id, delivery.provider, delivery.providerMessageId, to, subject, delivery.status, body.slice(0, 500)]
-  );
-  return delivery;
+async function sendAndRecordEmail(_client, job, { to, subject, body, template = null, mergeData = {} }) {
+  const idempotencyKey = `automation-job:${job.id}`;
+  let communication=(await query(
+    "SELECT * FROM communications WHERE idempotency_key=$1 AND deleted_at IS NULL LIMIT 1",
+    [idempotencyKey]
+  )).rows[0];
+
+  if (communication?.status === "SENT" || communication?.status === "SENT_TO_PROVIDER") {
+    return { duplicatePrevented:true, communication };
+  }
+  if (communication?.failure_code === "DELIVERY_OUTCOME_UNKNOWN" || communication?.status === "PROCESSING") {
+    throw new AppError("Automation email delivery outcome requires operator review before retry.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
+  }
+
+  if (!communication) {
+    const html = brandedEmailHtml(body);
+    communication=(await query(
+      `INSERT INTO communications (
+         lead_id, client_id, type, channel, direction, subject, rendered_subject, message_summary, rendered_body, rendered_html,
+         recipient, template_id, template_key, template_version, merge_data, send_mode, status, trigger_key, idempotency_key
+       )
+       VALUES ($1,$2,'EMAIL','EMAIL','OUTBOUND',$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,'SEND_NOW','DRAFT',$12,$13)
+       ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET updated_at=now()
+       RETURNING *`,
+      [
+        job.related_entity_type === "lead" ? job.related_entity_id : null,
+        job.related_entity_type === "client" ? job.related_entity_id : null,
+        subject,
+        body.slice(0, 500),
+        body,
+        html,
+        to,
+        template?.id || null,
+        template?.key || template?.template_key || job.action_config?.template_key || null,
+        template?.version || null,
+        mergeData,
+        job.job_type,
+        idempotencyKey
+      ]
+    )).rows[0];
+  }
+
+  if (communication.status === "FAILED") {
+    await query("UPDATE communications SET failure_code=NULL,failure_message=NULL,failed_at=NULL,updated_at=now() WHERE id=$1",[communication.id]);
+  }
+  const sent=await sendCommunication(communication.id, {});
+  return sent.delivery || sent;
 }
 
 async function executeAutomationJob(client, job) {
@@ -1045,7 +1105,9 @@ async function executeAutomationJob(client, job) {
 export async function processDueJobs({ limit = 25 } = {}) {
   if(stagingJobsPaused())throw new AppError('Automatic job processing is paused in this environment.',409,'STAGING_AUTOMATIONS_PAUSED');
   const processed = [];
-  await transaction(async (client) => {
+  const scope=stagingAutomationScope();
+  // Staging qualification runs fresh scheduled emails, not historical automation jobs.
+  if(!isStaging())await transaction(async (client) => {
     await recoverStaleProcessingJobs(client);
     const jobs = await client.query(
       `SELECT j.*, a.action_config, a.name AS automation_name
@@ -1084,15 +1146,28 @@ export async function processDueJobs({ limit = 25 } = {}) {
     // A crash after claiming cannot silently strand a message. An unknown external
     // outcome requires operator review rather than an automatic duplicate send.
     await client.query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code='DELIVERY_OUTCOME_UNKNOWN',failure_message='Worker stopped during send. Check provider history before retrying.' WHERE status='PROCESSING' AND updated_at<now()-interval '5 minutes'");
+    // Recheck the business state at dispatch time. A paid invoice or cancelled
+    // event must not receive a reminder that was queued earlier.
+    await client.query(`UPDATE communications c SET status='CANCELLED',updated_at=now()
+      WHERE c.status='SCHEDULED' AND c.scheduled_at<=now() AND (
+        (c.trigger_key='OVERDUE_BALANCE_REMINDER' AND NOT EXISTS (
+          SELECT 1 FROM invoices i WHERE i.id=c.invoice_id AND i.deleted_at IS NULL
+          AND i.due_date<current_date AND i.balance_due>0 AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED')))
+        OR (c.trigger_key='EVENT_24H_REMINDER' AND NOT EXISTS (
+          SELECT 1 FROM events e WHERE e.id=c.event_id AND e.deleted_at IS NULL
+          AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')
+          AND ((e.event_date+COALESCE(e.start_time,'12:00'::time)) AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')) BETWEEN now() AND now()+interval '24 hours'))
+      )`);
     const due = await client.query(
-      `SELECT id FROM communications
+      `SELECT id,scheduled_attempt_count FROM communications
        WHERE status='SCHEDULED' AND channel='EMAIL' AND scheduled_at <= now() AND deleted_at IS NULL
+       AND ($2::timestamptz IS NULL OR (created_at >= $2 AND lower(recipient)=ANY($3::text[])))
        ORDER BY scheduled_at LIMIT $1 FOR UPDATE SKIP LOCKED`,
-      [limit]
+      [limit,scope?.since||null,scope?.recipients||[]]
     );
     if (!due.rows.length) return [];
     await client.query(
-      "UPDATE communications SET status='PROCESSING', queued_at=COALESCE(queued_at, now()), updated_at=now() WHERE id=ANY($1::uuid[])",
+      "UPDATE communications SET status='PROCESSING', scheduled_attempt_count=scheduled_attempt_count+1, queued_at=COALESCE(queued_at, now()), updated_at=now() WHERE id=ANY($1::uuid[])",
       [due.rows.map((row) => row.id)]
     );
     return due.rows;
@@ -1102,13 +1177,14 @@ export async function processDueJobs({ limit = 25 } = {}) {
       const sent = await sendCommunication(communication.id, {}, { workerClaim: true });
       processed.push({ id: communication.id, status: sent.communication.status, type: "SCHEDULED_COMMUNICATION" });
     } catch (error) {
+      const retryAt = scheduledRetry(error, Number(communication.scheduled_attempt_count || 0) + 1);
       await query(
         `UPDATE communications
-         SET status='FAILED', failed_at=now(), failure_code=$1, failure_message=$2, updated_at=now()
+         SET status=$4, scheduled_at=COALESCE($5,scheduled_at), failed_at=now(), failure_code=$1, failure_message=$2, updated_at=now()
          WHERE id=$3`,
-        [error.code || "SCHEDULED_SEND_FAILED", error.message, communication.id]
+        [error.code || "SCHEDULED_SEND_FAILED", error.message, communication.id, retryAt ? 'SCHEDULED' : 'FAILED', retryAt]
       );
-      processed.push({ id: communication.id, status: "FAILED", type: "SCHEDULED_COMMUNICATION", error: error.message });
+      processed.push({ id: communication.id, status: retryAt ? 'SCHEDULED' : 'FAILED', type: "SCHEDULED_COMMUNICATION", error: error.message });
     }
   }
   return { processed };
