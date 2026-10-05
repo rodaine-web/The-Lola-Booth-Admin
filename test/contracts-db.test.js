@@ -18,7 +18,7 @@ test('contract lifecycle: snapshot, issue, lock, sign, replay, PDF, revoke and i
   await query(`CREATE SCHEMA ${schema}`);await query(`SET LOCAL search_path TO ${schema},public`);
   await query(`CREATE TABLE users(id UUID PRIMARY KEY); CREATE TABLE clients(id UUID PRIMARY KEY,name TEXT,email TEXT);
    CREATE TABLE events(id UUID PRIMARY KEY,event_name TEXT,event_type TEXT,event_date DATE,start_time TIME,end_time TIME,venue_name TEXT);
-   CREATE TABLE proposals(id UUID PRIMARY KEY,proposal_number TEXT,status TEXT,total NUMERIC,client_id UUID,event_id UUID,line_items_snapshot JSONB,secure_token TEXT,token_expires_at TIMESTAMPTZ,token_revoked_at TIMESTAMPTZ,deleted_at TIMESTAMPTZ);
+   CREATE TABLE proposals(id UUID PRIMARY KEY,proposal_number TEXT,status TEXT,total NUMERIC,client_id UUID,event_id UUID,line_items_snapshot JSONB,secure_token TEXT,deleted_at TIMESTAMPTZ);
    CREATE TABLE communications(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),proposal_id UUID,type TEXT,channel TEXT,direction TEXT,recipient TEXT,subject TEXT,rendered_subject TEXT,rendered_body TEXT,rendered_html TEXT,message_summary TEXT,status TEXT,send_mode TEXT,trigger_key TEXT,user_id UUID,created_by UUID,sent_by UUID,provider TEXT,provider_message_id TEXT,failure_code TEXT,failure_message TEXT,sent_at TIMESTAMPTZ);
    CREATE TABLE invoices(id UUID PRIMARY KEY,proposal_id UUID,invoice_number TEXT,status TEXT,total NUMERIC,amount_outstanding NUMERIC,balance_due NUMERIC,amount_paid NUMERIC,due_date DATE,secure_token TEXT,token_revoked_at TIMESTAMPTZ,token_expires_at TIMESTAMPTZ,deleted_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT now());
    CREATE TABLE payments(id UUID PRIMARY KEY,invoice_id UUID,amount NUMERIC,status TEXT,payment_date DATE,deleted_at TIMESTAMPTZ);

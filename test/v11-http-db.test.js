@@ -42,7 +42,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal((await api(`/contracts/${id}/send`,{method:'POST'})).data.status,'DEVELOPMENT_ONLY');
   const access=await api(`/proposals/${proposal.id}/workspace`,{method:'POST'});assert.equal(access.status,200);
   const workspaceToken=access.data.url.split('/').at(-1);
-  assert.equal((await api(`/public/workspaces/${workspaceToken}`,{token:null})).data.agreements[0].status,'ISSUED');
+  const workspace=await api(`/public/workspaces/${workspaceToken}`,{token:null});assert.equal(workspace.status,200);assert.equal(workspace.data.agreements[0].status,'ISSUED');
   const signature={name:'Demo Client',email:'demo@example.com',consent:true,documentHash:issued.data.document_hash};
   assert.equal((await api(`/public/contracts/${agreementToken}/sign`,{method:'POST',body:{...signature,consent:false},token:null})).status,400);
   const signed=await api(`/public/contracts/${agreementToken}/sign`,{method:'POST',body:signature,token:null});assert.equal(signed.data.status,'SIGNED');

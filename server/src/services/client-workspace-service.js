@@ -35,7 +35,7 @@ export async function publicWorkspace(token){
  return transaction(async()=>{
   const workspace=(await query('SELECT * FROM client_workspaces WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() FOR SHARE',[hashContractValue(token)])).rows[0];
   if(!workspace)throw new AppError('This client workspace link is unavailable or expired.',404,'NOT_FOUND');
-  const proposal=(await query(`SELECT p.id,p.proposal_number,p.status,p.total,p.secure_token,p.token_expires_at,p.token_revoked_at,
+  const proposal=(await query(`SELECT p.id,p.proposal_number,p.status,p.total,p.secure_token,
     c.name AS client_name,e.event_name,e.event_date,e.venue_name FROM proposals p LEFT JOIN clients c ON c.id=p.client_id
     LEFT JOIN events e ON e.id=p.event_id WHERE p.id=$1 AND p.deleted_at IS NULL`,[workspace.proposal_id])).rows[0];
   if(!proposal)throw new AppError('This client workspace is unavailable.',404,'NOT_FOUND');
