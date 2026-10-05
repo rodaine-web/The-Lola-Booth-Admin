@@ -49,6 +49,10 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   const repeated=await api(`/public/contracts/${agreementToken}/sign`,{method:'POST',body:signature,token:null});assert.equal(repeated.data.signed_at,signed.data.signed_at);
   assert.equal((await api(`/contracts/${id}`,{method:'PATCH',body:{title:'Changed agreement',terms:'This attempted changed document must fail.'}})).status,409);
   const pdf=await fetch(`${origin}/api/public/contracts/${agreementToken}/pdf`);assert.equal(pdf.status,200);assert.match(pdf.headers.get('content-type'),/pdf/);assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString(),'%PDF');
+  if(process.env.V11_BROWSER_TEST==='true'){
+   const {verifyClientBrowser}=await import('./support/v11-client-browser.js');
+   await verifyClientBrowser({api,origin,proposalId:proposal.id,workspaceToken});
+  }
   await api(`/proposals/${proposal.id}/workspace/revoke`,{method:'POST'});
   assert.equal((await api(`/public/workspaces/${workspaceToken}`,{token:null})).status,404);
   assert.equal((await pool.query('SELECT status FROM proposals WHERE id=$1',[proposal.id])).rows[0].status,'ACCEPTED');

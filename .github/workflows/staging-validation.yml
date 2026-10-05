@@ -56,3 +56,20 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Install browser for customer journey
+        run: npx playwright install --with-deps chromium
+
+      - name: Version 1.1 browser journey
+        env:
+          V11_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test
+          V11_BROWSER_TEST: "true"
+        run: node --test test/v11-http-db.test.js
+
+      - name: Save browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v11-browser-evidence
+          path: artifacts/v11-browser/
+          if-no-files-found: ignore
