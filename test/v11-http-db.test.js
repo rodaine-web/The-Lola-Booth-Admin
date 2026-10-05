@@ -76,8 +76,8 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   const recipient=(await pool.query('SELECT * FROM campaign_recipients WHERE campaign_id=$1',[trackedId])).rows[0];
   const message=(await pool.query('SELECT * FROM communications WHERE id=$1',[recipient.communication_id])).rows[0];
   assert.equal(message.sender_email,'lola@thelolabooth.com');assert.equal(recipient.tracking_enabled,true);
-  const openToken=message.html.match(/track\/open\/([A-Za-z0-9_-]{43})/)[1];
-  const clickToken=message.html.match(/track\/click\/([A-Za-z0-9_-]{43})/)[1];
+  const openToken=message.rendered_html.match(/track\/open\/([A-Za-z0-9_-]{43})/)[1];
+  const clickToken=message.rendered_html.match(/track\/click\/([A-Za-z0-9_-]{43})/)[1];
   const clickPath='/api/public/campaigns/track/click/'+clickToken;
   const openPath='/api/public/campaigns/track/open/'+openToken;
   await pool.query("UPDATE campaign_recipients SET status='SENT',sent_at=now() WHERE id=$1",[recipient.id]);
@@ -93,7 +93,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal(metrics.clicked,1);assert.equal(metrics.opened,1);assert.equal(metrics.delivered,null);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM campaign_events WHERE campaign_id=$1 AND event_type IN ('estimated_open','tracked_click')",[trackedId])).rows[0].n,2);
   const invalidSender=await api('/campaigns',{method:'POST',body:{name:'Invalid sender',sender_email:'outsider@example.com'}});assert.equal(invalidSender.status,422);
-  const unsubscribe=message.html.match(/https:[^" ]+\/unsubscribe\/([A-Za-z0-9_-]{43})/)[1];
+  const unsubscribe=message.rendered_html.match(/https:[^" ]+\/unsubscribe\/([A-Za-z0-9_-]{43})/)[1];
   assert.equal((await api('/public/campaigns/unsubscribe/'+unsubscribe,{method:'POST',body:{},token:null})).status,200);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM campaign_suppressions WHERE email=$1',['tracking@example.com'])).rows[0].n,1);
   assert.equal((await fetch(origin+'/api/public/campaigns/track/open/invalid')).status,200);
