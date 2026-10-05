@@ -52,6 +52,6 @@ export async function verifyCampaignSales({api,pool,viewerToken}){
  await reconcileInvoice(invoice.id);await reconcileInvoice(invoice.id);
  assert.equal((await pool.query("SELECT count(*)::int n FROM clients WHERE email='campaign-sales@example.com'")).rows[0].n,1);
  assert.equal((await pool.query('SELECT count(*)::int n FROM events WHERE client_id=$1',[won.converted_client_id])).rows[0].n,1);
- assert.equal((await pool.query('SELECT count(*)::int n FROM payments WHERE invoice_id=$1 AND client_id=$2 AND status='SUCCEEDED'',[invoice.id,won.converted_client_id])).rows[0].n,2);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM payments WHERE invoice_id=$1 AND client_id=$2 AND status='SUCCEEDED'",[invoice.id,won.converted_client_id])).rows[0].n,2);
  assert.equal((await api(`/campaigns/${id}/interests/${interest.id}/invoice`,{method:'POST',body:{send:true}})).status,409,'No new deposit request after the deposit is paid');
 }

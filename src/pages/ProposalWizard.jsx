@@ -1,3 +1,4 @@
+import {withoutCampaignBundle,removeCampaignExperience} from '../../shared/campaign-selection.js';
 import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
 import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
 import {experienceKey,normalizeScenarioEvent} from "../../shared/proposal-scenario.js";
@@ -115,16 +116,16 @@ export default function ProposalWizard(){
   function chooseExperience(item){
     setSelectedExperiences(current=>{
       const exists=current.some(entry=>entry.experience_id===item.id);
-      if(exists)return current.filter(entry=>entry.experience_id!==item.id);
+      if(exists)return removeCampaignExperience(current,item.id);
       return [...current,{experience_id:item.id,name:item.name,packages:[],price:Number(item.base_price||0),description:item.proposal_description||item.description||""}];
     });
   }
 
   function choosePackage(experienceId,pkg){
-    setSelectedExperiences(current=>current.map(item=>{
+    setSelectedExperiences(current=>withoutCampaignBundle(current,experienceId).map(item=>{
       if(item.experience_id!==experienceId)return item;
       const existing=item.packages||[];
-      const has=existing.some(entry=>entry.package_id===pkg.id);
+      const has=existing.some(entry=>!entry.campaign_id&&entry.package_id===pkg.id);
       const next=has?existing.filter(entry=>entry.package_id!==pkg.id):[packageSelection(pkg)];
       return {...item,packages:next,price:next.length?next.reduce((sum,entry)=>sum+Number(entry.price||0),0):item.price};
     }));
@@ -319,7 +320,7 @@ export default function ProposalWizard(){
         <CampaignPackagePicker experienceId={item.experience_id} onSelect={offer=>setSelectedExperiences(current=>mergeCampaignSelections(current,offer))}/>
         <div className="package-card-grid">
           {!packages.some(pkg=>!pkg.experience_id||pkg.experience_id===item.experience_id)&&!catalogLoading&&!catalogError&&<p>No active packages are linked to this experience yet.</p>}
-          {packages.filter(pkg=>!pkg.experience_id||pkg.experience_id===item.experience_id).map(pkg=>{const selected=(item.packages||[]).some(entry=>entry.package_id===pkg.id);return <button key={pkg.id} className={selected?"package-card selected":"package-card"} onClick={()=>choosePackage(item.experience_id,pkg)}><strong>{pkg.name}</strong>{pkg.most_popular&&<span>Most Popular</span>}<b>{pkg.pricing_mode==="CUSTOM"?"Let's create":money(pkg.starting_price||0)}</b><small>{pkg.short_description||pkg.description||""}</small><small>{pkg.included_hours?pkg.included_hours+" hours":"Duration as agreed"}</small><small>{(pkg.items||pkg.website_features||[]).map(f=>typeof f==="string"?f:f.label).join(" · ")}</small></button>;})}
+          {packages.filter(pkg=>!pkg.experience_id||pkg.experience_id===item.experience_id).map(pkg=>{const selected=(item.packages||[]).some(entry=>!entry.campaign_id&&entry.package_id===pkg.id);return <button key={pkg.id} className={selected?"package-card selected":"package-card"} onClick={()=>choosePackage(item.experience_id,pkg)}><strong>{pkg.name}</strong>{pkg.most_popular&&<span>Most Popular</span>}<b>{pkg.pricing_mode==="CUSTOM"?"Let's create":money(pkg.starting_price||0)}</b><small>{pkg.short_description||pkg.description||""}</small><small>{pkg.included_hours?pkg.included_hours+" hours":"Duration as agreed"}</small><small>{(pkg.items||pkg.website_features||[]).map(f=>typeof f==="string"?f:f.label).join(" · ")}</small></button>;})}
         </div>
       <div className="form-grid">{(item.packages||[]).map(pkg=><label key={pkg.campaign_id?pkg.campaign_id+pkg.campaign_offer_key:pkg.package_id}>Selected price — {pkg.name}<input type="number" min="0" step="0.01" readOnly={!!pkg.campaign_id} value={pkg.price} onChange={e=>setSelectedExperiences(current=>current.map(row=>row.experience_id===item.experience_id?{...row,packages:row.packages.map(p=>p.package_id===pkg.package_id?{...p,price:Number(e.target.value)}:p)}:row))}/></label>)}</div>
       </section>)}

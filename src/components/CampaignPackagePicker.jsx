@@ -1,10 +1,7 @@
 import {useEffect,useState} from 'react';
 import {api} from '../api/client.js';
 
-export function mergeCampaignSelections(current,offer){
- const ids=new Set(offer.selections.map(s=>s.experience_id));
- return [...current.filter(s=>!ids.has(s.experience_id)),...offer.selections];
-}
+export {mergeCampaignSelections} from '../../shared/campaign-selection.js';
 export default function CampaignPackagePicker({experienceId,onSelect}){
  const [open,setOpen]=useState(false),[campaigns,setCampaigns]=useState([]),[selected,setSelected]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);
  useEffect(()=>{

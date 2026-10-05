@@ -1,3 +1,4 @@
+import {withoutCampaignBundle,removeCampaignExperience} from '../../shared/campaign-selection.js';
 import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
 import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
 import ProposalScenarioReview from "../components/ProposalScenarioReview.jsx";
@@ -119,7 +120,7 @@ export default function ProposalEditor() {
       const selected = current.selected_experiences || [];
       const exists = selected.some((item) => item.experience_id === experience.id);
       const next = exists
-        ? selected.filter((item) => item.experience_id !== experience.id)
+        ? removeCampaignExperience(selected,experience.id)
         : [...selected, {
             experience_id: experience.id,
             name: experience.name,
@@ -141,10 +142,11 @@ export default function ProposalEditor() {
 
   function toggleExperiencePackage(index, pkg) {
     setForm((current) => {
-      const selected_experiences = (current.selected_experiences || []).map((item, i) => {
-        if (i !== index) return item;
+      const experienceId=current.selected_experiences[index].experience_id;
+      const selected_experiences = withoutCampaignBundle(current.selected_experiences||[],experienceId).map((item) => {
+        if (item.experience_id !== experienceId) return item;
         const selected = Array.isArray(item.packages) ? item.packages : [];
-        const exists = selected.some((entry) => entry.package_id === pkg.id);
+        const exists = selected.some((entry) => !entry.campaign_id && entry.package_id === pkg.id);
         const packages = exists
           ? selected.filter((entry) => entry.package_id !== pkg.id)
           : [...selected, {
@@ -403,7 +405,7 @@ export default function ProposalEditor() {
                             <label className="check-row" key={pkg.id}>
                               <input
                                 type="checkbox"
-                                checked={(item.packages || []).some((entry) => entry.package_id === pkg.id)}
+                                checked={(item.packages || []).some((entry) => !entry.campaign_id && entry.package_id === pkg.id)}
                                 onChange={() => toggleExperiencePackage(index, pkg)}
                               />
                               <span>{pkg.name}{pkg.starting_price != null ? ` · ${Number(pkg.starting_price).toLocaleString()}` : ""}</span>
