@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {campaignContent} from '../../shared/campaign-content.js';
 
-export async function verifyCampaignSales({api,pool,viewerToken}){
+export async function verifyCampaignSales({api,pool,viewerToken,origin}){
  assert.equal(process.env.EMAIL_PROVIDER,'development','This isolated fixture must never use an external mail provider');
  process.env.STAGING_EMAIL_ENABLED='true';process.env.STAGING_EMAIL_ALLOWLIST='campaign-sales@example.com';
  await pool.query("INSERT INTO business_settings(business_name,default_deposit_percent,sales_tax_percent) SELECT 'Synthetic QA',30,0 WHERE NOT EXISTS(SELECT 1 FROM business_settings)");
@@ -31,11 +31,16 @@ export async function verifyCampaignSales({api,pool,viewerToken}){
  assert.equal(Number(invoice.total),800);assert.equal(Number(invoice.discount),200);assert.equal(invoice.pricing_snapshot.amount_due_now,240);assert.equal(invoice.client_id,null);
  const requests=await Promise.all([0,1].map(()=>api(`/campaigns/${id}/interests/${interest.id}/invoice`,{method:'POST',body:{send:false}})));
  for(const request of requests)assert.equal(request.data.invoice.id,invoice.id);
+ process.env.STAGING_EMAIL_ENABLED='false';
+ const failedSend=await api(`/campaigns/${id}/interests/${interest.id}/invoice`,{method:'POST',body:{send:true}});assert.equal(failedSend.status,502);
+ assert.equal((await pool.query('SELECT status FROM invoices WHERE id=$1',[invoice.id])).rows[0].status,'DRAFT','A failed email keeps the invoice draft available for retry');
+ process.env.STAGING_EMAIL_ENABLED='true';
  const sent=await api(`/campaigns/${id}/interests/${interest.id}/invoice`,{method:'POST',body:{send:true}});
  assert.equal(sent.status,200,JSON.stringify(sent.data));assert.equal(sent.data.invoice.status,'SENT');assert.equal(sent.data.communication.status,'SENT_TO_PROVIDER');assert.match(sent.data.communication.rendered_html,/View &amp; Pay Deposit|View & Pay Deposit/);
  const repeated=await api(`/campaigns/${id}/interests/${interest.id}/invoice`,{method:'POST',body:{send:true}});assert.equal(repeated.status,200);assert.equal(repeated.data.communication.id,sent.data.communication.id);
  assert.equal((await pool.query('SELECT count(*)::int n FROM email_messages WHERE communication_id=$1',[sent.data.communication.id])).rows[0].n,1);
  const publicInvoice=await api('/public/invoices/'+invoice.secure_token,{token:null});assert.equal(publicInvoice.status,200,JSON.stringify(publicInvoice.data));assert.equal(publicInvoice.data.invoice.client_name,'Campaign Prospect');assert.equal(publicInvoice.data.paymentOptions.amountDue,240);
+ const pdf=await fetch(`${origin}/api/public/invoices/${invoice.secure_token}/pdf`);assert.equal(pdf.status,200);assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString(),'%PDF');
  const catalog=await api('/campaigns/offers-for-proposals');assert.equal(catalog.status,200);const campaignOffer=catalog.data.data.find(c=>c.id===id).offers[0];assert.equal(campaignOffer.discounted,800);
  const {buildProposalSnapshot}=await import('../../server/src/services/proposal-service.js');
  const snapshot=await buildProposalSnapshot({scenario_enabled:true,selected_experiences:campaignOffer.selections.map(s=>({...s,price:1,packages:s.packages.map(p=>({...p,price:1}))})),deposit_value:30});
