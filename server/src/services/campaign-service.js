@@ -420,6 +420,11 @@ export async function processCampaignJobs({
       const sent = await sendCommunication(r.communication_id, {}, {
         workerClaim: true
       });
+      if (sent.communication.status === 'CANCELLED') {
+        await query("UPDATE campaign_recipients SET status='CANCELLED' WHERE id=$1", [r.id]);
+        processed.push({ id: r.id, status: 'CANCELLED' });
+        continue;
+      }
       await query("UPDATE campaign_recipients SET status='SENT_TO_PROVIDER',sent_at=now(),failed_at=NULL WHERE id=$1", [r.id]);
       await event(r.campaign_id, 'provider_accepted', {}, r.id);
       processed.push({
@@ -427,6 +432,11 @@ export async function processCampaignJobs({
         status: sent.communication.status
       });
     } catch (e) {
+      if (e.code === 'CAMPAIGN_PAUSED') {
+        await query("UPDATE campaign_recipients SET status='QUEUED' WHERE id=$1", [r.id]);
+        processed.push({ id: r.id, status: 'QUEUED' });
+        continue;
+      }
       await query("UPDATE campaign_recipients SET status='FAILED',failed_at=now() WHERE id=$1", [r.id]);
       await event(r.campaign_id, 'delivery_failed', {
         message: e.message,

@@ -217,7 +217,8 @@ test('worker atomically claims a recipient, uses existing provider abstraction a
     campaign_id: id,
     communication_id: communicationId,
     email: 'qa@example.invalid',
-    status: 'QUEUED'
+    status: 'QUEUED',
+    campaign_status: 'SENDING'
   };
   let message = {
     id: communicationId,
@@ -230,7 +231,7 @@ test('worker atomically claims a recipient, uses existing provider abstraction a
     rendered_html: '<p>QA</p>'
   };
   const calls = fixture(t, (sql, args) => {
-    if (sql.startsWith('SELECT r.* FROM campaign_recipients')) return [recipient];
+    if (sql.startsWith('SELECT r.*')) return [recipient];
     if (sql.startsWith('SELECT status FROM campaign_recipients')) return [recipient];
     if (sql.startsWith('SELECT * FROM communications')) return [message];
     if (sql.startsWith('UPDATE campaign_recipients SET status=\'PROCESSING\'')) {
@@ -346,9 +347,9 @@ test('repeated worker send returns existing provider acceptance without sending 
 });
 test('provider failure remains visible and does not mark a campaign recipient sent',async t=>{
  const previousFlag=process.env.CAMPAIGN_JOBS_ENABLED,previousProvider=env.emailProvider;process.env.CAMPAIGN_JOBS_ENABLED='true';env.emailProvider='synthetic-unconfigured-provider';
- let recipient={id:recipientId,campaign_id:id,communication_id:communicationId,email:'qa@example.invalid',status:'QUEUED'};
+ let recipient={id:recipientId,campaign_id:id,communication_id:communicationId,email:'qa@example.invalid',status:'QUEUED',campaign_status:'SENDING'};
  let message={id:communicationId,campaign_recipient_id:recipientId,status:'DRAFT',channel:'EMAIL',recipient:recipient.email,subject:'QA',rendered_body:'QA'};
- const calls=fixture(t,(sql)=>{if(sql.startsWith('SELECT r.* FROM campaign_recipients'))return [recipient];if(sql.startsWith('SELECT status FROM campaign_recipients'))return [recipient];if(sql.startsWith('SELECT * FROM communications'))return [message];if(sql.startsWith("UPDATE campaign_recipients SET status='PROCESSING'")){recipient.status='PROCESSING';return [];}if(sql.startsWith("UPDATE communications SET status='PROCESSING'")){message.status='PROCESSING';return [message];}return [];});
+ const calls=fixture(t,(sql)=>{if(sql.startsWith('SELECT r.*'))return [recipient];if(sql.startsWith('SELECT status FROM campaign_recipients'))return [recipient];if(sql.startsWith('SELECT * FROM communications'))return [message];if(sql.startsWith("UPDATE campaign_recipients SET status='PROCESSING'")){recipient.status='PROCESSING';return [];}if(sql.startsWith("UPDATE communications SET status='PROCESSING'")){message.status='PROCESSING';return [message];}return [];});
  try{const out=await campaigns.processCampaignJobs({limit:1});assert.equal(out.processed[0].status,'FAILED');assert.ok(calls.some(c=>c.sql.includes("UPDATE communications SET status='FAILED'")));assert.equal(calls.some(c=>c.sql.includes("UPDATE campaign_recipients SET status='SENT_TO_PROVIDER'")),false);}
  finally{env.emailProvider=previousProvider;if(previousFlag===undefined)delete process.env.CAMPAIGN_JOBS_ENABLED;else process.env.CAMPAIGN_JOBS_ENABLED=previousFlag;}
 });

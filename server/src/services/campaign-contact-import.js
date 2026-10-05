@@ -55,7 +55,7 @@ export function importCampaignContacts(input){
  catch(e){throw new AppError('Cannot import contacts: '+e.message,422,'INVALID_CONTACT_FILE');}
  const header=(rows.shift()||[]).map(x=>String(x||'').trim().toLowerCase().replace(/[ _-]/g,''));
  if(!header.includes('email')||!header.includes('marketingconsent'))throw new AppError('Use the template headers, including Email and Marketing Consent.',422,'INVALID_CONTACT_HEADERS');
- const recipients=[],errors=[],seen=new Set();let duplicates=0;
+ const recipients=[],errors=[],seen=new Map();let duplicates=0;
  rows.forEach((row,i)=>{
   if(!row.some(v=>String(v||'').trim()))return;
   const get=key=>String(row[header.indexOf(key)]||'').trim();
@@ -64,7 +64,7 @@ export function importCampaignContacts(input){
   if(!['yes','true','1','no','false','0',''].includes(consent)){errors.push({row:i+2,message:'Marketing Consent must be Yes or No.'});return;}
   const c={email,first_name:get('firstname'),last_name:get('lastname'),company:get('company'),phone:get('phone'),marketing_email_opt_in:['yes','true','1'].includes(consent)};
   if(c.first_name.length>100||c.last_name.length>100||c.company.length>200||c.phone.length>50){errors.push({row:i+2,message:'Contact details are too long.'});return;}
-  if(seen.has(email)){duplicates++;return;}seen.add(email);recipients.push(c);
+  if(seen.has(email)){duplicates++;seen.get(email).marketing_email_opt_in &&= c.marketing_email_opt_in;return;}seen.set(email,c);recipients.push(c);
  });
  return {recipients,errors,duplicates,total:recipients.length,withoutConsent:recipients.filter(r=>!r.marketing_email_opt_in).length};
 }

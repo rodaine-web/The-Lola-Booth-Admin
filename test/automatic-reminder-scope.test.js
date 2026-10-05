@@ -12,7 +12,7 @@ test('staging reminders select fresh QA records; scheduled dispatch excludes bac
   for(const call of calls){assert.deepEqual(call.params,['2026-10-04T12:00:00.000Z',['qa@example.invalid']]);assert.match(call.sql,/created_at >= \$1/);assert.match(call.sql,/lower\(c.email\)=ANY/);}
   calls.length=0;await processDueJobs();
   assert.ok(!calls.some(c=>c.sql.includes('FROM automation_jobs j')));
-  const due=calls.find(c=>c.sql.includes('SELECT id FROM communications'));assert.deepEqual(due.params,[25,'2026-10-04T12:00:00.000Z',['qa@example.invalid']]);
+  const due=calls.find(c=>c.sql.includes('SELECT id,scheduled_attempt_count FROM communications'));assert.deepEqual(due.params,[25,'2026-10-04T12:00:00.000Z',['qa@example.invalid']]);
   const cancel=calls.find(c=>c.sql.includes("SET status='CANCELLED'"));assert.match(cancel.sql,/PAID/);assert.match(cancel.sql,/CONFIRMED/);assert.match(cancel.sql,/READY/);
   calls.length=0;delete process.env.STAGING_AUTOMATIONS_SINCE;assert.deepEqual(await queueDueReminders(),[]);assert.equal(calls.length,0);await assert.rejects(()=>processDueJobs(),e=>e.code==='STAGING_AUTOMATIONS_PAUSED');
  }finally{pool.query=originalQuery;pool.connect=originalConnect;for(const [k,v] of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;}

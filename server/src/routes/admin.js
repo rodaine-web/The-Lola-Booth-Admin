@@ -1,3 +1,4 @@
+import {searchAdmin} from '../services/admin-search-service.js';
 import { eventFinanceSummary } from "../services/event-finance-summary.js";
 import {campaignRouter} from "./campaigns.js";
 import {scenarioConfigSchema,scenarioOverridesSchema} from "../services/proposal-scenario-schema.js";
@@ -2711,14 +2712,7 @@ function sampleProviderLead(provider) {
 }
 
 adminRouter.get("/search", requirePermission("read:admin"), asyncHandler(async (req, res) => {
-  const term = `%${req.query.q || ""}%`;
-  const [clients, leads, events, invoices] = await Promise.all([
-    query("SELECT 'client' AS type, id, name AS title, email AS subtitle FROM clients WHERE deleted_at IS NULL AND (name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) LIMIT 8", [term]),
-    query("SELECT 'lead' AS type, id, first_name || ' ' || last_name AS title, email AS subtitle FROM leads WHERE deleted_at IS NULL AND (first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) LIMIT 8", [term]),
-    query("SELECT 'event' AS type, id, event_name AS title, venue_name AS subtitle FROM events WHERE deleted_at IS NULL AND (event_name ILIKE $1 OR venue_name ILIKE $1) LIMIT 8", [term]),
-    query("SELECT 'invoice' AS type, id, invoice_number AS title, status AS subtitle FROM invoices WHERE deleted_at IS NULL AND invoice_number ILIKE $1 LIMIT 8", [term])
-  ]);
-  res.json({ data: [...clients.rows, ...leads.rows, ...events.rows, ...invoices.rows] });
+  res.json({ data: await searchAdmin(req.user,req.query.q) });
 }));
 
 adminRouter.get("/audit-logs",requirePermission("read:audit"),asyncHandler(async(req,res)=>{
@@ -2846,7 +2840,7 @@ adminRouter.post('/invoices/:id/revoke-access',requirePermission('write:finance'
 adminRouter.get('/dashboard/revenue-records',requirePermission('read:finance'),asyncHandler(async(req,res)=>res.json(await revenueRecords(req.query))));
 
 adminRouter.get('/data-review',requirePermission('read:settings'),asyncHandler(async(req,res)=>res.json(await reviewData(req.query,req.user))));
-adminRouter.patch('/data-review/:type/:id',requirePermission('read:settings'),asyncHandler(async(req,res)=>res.json(await classifyData(req))));
+adminRouter.patch('/data-review/:type/:id',requirePermission('write:settings'),asyncHandler(async(req,res)=>res.json(await classifyData(req))));
 
 adminRouter.post('/invoices/:id/reissue-access',requirePermission('write:finance'),asyncHandler(async(req,res)=>{
  const token=crypto.randomBytes(24).toString('hex');

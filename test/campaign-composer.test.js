@@ -44,7 +44,7 @@ test('server rejects discounts exceeding price or percentage limits and mismatch
 const csv=data=>importCampaignContacts({filename:'contacts.csv',data:Buffer.from(data).toString('base64')});
 test('CSV import preserves contact details, normalizes emails and deduplicates',()=>{
  const out=csv('Email,First Name,Last Name,Company,Phone,Marketing Consent\r\njordan@example.com,Jordan,Smith,"Northstar, Inc.",+15551234567,Yes\r\nJORDAN@example.com,Other,Name,Company,,No\r\nno-consent@example.com,Lee,,,,\r\n');
- assert.equal(out.total,2);assert.equal(out.duplicates,1);assert.equal(out.withoutConsent,1);assert.equal(out.recipients[0].company,'Northstar, Inc.');assert.equal(out.recipients[0].phone,'+15551234567');assert.equal(out.recipients[0].marketing_email_opt_in,true);
+ assert.equal(out.total,2);assert.equal(out.duplicates,1);assert.equal(out.withoutConsent,2);assert.equal(out.recipients[0].company,'Northstar, Inc.');assert.equal(out.recipients[0].phone,'+15551234567');assert.equal(out.recipients[0].marketing_email_opt_in,false);
 });
 test('CSV import reports invalid row numbers and requires explicit consent',()=>{
  const out=csv('Email,Marketing Consent\nbad,Yes\nvalid@example.com,Maybe\nblank@example.com,\n');assert.deepEqual(out.errors.map(e=>e.row),[2,3]);assert.equal(out.recipients[0].marketing_email_opt_in,false);

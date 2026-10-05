@@ -6,6 +6,7 @@ import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { sendEmail } from "./email-service.js";
+import { dispatchDecision, scheduledRetry } from './communication-dispatch-policy.js';
 
 export const implementedAutomationJobTypes = [
   "SEND_EMAIL_TEMPLATE",
@@ -624,13 +625,17 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
   const claim = await transaction(async (client) => {
     let communication = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!communication) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
+    if (communication.status === "SENT" || communication.status === "SENT_TO_PROVIDER") {
+      logger.warn({ communicationId: id, providerMessageId: communication.provider_message_id }, "Duplicate communication send prevented");
+      return { duplicate: true, communication };
+    }
     if(communication.campaign_recipient_id){
       const recipient=(await client.query("SELECT status FROM campaign_recipients WHERE id=$1",[communication.campaign_recipient_id])).rows[0];
       if(!workerClaim||recipient?.status!=="PROCESSING")throw new AppError("Campaign messages must be sent by the campaign worker.",409,"CAMPAIGN_WORKER_REQUIRED",{retryable:false});
     }
-    if (communication.status === "SENT" || communication.status === "SENT_TO_PROVIDER") {
-      logger.warn({ communicationId: id, providerMessageId: communication.provider_message_id }, "Duplicate communication send prevented");
-      return { duplicate: true, communication };
+    if (await dispatchDecision(client, communication) === 'CANCELLED') {
+      const cancelled = (await client.query("UPDATE communications SET status='CANCELLED',updated_at=now() WHERE id=$1 RETURNING *", [id])).rows[0];
+      return { blocked: true, communication: cancelled };
     }
     if(communication.failure_code==="DELIVERY_OUTCOME_UNKNOWN")throw new AppError("Delivery outcome is unknown. Review provider history before any retry.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
     if (!["DRAFT", "SCHEDULED", "FAILED", ...(workerClaim ? ["PROCESSING"] : [])].includes(communication.status)) throw new AppError("This communication cannot be sent.", 409, "COMMUNICATION_IMMUTABLE");
@@ -647,6 +652,7 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
     return { duplicate: false, communication };
   });
 
+  if (claim.blocked) return { communication: claim.communication, delivery: { status: 'CANCELLED', suppressed: true } };
   if (claim.duplicate) {
     return { communication: claim.communication, delivery: { status: claim.communication.status, provider: claim.communication.provider, providerMessageId: claim.communication.provider_message_id, duplicatePrevented: true } };
   }
@@ -673,10 +679,11 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
       "UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$2,failure_message=$3,updated_at=now() WHERE id=$1",
       [id,code,message]
     );
-    throw new AppError(message,502,code,{retryable:!unknown&&error.details?.retryable!==false});
+    throw new AppError(message,502,code,{retryable:!unknown&&error.details?.retryable!==false,retryAfter:error.details?.retryAfter});
   }
 
-  const result = await transaction(async (client) => {
+  let result;
+  try { result = await transaction(async (client) => {
     const current=(await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",[id])).rows[0];
     if (!current) throw new AppError("Communication not found.",404,"COMMUNICATION_NOT_FOUND");
     if (current.status === "SENT" || current.status === "SENT_TO_PROVIDER") {
@@ -697,8 +704,13 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
       [id, delivery.provider, delivery.providerMessageId, current.recipient, current.rendered_subject || current.subject, delivery.status || "SENT", current.rendered_body.slice(0, 500)]
     );
     return { communication: updated.rows[0] };
-  });
-  await recordActivity({ actorUserId: user.id, entityType: "communication", entityId: id, action: "communication_sent_to_provider", summary: `${communication.channel} sent to provider for ${communication.recipient}` });
+  }); } catch (error) {
+    // The provider accepted the request, but persistence failed. Retrying could
+    // send it twice; keep this outcome for operator reconciliation.
+    await query("UPDATE communications SET status='FAILED',failed_at=now(),failure_code='DELIVERY_OUTCOME_UNKNOWN',failure_message='Provider accepted the message but recording failed. Review provider history before retrying.',updated_at=now() WHERE id=$1 AND status='PROCESSING'", [id]).catch(() => {});
+    throw new AppError('Provider acceptance could not be recorded. Review provider history before retrying.',502,'DELIVERY_OUTCOME_UNKNOWN',{retryable:false,outcomeUnknown:true});
+  }
+  await recordActivity({ actorUserId: user.id, entityType: "communication", entityId: id, action: "communication_sent_to_provider", summary: `${communication.channel} sent to provider for ${communication.recipient}` }).catch(error => logger.error({communicationId:id,error:error.message},'Communication accepted; activity recording failed'));
   return { ...result, delivery };
 }
 
@@ -1147,7 +1159,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
           AND ((e.event_date+COALESCE(e.start_time,'12:00'::time)) AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')) BETWEEN now() AND now()+interval '24 hours'))
       )`);
     const due = await client.query(
-      `SELECT id FROM communications
+      `SELECT id,scheduled_attempt_count FROM communications
        WHERE status='SCHEDULED' AND channel='EMAIL' AND scheduled_at <= now() AND deleted_at IS NULL
        AND ($2::timestamptz IS NULL OR (created_at >= $2 AND lower(recipient)=ANY($3::text[])))
        ORDER BY scheduled_at LIMIT $1 FOR UPDATE SKIP LOCKED`,
@@ -1155,7 +1167,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
     );
     if (!due.rows.length) return [];
     await client.query(
-      "UPDATE communications SET status='PROCESSING', queued_at=COALESCE(queued_at, now()), updated_at=now() WHERE id=ANY($1::uuid[])",
+      "UPDATE communications SET status='PROCESSING', scheduled_attempt_count=scheduled_attempt_count+1, queued_at=COALESCE(queued_at, now()), updated_at=now() WHERE id=ANY($1::uuid[])",
       [due.rows.map((row) => row.id)]
     );
     return due.rows;
@@ -1165,13 +1177,14 @@ export async function processDueJobs({ limit = 25 } = {}) {
       const sent = await sendCommunication(communication.id, {}, { workerClaim: true });
       processed.push({ id: communication.id, status: sent.communication.status, type: "SCHEDULED_COMMUNICATION" });
     } catch (error) {
+      const retryAt = scheduledRetry(error, Number(communication.scheduled_attempt_count || 0) + 1);
       await query(
         `UPDATE communications
-         SET status='FAILED', failed_at=now(), failure_code=$1, failure_message=$2, updated_at=now()
+         SET status=$4, scheduled_at=COALESCE($5,scheduled_at), failed_at=now(), failure_code=$1, failure_message=$2, updated_at=now()
          WHERE id=$3`,
-        [error.code || "SCHEDULED_SEND_FAILED", error.message, communication.id]
+        [error.code || "SCHEDULED_SEND_FAILED", error.message, communication.id, retryAt ? 'SCHEDULED' : 'FAILED', retryAt]
       );
-      processed.push({ id: communication.id, status: "FAILED", type: "SCHEDULED_COMMUNICATION", error: error.message });
+      processed.push({ id: communication.id, status: retryAt ? 'SCHEDULED' : 'FAILED', type: "SCHEDULED_COMMUNICATION", error: error.message });
     }
   }
   return { processed };
