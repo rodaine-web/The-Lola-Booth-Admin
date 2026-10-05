@@ -112,18 +112,20 @@ async function audit(req, campaign, action) {
 export async function getCampaign(id, {
   lock = false
 } = {}) {
-  const c = (await query(`SELECT * FROM campaigns WHERE id=$1 ${lock ? 'FOR UPDATE' : ''}`, [id])).rows[0];
+  const c = (await query(`SELECT * FROM campaigns WHERE id=$1 AND deleted_at IS NULL ${lock ? 'FOR UPDATE' : ''}`, [id])).rows[0];
   if (!c) throw new AppError('Campaign not found.', 404, 'NOT_FOUND');
   return {
     ...c,
+    can_delete: isStaging() && c.status === 'DRAFT' && !c.started_at && !c.scheduled_at,
     content_json: campaignContent(c.content_json)
   };
 }
 export async function listCampaigns(filters = {}) {
-  const rows = (await query(`SELECT c.*,u.name creator_name,count(r.id)::int recipients,count(r.sent_at)::int sent,count(r.interested_at)::int interested,count(r.failed_at)::int failed FROM campaigns c LEFT JOIN users u ON u.id=c.created_by LEFT JOIN campaign_recipients r ON r.campaign_id=c.id WHERE ($1='' OR c.status=$1) AND ($2='' OR c.type=$2) AND ($3='' OR c.name ILIKE '%'||$3||'%' OR EXISTS(SELECT 1 FROM campaign_recipients s WHERE s.campaign_id=c.id AND (s.email ILIKE '%'||$3||'%' OR s.company ILIKE '%'||$3||'%'))) AND ($4='' OR c.created_by::text=$4) AND ($5='' OR c.created_at::date>=NULLIF($5,'')::date) AND ($6='' OR c.created_at::date<=NULLIF($6,'')::date) AND ($7='' OR EXISTS(SELECT 1 FROM campaign_recipients a WHERE a.campaign_id=c.id AND a.company ILIKE '%'||$7||'%') OR c.audience_json::text ILIKE '%'||$7||'%') GROUP BY c.id,u.name ORDER BY c.updated_at DESC`, [filters.status || '', filters.type || '', filters.search || '',filters.owner||'',filters.from||'',filters.to||'',filters.audience||''])).rows;
+  const rows = (await query(`SELECT c.*,u.name creator_name,count(r.id)::int recipients,count(r.sent_at)::int sent,count(r.interested_at)::int interested,count(r.failed_at)::int failed FROM campaigns c LEFT JOIN users u ON u.id=c.created_by LEFT JOIN campaign_recipients r ON r.campaign_id=c.id WHERE c.deleted_at IS NULL AND ($1<>'' OR c.status<>'ARCHIVED') AND ($1='' OR c.status=$1) AND ($2='' OR c.type=$2) AND ($3='' OR c.name ILIKE '%'||$3||'%' OR EXISTS(SELECT 1 FROM campaign_recipients s WHERE s.campaign_id=c.id AND (s.email ILIKE '%'||$3||'%' OR s.company ILIKE '%'||$3||'%'))) AND ($4='' OR c.created_by::text=$4) AND ($5='' OR c.created_at::date>=NULLIF($5,'')::date) AND ($6='' OR c.created_at::date<=NULLIF($6,'')::date) AND ($7='' OR EXISTS(SELECT 1 FROM campaign_recipients a WHERE a.campaign_id=c.id AND a.company ILIKE '%'||$7||'%') OR c.audience_json::text ILIKE '%'||$7||'%') GROUP BY c.id,u.name ORDER BY c.updated_at DESC`, [filters.status || '', filters.type || '', filters.search || '',filters.owner||'',filters.from||'',filters.to||'',filters.audience||''])).rows;
   return {
     data: rows.map(c => ({
       ...c,
+      can_delete: isStaging() && c.status === 'DRAFT' && !c.started_at && !c.scheduled_at && c.recipients === 0,
       delivered: null,
       opened: null,
       clicked: null
@@ -195,6 +197,7 @@ export async function campaignDetail(id) {
   const [recipients, interests, events] = await Promise.all([query('SELECT r.*,m.failure_message,m.failure_code FROM campaign_recipients r LEFT JOIN communications m ON m.id=r.communication_id WHERE campaign_id=$1 ORDER BY r.company,r.first_name', [id]), query(`SELECT i.*,r.first_name,r.last_name,r.email,r.company,r.lead_id,r.client_id,l.status lead_status,l.assigned_user_id owner FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id LEFT JOIN leads l ON l.id=r.lead_id WHERE i.campaign_id=$1 ORDER BY submitted_at DESC`, [id]), query('SELECT * FROM campaign_events WHERE campaign_id=$1 ORDER BY created_at DESC LIMIT 300', [id])]);
   return {
     ...c,
+    can_delete: c.can_delete && recipients.rowCount === 0,
     recipients: recipients.rows,
     interests: interests.rows,
     activity: events.rows,
@@ -245,6 +248,18 @@ export async function queueCampaign(id, req, {
     const updated = (await query("UPDATE campaigns SET status=$2,scheduled_at=$3,updated_at=now() WHERE id=$1 RETURNING *", [id, scheduled_at ? 'SCHEDULED' : 'SENDING', scheduled_at])).rows[0];
     await audit(req, updated, scheduled_at ? 'campaign_scheduled' : 'campaign_send_initiated');
     return updated;
+  });
+}
+export async function deleteCampaign(id, req) {
+  if (!isStaging()) throw new AppError('Campaign deletion is available in staging only.',404,'NOT_FOUND');
+  return transaction(async () => {
+    const c = await getCampaign(id, {lock:true});
+    if (c.status !== 'DRAFT') throw new AppError('Only draft campaigns can be deleted. Archive sent campaigns instead.',409,'CAMPAIGN_STATE');
+    const history = await query('SELECT 1 FROM campaign_recipients WHERE campaign_id=$1 LIMIT 1',[id]);
+    if (history.rowCount || c.started_at || c.scheduled_at) throw new AppError('This campaign has sending history and must be archived.',409,'CAMPAIGN_STATE');
+    const deleted = (await query('UPDATE campaigns SET deleted_at=now(),deleted_by=$2,updated_at=now() WHERE id=$1 RETURNING *',[id,req.user.id])).rows[0];
+    await audit(req, deleted, 'campaign_deleted');
+    return {deleted:true};
   });
 }
 export async function campaignAction(id, action, req) {
@@ -386,7 +401,7 @@ export async function processCampaignJobs({
     processed: [],
     paused: true
   };
-  const started=await query("UPDATE campaigns SET status='SENDING',started_at=COALESCE(started_at,now()) WHERE status='SCHEDULED' AND scheduled_at<=now() RETURNING id");
+  const started=await query("UPDATE campaigns SET status='SENDING',started_at=COALESCE(started_at,now()) WHERE deleted_at IS NULL AND status='SCHEDULED' AND scheduled_at<=now() RETURNING id");
   for(const c of started.rows)await event(c.id,'campaign_sending_started',{},null,'started:'+c.id);
   // Unknown outcomes remain failed for operator review; never automatically re-send.
   await query("UPDATE communications m SET status='FAILED',failed_at=now(),failure_code='DELIVERY_OUTCOME_UNKNOWN',failure_message='Campaign worker stopped during send. Review provider history before retry.' FROM campaign_recipients r WHERE m.id=r.communication_id AND r.status='PROCESSING' AND r.queued_at<now()-interval '10 minutes' AND m.status='PROCESSING'");
@@ -394,7 +409,7 @@ export async function processCampaignJobs({
   const processed = [];
   for (let i = 0; i < limit; i++) {
     const r = await transaction(async () => {
-      const row = (await query("SELECT r.* FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='QUEUED' AND c.status='SENDING' ORDER BY r.queued_at LIMIT 1 FOR UPDATE OF r,c SKIP LOCKED")).rows[0];
+      const row = (await query("SELECT r.* FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='QUEUED' AND c.deleted_at IS NULL AND c.status='SENDING' ORDER BY r.queued_at LIMIT 1 FOR UPDATE OF r,c SKIP LOCKED")).rows[0];
       if (!row) return null;
       const suppressed = (await query('SELECT 1 FROM campaign_suppressions WHERE email=$1', [row.email])).rowCount;
       const contact=row.lead_id?(await query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL',[row.lead_id])).rows[0]:row.client_id?(await query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL',[row.client_id])).rows[0]:null;
@@ -448,7 +463,7 @@ export async function processCampaignJobs({
       });
     }
   }
-  const completed=await query("UPDATE campaigns c SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='FAILED') THEN 'FAILED' ELSE 'SENT' END,completed_at=now(),updated_at=now() WHERE c.status='SENDING' AND NOT EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('QUEUED','PROCESSING')) RETURNING c.id,c.status");
+  const completed=await query("UPDATE campaigns c SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='FAILED') THEN 'FAILED' ELSE 'SENT' END,completed_at=now(),updated_at=now() WHERE c.deleted_at IS NULL AND c.status='SENDING' AND NOT EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('QUEUED','PROCESSING')) RETURNING c.id,c.status");
   for(const c of completed.rows)await event(c.id,'campaign_completed',{status:c.status},null,'completed:'+c.id);
   return {
     processed

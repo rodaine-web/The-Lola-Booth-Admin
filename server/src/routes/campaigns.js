@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
-import { campaignSchema, getCampaign, listCampaigns, campaignContacts, resolveCampaignAudience, saveCampaign, duplicateCampaign, campaignDetail, queueCampaign, campaignAction, campaignTestSend, publicCampaign, submitCampaignInterest, unsubscribeCampaign, convertCampaignInterest, campaignPreference } from '../services/campaign-service.js';
+import { deleteCampaign, campaignSchema, getCampaign, listCampaigns, campaignContacts, resolveCampaignAudience, saveCampaign, duplicateCampaign, campaignDetail, queueCampaign, campaignAction, campaignTestSend, publicCampaign, submitCampaignInterest, unsubscribeCampaign, convertCampaignInterest, campaignPreference } from '../services/campaign-service.js';
 import { renderCampaignEmail } from '../services/campaign-email.js';
 export const campaignRouter = Router();
 const route = (method, path, permission, fn) => campaignRouter[method](path, requirePermission(permission), asyncHandler(async (req, res) => res.json(await fn(req))));
@@ -13,6 +13,7 @@ route('post', '/import-contacts', 'campaigns.create', req => importCampaignConta
 route('post', '/audience-preview', 'campaigns.read', req => resolveCampaignAudience(campaignSchema.shape.audience_json.parse(req.body)));
 route('post', '/', 'campaigns.create', req => saveCampaign(req.body, req));
 route('get', '/:id', 'campaigns.read', req => campaignDetail(z.uuid().parse(req.params.id)));
+route('delete', '/:id', 'campaigns.edit', req => deleteCampaign(z.uuid().parse(req.params.id), req));
 route('patch', '/:id', 'campaigns.edit', req => saveCampaign(req.body, req, z.uuid().parse(req.params.id)));
 campaignRouter.post('/:id/interests/:interestId/convert', requirePermission('campaigns.read'), requirePermission('write:sales'), asyncHandler(async (req, res) => res.json(await convertCampaignInterest(z.uuid().parse(req.params.id), z.uuid().parse(req.params.interestId), req))));
 route('post', '/:id/duplicate', 'campaigns.create', req => duplicateCampaign(z.uuid().parse(req.params.id), req));

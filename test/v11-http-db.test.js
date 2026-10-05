@@ -51,6 +51,26 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   const repeated=await api(`/public/contracts/${agreementToken}/sign`,{method:'POST',body:signature,token:null});assert.equal(repeated.data.signed_at,signed.data.signed_at);
   assert.equal((await api(`/contracts/${id}`,{method:'PATCH',body:{title:'Changed agreement',terms:'This attempted changed document must fail.'}})).status,409);
   const pdf=await fetch(`${origin}/api/public/contracts/${agreementToken}/pdf`);assert.equal(pdf.status,200);assert.match(pdf.headers.get('content-type'),/pdf/);assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString(),'%PDF');
+  // Draft-only campaign removal and sent-campaign archiving against real PostgreSQL.
+  process.env.APP_ENV='staging';
+  const campaignDraft=await api('/campaigns',{method:'POST',body:{name:'Disposable V1.1 campaign draft'}});assert.equal(campaignDraft.status,200);
+  const campaignId=campaignDraft.data.id;
+  assert.equal((await api(`/campaigns/${campaignId}`,{method:'DELETE',token:viewerToken})).status,403);
+  assert.equal((await api(`/campaigns/${campaignId}`,{method:'DELETE'})).status,200);
+  assert.equal((await api(`/campaigns/${campaignId}`)).status,404);
+  assert.equal((await api(`/campaigns/${campaignId}/send`,{method:'POST'})).status,404);
+  assert.ok((await pool.query('SELECT deleted_at FROM campaigns WHERE id=$1',[campaignId])).rows[0].deleted_at);
+  const sentCampaign=(await pool.query("INSERT INTO campaigns(name,status) VALUES('Sent QA campaign','SENT') RETURNING id")).rows[0];
+  assert.equal((await api(`/campaigns/${sentCampaign.id}`,{method:'DELETE'})).status,409);
+  assert.equal((await api(`/campaigns/${sentCampaign.id}/archive`,{method:'POST'})).data.status,'ARCHIVED');
+  assert.equal((await api('/campaigns')).data.data.some(c=>c.id===sentCampaign.id||c.id===campaignId),false);
+  assert.equal((await api('/campaigns?status=ARCHIVED')).data.data.some(c=>c.id===sentCampaign.id),true);
+  assert.equal((await api(`/campaigns/${sentCampaign.id}`,{method:'DELETE'})).status,409);
+  const productionDraft=(await pool.query("INSERT INTO campaigns(name) VALUES('Production gate QA draft') RETURNING id")).rows[0];
+  process.env.APP_ENV='production';
+  assert.equal((await api(`/campaigns/${productionDraft.id}`,{method:'DELETE'})).status,404);
+  assert.equal((await api(`/campaigns/${productionDraft.id}`)).data.can_delete,false);
+  delete process.env.APP_ENV;
   if(process.env.V11_BROWSER_TEST==='true'){
    const {verifyClientBrowser}=await import('./support/v11-client-browser.js');
    await verifyClientBrowser({api,origin,proposalId:proposal.id,workspaceToken});
