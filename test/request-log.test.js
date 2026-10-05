@@ -9,3 +9,7 @@ test('request logs redact document credentials, queries and sensitive headers', 
     assert.equal(logged.id,'request-id');
   }
 });
+
+test('campaign tracking and preference tokens never appear in request logs',()=>{
+ for(const kind of ['track/open','track/click','interest','unsubscribe'])assert.equal(safeRequestLog({url:'/api/public/campaigns/'+kind+'/private-token?destination=secret'}).url,'/api/public/campaigns/'+kind+'/[redacted]');
+});
