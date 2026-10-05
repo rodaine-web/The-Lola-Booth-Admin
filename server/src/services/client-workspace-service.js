@@ -9,7 +9,7 @@ import {documentOrigin} from '../utils/public-document-url.js';
 import {workspaceView} from '../../../shared/client-workspace.js';
 export async function workspaceAccess(proposalId,req){
  return transaction(async()=>{
-  const proposal=(await query("SELECT id FROM proposals WHERE id=$1 AND deleted_at IS NULL AND status='ACCEPTED' FOR UPDATE",[proposalId])).rows[0];
+  const proposal=(await query("SELECT id FROM proposals WHERE id=$1 AND deleted_at IS NULL AND status IN ('ACCEPTED','CONVERTED') FOR UPDATE",[proposalId])).rows[0];
   if(!proposal)throw new AppError('An accepted proposal is required for a client workspace.',409,'WORKSPACE_UNAVAILABLE');
   let row=(await query('SELECT * FROM client_workspaces WHERE proposal_id=$1 AND revoked_at IS NULL FOR UPDATE',[proposalId])).rows[0];
   if(row&&new Date(row.expires_at).getTime()<=Date.now()) {await query('UPDATE client_workspaces SET revoked_at=now() WHERE id=$1',[row.id]);row=null;}

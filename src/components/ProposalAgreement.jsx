@@ -1,3 +1,4 @@
+import {proposalAllowsAgreement} from '../../shared/contracts.js';
 import {useEffect,useState} from 'react';
 import {api} from '../api/client.js';
 import {useAuth} from '../context/AuthContext.jsx';
@@ -22,13 +23,13 @@ export default function ProposalAgreement({proposal}) {
     {notice&&<p role="status">{notice}</p>}
     {error&&<p role="alert" className="toast error">{error}</p>}
     {!records&&!error&&<p role="status">Loading agreements…</p>}
-    {records&&proposal.status!=='ACCEPTED'&&<p>Accept the proposal before creating an agreement.</p>}
-    {records&&can('write:sales')&&proposal.status==='ACCEPTED'&&(!active||active.status==='DRAFT')&&<form onSubmit={e=>{e.preventDefault();act(()=>active?api.patch(`/contracts/${active.id}`,{title,terms}):api.post(`/proposals/${proposal.id}/contracts`,{title,terms}));}}>
+    {records&&!proposalAllowsAgreement(proposal.status)&&<p>Accept the proposal before creating an agreement.</p>}
+    {records&&can('write:sales')&&proposalAllowsAgreement(proposal.status)&&(!active||active.status==='DRAFT')&&<form onSubmit={e=>{e.preventDefault();act(()=>active?api.patch(`/contracts/${active.id}`,{title,terms}):api.post(`/proposals/${proposal.id}/contracts`,{title,terms}));}}>
       <label>Agreement title<input required minLength={3} maxLength={200} value={title} onChange={e=>setTitle(e.target.value)} disabled={busy}/></label>
       <label>Approved service terms<textarea required minLength={20} maxLength={50000} rows={12} value={terms} onChange={e=>setTerms(e.target.value)} disabled={busy} placeholder="Paste the service agreement approved for your business."/></label>
       <button className="primary-action" disabled={busy}>{busy?'Saving…':active?'Save draft':'Create agreement draft'}</button>
     </form>}
-    {records&&can('write:sales')&&proposal.status==='ACCEPTED'&&<div className="button-row"><button disabled={busy} onClick={()=>act(async()=>{setWorkspaceUrl((await api.post(`/proposals/${proposal.id}/workspace`,{})).url);})}>Open client workspace link</button><button disabled={busy} onClick={()=>act(async()=>{await api.post(`/proposals/${proposal.id}/workspace/revoke`,{});setWorkspaceUrl('');setNotice('Workspace access revoked. Existing individual document links are managed separately.');})}>Revoke workspace link</button></div>}
+    {records&&can('write:sales')&&proposalAllowsAgreement(proposal.status)&&<div className="button-row"><button disabled={busy} onClick={()=>act(async()=>{setWorkspaceUrl((await api.post(`/proposals/${proposal.id}/workspace`,{})).url);})}>Open client workspace link</button><button disabled={busy} onClick={()=>act(async()=>{await api.post(`/proposals/${proposal.id}/workspace/revoke`,{});setWorkspaceUrl('');setNotice('Workspace access revoked. Existing individual document links are managed separately.');})}>Revoke workspace link</button></div>}
     {workspaceUrl&&<div role="status"><label>Client workspace link<input readOnly value={workspaceUrl} onFocus={e=>e.target.select()}/></label><a href={workspaceUrl} target="_blank" rel="noreferrer">Preview client workspace</a><p>Share only with this client. This workspace covers this event.</p></div>}
     {records?.map(record=><article key={record.id} className="panel"><h3>{record.title} · Revision {record.revision}</h3><p>{record.status}{record.signed_at?` · Signed by ${record.signer_name} on ${new Date(record.signed_at).toLocaleString()}`:''}</p>
       <div className="button-row"><button disabled={busy} onClick={()=>act(()=>api.download(`/contracts/${record.id}/pdf`,'LOLA-agreement.pdf'))}>Download {record.status==='SIGNED'?'signed copy':'agreement'}</button>

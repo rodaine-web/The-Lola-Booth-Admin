@@ -40,6 +40,8 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   const agreementToken=issued.data.signing_url.split('/').at(-1);
   const opened=await api(`/public/contracts/${agreementToken}`,{token:null});assert.equal(opened.status,200);assert.ok(!('token_hash' in opened.data));
   assert.equal((await api(`/contracts/${id}/send`,{method:'POST'})).data.status,'DEVELOPMENT_ONLY');
+  // Invoice conversion must preserve agreement and workspace eligibility.
+  await pool.query("UPDATE proposals SET status='CONVERTED' WHERE id=$1",[proposal.id]);
   const access=await api(`/proposals/${proposal.id}/workspace`,{method:'POST'});assert.equal(access.status,200);
   const workspaceToken=access.data.url.split('/').at(-1);
   const workspace=await api(`/public/workspaces/${workspaceToken}`,{token:null});assert.equal(workspace.status,200);assert.equal(workspace.data.agreements[0].status,'ISSUED');
@@ -53,9 +55,12 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
    const {verifyClientBrowser}=await import('./support/v11-client-browser.js');
    await verifyClientBrowser({api,origin,proposalId:proposal.id,workspaceToken});
   }
+  const convertedDraft=await api(`/proposals/${proposal.id}/contracts`,{method:'POST',body:{title:'Converted proposal agreement',terms:'Nonbinding disposable QA terms. No booking or payment commitment.'}});
+  assert.equal(convertedDraft.status,201);
+  assert.equal((await api(`/contracts/${convertedDraft.data.id}/issue`,{method:'POST'})).status,200);
   await api(`/proposals/${proposal.id}/workspace/revoke`,{method:'POST'});
   assert.equal((await api(`/public/workspaces/${workspaceToken}`,{token:null})).status,404);
-  assert.equal((await pool.query('SELECT status FROM proposals WHERE id=$1',[proposal.id])).rows[0].status,'ACCEPTED');
+  assert.equal((await pool.query('SELECT status FROM proposals WHERE id=$1',[proposal.id])).rows[0].status,'CONVERTED');
  }finally{
   if(server)await new Promise(resolve=>server.close(resolve));
   await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await pool.end();
