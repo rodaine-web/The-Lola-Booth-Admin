@@ -209,6 +209,32 @@ test('worker is opt-in and staging processing cannot enable unrelated automation
     if (previous === undefined) delete process.env.CAMPAIGN_JOBS_ENABLED;else process.env.CAMPAIGN_JOBS_ENABLED = previous;
   }
 });
+test('production campaigns can process while reminders remain paused, only with their own opt-in', async t => {
+  const keys = ['APP_ENV', 'PRODUCTION_AUTOMATIONS_ENABLED', 'CAMPAIGN_JOBS_ENABLED'];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  process.env.APP_ENV = 'production';
+  process.env.PRODUCTION_AUTOMATIONS_ENABLED = 'false';
+  const calls = fixture(t, () => []);
+  try {
+    for (const flag of [undefined, 'false']) {
+      if (flag === undefined) delete process.env.CAMPAIGN_JOBS_ENABLED;
+      else process.env.CAMPAIGN_JOBS_ENABLED = flag;
+      assert.equal((await campaigns.processCampaignJobs({limit: 1})).paused, true);
+      assert.equal(calls.length, 0);
+    }
+    process.env.CAMPAIGN_JOBS_ENABLED = 'true';
+    const result = await campaigns.processCampaignJobs({limit: 1});
+    assert.deepEqual(result.processed, []);
+    assert.ok(calls.some(call => call.sql.includes('FOR UPDATE OF r,c SKIP LOCKED')));
+    const {stagingJobsPaused} = await import('../server/src/config/staging-safety.js');
+    assert.equal(stagingJobsPaused(), true);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
 test('worker atomically claims a recipient, uses existing provider abstraction and finalizes acceptance', async t => {
   const previous = process.env.CAMPAIGN_JOBS_ENABLED;
   process.env.CAMPAIGN_JOBS_ENABLED = 'true';
