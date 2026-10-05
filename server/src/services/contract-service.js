@@ -5,7 +5,7 @@ import { query, transaction } from '../db/pool.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/errors.js';
 import { writeAudit } from './audit-service.js';
-import { CONTRACT_CONSENT, contractDocument, signingDecision } from '../../../shared/contracts.js';
+import { CONTRACT_CONSENT, contractDocument, signingDecision, proposalAllowsAgreement } from '../../../shared/contracts.js';
 
 export const hashContractValue = value => crypto.createHash('sha256').update(value).digest('hex');
 function fail(message, code = 'CONTRACT_STATE') { throw new AppError(message, 409, code); }
@@ -16,7 +16,7 @@ async function proposalSnapshot(id) {
     LEFT JOIN events e ON e.id=p.event_id WHERE p.id=$1 AND p.deleted_at IS NULL FOR UPDATE OF p`, [id]);
   const proposal = rows[0];
   if (!proposal) throw new AppError('Proposal not found.',404,'NOT_FOUND');
-  if (proposal.status !== 'ACCEPTED') fail('Accept the proposal before creating an agreement.');
+  if (!proposalAllowsAgreement(proposal.status)) fail('Accept the proposal before creating an agreement.');
   if (!proposal.client_email) fail('Add the client email before creating an agreement.');
   delete proposal.status;
   return proposal;

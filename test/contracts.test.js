@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {contractsEnabled, signingDecision, CONTRACT_CONSENT, contractDocument} from '../shared/contracts.js';
+import {contractsEnabled, signingDecision, CONTRACT_CONSENT, contractDocument, proposalAllowsAgreement} from '../shared/contracts.js';
 import crypto from 'node:crypto';
 const contract={status:'ISSUED',document_hash:'original',snapshot:{client_email:'client@example.com'}};
 const input={name:'Demo Client',email:'CLIENT@example.com',consent:true,documentHash:'original'};
@@ -63,4 +63,9 @@ test('contract delivery and workspace access enforce sales permissions before re
    assert.equal(error.statusCode,403,`${method} ${url} must reject unprivileged users`);
   }
  }finally{if(original===undefined)delete process.env.APP_ENV;else process.env.APP_ENV=original;}
+});
+
+test('agreements remain available after an accepted proposal becomes an invoice',()=>{
+ for(const status of ['ACCEPTED','CONVERTED']) assert.equal(proposalAllowsAgreement(status),true);
+ for(const status of ['DRAFT','READY','SENT','VIEWED','DECLINED','EXPIRED','ARCHIVED',undefined]) assert.equal(proposalAllowsAgreement(status),false);
 });
