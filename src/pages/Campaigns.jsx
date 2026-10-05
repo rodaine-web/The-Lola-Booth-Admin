@@ -71,6 +71,7 @@ export default function Campaigns() {
     [confirm, setConfirm] = useState(null),
     [selectedCampaign,setSelectedCampaign] = useState(null);
   const confirmationRef=useRef(null);
+  useEffect(()=>{setCampaign(null);setSelectedCampaign(null);setConfirm(null);},[id]);
   useEffect(()=>{if(!confirm)return;const before=document.activeElement;confirmationRef.current?.querySelector('button')?.focus();return()=>before?.focus();},[confirm]);
   useEffect(() => {
     let live = true;
