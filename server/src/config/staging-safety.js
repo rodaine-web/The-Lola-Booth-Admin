@@ -21,6 +21,7 @@ export function stagingEmailPolicy(message,config=process.env){
   return {...message,subject:String(message.subject||'').startsWith(tag)?message.subject:tag+(message.subject||'')};
  }
  if(config[`${prefix}_EMAIL_ENABLED`]!=='true')throw new AppError(`${prefix} email is paused pending controlled qualification.`,409,`${prefix}_EMAIL_PAUSED`);
+ if(production)return {...message,subject:String(message.subject||'').replace(/^\[LOLA PRODUCTION QA\]\s*/,'')};
  const allow=new Set(String(config[`${prefix}_EMAIL_ALLOWLIST`]||'').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean));
  const recipients=[message.to,message.cc,message.bcc].flatMap(v=>Array.isArray(v)?v:String(v||'').split(',')).map(v=>String(v).trim().toLowerCase()).filter(Boolean);
  if(!recipients.length||recipients.length>2||recipients.some(v=>!allow.has(v)))throw new AppError(`${prefix} email permits at most two approved QA recipients.`,403,`${prefix}_RECIPIENT_BLOCKED`);

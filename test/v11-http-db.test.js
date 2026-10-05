@@ -10,7 +10,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
  assert.ok(['localhost','127.0.0.1'].includes(database.hostname),'Only a disposable local database is allowed.');
  const schema=`v11_http_${crypto.randomBytes(8).toString('hex')}`;
  database.searchParams.set('options',`-c search_path=${schema},public`);
- Object.assign(process.env,{DATABASE_URL:database.toString(),NODE_ENV:'test',PORT:'0',EMAIL_PROVIDER:'development',JWT_SECRET:'v11-test-jwt-secret-not-for-real-users'});delete process.env.APP_ENV;
+ Object.assign(process.env,{DATABASE_URL:database.toString(),NODE_ENV:'test',PORT:'0',EMAIL_PROVIDER:'development',MICROSOFT_SENDER_EMAIL:'info@thelolabooth.com',MICROSOFT_FROM_ALIASES:'lola@thelolabooth.com',CAMPAIGN_TRACKING_ORIGIN:'https://api.example.invalid',JWT_SECRET:'v11-test-jwt-secret-not-for-real-users'});delete process.env.APP_ENV;
  const {pool}=await import('../server/src/db/pool.js');let server;
  try{
   const setup=await pool.connect();
@@ -66,6 +66,38 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal((await api('/campaigns')).data.data.some(c=>c.id===sentCampaign.id||c.id===campaignId),false);
   assert.equal((await api('/campaigns?status=ARCHIVED')).data.data.some(c=>c.id===sentCampaign.id),true);
   assert.equal((await api(`/campaigns/${sentCampaign.id}`,{method:'DELETE'})).status,409);
+  // Full tracked campaign journey, isolated DB and development mail only.
+  const {campaignContent}=await import('../shared/campaign-content.js');
+  assert.equal((await api('/campaigns/senders')).data.find(s=>s.email==='lola@thelolabooth.com').name,'Lola Masha');
+  const tracked=await api('/campaigns',{method:'POST',body:{name:'Tracked alias demo',sender_email:'lola@thelolabooth.com',sender_name:'Lola Masha',content_json:campaignContent({format:'TEXT',text_body:'Your special event offer',mailing_address:'Synthetic QA address'}),audience_json:{manual:[{email:'tracking@example.com',first_name:'Demo',marketing_email_opt_in:true}]}}});
+  assert.equal(tracked.status,200);
+  const trackedId=tracked.data.id;
+  assert.equal((await api(`/campaigns/${trackedId}/send`,{method:'POST'})).status,200);
+  const recipient=(await pool.query('SELECT * FROM campaign_recipients WHERE campaign_id=$1',[trackedId])).rows[0];
+  const message=(await pool.query('SELECT * FROM communications WHERE id=$1',[recipient.communication_id])).rows[0];
+  assert.equal(message.sender_email,'lola@thelolabooth.com');assert.equal(recipient.tracking_enabled,true);
+  const openToken=message.rendered_html.match(/track\/open\/([A-Za-z0-9_-]{43})/)[1];
+  const clickToken=message.rendered_html.match(/track\/click\/([A-Za-z0-9_-]{43})/)[1];
+  const clickPath='/api/public/campaigns/track/click/'+clickToken;
+  const openPath='/api/public/campaigns/track/open/'+openToken;
+  await pool.query("UPDATE campaign_recipients SET status='SENT',sent_at=now() WHERE id=$1",[recipient.id]);
+  const scanner=await fetch(origin+clickPath,{redirect:'manual',headers:{'user-agent':'Proofpoint scanner'}});assert.equal(scanner.status,302);
+  await fetch(origin+openPath,{method:'HEAD'});
+  assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.clicked,0);
+  assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.opened,0);
+  for(let visit=0;visit<2;visit++){
+   const click=await fetch(origin+clickPath,{redirect:'manual',headers:{'user-agent':'Mozilla/5.0'}});assert.equal(click.status,302);assert.match(click.headers.get('location'),/\/interest\//);assert.equal(click.headers.get('referrer-policy'),'no-referrer');
+   const open=await fetch(origin+openPath);assert.equal(open.status,200);assert.match(open.headers.get('content-type'),/gif/);assert.match(open.headers.get('cache-control'),/no-store/);
+  }
+  const metrics=(await api(`/campaigns/${trackedId}`)).data.metrics;
+  assert.equal(metrics.clicked,1);assert.equal(metrics.opened,1);assert.equal(metrics.delivered,null);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM campaign_events WHERE campaign_id=$1 AND event_type IN ('estimated_open','tracked_click')",[trackedId])).rows[0].n,2);
+  const invalidSender=await api('/campaigns',{method:'POST',body:{name:'Invalid sender',sender_email:'outsider@example.com'}});assert.equal(invalidSender.status,422);
+  const unsubscribe=message.rendered_html.match(/https:[^" ]+\/unsubscribe\/([A-Za-z0-9_-]{43})/)[1];
+  assert.equal((await api('/public/campaigns/unsubscribe/'+unsubscribe,{method:'POST',body:{},token:null})).status,200);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM campaign_suppressions WHERE email=$1',['tracking@example.com'])).rows[0].n,1);
+  assert.equal((await fetch(origin+'/api/public/campaigns/track/open/invalid')).status,200);
+  assert.equal((await fetch(origin+'/api/public/campaigns/track/click/invalid?url=https://example.com',{redirect:'manual'})).status,404);
   const productionDraft=(await pool.query("INSERT INTO campaigns(name) VALUES('Production gate QA draft') RETURNING id")).rows[0];
   process.env.APP_ENV='production';
   assert.equal((await api(`/campaigns/${productionDraft.id}`,{method:'DELETE'})).status,404);

@@ -7,8 +7,10 @@ import { recordActivity } from './activity-service.js';
 import { writeAudit } from './audit-service.js';
 import { createNotification } from './notification-service.js';
 import { sendCommunication, createCommunicationDraft } from './automation-service.js';
-import { stagingJobsPaused, isStaging } from '../config/staging-safety.js';
+import { isStaging } from '../config/staging-safety.js';
 import { campaignContent, eligibleAudience, campaignInterestOptions, campaignPackages } from '../../../shared/campaign-content.js';
+import { prepareCampaignTracking } from './campaign-tracking.js';
+import { approvedEmailSender } from './email-service.js';
 import { renderCampaignEmail } from './campaign-email.js';
 export const hashCampaignToken = token => createHash('sha256').update(token).digest('hex');
 export const newCampaignToken = () => randomBytes(32).toString('base64url');
@@ -54,6 +56,7 @@ export const campaignSchema = z.object({
   type: z.enum(['CORPORATE_OUTREACH', 'EMPLOYEE_APPRECIATION', 'SUMMER_EVENT', 'OTHER']).default('CORPORATE_OUTREACH'),
   subject: z.string().min(1).max(200).default('{{contact.first_name}}, make {{company.name}}\'s year-end celebration unforgettable'),
   preview_text: z.string().max(250).default('The LOLA Glam, The LOLA 360 or both. Premium year-end experiences for your team.'),
+  sender_email: z.union([z.email(),z.literal('')]).default(''),
   sender_name: z.string().min(1).max(100).default('The LOLA Booth'),
   reply_to: z.email().default('info@thelolabooth.com'),
   timezone: z.string().max(80).default('America/Chicago'),
@@ -121,19 +124,19 @@ export async function getCampaign(id, {
   };
 }
 export async function listCampaigns(filters = {}) {
-  const rows = (await query(`SELECT c.*,u.name creator_name,count(r.id)::int recipients,count(r.sent_at)::int sent,count(r.interested_at)::int interested,count(r.failed_at)::int failed FROM campaigns c LEFT JOIN users u ON u.id=c.created_by LEFT JOIN campaign_recipients r ON r.campaign_id=c.id WHERE c.deleted_at IS NULL AND ($1<>'' OR c.status<>'ARCHIVED') AND ($1='' OR c.status=$1) AND ($2='' OR c.type=$2) AND ($3='' OR c.name ILIKE '%'||$3||'%' OR EXISTS(SELECT 1 FROM campaign_recipients s WHERE s.campaign_id=c.id AND (s.email ILIKE '%'||$3||'%' OR s.company ILIKE '%'||$3||'%'))) AND ($4='' OR c.created_by::text=$4) AND ($5='' OR c.created_at::date>=NULLIF($5,'')::date) AND ($6='' OR c.created_at::date<=NULLIF($6,'')::date) AND ($7='' OR EXISTS(SELECT 1 FROM campaign_recipients a WHERE a.campaign_id=c.id AND a.company ILIKE '%'||$7||'%') OR c.audience_json::text ILIKE '%'||$7||'%') GROUP BY c.id,u.name ORDER BY c.updated_at DESC`, [filters.status || '', filters.type || '', filters.search || '',filters.owner||'',filters.from||'',filters.to||'',filters.audience||''])).rows;
+  const rows = (await query(`SELECT c.*,u.name creator_name,count(r.id)::int recipients,count(r.sent_at)::int sent,count(r.interested_at)::int interested,count(r.failed_at)::int failed,count(r.id) FILTER (WHERE r.tracking_enabled)::int tracked,count(r.opened_at)::int opened,count(r.clicked_at)::int clicked FROM campaigns c LEFT JOIN users u ON u.id=c.created_by LEFT JOIN campaign_recipients r ON r.campaign_id=c.id WHERE c.deleted_at IS NULL AND ($1<>'' OR c.status<>'ARCHIVED') AND ($1='' OR c.status=$1) AND ($2='' OR c.type=$2) AND ($3='' OR c.name ILIKE '%'||$3||'%' OR EXISTS(SELECT 1 FROM campaign_recipients s WHERE s.campaign_id=c.id AND (s.email ILIKE '%'||$3||'%' OR s.company ILIKE '%'||$3||'%'))) AND ($4='' OR c.created_by::text=$4) AND ($5='' OR c.created_at::date>=NULLIF($5,'')::date) AND ($6='' OR c.created_at::date<=NULLIF($6,'')::date) AND ($7='' OR EXISTS(SELECT 1 FROM campaign_recipients a WHERE a.campaign_id=c.id AND a.company ILIKE '%'||$7||'%') OR c.audience_json::text ILIKE '%'||$7||'%') GROUP BY c.id,u.name ORDER BY c.updated_at DESC`, [filters.status || '', filters.type || '', filters.search || '',filters.owner||'',filters.from||'',filters.to||'',filters.audience||''])).rows;
   return {
     data: rows.map(c => ({
       ...c,
       can_delete: isStaging() && c.status === 'DRAFT' && !c.started_at && !c.scheduled_at && c.recipients === 0,
       delivered: null,
-      opened: null,
-      clicked: null
+      opened: c.tracked ? c.opened : null,
+      clicked: c.tracked ? c.clicked : null
     })),
     tracking: {
       delivered: false,
-      opened: false,
-      clicked: false
+      opened: true,
+      clicked: true
     }
   };
 }
@@ -151,6 +154,7 @@ export async function resolveCampaignAudience(audience = {}) {
 }
 export async function saveCampaign(input, req, id = null) {
   const data = campaignSchema.parse(input);
+  data.sender_email=approvedEmailSender(data.sender_email);
   try {
     new Intl.DateTimeFormat('en', {
       timeZone: data.timezone
@@ -207,11 +211,11 @@ export async function campaignDetail(id) {
       interested: interests.rowCount,
       failed: recipients.rows.filter(r => r.failed_at).length,
       delivered: null,
-      opened: null,
-      clicked: null,
-      interest_rate: null
+      opened: recipients.rows.some(r=>r.tracking_enabled) ? recipients.rows.filter(r=>r.opened_at).length : null,
+      clicked: recipients.rows.some(r=>r.tracking_enabled) ? recipients.rows.filter(r=>r.clicked_at).length : null,
+      interest_rate: recipients.rows.some(r=>r.sent_at) ? Math.round(100*recipients.rows.filter(r=>r.interested_at).length/recipients.rows.filter(r=>r.sent_at).length)+'%' : null
     },
-    provider_note: 'Microsoft confirms provider acceptance. Delivery, opens and clicks are unavailable in the current provider integration.'
+    provider_note: 'Sent means Microsoft accepted the email; confirmed delivery is unavailable. Opens are estimated image loads and may reflect privacy proxies. Clicks exclude known automated scanners but may include unrecognized automation. Tracking applies only to emails queued with tracking enabled.'
   };
 }
 export async function queueCampaign(id, req, {
@@ -223,6 +227,7 @@ export async function queueCampaign(id, req, {
       lock: true
     });
     if (!['DRAFT', 'READY'].includes(c.status)) fail();
+    approvedEmailSender(c.sender_email);
     if (!c.content_json.mailing_address.trim()) throw new AppError('Add your business mailing address before sending marketing email.', 422, 'MAILING_ADDRESS_REQUIRED');
     const audience = await resolveCampaignAudience(c.audience_json);
     if (!audience.count) throw new AppError('Choose at least one consented recipient.', 422, 'EMPTY_AUDIENCE');
@@ -233,16 +238,17 @@ export async function queueCampaign(id, req, {
         });
       const recipient = (await query(`INSERT INTO campaign_recipients(campaign_id,lead_id,client_id,email,first_name,last_name,company,token_hash,phone,token_expires_at,status,queued_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '1 year','QUEUED',now()) ON CONFLICT(campaign_id,email) DO NOTHING RETURNING *`, [id, r.kind === 'lead' ? r.id : null, r.kind === 'client' ? r.id : null, r.email, r.first_name, r.last_name, r.company, hashCampaignToken(token), r.phone || null])).rows[0];
       if (!recipient) continue;
+      const tracked = await prepareCampaignTracking(rendered, recipient.id);
       const m = await createCommunicationDraft({
         lead_id: recipient.lead_id,
         client_id: recipient.client_id,
         recipient: r.email,
         subject: rendered.subject,
-        body: rendered.text,
-        html: rendered.html,
+        body: tracked.text,
+        html: tracked.html,
         status: 'DRAFT'
       }, req.user);
-      await query('UPDATE communications SET campaign_recipient_id=$2,reply_to=$3,idempotency_key=$4,sender_name=$5 WHERE id=$1', [m.id, recipient.id, c.reply_to, 'campaign:' + recipient.id, c.sender_name]);
+      await query('UPDATE communications SET campaign_recipient_id=$2,reply_to=$3,idempotency_key=$4,sender_name=$5,sender_email=$6 WHERE id=$1', [m.id, recipient.id, c.reply_to, 'campaign:' + recipient.id, c.sender_name,c.sender_email||'']);
       await query('UPDATE campaign_recipients SET communication_id=$2 WHERE id=$1', [recipient.id, m.id]);
     }
     const updated = (await query("UPDATE campaigns SET status=$2,scheduled_at=$3,updated_at=now() WHERE id=$1 RETURNING *", [id, scheduled_at ? 'SCHEDULED' : 'SENDING', scheduled_at])).rows[0];
@@ -308,7 +314,7 @@ export async function campaignTestSend(id, email, req, sample = {
     body: rendered.text,
     html: rendered.html
   }, req.user);
-  await query('UPDATE communications SET reply_to=$2,sender_name=$3 WHERE id=$1', [draft.id, c.reply_to, c.sender_name]);
+  await query('UPDATE communications SET reply_to=$2,sender_name=$3,sender_email=$4 WHERE id=$1', [draft.id, c.reply_to, c.sender_name,approvedEmailSender(c.sender_email)]);
   const result = await sendCommunication(draft.id, req.user);
   await audit(req, c, 'campaign_test_sent');
   return {
@@ -397,7 +403,7 @@ export async function unsubscribeCampaign(token) {
 export async function processCampaignJobs({
   limit = 25
 } = {}) {
-  if (process.env.CAMPAIGN_JOBS_ENABLED !== 'true' || stagingJobsPaused() && !isStaging()) return {
+  if (process.env.CAMPAIGN_JOBS_ENABLED !== 'true') return {
     processed: [],
     paused: true
   };

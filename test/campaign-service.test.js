@@ -131,6 +131,9 @@ test('invalid scheduling is rejected before any database mutation', async t => {
   assert.equal(calls.length, 0);
 });
 test('queue creates one draft communication per eligible recipient without sending at request time', async t => {
+  const oldOrigin=process.env.CAMPAIGN_TRACKING_ORIGIN;
+  process.env.CAMPAIGN_TRACKING_ORIGIN='https://api.example.invalid';
+  t.after(()=>{if(oldOrigin===undefined)delete process.env.CAMPAIGN_TRACKING_ORIGIN;else process.env.CAMPAIGN_TRACKING_ORIGIN=oldOrigin;});
   const c = campaign(),
     r = {
       id: recipientId,
@@ -159,6 +162,8 @@ test('queue creates one draft communication per eligible recipient without sendi
     scheduled_at: '2099-12-20T18:00:00Z'
   });
   assert.equal(queued.status, 'SCHEDULED');
+  assert.ok(calls.some(c=>c.sql.startsWith('INSERT INTO campaign_tracking_links')&&c.args[2]==='OPEN'));
+  assert.ok(calls.some(c=>c.sql.startsWith('UPDATE campaign_recipients SET tracking_enabled=true')));
   assert.equal(calls.filter(c => c.sql.startsWith('INSERT INTO communications')).length, 1);
   const recipient = calls.find(c => c.sql.startsWith('INSERT INTO campaign_recipients'));
   assert.equal(recipient.args[7].length, 64);

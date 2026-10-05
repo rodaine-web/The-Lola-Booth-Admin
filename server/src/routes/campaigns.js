@@ -1,3 +1,5 @@
+import {campaignSenders} from '../services/email-service.js';
+import {recordCampaignTracking,transparentPixel} from '../services/campaign-tracking.js';
 import { importCampaignContacts } from '../services/campaign-contact-import.js';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -8,6 +10,7 @@ import { renderCampaignEmail } from '../services/campaign-email.js';
 export const campaignRouter = Router();
 const route = (method, path, permission, fn) => campaignRouter[method](path, requirePermission(permission), asyncHandler(async (req, res) => res.json(await fn(req))));
 route('get', '/', 'campaigns.read', req => listCampaigns(req.query));
+route('get', '/senders', 'campaigns.read', () => campaignSenders());
 route('get', '/contacts', 'campaigns.read', () => campaignContacts());
 route('post', '/import-contacts', 'campaigns.create', req => importCampaignContacts(req.body));
 route('post', '/audience-preview', 'campaigns.read', req => resolveCampaignAudience(campaignSchema.shape.audience_json.parse(req.body)));
@@ -42,3 +45,16 @@ campaignPublicRouter.get('/campaigns/unsubscribe/:token', asyncHandler(async (re
   res.json(await campaignPreference(req.params.token));
 }));
 campaignPublicRouter.post('/campaigns/unsubscribe/:token', asyncHandler(async (req, res) => res.json(await unsubscribeCampaign(req.params.token))));
+
+const trackingRequest=req=>({method:req.method,userAgent:req.get('user-agent')||'',purpose:[req.get('purpose'),req.get('sec-purpose'),req.get('x-purpose')].filter(Boolean).join(' ')});
+function trackingHeaders(res){res.set({'Cache-Control':'no-store, max-age=0','Pragma':'no-cache','X-Robots-Tag':'noindex, nofollow','Referrer-Policy':'no-referrer','Cross-Origin-Resource-Policy':'cross-origin'});}
+campaignPublicRouter.get('/campaigns/track/open/:token',asyncHandler(async(req,res)=>{
+ trackingHeaders(res);
+ try{await recordCampaignTracking(req.params.token,'OPEN',trackingRequest(req));}catch(error){if(error.code!=='NOT_FOUND')throw error;}
+ res.type('gif').send(transparentPixel);
+}));
+campaignPublicRouter.get('/campaigns/track/click/:token',asyncHandler(async(req,res)=>{
+ trackingHeaders(res);
+ const destination=await recordCampaignTracking(req.params.token,'CLICK',trackingRequest(req));
+ res.redirect(302,destination);
+}));

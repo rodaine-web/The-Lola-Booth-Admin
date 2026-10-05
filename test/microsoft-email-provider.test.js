@@ -258,3 +258,17 @@ test("automation retries can honor Microsoft transient/permanent classification"
   assert.match(automationSource, /error\.details\?\.retryable !== false/);
   assert.match(automationSource, /error\.details\?\.retryAfter/);
 });
+
+test('approved alias uses its owning mailbox and preserves the requested visible From',()=>withNeutralEmailPolicy(async()=>{
+ const requests=[];
+ const provider=providerWithFetch(async(url,options)=>{requests.push({url,options});return url.endsWith('/token')?response(200,{access_token:'test-token'}):response(202);},{senderEmail:'info@thelolabooth.com',fromAliases:'lola@thelolabooth.com'});
+ await provider.send({to:'qa@example.invalid',subject:'Alias test',text:'Demo',fromEmail:'lola@thelolabooth.com',senderName:'Lola Masha',replyTo:'lola@thelolabooth.com'});
+ assert.match(requests[1].url,/users\/info%40thelolabooth.com\/sendMail$/);
+ const message=JSON.parse(requests[1].options.body).message;
+ assert.deepEqual(message.from.emailAddress,{address:'lola@thelolabooth.com',name:'Lola Masha'});
+ assert.equal(message.replyTo[0].emailAddress.address,'lola@thelolabooth.com');
+}));
+test('unapproved sender is rejected before contacting Microsoft',()=>withNeutralEmailPolicy(async()=>{
+ let calls=0;const provider=providerWithFetch(async()=>{calls++;return response(202);});
+ await assert.rejects(provider.send({to:'qa@example.invalid',subject:'Test',fromEmail:'outsider@example.invalid'}),e=>e.code==='EMAIL_SENDER_NOT_ALLOWED');assert.equal(calls,0);
+}));
