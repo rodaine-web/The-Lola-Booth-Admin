@@ -99,7 +99,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal((await fetch(origin+'/api/public/campaigns/track/open/invalid')).status,200);
   assert.equal((await fetch(origin+'/api/public/campaigns/track/click/invalid?url=https://example.com',{redirect:'manual'})).status,404);
   const {verifyCampaignSales}=await import('./support/campaign-sales-journey.js');
-  await verifyCampaignSales({api,pool,viewerToken});
+  const campaignSales=await verifyCampaignSales({api,pool,viewerToken});
   const productionDraft=(await pool.query("INSERT INTO campaigns(name) VALUES('Production gate QA draft') RETURNING id")).rows[0];
   process.env.APP_ENV='production';
   assert.equal((await api(`/campaigns/${productionDraft.id}`,{method:'DELETE'})).status,404);
@@ -107,7 +107,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   delete process.env.APP_ENV;
   if(process.env.V11_BROWSER_TEST==='true'){
    const {verifyClientBrowser}=await import('./support/v11-client-browser.js');
-   await verifyClientBrowser({api,origin,proposalId:proposal.id,workspaceToken});
+   await verifyClientBrowser({api,origin,proposalId:proposal.id,workspaceToken,ownerToken,campaignSales});
   }
   const convertedDraft=await api(`/proposals/${proposal.id}/contracts`,{method:'POST',body:{title:'Converted proposal agreement',terms:'Nonbinding disposable QA terms. No booking or payment commitment.'}});
   assert.equal(convertedDraft.status,201);

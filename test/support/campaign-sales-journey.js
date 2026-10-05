@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {campaignContent} from '../../shared/campaign-content.js';
 
 export async function verifyCampaignSales({api,pool,viewerToken}){
+ assert.equal(process.env.EMAIL_PROVIDER,'development','This isolated fixture must never use an external mail provider');
+ process.env.STAGING_EMAIL_ENABLED='true';process.env.STAGING_EMAIL_ALLOWLIST='campaign-sales@example.com';
  await pool.query("INSERT INTO business_settings(business_name,default_deposit_percent,sales_tax_percent) SELECT 'Synthetic QA',30,0 WHERE NOT EXISTS(SELECT 1 FROM business_settings)");
  const exp=(await pool.query("INSERT INTO experiences(name,slug) VALUES('360 Video Booth','campaign-sales-360') RETURNING id")).rows[0];
  const key='EXPERIENCE_'+exp.id;
@@ -54,4 +56,5 @@ export async function verifyCampaignSales({api,pool,viewerToken}){
  assert.equal((await pool.query('SELECT count(*)::int n FROM events WHERE client_id=$1',[won.converted_client_id])).rows[0].n,1);
  assert.equal((await pool.query("SELECT count(*)::int n FROM payments WHERE invoice_id=$1 AND client_id=$2 AND status='SUCCEEDED'",[invoice.id,won.converted_client_id])).rows[0].n,2);
  assert.equal((await api(`/campaigns/${id}/interests/${interest.id}/invoice`,{method:'POST',body:{send:true}})).status,409,'No new deposit request after the deposit is paid');
+ return {campaignId:id,leadId:lead.id,offerKey:key,invoiceId:invoice.id};
 }
