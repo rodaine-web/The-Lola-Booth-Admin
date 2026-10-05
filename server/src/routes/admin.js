@@ -1,3 +1,4 @@
+import {contractsRouter} from './contracts.js';
 import {searchAdmin} from '../services/admin-search-service.js';
 import { eventFinanceSummary } from "../services/event-finance-summary.js";
 import {campaignRouter} from "./campaigns.js";
@@ -170,6 +171,7 @@ import {isStaging} from '../config/staging-safety.js';
 export const adminRouter = Router();
 
 adminRouter.use(authenticate);
+adminRouter.use(contractsRouter);
 adminRouter.use((req,_res,next)=>{
   if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)){
     if(req.path==='/settings'){
