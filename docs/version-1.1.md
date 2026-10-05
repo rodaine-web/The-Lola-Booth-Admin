@@ -45,3 +45,7 @@ Each milestone requires real end-to-end evidence before being marked complete. P
 ## Converted proposal workflow correction
 
 Agreements and client workspace grants remain available after an accepted proposal is converted into an invoice. Creating or issuing an agreement does not change proposal, invoice or payment status. Draft, declined, expired and archived proposals remain ineligible. API regression coverage exercises workspace creation, agreement draft/issuance, and client signing after conversion.
+
+## Campaign lifecycle
+
+Campaigns can be archived from the list or overview, with confirmation. Archived campaigns are omitted from the active list and accessible through the Archived status filter. Sent campaigns cannot be deleted. In staging only, users with campaigns.edit can delete a draft with no recipient or sending history. Deletion removes it from campaign access using an audit-preserving soft deletion; CRM contacts and suppressions stay intact. Mutation eligibility is checked under a row lock so scheduling/sending cannot race deletion. Migration 043 adds deletion timestamps and actor attribution.

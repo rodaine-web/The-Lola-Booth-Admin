@@ -378,3 +378,24 @@ test('explicit conversion carries imported phone and selected catalog experience
  const insert=calls.find(c=>c.sql.startsWith('INSERT INTO leads'));
  assert.equal(insert.args[9],'+1 312 555 0100');assert.equal(insert.args[10],experienceId);assert.equal(insert.args[11],packageId);assert.match(insert.args[7],/360 Signature/);
 });
+
+test('draft deletion is staging-only and records removal without deleting contacts or suppressions',async t=>{
+ const previous=process.env.APP_ENV;
+ const calls=fixture(t,sql=>sql.startsWith('SELECT * FROM campaigns')||sql.startsWith('UPDATE campaigns SET deleted_at')?[campaign()]:[]);
+ try{
+  process.env.APP_ENV='production';await assert.rejects(campaigns.deleteCampaign(id,req),e=>e.statusCode===404);assert.equal(calls.length,0);
+  process.env.APP_ENV='staging';assert.deepEqual(await campaigns.deleteCampaign(id,req),{deleted:true});
+  assert.ok(calls.some(c=>c.sql.includes('FOR UPDATE')));
+  assert.ok(calls.some(c=>c.sql.includes('INSERT INTO audit_logs')&&c.args.includes('campaign_deleted')));
+  assert.equal(calls.some(c=>/DELETE FROM/.test(c.sql)),false);
+ }finally{if(previous===undefined)delete process.env.APP_ENV;else process.env.APP_ENV=previous;}
+});
+test('non-draft campaigns and drafts with sending history cannot be deleted',async t=>{
+ const previous=process.env.APP_ENV;process.env.APP_ENV='staging';let c=campaign('SENT'),history=[];
+ const calls=fixture(t,sql=>sql.startsWith('SELECT * FROM campaigns')?[c]:sql.startsWith('SELECT 1 FROM campaign_recipients')?history:[]);
+ try{
+  for(const status of ['READY','SCHEDULED','SENDING','SENT','PAUSED','FAILED','CANCELLED','ARCHIVED']){c=campaign(status);await assert.rejects(campaigns.deleteCampaign(id,req),e=>e.code==='CAMPAIGN_STATE');}
+  c=campaign();history=[{}];await assert.rejects(campaigns.deleteCampaign(id,req),e=>e.code==='CAMPAIGN_STATE');
+  assert.equal(calls.some(c=>c.sql.startsWith('UPDATE campaigns')),false);
+ }finally{if(previous===undefined)delete process.env.APP_ENV;else process.env.APP_ENV=previous;}
+});
