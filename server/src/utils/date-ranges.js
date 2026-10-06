@@ -37,9 +37,12 @@ function startOfLocalDay(date, timeZone) {
 }
 
 function range(startParts, endParts, timeZone) {
+  const dateOnly = ({year, month, day}) => `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   return {
     start: zonedTimeToUtc(startParts, timeZone),
     end: zonedTimeToUtc(endParts, timeZone),
+    startDate: dateOnly(startParts),
+    endDate: dateOnly(endParts),
     timeZone
   };
 }

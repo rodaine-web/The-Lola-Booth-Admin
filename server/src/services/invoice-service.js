@@ -18,9 +18,10 @@ const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 export async function getInvoice(idOrToken, { publicView = false } = {}) {
   const where = publicView ? "i.secure_token=$1 AND i.token_revoked_at IS NULL AND (i.token_expires_at IS NULL OR i.token_expires_at>now())" : "i.id=$1";
   const invoice = await query(
-    `SELECT i.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone, e.event_name, e.event_type, e.event_date, e.venue_name, e.venue_address, e.city, e.state, e.guest_count, p.proposal_title, pkg.name AS package_name
+    `SELECT i.*, COALESCE(c.name,concat_ws(' ',l.first_name,l.last_name)) AS client_name, COALESCE(c.email,l.email) AS client_email, COALESCE(c.phone,l.phone) AS client_phone, COALESCE(e.event_name,i.pricing_snapshot->>'campaign_name') event_name, COALESCE(e.event_type,l.event_type) event_type, COALESCE(e.event_date,l.event_date) event_date, COALESCE(e.venue_name,l.venue_name) venue_name, e.venue_address, e.city, e.state, e.guest_count, p.proposal_title, pkg.name AS package_name
      FROM invoices i
      LEFT JOIN clients c ON c.id=i.client_id
+     LEFT JOIN leads l ON l.id=i.lead_id
      LEFT JOIN events e ON e.id=i.event_id
      LEFT JOIN proposals p ON p.id=i.proposal_id
      LEFT JOIN packages pkg ON pkg.id=p.package_id
@@ -106,6 +107,7 @@ export async function updateDraftInvoice(req) {
   const result = await transaction(async client => {
     const locked = await client.query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.params.id]);
     const before = locked.rows[0];
+    if(before?.campaign_interest_id)throw new AppError('Campaign invoice pricing is fixed to the selected offer.',409,'CAMPAIGN_INVOICE_IMMUTABLE');
     if (!before) throw notFound("Invoice");
     if (before.status !== "DRAFT" || Number(before.amount_paid) > 0) throw new AppError("Only unpaid draft invoices can be edited.", 409, "INVOICE_NOT_EDITABLE");
     const currentItems = await client.query("SELECT * FROM invoice_items WHERE invoice_id=$1", [before.id]);

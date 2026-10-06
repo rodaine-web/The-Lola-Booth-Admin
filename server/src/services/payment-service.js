@@ -145,10 +145,11 @@ export async function recordManualPayment(req) {
   });
   if (payment.invoice_id) {
     await reconcileInvoice(payment.invoice_id, { req, actorUserId: req.user.id, action: "manual_payment_recorded" });
+    Object.assign(payment,(await query('SELECT * FROM payments WHERE id=$1',[payment.id])).rows[0]);
     await applyBookingConfirmationPolicy(payment.event_id);
   }
   await writeAudit({ req, action: "payment_recorded", entity: "payment", entityId: payment.id, after: payment });
-  await recordActivity({ actorUserId: req.user.id, entityType: "event", entityId: payment.event_id, action: "payment_recorded", summary: `Payment recorded: $${payment.amount}` });
+  await recordActivity({ actorUserId: req.user.id, entityType: payment.event_id ? "event" : "invoice", entityId: payment.event_id || payment.invoice_id, action: "payment_recorded", summary: `Payment recorded: $${payment.amount}` });
   return payment;
 }
 
@@ -343,6 +344,7 @@ async function recordProviderPayment(input) {
   });
   await reconcileInvoice(input.invoiceId, { action: "payment_succeeded" });
 
+  Object.assign(payment,(await query('SELECT * FROM payments WHERE id=$1',[payment.id])).rows[0]);
   await applyBookingConfirmationPolicy(payment.event_id).catch((error)=>{
     logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"BOOKING_CONFIRMATION_FAILED"},"Booking confirmation side effect failed after payment posting");
   });
@@ -463,7 +465,7 @@ async function recordProviderPaymentFailure(input) {
   const attempt = updated.rows[0];
   if (!attempt?.invoice_id) return { status: "FAILED" };
   const invoice = (await query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL", [attempt.invoice_id])).rows[0];
-  const customer = attempt.client_id ? (await query("SELECT name,email FROM clients WHERE id=$1", [attempt.client_id])).rows[0] : null;
+  const customer = attempt.client_id ? (await query("SELECT name,email FROM clients WHERE id=$1", [attempt.client_id])).rows[0] : invoice?.lead_id ? (await query("SELECT concat_ws(' ',first_name,last_name) name,email FROM leads WHERE id=$1 AND deleted_at IS NULL",[invoice.lead_id])).rows[0] : null;
   const payUrl = invoice ? secureDocumentUrl(documentOrigin(), "pay", invoice) : null;
   if (customer?.email && invoice) {
     const subject = `Payment unsuccessful — ${invoice.invoice_number}`;

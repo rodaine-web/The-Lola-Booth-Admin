@@ -8,8 +8,8 @@ import {brandedEmailHtml} from './automation-service.js';
 // Access is delivered only to the address already attached to the invoice.
 export async function requestInvoiceAccess({invoiceNumber,email}) {
   await transaction(async client=>{
-    const invoice=(await client.query(`SELECT i.id,i.secure_token,c.email FROM invoices i JOIN clients c ON c.id=i.client_id
-      WHERE lower(i.invoice_number)=lower($1) AND lower(c.email)=lower($2) AND i.deleted_at IS NULL
+    const invoice=(await client.query(`SELECT i.id,i.secure_token,COALESCE(c.email,l.email) email FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN leads l ON l.id=i.lead_id
+      WHERE lower(i.invoice_number)=lower($1) AND lower(COALESCE(c.email,l.email))=lower($2) AND i.deleted_at IS NULL
       AND i.token_revoked_at IS NULL AND (i.token_expires_at IS NULL OR i.token_expires_at>now())`,[invoiceNumber,email])).rows[0];
     const url = invoice && secureDocumentUrl(documentOrigin(), "pay", invoice);
     if(!url)return;

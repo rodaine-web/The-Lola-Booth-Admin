@@ -1,3 +1,4 @@
+import {linkCampaignInterest} from './campaign-lead-service.js';
 import { randomBytes, createHash } from 'node:crypto';
 import sanitizeHtml from 'sanitize-html';
 import { z } from 'zod';
@@ -7,7 +8,10 @@ import { recordActivity } from './activity-service.js';
 import { writeAudit } from './audit-service.js';
 import { createNotification } from './notification-service.js';
 import { sendCommunication, createCommunicationDraft } from './automation-service.js';
+import { isStaging } from '../config/staging-safety.js';
 import { campaignContent, eligibleAudience, campaignInterestOptions, campaignPackages } from '../../../shared/campaign-content.js';
+import { prepareCampaignTracking } from './campaign-tracking.js';
+import { approvedEmailSender } from './email-service.js';
 import { renderCampaignEmail } from './campaign-email.js';
 export const hashCampaignToken = token => createHash('sha256').update(token).digest('hex');
 export const newCampaignToken = () => randomBytes(32).toString('base64url');
@@ -53,6 +57,7 @@ export const campaignSchema = z.object({
   type: z.enum(['CORPORATE_OUTREACH', 'EMPLOYEE_APPRECIATION', 'SUMMER_EVENT', 'OTHER']).default('CORPORATE_OUTREACH'),
   subject: z.string().min(1).max(200).default('{{contact.first_name}}, make {{company.name}}\'s year-end celebration unforgettable'),
   preview_text: z.string().max(250).default('The LOLA Glam, The LOLA 360 or both. Premium year-end experiences for your team.'),
+  sender_email: z.union([z.email(),z.literal('')]).default(''),
   sender_name: z.string().min(1).max(100).default('The LOLA Booth'),
   reply_to: z.email().default('info@thelolabooth.com'),
   timezone: z.string().max(80).default('America/Chicago'),
@@ -111,26 +116,28 @@ async function audit(req, campaign, action) {
 export async function getCampaign(id, {
   lock = false
 } = {}) {
-  const c = (await query(`SELECT * FROM campaigns WHERE id=$1 ${lock ? 'FOR UPDATE' : ''}`, [id])).rows[0];
+  const c = (await query(`SELECT * FROM campaigns WHERE id=$1 AND deleted_at IS NULL ${lock ? 'FOR UPDATE' : ''}`, [id])).rows[0];
   if (!c) throw new AppError('Campaign not found.', 404, 'NOT_FOUND');
   return {
     ...c,
+    can_delete: isStaging() && c.status === 'DRAFT' && !c.started_at && !c.scheduled_at,
     content_json: campaignContent(c.content_json)
   };
 }
 export async function listCampaigns(filters = {}) {
-  const rows = (await query(`SELECT c.*,u.name creator_name,count(r.id)::int recipients,count(r.sent_at)::int sent,count(r.interested_at)::int interested,count(r.failed_at)::int failed FROM campaigns c LEFT JOIN users u ON u.id=c.created_by LEFT JOIN campaign_recipients r ON r.campaign_id=c.id WHERE ($1='' OR c.status=$1) AND ($2='' OR c.type=$2) AND ($3='' OR c.name ILIKE '%'||$3||'%' OR EXISTS(SELECT 1 FROM campaign_recipients s WHERE s.campaign_id=c.id AND (s.email ILIKE '%'||$3||'%' OR s.company ILIKE '%'||$3||'%'))) AND ($4='' OR c.created_by::text=$4) AND ($5='' OR c.created_at::date>=NULLIF($5,'')::date) AND ($6='' OR c.created_at::date<=NULLIF($6,'')::date) AND ($7='' OR EXISTS(SELECT 1 FROM campaign_recipients a WHERE a.campaign_id=c.id AND a.company ILIKE '%'||$7||'%') OR c.audience_json::text ILIKE '%'||$7||'%') GROUP BY c.id,u.name ORDER BY c.updated_at DESC`, [filters.status || '', filters.type || '', filters.search || '',filters.owner||'',filters.from||'',filters.to||'',filters.audience||''])).rows;
+  const rows = (await query(`SELECT c.*,u.name creator_name,count(r.id)::int recipients,count(r.sent_at)::int sent,count(r.interested_at)::int interested,count(r.failed_at)::int failed,count(r.id) FILTER (WHERE r.tracking_enabled)::int tracked,count(r.opened_at)::int opened,count(r.clicked_at)::int clicked FROM campaigns c LEFT JOIN users u ON u.id=c.created_by LEFT JOIN campaign_recipients r ON r.campaign_id=c.id WHERE c.deleted_at IS NULL AND ($1<>'' OR c.status<>'ARCHIVED') AND ($1='' OR c.status=$1) AND ($2='' OR c.type=$2) AND ($3='' OR c.name ILIKE '%'||$3||'%' OR EXISTS(SELECT 1 FROM campaign_recipients s WHERE s.campaign_id=c.id AND (s.email ILIKE '%'||$3||'%' OR s.company ILIKE '%'||$3||'%'))) AND ($4='' OR c.created_by::text=$4) AND ($5='' OR c.created_at::date>=NULLIF($5,'')::date) AND ($6='' OR c.created_at::date<=NULLIF($6,'')::date) AND ($7='' OR EXISTS(SELECT 1 FROM campaign_recipients a WHERE a.campaign_id=c.id AND a.company ILIKE '%'||$7||'%') OR c.audience_json::text ILIKE '%'||$7||'%') GROUP BY c.id,u.name ORDER BY c.updated_at DESC`, [filters.status || '', filters.type || '', filters.search || '',filters.owner||'',filters.from||'',filters.to||'',filters.audience||''])).rows;
   return {
     data: rows.map(c => ({
       ...c,
+      can_delete: isStaging() && c.status === 'DRAFT' && !c.started_at && !c.scheduled_at && c.recipients === 0,
       delivered: null,
-      opened: null,
-      clicked: null
+      opened: c.tracked ? c.opened : null,
+      clicked: c.tracked ? c.clicked : null
     })),
     tracking: {
       delivered: false,
-      opened: false,
-      clicked: false
+      opened: true,
+      clicked: true
     }
   };
 }
@@ -148,6 +155,7 @@ export async function resolveCampaignAudience(audience = {}) {
 }
 export async function saveCampaign(input, req, id = null) {
   const data = campaignSchema.parse(input);
+  data.sender_email=approvedEmailSender(data.sender_email);
   try {
     new Intl.DateTimeFormat('en', {
       timeZone: data.timezone
@@ -191,9 +199,10 @@ export async function duplicateCampaign(id, req) {
 }
 export async function campaignDetail(id) {
   const c = await getCampaign(id);
-  const [recipients, interests, events] = await Promise.all([query('SELECT r.*,m.failure_message,m.failure_code FROM campaign_recipients r LEFT JOIN communications m ON m.id=r.communication_id WHERE campaign_id=$1 ORDER BY r.company,r.first_name', [id]), query(`SELECT i.*,r.first_name,r.last_name,r.email,r.company,r.lead_id,r.client_id,l.status lead_status,l.assigned_user_id owner FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id LEFT JOIN leads l ON l.id=r.lead_id WHERE i.campaign_id=$1 ORDER BY submitted_at DESC`, [id]), query('SELECT * FROM campaign_events WHERE campaign_id=$1 ORDER BY created_at DESC LIMIT 300', [id])]);
+  const [recipients, interests, events] = await Promise.all([query('SELECT r.*,m.failure_message,m.failure_code FROM campaign_recipients r LEFT JOIN communications m ON m.id=r.communication_id WHERE campaign_id=$1 ORDER BY r.company,r.first_name', [id]), query(`SELECT i.*,r.first_name,r.last_name,r.email,r.company,r.lead_id,r.client_id,inv.id invoice_id,inv.status invoice_status,l.status lead_status,l.assigned_user_id owner FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id LEFT JOIN leads l ON l.id=r.lead_id LEFT JOIN invoices inv ON inv.campaign_interest_id=i.id AND inv.deleted_at IS NULL WHERE i.campaign_id=$1 ORDER BY submitted_at DESC`, [id]), query('SELECT * FROM campaign_events WHERE campaign_id=$1 ORDER BY created_at DESC LIMIT 300', [id])]);
   return {
     ...c,
+    can_delete: c.can_delete && recipients.rowCount === 0,
     recipients: recipients.rows,
     interests: interests.rows,
     activity: events.rows,
@@ -203,11 +212,11 @@ export async function campaignDetail(id) {
       interested: interests.rowCount,
       failed: recipients.rows.filter(r => r.failed_at).length,
       delivered: null,
-      opened: null,
-      clicked: null,
-      interest_rate: null
+      opened: recipients.rows.some(r=>r.tracking_enabled) ? recipients.rows.filter(r=>r.opened_at).length : null,
+      clicked: recipients.rows.some(r=>r.tracking_enabled) ? recipients.rows.filter(r=>r.clicked_at).length : null,
+      interest_rate: recipients.rows.some(r=>r.sent_at) ? Math.round(100*recipients.rows.filter(r=>r.interested_at).length/recipients.rows.filter(r=>r.sent_at).length)+'%' : null
     },
-    provider_note: 'Microsoft confirms provider acceptance. Delivery, opens and clicks are unavailable in the current provider integration.'
+    provider_note: 'Sent means Microsoft accepted the email; confirmed delivery is unavailable. Opens are estimated image loads and may reflect privacy proxies. Clicks exclude known automated scanners but may include unrecognized automation. Tracking applies only to emails queued with tracking enabled.'
   };
 }
 export async function queueCampaign(id, req, {
@@ -219,6 +228,7 @@ export async function queueCampaign(id, req, {
       lock: true
     });
     if (!['DRAFT', 'READY'].includes(c.status)) fail();
+    approvedEmailSender(c.sender_email);
     if (!c.content_json.mailing_address.trim()) throw new AppError('Add your business mailing address before sending marketing email.', 422, 'MAILING_ADDRESS_REQUIRED');
     const audience = await resolveCampaignAudience(c.audience_json);
     if (!audience.count) throw new AppError('Choose at least one consented recipient.', 422, 'EMPTY_AUDIENCE');
@@ -229,21 +239,34 @@ export async function queueCampaign(id, req, {
         });
       const recipient = (await query(`INSERT INTO campaign_recipients(campaign_id,lead_id,client_id,email,first_name,last_name,company,token_hash,phone,token_expires_at,status,queued_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '1 year','QUEUED',now()) ON CONFLICT(campaign_id,email) DO NOTHING RETURNING *`, [id, r.kind === 'lead' ? r.id : null, r.kind === 'client' ? r.id : null, r.email, r.first_name, r.last_name, r.company, hashCampaignToken(token), r.phone || null])).rows[0];
       if (!recipient) continue;
+      const tracked = await prepareCampaignTracking(rendered, recipient.id);
       const m = await createCommunicationDraft({
         lead_id: recipient.lead_id,
         client_id: recipient.client_id,
         recipient: r.email,
         subject: rendered.subject,
-        body: rendered.text,
-        html: rendered.html,
+        body: tracked.text,
+        html: tracked.html,
         status: 'DRAFT'
       }, req.user);
-      await query('UPDATE communications SET campaign_recipient_id=$2,reply_to=$3,idempotency_key=$4,sender_name=$5 WHERE id=$1', [m.id, recipient.id, c.reply_to, 'campaign:' + recipient.id, c.sender_name]);
+      await query('UPDATE communications SET campaign_recipient_id=$2,reply_to=$3,idempotency_key=$4,sender_name=$5,sender_email=$6 WHERE id=$1', [m.id, recipient.id, c.reply_to, 'campaign:' + recipient.id, c.sender_name,c.sender_email||'']);
       await query('UPDATE campaign_recipients SET communication_id=$2 WHERE id=$1', [recipient.id, m.id]);
     }
     const updated = (await query("UPDATE campaigns SET status=$2,scheduled_at=$3,updated_at=now() WHERE id=$1 RETURNING *", [id, scheduled_at ? 'SCHEDULED' : 'SENDING', scheduled_at])).rows[0];
     await audit(req, updated, scheduled_at ? 'campaign_scheduled' : 'campaign_send_initiated');
     return updated;
+  });
+}
+export async function deleteCampaign(id, req) {
+  if (!isStaging()) throw new AppError('Campaign deletion is available in staging only.',404,'NOT_FOUND');
+  return transaction(async () => {
+    const c = await getCampaign(id, {lock:true});
+    if (c.status !== 'DRAFT') throw new AppError('Only draft campaigns can be deleted. Archive sent campaigns instead.',409,'CAMPAIGN_STATE');
+    const history = await query('SELECT 1 FROM campaign_recipients WHERE campaign_id=$1 LIMIT 1',[id]);
+    if (history.rowCount || c.started_at || c.scheduled_at) throw new AppError('This campaign has sending history and must be archived.',409,'CAMPAIGN_STATE');
+    const deleted = (await query('UPDATE campaigns SET deleted_at=now(),deleted_by=$2,updated_at=now() WHERE id=$1 RETURNING *',[id,req.user.id])).rows[0];
+    await audit(req, deleted, 'campaign_deleted');
+    return {deleted:true};
   });
 }
 export async function campaignAction(id, action, req) {
@@ -292,7 +315,7 @@ export async function campaignTestSend(id, email, req, sample = {
     body: rendered.text,
     html: rendered.html
   }, req.user);
-  await query('UPDATE communications SET reply_to=$2,sender_name=$3 WHERE id=$1', [draft.id, c.reply_to, c.sender_name]);
+  await query('UPDATE communications SET reply_to=$2,sender_name=$3,sender_email=$4 WHERE id=$1', [draft.id, c.reply_to, c.sender_name,approvedEmailSender(c.sender_email)]);
   const result = await sendCommunication(draft.id, req.user);
   await audit(req, c, 'campaign_test_sent');
   return {
@@ -323,12 +346,14 @@ export async function submitCampaignInterest(token, input) {
     const r = await resolveCampaignToken(token);
     if (!campaignInterestOptions(r.content_json).some(o => o.key === data.package)) throw new AppError('Choose an experience offered in this campaign.',422,'INVALID_CAMPAIGN_OFFER');
     if (r.unsubscribed_at) throw new AppError('This marketing link has been unsubscribed.', 410, 'UNSUBSCRIBED');
+    await query('SELECT pg_advisory_xact_lock(hashtext($1))',[r.email.toLowerCase()]);
     const selectedOffer = campaignInterestOptions(r.content_json).find(o=>o.key===data.package);
     const inserted = (await query('INSERT INTO campaign_interests(campaign_id,campaign_recipient_id,package,event_date,event_time,location) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(campaign_recipient_id) DO NOTHING RETURNING *', [r.campaign_id, r.id, data.package, data.event_date, data.event_time, data.location || null])).rows[0];
-    if (!inserted) return {
+    if (!inserted) { if(!r.lead_id)await linkCampaignInterest(r.campaign_id,(await query('SELECT id FROM campaign_interests WHERE campaign_recipient_id=$1',[r.id])).rows[0].id); return {
       duplicate: true,
       interest: (await query('SELECT * FROM campaign_interests WHERE campaign_recipient_id=$1', [r.id])).rows[0]
-    };
+    }; }
+    const linked=await linkCampaignInterest(r.campaign_id,inserted.id);
     await query('UPDATE campaign_recipients SET interested_at=now() WHERE id=$1', [r.id]);
     await event(r.campaign_id, 'interest_submitted', data, r.id);
     if (r.lead_id || r.client_id) await recordActivity({
@@ -351,7 +376,7 @@ export async function submitCampaignInterest(token, input) {
       }
     });
     return {
-      interest: inserted
+      interest: inserted,lead_id:linked.lead_id,lead_status:linked.lead_status
     };
   });
 }
@@ -381,12 +406,11 @@ export async function unsubscribeCampaign(token) {
 export async function processCampaignJobs({
   limit = 25
 } = {}) {
-  // Campaigns have their own opt-in; reminder processing remains independently paused.
   if (process.env.CAMPAIGN_JOBS_ENABLED !== 'true') return {
     processed: [],
     paused: true
   };
-  const started=await query("UPDATE campaigns SET status='SENDING',started_at=COALESCE(started_at,now()) WHERE status='SCHEDULED' AND scheduled_at<=now() RETURNING id");
+  const started=await query("UPDATE campaigns SET status='SENDING',started_at=COALESCE(started_at,now()) WHERE deleted_at IS NULL AND status='SCHEDULED' AND scheduled_at<=now() RETURNING id");
   for(const c of started.rows)await event(c.id,'campaign_sending_started',{},null,'started:'+c.id);
   // Unknown outcomes remain failed for operator review; never automatically re-send.
   await query("UPDATE communications m SET status='FAILED',failed_at=now(),failure_code='DELIVERY_OUTCOME_UNKNOWN',failure_message='Campaign worker stopped during send. Review provider history before retry.' FROM campaign_recipients r WHERE m.id=r.communication_id AND r.status='PROCESSING' AND r.queued_at<now()-interval '10 minutes' AND m.status='PROCESSING'");
@@ -394,7 +418,7 @@ export async function processCampaignJobs({
   const processed = [];
   for (let i = 0; i < limit; i++) {
     const r = await transaction(async () => {
-      const row = (await query("SELECT r.* FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='QUEUED' AND c.status='SENDING' ORDER BY r.queued_at LIMIT 1 FOR UPDATE OF r,c SKIP LOCKED")).rows[0];
+      const row = (await query("SELECT r.* FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='QUEUED' AND c.deleted_at IS NULL AND c.status='SENDING' ORDER BY r.queued_at LIMIT 1 FOR UPDATE OF r,c SKIP LOCKED")).rows[0];
       if (!row) return null;
       const suppressed = (await query('SELECT 1 FROM campaign_suppressions WHERE email=$1', [row.email])).rowCount;
       const contact=row.lead_id?(await query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL',[row.lead_id])).rows[0]:row.client_id?(await query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL',[row.client_id])).rows[0]:null;
@@ -448,52 +472,13 @@ export async function processCampaignJobs({
       });
     }
   }
-  const completed=await query("UPDATE campaigns c SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='FAILED') THEN 'FAILED' ELSE 'SENT' END,completed_at=now(),updated_at=now() WHERE c.status='SENDING' AND NOT EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('QUEUED','PROCESSING')) RETURNING c.id,c.status");
+  const completed=await query("UPDATE campaigns c SET status=CASE WHEN EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='FAILED') THEN 'FAILED' ELSE 'SENT' END,completed_at=now(),updated_at=now() WHERE c.deleted_at IS NULL AND c.status='SENDING' AND NOT EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status IN ('QUEUED','PROCESSING')) RETURNING c.id,c.status");
   for(const c of completed.rows)await event(c.id,'campaign_completed',{status:c.status},null,'completed:'+c.id);
   return {
     processed
   };
 }
-export async function convertCampaignInterest(campaignId, interestId, req) {
-  return transaction(async () => {
-    const i = (await query('SELECT i.*,r.* ,i.id interest_id,c.content_json FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id JOIN campaigns c ON c.id=i.campaign_id WHERE i.id=$1 AND i.campaign_id=$2 FOR UPDATE OF r', [interestId, campaignId])).rows[0];
-    if (!i) throw new AppError('Interest not found.', 404, 'NOT_FOUND');
-    if (i.lead_id) return {
-      lead_id: i.lead_id,
-      existing: true
-    };
-    // Serializes explicit conversion for the same email, including other campaigns.
-    await query('SELECT pg_advisory_xact_lock(hashtext($1))', [i.email]);
-    let lead = (await query('SELECT id FROM leads WHERE lower(email)=$1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1', [i.email])).rows[0];
-    if (!lead) {
-      const selected=campaignContent(i.content_json).offers.find(o=>o.key===i.package);
-      lead = (await query(`INSERT INTO leads(first_name,last_name,email,phone,event_date,event_start_time,event_type,venue_name,company,lead_source,message,marketing_email_opt_in,assigned_user_id,preferred_experience_id,preferred_package_id) VALUES($1,$2,$3,$10,$4,$5,'CORPORATE',$6,$7,'MANUAL',$8,false,$9,$11,$12) RETURNING id`, [i.first_name || 'Prospect', i.last_name || '', i.email, i.event_date, i.event_time, i.location || null, i.company, `Campaign interest: ${selected?.name || i.package}. Requested ${i.event_date} ${i.event_time}.`, req.user.id, i.phone || null, selected?.catalog_id || null, selected?.package_id || null])).rows[0];
-    }
-    await query('UPDATE campaign_recipients SET lead_id=$2 WHERE id=$1', [i.campaign_recipient_id, lead.id]);
-    await recordActivity({
-      actorUserId: req.user.id,
-      entityType: 'lead',
-      entityId: lead.id,
-      action: 'campaign_interest_converted',
-      summary: 'Campaign interest linked to lead',
-      metadata: {
-        package: i.package,
-        event_date: i.event_date,
-        event_time: i.event_time,
-        location: i.location,
-        campaign_id: campaignId
-      }
-    });
-    await audit(req, {
-      id: campaignId,
-      name: 'Campaign interest',
-      status: 'LINKED'
-    }, 'campaign_interest_converted');
-    return {
-      lead_id: lead.id
-    };
-  });
-}
+export async function convertCampaignInterest(campaignId,interestId,req){return linkCampaignInterest(campaignId,interestId,req.user.id);}
 // Provider adapters call this only AFTER authenticating the provider webhook.
 // Microsoft Graph sendMail does not expose these events in the current adapter.
 export async function recordCampaignProviderEvent({
