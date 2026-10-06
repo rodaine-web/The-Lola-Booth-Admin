@@ -93,3 +93,14 @@ export function campaignInterestOptions(content) {
 export function campaignPackageOffer(offer,pkg) {
   return {...offer,package_id:pkg.id,original_price:Number(pkg.starting_price ?? pkg.price ?? offer.original_price),hours:Number(pkg.included_hours ?? pkg.duration ?? offer.hours),description:pkg.proposal_description||pkg.description||offer.description};
 }
+
+// Expand an explicit catalog rule; never apply the planner rate to unrelated experiences.
+export function expandCampaignPackageOffers(offers, experiences, packages) {
+  return offers.flatMap(offer => {
+    if (offer.package_scope !== 'ALL_REGULAR') return [offer];
+    const experience = experiences.find(e => e.id === offer.catalog_id && e.active !== false && e.is_active !== false && !e.deleted_at);
+    if (!experience) return [];
+    return packages.filter(p => p.experience_id === experience.id && p.active !== false && p.is_active !== false && !p.deleted_at)
+      .map(pkg => ({...campaignPackageOffer(offer, pkg), package_scope:'SINGLE', key:`${offer.key}_PACKAGE_${pkg.id}`, name:`${experience.website_name || experience.name} — ${pkg.name}`, features:pkg.items || pkg.website_features || [], image_url:offer.image_url || experience.image_url || ''}));
+  });
+}

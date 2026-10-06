@@ -1,3 +1,4 @@
+import {campaignOffers,campaignEmailContent} from './campaign-offers.js';
 import {linkCampaignInterest} from './campaign-lead-service.js';
 import { randomBytes, createHash } from 'node:crypto';
 import sanitizeHtml from 'sanitize-html';
@@ -16,10 +17,11 @@ import { renderCampaignEmail } from './campaign-email.js';
 export const hashCampaignToken = token => createHash('sha256').update(token).digest('hex');
 export const newCampaignToken = () => randomBytes(32).toString('base64url');
 export const offerSchema = z.object({
-  key: z.string().regex(/^(EXPERIENCE|ADDON)_[0-9a-f-]{36}$/i),
+  key: z.string().regex(/^(EXPERIENCE|ADDON)_[0-9a-f-]{36}(?:_PACKAGE_[0-9a-f-]{36})?$/i),
   kind: z.enum(['EXPERIENCE','ADDON']),
   catalog_id: z.uuid(),
   package_id: z.uuid().nullable().optional(),
+  package_scope: z.enum(['SINGLE','ALL_REGULAR']).default('SINGLE'),
   name: z.string().trim().min(1).max(200),
   description: z.string().max(2000).default(''),
   image_url: z.string().max(2000).default(''),
@@ -29,7 +31,7 @@ export const offerSchema = z.object({
   discount_value: z.number().min(0).max(1000000).default(0)
 }).refine(o => o.discount_type !== 'PERCENT' || o.discount_value <= 100, {message:'Percentage discount cannot exceed 100%.'})
 .refine(o => o.discount_type !== 'AMOUNT' || o.discount_value <= o.original_price, {message:'Discount cannot exceed the original price.'})
-.refine(o => o.key === o.kind + '_' + o.catalog_id, {message:'Offer identity does not match the selected catalog item.'});
+.refine(o => (o.key === o.kind + '_' + o.catalog_id || (o.kind==='EXPERIENCE' && o.package_id && o.key === o.kind + '_' + o.catalog_id + '_PACKAGE_' + o.package_id)), {message:'Offer identity does not match the selected catalog item.'});
 const contentSchema = z.object({
   format: z.enum(['CORPORATE','TEXT','HTML']).default('CORPORATE'),
   text_body: z.string().max(20000).default(''),
@@ -83,7 +85,7 @@ export const campaignSchema = z.object({
   })
 });
 export const interestSchema = z.object({
-  package: z.string().regex(/^(GLAM|360|DUO|GENERAL|EXPERIENCE_[0-9a-f-]{36})$/i),
+  package: z.string().regex(/^(GLAM|360|DUO|GENERAL|EXPERIENCE_[0-9a-f-]{36}(?:_PACKAGE_[0-9a-f-]{36})?)$/i),
   event_date: z.iso.date(),
   event_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   location: z.string().trim().max(300).optional().default('').transform(value=>sanitizeHtml(value,{allowedTags:[],allowedAttributes:{}})),
@@ -230,11 +232,13 @@ export async function queueCampaign(id, req, {
     if (!['DRAFT', 'READY'].includes(c.status)) fail();
     approvedEmailSender(c.sender_email);
     if (!c.content_json.mailing_address.trim()) throw new AppError('Add your business mailing address before sending marketing email.', 422, 'MAILING_ADDRESS_REQUIRED');
+    const emailCampaign = await campaignEmailContent(c);
     const audience = await resolveCampaignAudience(c.audience_json);
     if (!audience.count) throw new AppError('Choose at least one consented recipient.', 422, 'EMPTY_AUDIENCE');
+    if(emailCampaign!==c)await query('UPDATE campaigns SET content_json=$2 WHERE id=$1',[id,JSON.stringify(emailCampaign.content_json)]);
     for (const r of audience.recipients) {
       const token = newCampaignToken(),
-        rendered = renderCampaignEmail(c, r, {
+        rendered = renderCampaignEmail(emailCampaign, r, {
           token
         });
       const recipient = (await query(`INSERT INTO campaign_recipients(campaign_id,lead_id,client_id,email,first_name,last_name,company,token_hash,phone,token_expires_at,status,queued_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '1 year','QUEUED',now()) ON CONFLICT(campaign_id,email) DO NOTHING RETURNING *`, [id, r.kind === 'lead' ? r.id : null, r.kind === 'client' ? r.id : null, r.email, r.first_name, r.last_name, r.company, hashCampaignToken(token), r.phone || null])).rows[0];
@@ -305,7 +309,7 @@ export async function campaignTestSend(id, email, req, sample = {
   company: 'Northstar Group'
 }) {
   z.email().parse(email);
-  const c = await getCampaign(id),
+  const c = await campaignEmailContent(await getCampaign(id)),
     rendered = renderCampaignEmail(c, sample, {
       test: true
     });
@@ -335,7 +339,7 @@ export async function publicCampaign(token) {
   return {
     first_name: r.first_name,
     company: r.company,
-    content: campaignContent(r.content_json),
+    content: campaignContent((await campaignEmailContent({...r,id:r.campaign_id})).content_json),
     unsubscribed: Boolean(r.unsubscribed_at),
     interest: (await query('SELECT package,event_date,event_time,location FROM campaign_interests WHERE campaign_recipient_id=$1', [r.id])).rows[0] || null
   };
@@ -344,10 +348,12 @@ export async function submitCampaignInterest(token, input) {
   const data = interestSchema.parse(input);
   return transaction(async () => {
     const r = await resolveCampaignToken(token);
-    if (!campaignInterestOptions(r.content_json).some(o => o.key === data.package)) throw new AppError('Choose an experience offered in this campaign.',422,'INVALID_CAMPAIGN_OFFER');
+    const hasPackageRule=(r.content_json?.offers||[]).some(o=>o.package_scope==='ALL_REGULAR'||o.key.includes('_PACKAGE_'));
+    const options = hasPackageRule ? (await campaignOffers(r.campaign_id)).offers : campaignInterestOptions(r.content_json);
+    if (!options.some(o => o.key === data.package)) throw new AppError('Choose an experience offered in this campaign.',422,'INVALID_CAMPAIGN_OFFER');
     if (r.unsubscribed_at) throw new AppError('This marketing link has been unsubscribed.', 410, 'UNSUBSCRIBED');
     await query('SELECT pg_advisory_xact_lock(hashtext($1))',[r.email.toLowerCase()]);
-    const selectedOffer = campaignInterestOptions(r.content_json).find(o=>o.key===data.package);
+    const selectedOffer = options.find(o=>o.key===data.package);
     const inserted = (await query('INSERT INTO campaign_interests(campaign_id,campaign_recipient_id,package,event_date,event_time,location) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(campaign_recipient_id) DO NOTHING RETURNING *', [r.campaign_id, r.id, data.package, data.event_date, data.event_time, data.location || null])).rows[0];
     if (!inserted) { if(!r.lead_id)await linkCampaignInterest(r.campaign_id,(await query('SELECT id FROM campaign_interests WHERE campaign_recipient_id=$1',[r.id])).rows[0].id); return {
       duplicate: true,

@@ -3,7 +3,7 @@ export const isStaging=(config=process.env)=>config.APP_ENV==='staging';
 export function buildInfo(config=process.env){return {environment:config.APP_ENV||config.NODE_ENV||'development',revision:config.RAILWAY_GIT_COMMIT_SHA||config.APP_REVISION||'local'};}
 export function assertStagingConfiguration(config=process.env){
  if(!isStaging(config)&&config.APP_ENV!=='production')return;
- if(config.STRIPE_SECRET_KEY&&!config.STRIPE_SECRET_KEY.startsWith('sk_test_'))throw new Error('Hosted qualification requires a Stripe TEST secret key.');
+ if(config.STRIPE_SECRET_KEY&&!/^(sk|rk)_test_/.test(config.STRIPE_SECRET_KEY)&&!(config.APP_ENV==='production'&&config.STRIPE_LIVE_PAYMENTS_ENABLED==='true'&&/^acct_[A-Za-z0-9]+$/.test(config.STRIPE_ACCOUNT_ID||'')&&/^(sk|rk)_live_/.test(config.STRIPE_SECRET_KEY)))throw new Error('Hosted qualification requires a Stripe TEST secret key.');
  if(config.SMS_PROVIDER&&config.SMS_PROVIDER!=='none')throw new Error('Staging external SMS must remain disabled.');
  for(const key of ['GA4_ENABLED','META_EVENTS_ENABLED','TIKTOK_EVENTS_ENABLED'])if(config[key]==='true')throw new Error(`${key} must remain false in staging.`);
 }

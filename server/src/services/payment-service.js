@@ -1,3 +1,4 @@
+import {stripeConfiguration,assertStripeEventMode,verifyStripeAccount,verifyStripeEventAccount} from './stripe-configuration.js';
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {getReceiptView} from "./receipt-service.js";
 import {enqueueLifecycle} from './integration-jobs-service.js';
@@ -19,18 +20,8 @@ const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 const cents = (value) => Math.round(Number(value || 0) * 100);
 
 export function providerStatus() {
-  const stripeConfigured = Boolean(env.stripeSecretKey?.startsWith("sk_test_"));
-  const stripeWebhookConfigured = Boolean(env.stripeWebhookSecret);
-  const stripeMode = env.stripeSecretKey?.startsWith("sk_live_") ? "LIVE" : "TEST";
   return {
-    stripe: {
-      provider: "STRIPE",
-      configured: stripeConfigured,
-      webhookConfigured: stripeWebhookConfigured,
-      mode: stripeMode,
-      readiness: stripeMode === "LIVE" ? "DISABLED" : stripeConfigured && stripeWebhookConfigured ? "TEST_READY" : stripeConfigured ? "ERROR" : "NOT_CONFIGURED",
-      enabled: stripeConfigured
-    },
+    stripe: stripeConfiguration(),
     paypal: {
       provider: "PAYPAL",
       configured: Boolean(env.paypalClientId && env.paypalClientSecret),
@@ -112,13 +103,14 @@ export async function createPaymentSession({ token, provider, amountChoice = "DE
     selectedAmount = money(customAmount);
     if (!Number.isFinite(selectedAmount) || selectedAmount < options.minimumAmount || selectedAmount > options.fullAmount) throw new AppError(`Choose an amount between ${options.minimumAmount.toFixed(2)} and ${options.fullAmount.toFixed(2)}.`,422,"INVALID_PAYMENT_AMOUNT");
   }
-  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount])).rows[0];
+  const stripeAccount = normalizedProvider === "STRIPE" ? await verifyStripeAccount() : null;
+  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' AND ($4::text IS NULL OR (metadata->>'stripe_account_id'=$4 AND metadata->>'stripe_mode'=$5)) ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount,stripeAccount?.accountId||null,stripeAccount?.mode||null])).rows[0];
   if(pending)return safeSession(pending,normalizedProvider);
-  const key = `${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}`;
+  const key = `${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}${stripeAccount ? ":"+stripeAccount.accountId+":"+stripeAccount.mode : ""}`;
   const existing = await query("SELECT * FROM payment_attempts WHERE idempotency_key=$1 AND invoice_id=$2 AND provider=$3 LIMIT 1", [key, invoice.id, normalizedProvider]);
   if (existing.rows[0] && existing.rows[0].status === "PENDING" && Date.now()-new Date(existing.rows[0].created_at).getTime()<23*3600000) return safeSession(existing.rows[0], normalizedProvider);
   if (existing.rows[0]) throw new AppError("This checkout has ended. Please refresh and try again.", 409, "CHECKOUT_ENDED");
-  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice);
+  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice, stripeAccount);
   return createPaypalOrder(invoice, key, options.currency, selectedAmount, amountChoice);
 }
 
@@ -248,7 +240,8 @@ export async function handleStripeWebhook(rawBody, signature) {
   if (!env.stripeWebhookSecret) throw new AppError("Stripe webhook secret is not configured.", 503, "STRIPE_WEBHOOK_NOT_CONFIGURED");
   if (!validStripeSignature(rawBody, signature, env.stripeWebhookSecret)) throw new AppError("Invalid Stripe signature.", 400, "INVALID_STRIPE_SIGNATURE");
   const event = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody));
-  if (event.livemode !== false || env.stripeSecretKey?.startsWith("sk_live_")) throw new AppError("Only Stripe test events are enabled.", 403, "LIVE_PAYMENTS_DISABLED");
+  assertStripeEventMode(event);
+  await verifyStripeEventAccount(event);
   return persistWebhookEvent("STRIPE", event.id, event.type, event, async () => {
     if (["checkout.session.completed", "checkout.session.async_payment_succeeded", "payment_intent.succeeded"].includes(event.type)) {
       const object = event.data?.object || {};
@@ -570,9 +563,10 @@ async function recordProviderRefund(input) {
   return refund;
 }
 
-async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT") {
+async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount) {
   const params = new URLSearchParams({
     mode: "payment",
+    integration_identifier: 'lola_invoice_' + [...crypto.createHash('sha256').update(key).digest().subarray(0,8)].map(n=>String.fromCharCode(97+n%26)).join(''),
     success_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=cancelled`,
     "line_items[0][price_data][currency]": currency.toLowerCase(),
@@ -588,12 +582,14 @@ async function createStripeCheckout(invoice, key, currency, amount = invoiceBala
   });
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.stripeSecretKey}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": key },
-    body: params
+    headers: { Authorization: `Bearer ${env.stripeSecretKey}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": key, "Stripe-Version":"2026-08-26.dahlia" },
+    body: params,
+    signal: AbortSignal.timeout(20000)
   });
   const data = await response.json();
   if (!response.ok) throw new AppError(safeProviderMessage(data.error?.message), 502, "STRIPE_SESSION_FAILED");
-  await insertAttempt({ invoice, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice });
+  if(data.livemode !== (stripeAccount.mode === 'LIVE'))throw new AppError('Stripe checkout environment does not match this invoice.',502,'STRIPE_MODE_MISMATCH');
+  await insertAttempt({ invoice, stripeAccount, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice });
   return { provider: "STRIPE", checkoutUrl: data.url, sessionId: data.id, amount, currency };
 }
 
@@ -615,12 +611,12 @@ async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance
   return { provider: "PAYPAL", checkoutUrl, sessionId: data.id, amount, currency };
 }
 
-async function insertAttempt({ invoice, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT" }) {
+async function insertAttempt({ invoice, stripeAccount, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT" }) {
   await query(
     `INSERT INTO payment_attempts (invoice_id, client_id, event_id, proposal_id, provider, provider_reference, provider_session_id, checkout_url, amount, currency, status, idempotency_key, metadata)
      VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number, amount_choice: amountChoice })]
+    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number, amount_choice: amountChoice, ...(stripeAccount ? {stripe_account_id:stripeAccount.accountId,stripe_mode:stripeAccount.mode} : {}) })]
   );
 }
 

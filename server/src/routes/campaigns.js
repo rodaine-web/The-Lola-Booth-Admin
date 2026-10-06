@@ -1,4 +1,4 @@
-import {proposalCampaignCatalog} from '../services/campaign-offers.js';
+import {proposalCampaignCatalog,campaignEmailContent} from '../services/campaign-offers.js';
 import {campaignDepositInvoice} from '../services/campaign-sales-service.js';
 import {campaignSenders} from '../services/email-service.js';
 import {recordCampaignTracking,transparentPixel} from '../services/campaign-tracking.js';
@@ -24,7 +24,7 @@ route('delete', '/:id', 'campaigns.edit', req => deleteCampaign(z.uuid().parse(r
 route('patch', '/:id', 'campaigns.edit', req => saveCampaign(req.body, req, z.uuid().parse(req.params.id)));
 campaignRouter.post('/:id/interests/:interestId/convert', requirePermission('campaigns.read'), requirePermission('write:sales'), asyncHandler(async (req, res) => res.json(await convertCampaignInterest(z.uuid().parse(req.params.id), z.uuid().parse(req.params.interestId), req))));
 route('post', '/:id/duplicate', 'campaigns.create', req => duplicateCampaign(z.uuid().parse(req.params.id), req));
-route('post', '/:id/preview', 'campaigns.read', async req => renderCampaignEmail(await getCampaign(z.uuid().parse(req.params.id)), req.body.sample || {
+route('post', '/:id/preview', 'campaigns.read', async req => renderCampaignEmail(await campaignEmailContent(await getCampaign(z.uuid().parse(req.params.id))), req.body.sample || {
   first_name: 'Jordan',
   company: 'Northstar Group'
 }, {

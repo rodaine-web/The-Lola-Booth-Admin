@@ -1,6 +1,6 @@
 import {query} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
-import {campaignContent,campaignOfferPrice,campaignInterestOptions} from '../../../shared/campaign-content.js';
+import {campaignContent,campaignOfferPrice,campaignInterestOptions,expandCampaignPackageOffers} from '../../../shared/campaign-content.js';
 import {experienceKey} from '../../../shared/proposal-scenario.js';
 
 const round=n=>Math.round(Number(n)*100)/100;
@@ -8,7 +8,7 @@ const round=n=>Math.round(Number(n)*100)/100;
 export function composeCampaignOffers(campaign,experiences,packages){
  const c=campaignContent(campaign.content_json);
  const catalog=experiences.filter(e=>e.active!==false&&!e.deleted_at);
- const raw=c.format==='CORPORATE'?campaignInterestOptions(c).map(o=>({...o,kind:'EXPERIENCE',original_price:o.price,discount_type:'NONE',hours:4,features:o.key==='DUO'?c.duo_features:c[o.key==='GLAM'?'glam_features':'360_features'],experience_ids:(o.key==='DUO'?['glam','360']:[o.key==='GLAM'?'glam':'360']).map(k=>catalog.find(e=>experienceKey(e)===k)?.id).filter(Boolean)})):c.offers;
+ const raw=c.format==='CORPORATE'?campaignInterestOptions(c).map(o=>({...o,kind:'EXPERIENCE',original_price:o.price,discount_type:'NONE',hours:4,features:o.key==='DUO'?c.duo_features:c[o.key==='GLAM'?'glam_features':'360_features'],experience_ids:(o.key==='DUO'?['glam','360']:[o.key==='GLAM'?'glam':'360']).map(k=>catalog.find(e=>experienceKey(e)===k)?.id).filter(Boolean)})):expandCampaignPackageOffers(c.offers,catalog,packages);
  return raw.filter(o=>o.kind==='EXPERIENCE').map(o=>{
   const ids=o.experience_ids||[o.catalog_id];
   const expected=o.key==='DUO'?2:1;
@@ -49,4 +49,10 @@ export async function resolveProposalCampaignPackages(input){
   if(!resolved.get(key).selections.some(s=>s.experience_id===p.experience_id))throw new AppError('Campaign offer does not belong to this experience.',422,'INVALID_CAMPAIGN_OFFER');
  }
  return resolved;
+}
+
+export async function campaignEmailContent(campaign) {
+ if (!(campaign.content_json?.offers || []).some(o => o.package_scope === 'ALL_REGULAR')) return campaign;
+ const resolved = await campaignOffers(campaign.id);
+ return {...campaign, content_json:{...campaignContent(campaign.content_json), offers:[...resolved.offers, ...(campaign.content_json.offers || []).filter(o=>o.kind==='ADDON')]}};
 }
