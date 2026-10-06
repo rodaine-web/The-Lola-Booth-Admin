@@ -21,7 +21,7 @@ test('two-experience campaign bundles allocate their price exactly once',()=>{
 test('planner rules cover every active package of Glam, 360 and Vogue at 15 percent',()=>{
  const experiences=['glam','360','vogue','audio'].map(id=>({id,name:id,active:true}));
  const packages=experiences.flatMap(e=>['Essential','Signature','Premium'].map((name,index)=>({id:e.id+index,experience_id:e.id,name,starting_price:999.99+index*100,active:true,items:['Attendant']})));
- packages.push({id:'inactive',experience_id:'glam',name:'Old',starting_price:100,active:false},{id:'deleted',experience_id:'vogue',starting_price:100,deleted_at:'2026-10-01'});
+ packages.push({id:'custom',experience_id:'glam',name:'Custom',starting_price:0,active:true},{id:'custom-priced',experience_id:'360',name:'Custom quote',starting_price:100,active:true},{id:'inactive',experience_id:'glam',name:'Old',starting_price:100,active:false},{id:'deleted',experience_id:'vogue',starting_price:100,deleted_at:'2026-10-01'});
  const campaign={id:'planner',name:'Wedding planner',content_json:{format:'HTML',offers:experiences.slice(0,3).map(e=>({key:'EXPERIENCE_'+e.id,kind:'EXPERIENCE',catalog_id:e.id,package_scope:'ALL_REGULAR',discount_type:'PERCENT',discount_value:15}))}};
  const offers=composeCampaignOffers(campaign,experiences,packages);
  assert.equal(offers.length,9);assert.equal(new Set(offers.map(o=>o.key)).size,9);

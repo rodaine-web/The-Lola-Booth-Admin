@@ -100,7 +100,7 @@ export function expandCampaignPackageOffers(offers, experiences, packages) {
     if (offer.package_scope !== 'ALL_REGULAR') return [offer];
     const experience = experiences.find(e => e.id === offer.catalog_id && e.active !== false && e.is_active !== false && !e.deleted_at);
     if (!experience) return [];
-    return packages.filter(p => p.experience_id === experience.id && p.active !== false && p.is_active !== false && !p.deleted_at)
+    return packages.filter(p => p.experience_id === experience.id && !/^custom(?:\s|$)/i.test(p.name || '') && Number(p.starting_price ?? p.price) > 0 && p.active !== false && p.is_active !== false && !p.deleted_at)
       .map(pkg => ({...campaignPackageOffer(offer, pkg), package_scope:'SINGLE', key:`${offer.key}_PACKAGE_${pkg.id}`, name:`${experience.website_name || experience.name} — ${pkg.name}`, features:pkg.items || pkg.website_features || [], image_url:offer.image_url || experience.image_url || ''}));
   });
 }
