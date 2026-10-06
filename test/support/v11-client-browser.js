@@ -43,7 +43,7 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   await api(`/proposals/${proposalId}/workspace/revoke`,{method:'POST'});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   assert.equal(await page.getByRole('heading',{name:'Your agreements',exact:true}).count(),0,'Revoked workspace clears customer records');
   if(campaignSales){
-   await page.addInitScript(token=>localStorage.setItem('lola_access_token',token),ownerToken);
+   await page.addInitScript(token=>{if(window===window.top)localStorage.setItem('lola_access_token',token);},ownerToken);
    await page.setViewportSize({width:1440,height:1000});
    await api('/settings',{method:'PATCH',body:{business_email:'hello@lolabooths.com'}});
    await page.goto(`${base}/system/settings`);
