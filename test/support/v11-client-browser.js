@@ -43,7 +43,7 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   await api(`/proposals/${proposalId}/workspace/revoke`,{method:'POST'});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   assert.equal(await page.getByRole('heading',{name:'Your agreements',exact:true}).count(),0,'Revoked workspace clears customer records');
   if(campaignSales){
-   await page.addInitScript(token=>localStorage.setItem('lola_access_token',token),ownerToken);
+   await page.addInitScript(token=>{if(window===window.top)localStorage.setItem('lola_access_token',token);},ownerToken);
    await page.setViewportSize({width:1440,height:1000});
    await api('/settings',{method:'PATCH',body:{business_email:'hello@lolabooths.com'}});
    await page.goto(`${base}/system/settings`);
@@ -56,6 +56,23 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
    await page.reload();await businessEmail.waitFor();
    assert.equal(await businessEmail.inputValue(),'info@thelolabooth.com');
    assert.equal((await api('/settings')).data.business_email,'info@thelolabooth.com');
+   await page.goto(`${base}/communications/campaigns`);
+   await page.getByRole('button',{name:'+ Create Campaign',exact:true}).click();
+   await page.getByRole('button',{name:/HTML campaign/}).click();
+   await page.getByLabel('Campaign name',{exact:true}).fill('HTML upload and image mapping QA');
+   await page.getByLabel('Email subject',{exact:true}).fill('Synthetic HTML preview');
+   const uploadedHtml='<html><body><h1>Wedding upload QA</h1><img alt="Wedding hero" src="{{assets.wedding_hero_url}}"></body></html>';
+   await page.getByLabel('Upload HTML',{exact:true}).setInputFiles({name:'wedding-qa.html',mimeType:'text/html',buffer:Buffer.from(uploadedHtml)});
+   await page.getByRole('status').filter({hasText:'Loaded wedding-qa.html'}).waitFor();
+   assert.equal(await page.getByLabel('Or paste your HTML',{exact:true}).inputValue(),uploadedHtml);
+   await page.getByLabel('Image URL — wedding_hero_url',{exact:true}).fill('https://thelolabooth.com/campaigns/year-end-2026/hero.jpg');
+   await page.getByRole('button',{name:'4. Review & send',exact:true}).click();
+   await page.getByRole('button',{name:'Generate preview',exact:true}).click();
+   await page.frameLocator('iframe[title="Campaign email preview"]').getByRole('heading',{name:'Wedding upload QA',exact:true}).waitFor();
+   assert.equal(await page.frameLocator('iframe[title="Campaign email preview"]').getByRole('img',{name:'Wedding hero',exact:true}).getAttribute('src'),'https://thelolabooth.com/campaigns/year-end-2026/hero.jpg');
+   await page.getByRole('button',{name:'1. Campaign',exact:true}).click();
+   await page.getByRole('status').filter({hasText:'Loaded wedding-qa.html'}).waitFor();
+   await page.screenshot({path:fileURLToPath(new URL('campaign-html-upload.png',evidence)),fullPage:true});
    await page.goto(`${base}/communications/campaigns/${campaignSales.campaignId}`);
    await page.getByRole('button',{name:'Interested',exact:true}).click();
    await page.getByRole('link',{name:'Open client',exact:true}).waitFor();
