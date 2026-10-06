@@ -6,8 +6,9 @@ export async function verifyCampaignSales({api,pool,viewerToken,origin}){
  process.env.STAGING_EMAIL_ENABLED='true';process.env.STAGING_EMAIL_ALLOWLIST='campaign-sales@example.com';
  await pool.query("INSERT INTO business_settings(business_name,default_deposit_percent,sales_tax_percent) SELECT 'Synthetic QA',30,0 WHERE NOT EXISTS(SELECT 1 FROM business_settings)");
  const exp=(await pool.query("INSERT INTO experiences(name,slug) VALUES('360 Video Booth','campaign-sales-360') RETURNING id")).rows[0];
- const key='EXPERIENCE_'+exp.id;
- const offer={key,kind:'EXPERIENCE',catalog_id:exp.id,name:'Campaign 360 Signature',description:'Campaign custom overlay and attendant',original_price:1000,discount_type:'PERCENT',discount_value:20,hours:4};
+ const pkg=(await pool.query("INSERT INTO packages(name,starting_price,duration,experience_id) VALUES('Campaign Signature',1000,4,$1) RETURNING id",[exp.id])).rows[0];
+ const key='EXPERIENCE_'+exp.id+'_PACKAGE_'+pkg.id;
+ const offer={key,kind:'EXPERIENCE',catalog_id:exp.id,package_id:pkg.id,name:'Campaign 360 Signature',description:'Campaign custom overlay and attendant',original_price:1000,discount_type:'PERCENT',discount_value:20,hours:4};
  const created=await api('/campaigns',{method:'POST',body:{name:'Campaign sales isolated demo',content_json:campaignContent({format:'TEXT',text_body:'Synthetic offer',mailing_address:'Synthetic QA mailing address',offers:[offer]}),audience_json:{manual:[{email:'campaign-sales@example.com',first_name:'Campaign',last_name:'Prospect',phone:'555-0100',marketing_email_opt_in:true}]}}});
  assert.equal(created.status,200,JSON.stringify(created.data));const id=created.data.id;
  assert.equal((await api(`/campaigns/${id}/send`,{method:'POST'})).status,200);
