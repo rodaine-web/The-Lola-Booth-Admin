@@ -33,8 +33,8 @@ export default function Settings(){
 
   useEffect(()=>{
     api.get("/settings").then(result=>{
-      const normalized={...result,business_email:result.business_email==="hello@lolabooths.com"?"info@thelolabooth.com":result.business_email};
-      setSettings(normalized);setForm(normalized);
+      // Display the saved value so correcting legacy contact data is persisted.
+      setSettings(result);setForm(result);
     }).catch(e=>setError(e.message));
     api.get("/notifications/preferences").then(setNotificationPrefs).catch(()=>null);
   },[revision]);
