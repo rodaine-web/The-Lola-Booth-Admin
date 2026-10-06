@@ -1,3 +1,4 @@
+import {contractsRouter} from './contracts.js';
 import {searchAdmin} from '../services/admin-search-service.js';
 import { eventFinanceSummary } from "../services/event-finance-summary.js";
 import {campaignRouter} from "./campaigns.js";
@@ -170,6 +171,7 @@ import {isStaging} from '../config/staging-safety.js';
 export const adminRouter = Router();
 
 adminRouter.use(authenticate);
+adminRouter.use(contractsRouter);
 adminRouter.use((req,_res,next)=>{
   if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)){
     if(req.path==='/settings'){
@@ -511,7 +513,9 @@ const proposalSchema = z.object({
     name: z.string().optional().nullable(),
     package_name: z.string().optional().nullable(),
     packages: z.array(z.object({
-      package_id: uuid,
+      package_id: uuid.optional().nullable(),
+      campaign_id: uuid.optional(),
+      campaign_offer_key: z.string().max(100).optional(),
       name: z.string().optional().nullable(),
       price: z.coerce.number().min(0).optional().nullable(),
       description: z.string().optional().nullable()
@@ -1381,7 +1385,7 @@ adminRouter.get("/pickers/proposals", requirePermission("read:sales"), asyncHand
 }));
 
 adminRouter.get("/pickers/invoices", requirePermission("read:finance"), asyncHandler(async (req, res) => {
-  const rows = await pickerRows(req.query.q, "SELECT i.id, i.invoice_number || COALESCE(' - ' || c.name, '') AS label, i.status || ' · $' || COALESCE(i.amount_outstanding, i.balance_due)::text AS subtitle FROM invoices i LEFT JOIN clients c ON c.id=i.client_id WHERE i.deleted_at IS NULL AND (i.invoice_number ILIKE $1 OR c.name ILIKE $1) ORDER BY i.created_at DESC LIMIT 25");
+  const rows = await pickerRows(req.query.q, "SELECT i.id, i.invoice_number || COALESCE(' - ' || c.name, '') AS label, i.status || ' · $' || COALESCE(i.amount_outstanding, i.balance_due)::text AS subtitle FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN leads l ON l.id=i.lead_id WHERE i.deleted_at IS NULL AND (i.invoice_number ILIKE $1 OR c.name ILIKE $1) ORDER BY i.created_at DESC LIMIT 25");
   res.json({ data: rows });
 }));
 
@@ -1570,23 +1574,23 @@ adminRouter.get("/invoices", requirePermission("read:finance"), validate(paginat
   }
   if (filters.search) {
     params.push(`%${filters.search}%`);
-    where.push(`(i.invoice_number ILIKE $${params.length} OR c.name ILIKE $${params.length} OR e.event_name ILIKE $${params.length})`);
+    where.push(`(i.invoice_number ILIKE $${params.length} OR c.name ILIKE $${params.length} OR concat_ws(' ',l.first_name,l.last_name) ILIKE $${params.length} OR e.event_name ILIKE $${params.length})`);
   }
   const sortMap = { invoice_number: "i.invoice_number", client: "c.name", event_date: "e.event_date", total: "i.total", status: "i.status", created_at: "i.created_at", due_date: "i.due_date" };
   const sortBy = sortMap[filters.sort_by || filters.sort] || "i.created_at";
   const direction = String(filters.sort_direction || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
   params.push(pageSize, offset);
   const rows = await query(
-    `SELECT i.*, (SELECT count(*) FROM invoice_items ii WHERE ii.invoice_id=i.id) AS item_count, c.name AS client_name, e.event_name, e.event_date, p.proposal_number
+    `SELECT i.*, (SELECT count(*) FROM invoice_items ii WHERE ii.invoice_id=i.id) AS item_count, COALESCE(c.name,concat_ws(' ',l.first_name,l.last_name)) AS client_name, COALESCE(e.event_name,i.pricing_snapshot->>'campaign_name') event_name, COALESCE(e.event_date,l.event_date) event_date, p.proposal_number
      FROM invoices i
-     LEFT JOIN clients c ON c.id=i.client_id
+     LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN leads l ON l.id=i.lead_id
      LEFT JOIN events e ON e.id=i.event_id
      LEFT JOIN proposals p ON p.id=i.proposal_id
      WHERE ${where.join(" AND ")}
      ORDER BY ${sortBy} ${direction} NULLS LAST LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
-  const count = await query(`SELECT count(*)::int AS count FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN events e ON e.id=i.event_id WHERE ${where.join(" AND ")}`, params.slice(0, -2));
+  const count = await query(`SELECT count(*)::int AS count FROM invoices i LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN leads l ON l.id=i.lead_id LEFT JOIN events e ON e.id=i.event_id WHERE ${where.join(" AND ")}`, params.slice(0, -2));
   res.json({ data: rows.rows.map(normalizeInvoice), pagination: { page: filters.page, pageSize, total: count.rows[0].count } });
 }));
 
@@ -2645,8 +2649,8 @@ adminRouter.post("/events/:id/communications", requirePermission("write:events")
 }));
 
 const paymentSchema = z.object({
-  event_id: uuid,
-  client_id: uuid,
+  event_id: uuid.optional().nullable(),
+  client_id: uuid.optional().nullable(),
   invoice_id: uuid.optional().nullable(),
   amount: money.refine((value) => Number(value) > 0, "Payment amount must be greater than zero."),
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
@@ -2657,7 +2661,7 @@ const paymentSchema = z.object({
   idempotency_key: z.string().optional().nullable()
 });
 
-adminRouter.post("/payments", requirePermission("write:finance"), validate(paymentSchema), asyncHandler(async (req, res) => {
+adminRouter.post("/payments", requirePermission("write:finance"), validate(paymentSchema.refine(value=>value.invoice_id || (value.event_id && value.client_id), "Select an invoice or both a client and an event.")), asyncHandler(async (req, res) => {
   res.status(201).json(await recordManualPayment(req));
 }));
 

@@ -1,3 +1,4 @@
+import {resolveProposalCampaignPackages} from './campaign-offers.js';
 import {freezeDefaultProposalMedia} from './proposal-default-media.js';
 import { composeProposal } from "../../../shared/proposal-scenario.js";
 import { compactProposalPhotos } from "./proposal-pdf-images.js";
@@ -62,10 +63,15 @@ export async function buildProposalSnapshot(input) {
     selectedIds.length ? query("SELECT * FROM experiences WHERE id = ANY($1::uuid[])", [selectedIds]).then(result => result.rows) : [],
     selectedPackageIds.length ? query("SELECT p.*, COALESCE(json_agg(pi.label ORDER BY pi.display_order) FILTER (WHERE pi.id IS NOT NULL),'[]') AS items FROM packages p LEFT JOIN package_items pi ON pi.package_id=p.id WHERE p.id = ANY($1::uuid[]) GROUP BY p.id", [selectedPackageIds]).then(result => result.rows) : []
   ]);
+  const campaignPackages=await resolveProposalCampaignPackages(input);
   const selectedExperiences = selectedInput.map((item, index) => {
     const catalog = selectedExperienceRows.find((row) => row.id === item.experience_id) || {};
     if(input.scenario_enabled && (!catalog.id || catalog.active===false))throw new AppError("Choose an active catalog experience.",422,"CATALOG_SELECTION_INVALID");
     const packages = (Array.isArray(item.packages) ? item.packages : []).map((selectedPackage) => {
+      if(selectedPackage.campaign_id){
+        const offer=campaignPackages.get(selectedPackage.campaign_id+':'+selectedPackage.campaign_offer_key);
+        return {...offer.selections.find(s=>s.experience_id===item.experience_id).packages[0]};
+      }
       const packageCatalog = selectedPackageRows.find((row) => row.id === selectedPackage.package_id) || {};
       if (!packageCatalog.id || packageCatalog.active === false || (packageCatalog.experience_id && packageCatalog.experience_id !== item.experience_id)) throw new AppError("Choose an active package belonging to the selected experience.",422,"CATALOG_SELECTION_INVALID");
       if (packageCatalog.pricing_mode === 'CUSTOM' && !(Number(selectedPackage.price)>0)) throw new AppError("Enter the agreed custom package price.",422,"CATALOG_SELECTION_INVALID");
@@ -123,6 +129,7 @@ export async function buildProposalSnapshot(input) {
         type: "EXPERIENCE_SELECTED",
         experience_id: item.experience_id,
         package_id: pkg.package_id,
+        campaign_id:pkg.campaign_id,campaign_offer_key:pkg.campaign_offer_key,original_price:pkg.original_price,campaign_discount:pkg.discount,
         description: [item.name, pkg.name].filter(Boolean).join(" - "),
         detail: pkg.description || item.description || "",
         quantity: 1,

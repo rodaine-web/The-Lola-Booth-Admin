@@ -131,6 +131,9 @@ test('invalid scheduling is rejected before any database mutation', async t => {
   assert.equal(calls.length, 0);
 });
 test('queue creates one draft communication per eligible recipient without sending at request time', async t => {
+  const oldOrigin=process.env.CAMPAIGN_TRACKING_ORIGIN;
+  process.env.CAMPAIGN_TRACKING_ORIGIN='https://api.example.invalid';
+  t.after(()=>{if(oldOrigin===undefined)delete process.env.CAMPAIGN_TRACKING_ORIGIN;else process.env.CAMPAIGN_TRACKING_ORIGIN=oldOrigin;});
   const c = campaign(),
     r = {
       id: recipientId,
@@ -159,6 +162,8 @@ test('queue creates one draft communication per eligible recipient without sendi
     scheduled_at: '2099-12-20T18:00:00Z'
   });
   assert.equal(queued.status, 'SCHEDULED');
+  assert.ok(calls.some(c=>c.sql.startsWith('INSERT INTO campaign_tracking_links')&&c.args[2]==='OPEN'));
+  assert.ok(calls.some(c=>c.sql.startsWith('UPDATE campaign_recipients SET tracking_enabled=true')));
   assert.equal(calls.filter(c => c.sql.startsWith('INSERT INTO communications')).length, 1);
   const recipient = calls.find(c => c.sql.startsWith('INSERT INTO campaign_recipients'));
   assert.equal(recipient.args[7].length, 64);
@@ -296,6 +301,7 @@ test('duplicate interest does not create duplicate activity, notifications or ev
     campaign_id: id,
     lead_id: leadId,
     first_name: 'QA',
+    email:'qa@example.invalid',
     campaign_name: 'QA'
   };
   const calls = fixture(t, sql => sql.includes('WHERE token_hash=') ? [r] : sql.startsWith('SELECT * FROM campaign_interests') ? [{
@@ -315,14 +321,14 @@ test('new interest records CRM activity and notification without booking, invoic
     id: recipientId,
     campaign_id: id,
     lead_id: leadId,
-    first_name: 'QA',
+    email:'qa@example.invalid',first_name: 'QA',
     company: 'Synthetic',
     campaign_name: 'QA outreach'
   };
   const calls = fixture(t, sql => sql.includes('WHERE token_hash=') ? [r] : sql.startsWith('INSERT INTO campaign_interests') ? [{
     id: randomUUID(),
     package: 'DUO'
-  }] : sql.startsWith('INSERT INTO notifications') ? [{
+  }] : sql.includes('i.id=$1 AND i.campaign_id=$2') ? [{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',lead_id:leadId,offer_snapshot:{name:'Duo'},event_date:'2099-12-20'}] : sql.startsWith('SELECT * FROM leads') || sql.startsWith("UPDATE leads SET status='FOLLOW_UP'") ? [{id:leadId,status:'FOLLOW_UP'}] : sql.startsWith('INSERT INTO notifications') ? [{
     id: randomUUID()
   }] : []);
   await campaigns.submitCampaignInterest(campaigns.newCampaignToken(), {
@@ -380,7 +386,7 @@ test('provider failure remains visible and does not mark a campaign recipient se
  finally{env.emailProvider=previousProvider;if(previousFlag===undefined)delete process.env.CAMPAIGN_JOBS_ENABLED;else process.env.CAMPAIGN_JOBS_ENABLED=previousFlag;}
 });
 test('explicit conversion links to an existing email instead of creating a duplicate lead',async t=>{
- const interestId=randomUUID();const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',package:'DUO',event_date:'2099-12-20',event_time:'18:00'}]:sql.startsWith('SELECT id FROM leads')?[{id:leadId}]:[]);
+ const interestId=randomUUID();const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',package:'DUO',event_date:'2099-12-20',event_time:'18:00',offer_snapshot:{name:'Duo'}}]:sql.startsWith('SELECT * FROM leads')||sql.startsWith("UPDATE leads SET status='FOLLOW_UP'")?[{id:leadId,status:'FOLLOW_UP'}]:[]);
  const out=await campaigns.convertCampaignInterest(id,interestId,req);assert.equal(out.lead_id,leadId);assert.ok(calls.some(c=>c.sql.includes('pg_advisory_xact_lock')));assert.equal(calls.some(c=>c.sql.startsWith('INSERT INTO leads')),false);
 });
 test('unsubscribe token stays usable after campaign archive and interest token expiry',async t=>{
@@ -398,9 +404,30 @@ test('custom campaign rejects an experience outside its offers before recording 
 test('explicit conversion carries imported phone and selected catalog experience/package into the lead',async t=>{
  const experienceId=randomUUID(),packageId=randomUUID(),interestId=randomUUID();
  const offer={key:'EXPERIENCE_'+experienceId,kind:'EXPERIENCE',catalog_id:experienceId,package_id:packageId,name:'360 Signature',original_price:999,discount_type:'NONE',discount_value:0};
- const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',phone:'+1 312 555 0100',package:offer.key,event_date:'2099-12-20',event_time:'18:00',content_json:campaignContent({format:'TEXT',offers:[offer]})}]:sql.startsWith('INSERT INTO leads')?[{id:leadId}]:[]);
+ const calls=fixture(t,sql=>sql.includes('i.id=$1 AND i.campaign_id=$2')?[{id:recipientId,campaign_recipient_id:recipientId,email:'qa@example.invalid',phone:'+1 312 555 0100',package:offer.key,event_date:'2099-12-20',event_time:'18:00',offer_snapshot:{...offer,selections:[{experience_id:experienceId,packages:[{package_id:packageId}]}]}}]:sql.startsWith('INSERT INTO leads')?[{id:leadId}]:[]);
  const out=await campaigns.convertCampaignInterest(id,interestId,req);
  assert.equal(out.lead_id,leadId);
  const insert=calls.find(c=>c.sql.startsWith('INSERT INTO leads'));
- assert.equal(insert.args[9],'+1 312 555 0100');assert.equal(insert.args[10],experienceId);assert.equal(insert.args[11],packageId);assert.match(insert.args[7],/360 Signature/);
+ assert.equal(insert.args[3],'+1 312 555 0100');assert.equal(insert.args[10],experienceId);assert.equal(insert.args[11],packageId);assert.match(insert.args[8],/360 Signature/);assert.match(insert.sql,/'FOLLOW_UP'/);
+});
+
+test('draft deletion is staging-only and records removal without deleting contacts or suppressions',async t=>{
+ const previous=process.env.APP_ENV;
+ const calls=fixture(t,sql=>sql.startsWith('SELECT * FROM campaigns')||sql.startsWith('UPDATE campaigns SET deleted_at')?[campaign()]:[]);
+ try{
+  process.env.APP_ENV='production';await assert.rejects(campaigns.deleteCampaign(id,req),e=>e.statusCode===404);assert.equal(calls.length,0);
+  process.env.APP_ENV='staging';assert.deepEqual(await campaigns.deleteCampaign(id,req),{deleted:true});
+  assert.ok(calls.some(c=>c.sql.includes('FOR UPDATE')));
+  assert.ok(calls.some(c=>c.sql.includes('INSERT INTO audit_logs')&&c.args.includes('campaign_deleted')));
+  assert.equal(calls.some(c=>/DELETE FROM/.test(c.sql)),false);
+ }finally{if(previous===undefined)delete process.env.APP_ENV;else process.env.APP_ENV=previous;}
+});
+test('non-draft campaigns and drafts with sending history cannot be deleted',async t=>{
+ const previous=process.env.APP_ENV;process.env.APP_ENV='staging';let c=campaign('SENT'),history=[];
+ const calls=fixture(t,sql=>sql.startsWith('SELECT * FROM campaigns')?[c]:sql.startsWith('SELECT 1 FROM campaign_recipients')?history:[]);
+ try{
+  for(const status of ['READY','SCHEDULED','SENDING','SENT','PAUSED','FAILED','CANCELLED','ARCHIVED']){c=campaign(status);await assert.rejects(campaigns.deleteCampaign(id,req),e=>e.code==='CAMPAIGN_STATE');}
+  c=campaign();history=[{}];await assert.rejects(campaigns.deleteCampaign(id,req),e=>e.code==='CAMPAIGN_STATE');
+  assert.equal(calls.some(c=>c.sql.startsWith('UPDATE campaigns')),false);
+ }finally{if(previous===undefined)delete process.env.APP_ENV;else process.env.APP_ENV=previous;}
 });

@@ -3,7 +3,7 @@ import {assertDatabaseIdentity} from './config/database-identity.js';
 import {originAllowed} from '../../shared/environment-isolation.js';
 import {buildInfo} from './config/staging-safety.js';
 import crypto from "node:crypto";
-import { safeRequestLog } from "./utils/request-log.js";
+import { safeRequestLog, safeResponseLog } from "./utils/request-log.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -33,7 +33,7 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(pinoHttp({ logger, genReqId: (_req, res) => { const id = crypto.randomUUID(); res.setHeader("X-Request-ID", id); return id; }, serializers: { req: safeRequestLog } }));
+app.use(pinoHttp({ logger, genReqId: (_req, res) => { const id = crypto.randomUUID(); res.setHeader("X-Request-ID", id); return id; }, serializers: { req: safeRequestLog, res: safeResponseLog } }));
 app.use("/api/webhooks", express.raw({ type: "application/json", limit: "1mb" }), webhookRouter);
 app.use(express.json({ limit: "14mb" }));
 app.use(createApiRateLimits({windowMs:env.rateLimitWindowMs,limit:env.rateLimitMax}));

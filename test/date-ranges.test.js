@@ -38,3 +38,16 @@ test("empty dataset range inputs still return concrete ranges", () => {
   assert.ok(ranges.today.end instanceof Date);
   assert.ok(ranges.today.end > ranges.today.start);
 });
+
+test('today event bounds use business calendar dates across UTC rollover and DST', () => {
+  for (const [now, timeZone, start, end] of [
+    ['2026-10-06T02:00:00Z','America/Chicago','2026-10-05','2026-10-06'],
+    ['2026-10-05T18:00:00Z','Asia/Tokyo','2026-10-06','2026-10-07'],
+    ['2026-03-08T18:00:00Z','America/Chicago','2026-03-08','2026-03-09']
+  ]) {
+    const ranges = getBusinessDateRanges({now:new Date(now),timeZone});
+    assert.equal(ranges.today.startDate,start);
+    assert.equal(ranges.today.endDate,end);
+    assert.notEqual(ranges.mtd.startDate,ranges.today.startDate);
+  }
+});

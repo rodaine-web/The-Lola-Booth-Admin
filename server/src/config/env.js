@@ -99,5 +99,6 @@ export const env = {
   microsoftTenantId: process.env.MICROSOFT_TENANT_ID || "",
   microsoftClientId: process.env.MICROSOFT_CLIENT_ID || "",
   microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET || "",
-  microsoftSenderEmail: process.env.MICROSOFT_SENDER_EMAIL || ""
+  microsoftSenderEmail: process.env.MICROSOFT_SENDER_EMAIL || "",
+  microsoftFromAliases: process.env.MICROSOFT_FROM_ALIASES || ""
 };

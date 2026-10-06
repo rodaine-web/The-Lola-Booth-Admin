@@ -15,6 +15,7 @@ export class MicrosoftEmailProvider {
     clientSecret,
     senderEmail,
     emailFrom,
+    fromAliases = "",
     fetchImpl = globalThis.fetch,
     storageProvider = getStorageProvider(),
     graphBaseUrl = "https://graph.microsoft.com/v1.0",
@@ -25,6 +26,7 @@ export class MicrosoftEmailProvider {
     this.clientSecret = clientSecret;
     this.senderEmail = senderEmail;
     this.emailFrom = emailFrom;
+    this.fromAliases = String(fromAliases).toLowerCase().split(",").map(v=>v.trim()).filter(Boolean);
     this.fetchImpl = fetchImpl;
     this.storageProvider = storageProvider;
     this.graphBaseUrl = graphBaseUrl.replace(/\/$/, "");
@@ -84,12 +86,13 @@ export class MicrosoftEmailProvider {
     return payload.access_token;
   }
 
-  async send({ to, cc, bcc, subject, body, html, text, replyTo, senderName, attachments = [], formOwnerNotification = false }) {
+  async send({ to, cc, bcc, subject, body, html, text, replyTo, senderName, fromEmail, attachments = [], formOwnerNotification = false }) {
     ({to,cc,bcc,subject}=stagingEmailPolicy({to,cc,bcc,subject,formOwnerNotification}));
+    const visibleFrom = approvedEmailSender(fromEmail, {microsoftSenderEmail:this.senderEmail,microsoftFromAliases:this.fromAliases.join(",")}) || this.senderEmail;
     const token = await this.getAccessToken();
     const message = {
       subject,
-      ...(senderName?{from:{emailAddress:{address:this.senderEmail,name:senderName}}}:{}),
+      ...((senderName||fromEmail)?{from:{emailAddress:{address:visibleFrom,...(senderName?{name:senderName}:{})}}}:{}),
       body: html
         ? { contentType: "HTML", content: html }
         : { contentType: "Text", content: text || body || "" },
@@ -211,6 +214,7 @@ function createProvider() {
       clientId: env.microsoftClientId,
       clientSecret: env.microsoftClientSecret,
       senderEmail: env.microsoftSenderEmail,
+      fromAliases: env.microsoftFromAliases,
       emailFrom: env.emailFrom
     });
   }
@@ -233,6 +237,7 @@ export function getEmailProviderReadiness(config = env, providerOptions = {}) {
       clientId: config.microsoftClientId,
       clientSecret: config.microsoftClientSecret,
       senderEmail: config.microsoftSenderEmail,
+      fromAliases: config.microsoftFromAliases,
       emailFrom: config.emailFrom,
       ...providerOptions
     });
@@ -242,6 +247,7 @@ export function getEmailProviderReadiness(config = env, providerOptions = {}) {
       active: true,
       deliveredExternally: true,
       senderEmail: config.microsoftSenderEmail,
+      fromAliases: config.microsoftFromAliases,
       from: config.emailFrom
     };
   }
@@ -249,7 +255,7 @@ export function getEmailProviderReadiness(config = env, providerOptions = {}) {
   throw new AppError(`Email provider ${config.emailProvider} is configured but no adapter is active yet.`, 500, "EMAIL_PROVIDER_UNSUPPORTED");
 }
 
-export async function sendEmail({ to, cc, bcc, subject, body, html, text, replyTo, senderName, attachments = [], formOwnerNotification = false }) {
+export async function sendEmail({ to, cc, bcc, subject, body, html, text, replyTo, senderName, fromEmail, attachments = [], formOwnerNotification = false }) {
   ({to,cc,bcc,subject}=stagingEmailPolicy({to,cc,bcc,subject,formOwnerNotification}));
   if (!env.emailProvider || env.emailProvider === "development") {
     return {
@@ -268,7 +274,19 @@ export async function sendEmail({ to, cc, bcc, subject, body, html, text, replyT
   }
 
   const provider = createProvider();
-  if (provider) return provider.send({ to, cc, bcc, subject, body, html, text, replyTo, senderName, attachments, formOwnerNotification });
+  if (provider) return provider.send({ to, cc, bcc, subject, body, html, text, replyTo, senderName, fromEmail, attachments, formOwnerNotification });
 
   throw new Error(`Email provider ${env.emailProvider} is configured but no adapter is active yet.`);
+}
+
+export function approvedEmailSender(address, config=env) {
+ const value=String(address||'').trim().toLowerCase();
+ if(!value)return '';
+ const allowed=[config.microsoftSenderEmail,...String(config.microsoftFromAliases||'').split(',')].map(v=>String(v||'').trim().toLowerCase());
+ if(!allowed.includes(value))throw new AppError('Choose an approved sending address.',422,'EMAIL_SENDER_NOT_ALLOWED');
+ return value;
+}
+export function campaignSenders(config=env) {
+ const mailbox=String(config.microsoftSenderEmail||'').trim().toLowerCase();
+ return [{email:'',name:'The LOLA Booth',label:mailbox||'Default mailbox'},...String(config.microsoftFromAliases||'').split(',').map(v=>v.trim().toLowerCase()).filter(v=>v&&v!==mailbox).map(email=>({email,name:email==='lola@thelolabooth.com'?'Lola Masha':'The LOLA Booth',label:email}))];
 }

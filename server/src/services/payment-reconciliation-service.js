@@ -1,3 +1,4 @@
+import {convertPaidCampaignLead} from './campaign-lead-service.js';
 import { query, transaction } from "../db/pool.js";
 import { recordActivity } from "./activity-service.js";
 import { writeAudit } from "./audit-service.js";
@@ -32,6 +33,8 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
       "UPDATE invoices SET amount_paid=$1, balance_due=$2, amount_outstanding=$2, status=$3, updated_at=now() WHERE id=$4 RETURNING *",
       [paid, outstanding, status, invoiceId]
     );
+    const converted=await convertPaidCampaignLead(client,updated.rows[0]);
+    if(converted)Object.assign(updated.rows[0],converted);
     await reconcileEventFinance(client, updated.rows[0].event_id);
     return { before: invoice.rows[0], after: updated.rows[0], refunded: money(refunded.rows[0].refunded) };
   });

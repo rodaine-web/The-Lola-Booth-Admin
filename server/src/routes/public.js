@@ -1,3 +1,4 @@
+import {publicContractsRouter,publicWorkspaceRouter} from './contracts.js';
 import {campaignPublicRouter} from "./campaigns.js";
 import {inquirySchema,publicFormKind} from "../services/public-form-schema.js";
 import {getReceiptView} from "../services/receipt-service.js";
@@ -43,6 +44,8 @@ publicRouter.use(rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 }));
+publicRouter.use('/contracts', publicContractsRouter);
+publicRouter.use('/workspaces', publicWorkspaceRouter);
 
 
 

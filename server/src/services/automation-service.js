@@ -669,6 +669,7 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
       html: communication.rendered_html,
       replyTo: communication.reply_to || undefined,
       senderName:communication.sender_name || undefined,
+      fromEmail:communication.sender_email || undefined,
       formOwnerNotification: communication.trigger_key === "PUBLIC_FORM" && /^public-form:[a-f0-9-]+:owner$/.test(communication.idempotency_key || "")
     });
   } catch (error) {

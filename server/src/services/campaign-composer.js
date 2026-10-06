@@ -21,7 +21,14 @@ export function renderComposedCampaign(campaign,c,recipient,{origin,token,test})
  };
  const merge=(body,html=false)=>body.replace(/\{\{([\w.]+)\}\}/g,(match,key)=>{
   if(key==='offers'&&html)return offers;
-  if(!(key in vars))throw new AppError('Unsupported campaign merge field: '+key,422,'INVALID_MERGE_FIELD');return html?escape(vars[key]):vars[key];
+  if(/^(assets?|images)\./.test(key)){
+   const imageKey=key.slice(key.indexOf('.')+1);
+   if(!Object.hasOwn(c.images,imageKey)||!c.images[imageKey].trim())throw new AppError('Add a public HTTPS image URL for '+key+' in Campaign images.',422,'MISSING_CAMPAIGN_ASSET');
+   let url;try{url=new URL(c.images[imageKey],origin);}catch{throw new AppError('Campaign image '+key+' needs a public HTTPS URL.',422,'INVALID_CAMPAIGN_ASSET');}
+   if(url.protocol!=='https:'||url.username||url.password||/^(localhost|127\.|\[::1\])/.test(url.hostname))throw new AppError('Campaign image '+key+' needs a public HTTPS URL.',422,'INVALID_CAMPAIGN_ASSET');
+   return html?escape(url.href):url.href;
+  }
+  if(!Object.hasOwn(vars,key))throw new AppError('Unsupported campaign merge field: '+key,422,'INVALID_MERGE_FIELD');return html?escape(vars[key]):vars[key];
  });
  const footer=`<div style="font:12px Arial;color:#666;padding:24px;text-align:center">${escape(c.footer)}<br>${escape(c.mailing_address)}<br><a href="${escape(unsubscribeUrl)}">Unsubscribe from marketing</a></div>`;
  const banner=test?'<p style="background:#171717;color:white;padding:12px;font:12px Arial;text-align:center">TEST EMAIL — sample recipient data</p>':'';
