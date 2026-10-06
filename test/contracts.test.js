@@ -11,6 +11,11 @@ test('V1.1 contracts are staging/local only, including production with an accide
  assert.equal(contractsEnabled({NODE_ENV:'production'}),false);
  assert.equal(contractsEnabled({APP_ENV:'unknown'}),false);
 });
+test('production client workflows require the explicit V1.1 release flag',()=>{
+ assert.equal(contractsEnabled({APP_ENV:'production',V11_CLIENT_WORKFLOW_ENABLED:'true'}),true);
+ for(const value of [undefined,'false','TRUE','1',true]) assert.equal(contractsEnabled({APP_ENV:'production',V11_CLIENT_WORKFLOW_ENABLED:value}),false);
+ assert.equal(contractsEnabled({APP_ENV:'unknown',V11_CLIENT_WORKFLOW_ENABLED:'true'}),false);
+});
 test('signing requires explicit consent, correct recipient and current document',()=>{
  assert.deepEqual(signingDecision(contract,input),{replay:false});
  assert.equal(signingDecision(contract,{...input,consent:false}).error,'CONSENT_REQUIRED');

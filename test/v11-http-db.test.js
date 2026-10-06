@@ -100,6 +100,19 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal((await fetch(origin+'/api/public/campaigns/track/click/invalid?url=https://example.com',{redirect:'manual'})).status,404);
   const {verifyCampaignSales}=await import('./support/campaign-sales-journey.js');
   const campaignSales=await verifyCampaignSales({api,pool,viewerToken,origin});
+  // The Today card must exclude other MTD events, using the configured local day.
+  await pool.query("INSERT INTO events(event_name,event_type,event_date,data_classification) VALUES('Dashboard today','Wedding','2026-10-05','BUSINESS'),('Dashboard earlier','Wedding','2026-10-01','BUSINESS'),('Dashboard tomorrow','Wedding','2026-10-06','BUSINESS')");
+  const {getOperationalDashboard}=await import('../server/src/services/operational-intelligence-service.js');
+  const dashboard=await getOperationalDashboard({range:'mtd',now:new Date('2026-10-06T02:00:00Z'),user:{id:user.id,roles:['OWNER'],permissions:['*']}});
+  assert.deepEqual(dashboard.todaysEvents.map(e=>e.event_name),['Dashboard today']);
+  // Production rollout remains off by default, but the explicit release flag
+  // exposes the same permission-protected routes and public workspace.
+  process.env.APP_ENV='production';process.env.V11_CLIENT_WORKFLOW_ENABLED='true';
+  assert.equal((await api(`/public/workspaces/${workspaceToken}`,{token:null})).status,200);
+  assert.equal((await api(`/proposals/${proposal.id}/contracts`,{token:viewerToken})).status,403);
+  assert.equal((await api(`/proposals/${proposal.id}/contracts`)).status,200);
+  delete process.env.V11_CLIENT_WORKFLOW_ENABLED;
+  assert.equal((await api(`/public/workspaces/${workspaceToken}`,{token:null})).status,404);
   const productionDraft=(await pool.query("INSERT INTO campaigns(name) VALUES('Production gate QA draft') RETURNING id")).rows[0];
   process.env.APP_ENV='production';
   assert.equal((await api(`/campaigns/${productionDraft.id}`,{method:'DELETE'})).status,404);

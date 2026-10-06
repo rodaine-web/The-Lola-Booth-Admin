@@ -45,6 +45,17 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   if(campaignSales){
    await page.addInitScript(token=>localStorage.setItem('lola_access_token',token),ownerToken);
    await page.setViewportSize({width:1440,height:1000});
+   await api('/settings',{method:'PATCH',body:{business_email:'hello@lolabooths.com'}});
+   await page.goto(`${base}/system/settings`);
+   const businessEmail=page.getByRole('textbox',{name:'Business Email',exact:true});
+   await businessEmail.waitFor();
+   assert.equal(await businessEmail.inputValue(),'hello@lolabooths.com','Settings must show the saved contact, not a cosmetic replacement');
+   await businessEmail.fill('info@thelolabooth.com');
+   await page.getByRole('button',{name:'Save Changes',exact:true}).click();
+   await page.getByText('Settings saved.',{exact:true}).waitFor();
+   await page.reload();await businessEmail.waitFor();
+   assert.equal(await businessEmail.inputValue(),'info@thelolabooth.com');
+   assert.equal((await api('/settings')).data.business_email,'info@thelolabooth.com');
    await page.goto(`${base}/communications/campaigns/${campaignSales.campaignId}`);
    await page.getByRole('button',{name:'Interested',exact:true}).click();
    await page.getByRole('link',{name:'Open client',exact:true}).waitFor();

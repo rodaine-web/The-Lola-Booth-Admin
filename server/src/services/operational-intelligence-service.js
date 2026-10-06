@@ -18,9 +18,9 @@ const comparisonForRange = {
   ytd: "sameYtdPeriodPreviousYear"
 };
 
-export async function getOperationalDashboard({ range = "today", user } = {}) {
+export async function getOperationalDashboard({ range = "today", user, now = new Date() } = {}) {
   const settings = await getOperationalSettings();
-  const ranges = getBusinessDateRanges({ timeZone: settings.timezone, weekStart: settings.business_week_start });
+  const ranges = getBusinessDateRanges({ now, timeZone: settings.timezone, weekStart: settings.business_week_start });
   const selected = ranges[range] || ranges.today;
   const comparison = ranges.comparisons[comparisonForRange[range] || "previousDay"];
   const params = rangeParams(selected);
@@ -28,7 +28,7 @@ export async function getOperationalDashboard({ range = "today", user } = {}) {
   const [current, previous, lists, trends, funnel, leadSources, performers] = await Promise.all([
     dashboardMetrics(params),
     dashboardMetrics(comparisonParams),
-    dashboardLists(params, range, user),
+    dashboardLists(params, range, user, ranges.today),
     revenueTrend(params, range),
     salesFunnel(params),
     leadSourcePerformance(params),
@@ -169,9 +169,9 @@ async function dashboardMetrics([start, end]) {
   return row;
 }
 
-async function dashboardLists([start, end], range, user) {
-  const todayOnly = range === "today";
-  const todayEvents = await eventRows(todayOnly ? "e.event_date >= $1::date AND e.event_date < $2::date" : "e.event_date >= $1::date AND e.event_date < $2::date", [start, end], 12);
+async function dashboardLists([start, end], range, user, today) {
+  // Event dates are local calendar dates, independent of the KPI period.
+  const todayEvents = await eventRows("e.event_date >= $1::date AND e.event_date < $2::date", [today.startDate, today.endDate], 12);
   const upcomingEvents = await eventRows("e.event_date >= current_date AND e.event_date < current_date + interval '30 days' AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')", [], 10);
   const readinessDetails=await dashboardReadiness(upcomingEvents,user,{canAccess:userCanAccessEvent,readOperations:getEventOperations});
   const [tasks, attention, activity, weekly] = await Promise.all([

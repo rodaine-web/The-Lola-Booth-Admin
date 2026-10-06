@@ -9,7 +9,7 @@ import {AppError} from '../utils/errors.js';
 import {contractsEnabled} from '../../../shared/contracts.js';
 import {listContracts,createContract,updateContract,issueContract,revokeContract,publicContract,signContract,getContract,contractPdf,contractSigningUrl} from '../services/contract-service.js';
 export const contractsRouter=Router(), publicContractsRouter=Router();
-function gate(_req,res,next){res.set('Cache-Control','no-store');return contractsEnabled(process.env)?next():next(new AppError('Version 1.1 agreements are available in staging only.',404,'NOT_FOUND'));}
+function gate(_req,res,next){res.set('Cache-Control','no-store');return contractsEnabled(process.env)?next():next(new AppError('Client agreements and workspace are not enabled in this environment.',404,'NOT_FOUND'));}
 contractsRouter.use(['/contracts','/proposals/:id/contracts','/proposals/:id/workspace'],gate);publicContractsRouter.use(gate);
 const draft=z.object({title:z.string().trim().min(3).max(200),terms:z.string().trim().min(20).max(50000)});
 const id=validate(z.object({id:uuid}),'params');
