@@ -75,3 +75,14 @@ test('package selection reads current catalog starting price and included hours'
 });
 
 test('missing contact import body returns a validation error',()=>{assert.throws(()=>importCampaignContacts(null),e=>e.code==='INVALID_CONTACT_FILE');});
+
+ test('HTML asset placeholders use configured images and retain escaping in HTML and text',()=>{
+ const out=render({format:'HTML',images:{wedding_hero_url:'https://thelolabooth.com/wedding.jpg?a=1&b=2'},html_body:'<img src="{{assets.wedding_hero_url}}"><p>{{assets.wedding_hero_url}}</p>'});
+ assert.match(out.html,/src="https:\/\/thelolabooth.com\/wedding.jpg\?a=1&amp;b=2"/);assert.match(out.text,/wedding.jpg/);assert.doesNotMatch(out.html,/\{\{assets/);
+ for(const prefix of ['asset','images'])assert.match(render({format:'HTML',html_body:'<img src="{{'+prefix+'.hero}}">'}).html,/year-end-2026\/hero.jpg/);
+ });
+ test('missing and unsafe campaign image placeholders fail with actionable errors',()=>{
+ assert.throws(()=>render({format:'HTML',html_body:'<img src="{{assets.wedding_hero_url}}">'}),e=>e.code==='MISSING_CAMPAIGN_ASSET'&&/Campaign images/.test(e.message));
+ for(const url of ['http://example.com/image.jpg','https://localhost/image.jpg','https://user:pass@example.com/image.jpg','javascript:alert(1)'])assert.throws(()=>render({format:'HTML',images:{wedding_hero_url:url},html_body:'<img src="{{assets.wedding_hero_url}}">'}));
+ assert.throws(()=>render({format:'HTML',html_body:'{{assets.constructor}}'}),e=>e.code==='MISSING_CAMPAIGN_ASSET');
+ });
