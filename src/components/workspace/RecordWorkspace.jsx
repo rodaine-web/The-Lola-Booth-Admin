@@ -29,6 +29,7 @@ export function workspaceSummary(module, rows=[]){
 }
 const grouping={Leads:['status','Lead pipeline','source','Leads by source'],Clients:['client_type','Client segments','company','Companies'],Events:['status','Event readiness','event_type','Event type mix'],Tasks:['status','Task status breakdown','owner_name','Team workload'],Proposals:['status','Proposal pipeline','event_type','Event types'],Invoices:['status','Payment status mix','client_name','Balances by client'],Payments:['provider','Payment providers','status','Payment status'],Templates:['category','Template categories','channel','Channels'],Scheduled:['channel','Send channels','status','Send status'],Messages:['channel','Channel mix','status','Message status'],Automations:['trigger_key','Workflow triggers','action_type','Workflow actions']};
 function Distribution({rows,field,title}){
+ if(rows.length&&!rows.some(row=>row[field]))return null;
  const groups=Object.entries(rows.reduce((acc,row)=>{const key=row[field]?labelize(row[field]):'Unspecified';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]).slice(0,6);
  return <article className="record-panel"><h2>{title}</h2>{groups.length?<div className="record-distribution">{groups.map(([name,value])=><div key={name}><span>{name}</span><div className="record-bar"><i style={{width:`${value/rows.length*100}%`}}/></div><strong>{value}</strong></div>)}</div>:<p className="record-muted">No records in this view.</p>}</article>;
 }
