@@ -30,6 +30,7 @@ export default function Communications() {
   const location=useLocation();
   const [section, setSection] = useState(() => ["Templates","Automations"].includes(new URLSearchParams(location.search).get("section")) ? new URLSearchParams(location.search).get("section") : "Communications");
   useEffect(()=>{const params=new URLSearchParams(location.search);setSection(["Templates","Automations"].includes(params.get("section"))?params.get("section"):"Communications");if(params.get("status")==="SCHEDULED")setCommunicationTab("SCHEDULED");},[location.search]);
+  const [templateSearch,setTemplateSearch]=useState(""),[templateStatus,setTemplateStatus]=useState(""),[templateCategory,setTemplateCategory]=useState("");
   const [templateTab, setTemplateTab] = useState("All");
   const [communicationTab, setCommunicationTab] = useState(() => new URLSearchParams(location.search).get("status") === "SCHEDULED" ? "SCHEDULED" : "SENT_TO_PROVIDER");
   const [communicationSearch,setCommunicationSearch]=useState(""),[communicationSort,setCommunicationSort]=useState("created_at"),[communicationPage,setCommunicationPage]=useState(1);
@@ -88,11 +89,11 @@ export default function Communications() {
   }
 
   const filteredTemplates = useMemo(() => {
-    const rows = templates?.data || [];
+    const rows = (templates?.data || []).filter(row=>`${row.name} ${row.subject_template||""}`.toLowerCase().includes(templateSearch.toLowerCase())&&(!templateStatus||row.status===templateStatus)&&(!templateCategory||row.category===templateCategory));
     if (templateTab === "All") return rows;
     if (templateTab === "Internal") return rows.filter((row) => row.channel === "INTERNAL" || row.template_type === "INTERNAL_NOTIFICATION");
     return rows.filter((row) => [row.channel, row.template_type].includes(templateTab.toUpperCase()));
-  }, [templates, templateTab]);
+  }, [templates, templateTab,templateSearch,templateStatus,templateCategory]);
 
   const variables = useMemo(() => {
     const term = variableSearch.toLowerCase();
@@ -223,10 +224,7 @@ export default function Communications() {
       </div>
       {error ? <AsyncState error={error} requestId={requestId} onRetry={load} noun="communications" /> : notice && <div role="status" className="toast">{notice}</div>}
 
-      <div className="segmented-control page-tabs">
-        <Link to="/communications/campaigns">Campaigns</Link>
-        {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item === "Communications" ? "Messages" : item}</button>)}<button className={section==="Communications"&&communicationTab==="SCHEDULED"?"active":""} onClick={()=>{setSection("Communications");setCommunicationPage(1);setCommunicationTab("SCHEDULED");}}>Scheduled</button>
-      </div>
+
 
       {section === "Communications" && (
         <>
@@ -249,15 +247,8 @@ export default function Communications() {
       )}
 
       {section === "Templates" && (
-        <><RecordMetrics module="Templates" rows={filteredTemplates}/><RecordWorkspace module="Templates" rows={filteredTemplates}><section className="template-admin-grid">
+        <><RecordMetrics module="Templates" rows={filteredTemplates}/><div className="toolbar"><label>Search Templates<input value={templateSearch} onChange={event=>setTemplateSearch(event.target.value)} placeholder="Search by name or subject…"/></label><label>Channel<select value={templateTab} onChange={event=>setTemplateTab(event.target.value)}>{templateTabs.map(tab=><option key={tab}>{tab}</option>)}</select></label><label>Category<select value={templateCategory} onChange={event=>setTemplateCategory(event.target.value)}><option value="">All categories</option>{[...new Set((templates.data||[]).map(row=>row.category).filter(Boolean))].map(value=><option key={value}>{value}</option>)}</select></label><label>Status<select value={templateStatus} onChange={event=>setTemplateStatus(event.target.value)}><option value="">All statuses</option>{['ACTIVE','DRAFT','ARCHIVED'].map(value=><option key={value}>{value}</option>)}</select></label></div><RecordWorkspace module="Templates" rows={filteredTemplates}><section className="template-admin-grid">
           <article className="panel">
-            <div className="table-heading">
-              <h2>Templates</h2>
-              <button className="primary-action" onClick={() => editTemplate()}><Edit3 size={15} />New</button>
-            </div>
-            <div className="segmented-control">
-              {templateTabs.map((tab) => <button key={tab} className={templateTab === tab ? "active" : ""} onClick={() => setTemplateTab(tab)}>{tab}</button>)}
-            </div>
             <RecordTable title="Templates" rows={filteredTemplates} columns={["name","channel","category","updated_at","status","version"]} onEdit={editTemplate} rowActions={template=><><button onClick={()=>{editTemplate(template);previewTemplate(template.id);}}>Preview</button><button onClick={()=>templateAction(template,"duplicate")}>Duplicate</button><button onClick={()=>templateAction(template,"activate")}>Activate</button><button onClick={()=>templateAction(template,"archive")}>Archive</button></>}/>
 
           </article>
@@ -286,10 +277,10 @@ export default function Communications() {
 
           </section>
           {automationEdit&&<form className="panel" onSubmit={async e=>{e.preventDefault();if(busy)return;setBusy(true);setError('');try{await api.patch(`/communications/automations/${automationEdit.id}`,{name:automationEdit.name,delay_amount:Number(automationEdit.delay_amount),delay_unit:automationEdit.delay_unit,enabled:automationEdit.enabled});await load();setNotice('Automation saved.');setAutomationEdit(null);}catch(error){setError(error.message);}finally{setBusy(false);}}}><h2>Edit automation rule</h2><p>Trigger: {automationEdit.trigger_key}. Existing jobs keep their scheduled time. Changes affect future triggers.</p><div className="form-grid"><label>Rule name<input required value={automationEdit.name} onChange={e=>setAutomationEdit({...automationEdit,name:e.target.value})}/></label><label>Delay amount<input type="number" min="0" max="365" required value={automationEdit.delay_amount} onChange={e=>setAutomationEdit({...automationEdit,delay_amount:e.target.value})}/></label><label>Delay unit<select value={automationEdit.delay_unit} onChange={e=>setAutomationEdit({...automationEdit,delay_unit:e.target.value})}>{['MINUTES','HOURS','DAYS'].map(v=><option key={v}>{v}</option>)}</select></label><label>Rule enabled<input type="checkbox" checked={automationEdit.enabled} onChange={e=>setAutomationEdit({...automationEdit,enabled:e.target.checked})}/></label></div><button disabled={busy}>Save automation</button><button type="button" onClick={()=>setAutomationEdit(null)}>Cancel</button></form>}
-          <section className="dashboard-grid">
+          <details className="automation-history-details"><summary>Jobs and execution history</summary><section className="dashboard-grid">
             <article className="panel"><h2>Jobs</h2><DataTable rows={automations.jobs} columns={["job_type", "related_entity_type", "scheduled_for", "status", "attempt_count", "last_error"]} empty="No automation jobs yet." /></article>
             <article className="panel"><h2>History</h2><DataTable rows={automations.runs} columns={["automation_name", "entity_type", "scheduled_for", "executed_at", "result", "error"]} empty="No automation runs yet." /></article>
-          </section>
+          </section></details>
         </RecordWorkspace></>
       )}
     </main>
