@@ -1,3 +1,4 @@
+import { recordCell } from '../components/workspace/RecordCells.jsx';
 import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
 import RecordTable from "../components/workspace/RecordTable.jsx";
 
@@ -102,18 +103,18 @@ export default function Events(){
       {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setStatus(item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
     </section>
 
-    <section className="lola-list-toolbar">
+    <div className="record-filter-bar"><section className="lola-list-toolbar">
       <div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search events by name, type or venue..."/></div>
     </section>
 
     {filtersOpen&&<section className="lola-filter-drawer">
       <label>Date from<input type="date" value={urlParams.get("date_from")||""} onChange={e=>setUrlParams(current=>{const next=new URLSearchParams(current);if(e.target.value)next.set("date_from",e.target.value);else next.delete("date_from");return next;})}/></label>
       <label>Date to<input type="date" value={urlParams.get("date_to")||""} onChange={e=>setUrlParams(current=>{const next=new URLSearchParams(current);if(e.target.value)next.set("date_to",e.target.value);else next.delete("date_to");return next;})}/></label>
-    </section>}
+    </section>}<label>Status<select value={status} onChange={e=>setStatus(e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item?item.replaceAll("_"," "):"All statuses"}</option>)}</select></label></div>
 
     {(error||notice)&&<div className={error?"toast error":"toast"}>{error||notice}</div>}
 
-    <RecordWorkspace module="Events" rows={rows} getRowHref={row=>"/events/events/"+row.id}><RecordTable title="Events" rows={rows} columns={["event_name","event_type","event_date","venue_name","start_time","guest_count","status"]} getRowHref={row=>"/events/events/"+row.id}/></RecordWorkspace>
+    <RecordWorkspace module="Events" rows={rows} getRowHref={row=>"/events/events/"+row.id}><RecordTable renderCell={recordCell} title="Events" rows={rows} columns={["event_name","event_type","event_date","venue_name","start_time","guest_count","status"]} getRowHref={row=>"/events/events/"+row.id}/></RecordWorkspace>
     </>}
     {display==="calendar"&&<Calendar embedded/>}
 

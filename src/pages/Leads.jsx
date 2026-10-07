@@ -1,3 +1,4 @@
+import { recordCell } from '../components/workspace/RecordCells.jsx';
 import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
 import RecordTable from "../components/workspace/RecordTable.jsx";
 import EventTypeSelect from "../components/EventTypeSelect.jsx";
@@ -89,11 +90,8 @@ export default function Leads(){
     </section>
 
     <RecordMetrics module="Leads" rows={leads}/>
-    <section className="lola-status-tabs">
-      {statuses.slice(0,7).map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
-    </section>
 
-    <section className="lola-list-toolbar">
+    <div className="record-filter-bar"><section className="lola-list-toolbar">
       <div className="lola-list-search"><Search size={16}/><input aria-label="Search leads" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search leads by name, email, phone..."/></div>
       <div className="lola-view-toggle"><button aria-label="Table view" className={view==="table"?"active":""} onClick={()=>setView("table")}><Table2 size={15}/></button><button aria-label="Board view" className={view==="kanban"?"active":""} onClick={()=>setView("kanban")}><Columns3 size={15}/></button></div>
     </section>
@@ -102,12 +100,12 @@ export default function Leads(){
       <label>Source<select value={source} onChange={e=>setFilter("source",e.target.value)}>{[...new Set([...sources,source])].map(item=><option key={item||"all"} value={item}>{item||"All sources"}</option>)}</select></label>
       <label>Campaign<input value={campaign} onChange={e=>setFilter("campaign",e.target.value)} placeholder="Campaign"/></label>
       <button onClick={()=>{setFilter("source","");setFilter("campaign","");}}>Clear filters</button>
-    </section>}
+    </section>}<label>Status<select value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item?item.replaceAll("_"," "):"All statuses"}</option>)}</select></label></div>
 
     {error&&<div className="toast error">{error}</div>}
 
     <RecordWorkspace module="Leads" rows={leads}>    {view==="table"
-      ? <RecordTable title="Leads" rows={leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")}))} columns={columns} columnLabels={{event_type:"Event Type",created_at:"Created"}} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
+      ? <RecordTable renderCell={recordCell} title="Leads" rows={leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")}))} columns={["name","event_type","lead_source","status","event_date","updated_at"]} columnLabels={{lead_source:"Source",updated_at:"Last Activity"}} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
       : <LeadBoard leads={leads}/>
     }</RecordWorkspace>
 

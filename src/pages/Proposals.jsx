@@ -1,3 +1,4 @@
+import { recordCell } from '../components/workspace/RecordCells.jsx';
 import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
 import RecordTable from "../components/workspace/RecordTable.jsx";
 import { FilePlus2, Search, SlidersHorizontal } from "lucide-react";
@@ -51,25 +52,22 @@ export default function Proposals(){
     </section>
 
     <RecordMetrics module="Proposals" rows={rows}/>
-    <section className="lola-status-tabs">
-      {statuses.slice(0,7).map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
-    </section>
 
-    <section className="lola-list-toolbar">
+    <div className="record-filter-bar"><section className="lola-list-toolbar">
       <div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search proposals by number, client, event or package..."/></div>
     </section>
 
     {filtersOpen&&<section className="lola-filter-drawer">
       <label>Status<select value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item?item.toLowerCase().replaceAll("_"," "):"All statuses"}</option>)}</select></label>
       <label>Sort<select value={urlParams.get("sort_by")||"created_at"} onChange={e=>setFilter("sort_by",e.target.value)}><option value="created_at">Newest first</option><option value="total">Highest total</option><option value="event_date">Event date</option></select></label>
-    </section>}
+    </section>}</div>
 
     {urlParams.has("funnel")&&<p className="note-text">Showing one matching proposal per lead for the selected dashboard funnel.</p>}
     {error&&<div className="toast error">{error}</div>}
 
-    <RecordWorkspace module="Proposals" rows={rows}>    <RecordTable title="Proposals"
+    <RecordWorkspace module="Proposals" rows={rows}>    <RecordTable renderCell={recordCell} title="Proposals"
       rows={rows}
-      columns={["proposal_number","client_name","event_name","event_date","total","status","sent_at","valid_through"]}
+      columns={["proposal_number","client_name","event_name","event_date","total","status","updated_at","owner_name"]}
       getRowHref={row=>`/sales/proposals/${row.id}`}
       empty="No proposals found."
     /></RecordWorkspace>

@@ -17,6 +17,7 @@ const columns = [
 ];
 
 export default function LiveOperations() {
+  const [tab,setTab]=useState("All Events");
   const [dashboard, setDashboard] = useState(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -62,15 +63,8 @@ export default function LiveOperations() {
         <span>{dashboard?.timeZone || "America/Chicago"}</span>
         <span>Updates every 30 seconds</span>
       </div>
-      <section className="live-board">
-        {grouped.map((column) => (
-          <div className="live-column" key={column.label}>
-            <h2>{column.label} <span>{column.events.length}</span></h2>
-            {column.events.length === 0 && <div className="mini-empty">No events</div>}
-            {column.events.map((event) => <LiveCard event={event} key={event.id} />)}
-          </div>
-        ))}
-      </section>
+      <div className="lola-status-tabs">{['All Events','Live','Upcoming','Completed'].map(value=><button key={value} className={tab===value?'active':''} onClick={()=>setTab(value)}>{value}</button>)}</div>
+      <section className="live-reference-list">{grouped.filter(column=>tab==='All Events'||(tab==='Live'?['LIVE','ON SITE','SETTING UP','BREAKDOWN','EN ROUTE'].includes(column.label):tab==='Completed'?column.label==='COMPLETE':column.label==='UPCOMING')).flatMap(column=>column.events.map(event=><article className="record-panel" key={event.id}><StatusBadge status={event.operational_status||event.status}/><LiveCard event={event}/></article>))}{dashboard&&!grouped.some(column=>column.events.length)&&<div className="empty-state"><h2>No events today</h2><p>Your event readiness and team assignments will appear here.</p></div>}</section>
     </main>
   );
 }

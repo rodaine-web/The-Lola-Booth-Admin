@@ -1,3 +1,4 @@
+import { recordCell } from '../components/workspace/RecordCells.jsx';
 import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
 import RecordTable from "../components/workspace/RecordTable.jsx";
 
@@ -40,18 +41,15 @@ export default function Invoices(){
     </section>
 
     <RecordMetrics module="Invoices" rows={rows}/>
-    <section className="lola-status-tabs">
-      {statuses.slice(0,7).map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
-    </section>
 
-    <section className="lola-list-toolbar"><div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search invoice, client or event..."/></div></section>
+    <div className="record-filter-bar"><section className="lola-list-toolbar"><div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search invoice, client or event..."/></div></section>
 
     {filtersOpen&&<section className="lola-filter-drawer">
       <label>Status<select value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item?item.toLowerCase().replaceAll("_"," "):"All statuses"}</option>)}</select></label>
       <label>Sort<select value={urlParams.get("sort_by")||"created_at"} onChange={e=>setFilter("sort_by",e.target.value)}><option value="created_at">Newest first</option><option value="total">Highest total</option><option value="event_date">Event date</option><option value="due_date">Due date</option></select></label>
-    </section>}
+    </section>}</div>
 
     {error&&<div className="toast error">{error}</div>}
-    <RecordWorkspace module="Invoices" rows={rows}>    <RecordTable title="Invoices" rows={rows} columns={["invoice_number","client_name","event_name","event_date","total","amount_outstanding","status","due_date"]} getRowHref={row=>"/finance/invoices/"+row.id} empty="No invoices found."/></RecordWorkspace>
+    <RecordWorkspace module="Invoices" rows={rows}>    <RecordTable renderCell={recordCell} title="Invoices" rows={rows} columns={["invoice_number","client_name","event_name","total","amount_outstanding","due_date","status","updated_at"]} getRowHref={row=>"/finance/invoices/"+row.id} empty="No invoices found."/></RecordWorkspace>
   </main>;
 }
