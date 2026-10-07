@@ -1,61 +1,23 @@
-import { PageHeader, TabNavigation } from "../components/WorkspaceUI.jsx";
-import { GALLERY_ENABLED } from "../utils/features.js";
-import {useAuth} from "../context/AuthContext.jsx";
-import AsyncState from "../components/AsyncState.jsx";
-import { formatDisplay, formatMoney } from "../utils/display.js";
-import { useEffect, useState } from "react";
-import { Line, LineChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api } from "../api/client.js";
-
-export default function Analytics() {
-  const {can}=useAuth();const [galleryActivity,setGalleryActivity]=useState(null);
-  useEffect(()=>{if(GALLERY_ENABLED&&can("read:events"))api.get("/gallery-admin/analytics").then(r=>setGalleryActivity(r.data)).catch(()=>setGalleryActivity(null));},[]);
-  const [report,setReport]=useState("Overview");
-  const [data, setData] = useState(null);
-  const [error,setError]=useState(""),[range,setRange]=useState("mtd"),[revision,setRevision]=useState(0);
-
-  useEffect(() => {
-    setError(""); api.get(`/analytics?range=${range}`).then(setData).catch(e=>setError(e.message));
-  }, [range,revision]);
-
-  if(error)return <main className="page analytics-workspace"><AsyncState error={error} noun="analytics" onRetry={()=>setRevision(r=>r+1)}/></main>;
-  if (!data) return <main className="page analytics-redesign"><div className="empty-state">Loading analytics...</div></main>;
-
-  return (
-    <main className="page analytics-redesign">
-      <PageHeader eyebrow="Insights" title="Reports & Analytics" description="Understand revenue, demand, and lead performance over time." />
-      <div className="analytics-range">{[["today","Today"],["week","This Week"],["mtd","Month to Date"],["ytd","Year to Date"]].map(([key,label])=><button key={key} className={range===key?"active":""} onClick={()=>setRange(key)}>{label}</button>)}</div><p className="note-text">Revenue and average booking value share the Dashboard definitions and selected period. Outstanding is the current unpaid balance.</p>
-      <TabNavigation items={["Overview","Revenue","Events","Leads"]} value={report} onChange={setReport} label="Analytics reports"/>
-      <section className="kpi-grid compact">
-        {Object.entries(data.summary).map(([key, value]) => (
-          <article className="kpi" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatDisplay(value,key)}</strong></article>
-        ))}
-      </section>
-      {galleryActivity&&<section className="panel"><h2>Private gallery activity</h2><p className="note-text">Last 30 days · aggregate activity without guest identities</p><div className="gallery-summary">{galleryActivity.map(row=><article key={row.action}><span>{row.action.replaceAll("_"," ")}</span><strong>{row.count}</strong></article>)}</div></section>}
-      <section className="chart-grid">
-        {["Overview","Revenue"].includes(report)&&<Chart title="Revenue by Month" data={data.revenueByMonth} x="month" y="revenue" />}
-        {["Overview","Events"].includes(report)&&<Chart title="Bookings by Package" data={data.bookingsByPackage} x="name" y="bookings" />}
-        {["Overview","Events"].includes(report)&&<Chart title="Bookings by Experience" data={data.bookingsByExperience} x="name" y="bookings" />}
-        {["Overview","Leads"].includes(report)&&<Chart title="Lead Source Performance" data={data.leadSourcePerformance} x="source" y="leads" />}
-      </section>
-    </main>
-  );
+import { PageHeader, TabNavigation } from '../components/WorkspaceUI.jsx';
+import RecordTable from '../components/workspace/RecordTable.jsx';
+import {useAuth} from '../context/AuthContext.jsx';
+import AsyncState from '../components/AsyncState.jsx';
+import { formatDisplay, formatMoney } from '../utils/display.js';
+import { useEffect, useState } from 'react';
+import { Line, LineChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell } from 'recharts';
+import { api } from '../api/client.js';
+import '../styles/record-workspace.css';
+const palette=['#a88649','#d5bd90','#638a83','#98b8c4','#746d95','#dfcdb0'];
+export default function Analytics(){
+ const {can}=useAuth();const [report,setReport]=useState('Overview'),[data,setData]=useState(null),[campaigns,setCampaigns]=useState(null),[campaignError,setCampaignError]=useState(''),[error,setError]=useState(''),[range,setRange]=useState('mtd'),[revision,setRevision]=useState(0),[loading,setLoading]=useState(false);
+ useEffect(()=>{let active=true;setLoading(true);setError('');api.get(`/analytics?range=${range}`).then(r=>active&&setData(r)).catch(e=>active&&setError(e.message)).finally(()=>active&&setLoading(false));return()=>{active=false;};},[range,revision]);
+ useEffect(()=>{let active=true;if(report==='Marketing & Campaigns'&&can('read:sales'))api.get('/campaigns').then(r=>active&&setCampaigns(Array.isArray(r)?r:r.data||[])).catch(e=>active&&setCampaignError(e.message));return()=>{active=false;};},[report]);
+ const sum=key=>(campaigns||[]).reduce((n,c)=>n+(Number(c[key])||0),0),tracked=sum('tracked');
+ return <main className="page analytics-redesign record-module"><PageHeader eyebrow="Insights" title="Reports & Analytics" description="Insights that fuel unforgettable experiences."/><TabNavigation items={['Overview','Sales & Financial','Marketing & Campaigns']} value={report} onChange={setReport} label="Analytics reports"/><div className="analytics-range">{[['today','Today'],['week','This Week'],['mtd','Month to Date'],['ytd','Year to Date']].map(([key,label])=><button key={key} className={range===key?'active':''} onClick={()=>setRange(key)}>{label}</button>)}</div>{error&&<AsyncState error={error} noun="analytics" onRetry={()=>setRevision(r=>r+1)}/>}<AsyncState loading={loading&&!data} noun="analytics"/>{data&&<><p className="record-scope">{loading?'Updating selected period…':'Financial summary and revenue chart follow the selected period. Outstanding balance is current. Package, experience and source breakdowns cover all recorded activity.'}</p>{report!=='Marketing & Campaigns'&&<section className="analytics-summary-cards">{Object.entries(data.summary||{}).map(([key,value])=><article className="record-panel" key={key}><strong>{formatDisplay(value,key)}</strong><span>{key.replaceAll('_',' ')}</span></article>)}</section>}
+ {report==='Overview'&&<><section className="analytics-chart-grid"><Chart title="Revenue Trend" data={data.revenueByMonth} x="month" y="revenue"/><Donut title="Bookings by Experience" data={data.bookingsByExperience} name="name" value="bookings"/><Chart title="Lead Source Breakdown" data={data.leadSourcePerformance} x="source" y="leads"/></section><RecordTable title="Source Performance" rows={(data.sourceQuality||[]).map((r,i)=>({...r,id:i}))} columns={['source','leads','bookings','booked_revenue','conversion_rate']}/></>}
+ {report==='Sales & Financial'&&<><section className="analytics-chart-grid"><Chart title="Revenue by Month" data={data.revenueByMonth} x="month" y="revenue"/><Donut title="Bookings by Package" data={data.bookingsByPackage} name="name" value="bookings"/><Chart title="Experiences Sold" data={data.bookingsByExperience} x="name" y="bookings"/></section><RecordTable title="Top Packages" rows={(data.bookingsByPackage||[]).map((r,i)=>({...r,id:i}))} columns={['name','bookings']}/></>}
+ {report==='Marketing & Campaigns'&&<><p className="record-scope">Campaign engagement covers the campaigns loaded below, across their full sending history. Opens are estimates. Delivery confirmation is unavailable from the current provider.</p>{campaignError&&<p role="alert">{campaignError}</p>}{campaigns&&<section className="analytics-summary-cards">{[['Emails sent',sum('sent')],['Tracked recipients',tracked],['Estimated open rate',tracked?(sum('opened')/tracked*100).toFixed(1)+'%':'—'],['Click rate',tracked?(sum('clicked')/tracked*100).toFixed(1)+'%':'—'],['Interested recipients',sum('interested')],['Campaigns',campaigns.length]].map(([label,value])=><article className="record-panel" key={label}><strong>{value}</strong><span>{label}</span></article>)}</section>}<section className="analytics-chart-grid"><Donut title="Leads by Source" data={data.leadSourcePerformance} name="source" value="leads"/><Chart title="Campaign Bookings" data={data.campaignPerformance} x="campaign" y="bookings"/></section>{campaigns&&<RecordTable title="Email Campaign Performance" rows={campaigns} columns={['name','status','sent','tracked','opened','clicked','interested']} getRowHref={r=>'/communications/campaigns/'+r.id}/>}<RecordTable title="Campaign Attribution" rows={(data.campaignPerformance||[]).map((r,i)=>({...r,id:i}))} columns={['campaign','source','leads','bookings','booked_revenue']}/></>}
+ </>}</main>;
 }
-
-function Chart({ title, data, x, y }) {
-  const Graph = y === "revenue" ? LineChart : BarChart;
-  return (
-    <section className="panel chart-panel">
-      <h2>{title}</h2>
-      <ResponsiveContainer width="100%" height={260}>
-        <Graph data={data}>
-          <CartesianGrid stroke="#eee8df" />
-          <XAxis dataKey={x} tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip formatter={value=>y==='revenue'?formatMoney(value):value}/>
-          {y === "revenue" ? <Line type="monotone" dataKey={y} stroke="#8072ef" strokeWidth={2} dot={{r:3,fill:"#fff",strokeWidth:2}}/> : <Bar dataKey={y} fill="#B89B6B" radius={[3, 3, 0, 0]} />}
-        </Graph>
-      </ResponsiveContainer>
-    </section>
-  );
-}
+function Chart({title,data=[],x,y}){const Graph=y==='revenue'?LineChart:BarChart;return <section className="record-panel chart-panel"><h2>{title}</h2>{data.length?<ResponsiveContainer width="100%" height={250}><Graph data={data}><CartesianGrid stroke="#eee8df"/><XAxis dataKey={x} tick={{fontSize:11}}/><YAxis tick={{fontSize:11}}/><Tooltip formatter={value=>y==='revenue'?formatMoney(value):value}/>{y==='revenue'?<Line type="monotone" dataKey={y} stroke="#aa8849" strokeWidth={2} dot={{r:3}}/>:<Bar dataKey={y} fill="#b99b65" radius={[3,3,0,0]}/>}</Graph></ResponsiveContainer>:<p className="record-muted">No activity recorded for this report.</p>}</section>;}
+function Donut({title,data=[],name,value}){const total=data.reduce((sum,row)=>sum+(Number(row[value])||0),0);return <section className="record-panel"><h2>{title}</h2>{total?<><ResponsiveContainer width="100%" height={200}><PieChart><Pie data={data.map(r=>({...r,[value]:Number(r[value])||0}))} dataKey={value} nameKey={name} innerRadius={57} outerRadius={84} paddingAngle={1}>{data.map((row,i)=><Cell key={row[name]} fill={palette[i%palette.length]}/>)}</Pie><Tooltip/></PieChart></ResponsiveContainer><div className="analytics-legend">{data.slice(0,6).map((row,i)=><div key={row[name]}><i style={{background:palette[i%palette.length]}}/><span>{row[name]}</span><strong>{row[value]}</strong></div>)}</div></>:<p className="record-muted">No activity recorded yet.</p>}</section>;}
