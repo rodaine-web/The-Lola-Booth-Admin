@@ -56,6 +56,7 @@ export default function Campaigns() {
     [draft, setDraft] = useState(blank),
     [editing, setEditing] = useState(false),
     [step, setStep] = useState(0),
+    [preferLater, setPreferLater] = useState(false),
     [tab, setTab] = useState('Overview'),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
@@ -157,7 +158,7 @@ export default function Campaigns() {
   function startCampaign(format='HTML', selection='', later=false, importOnly=false) {
     const picked=selection==='LEADS'?contacts.filter(c=>c.kind==='lead'):selection==='CLIENTS'?contacts.filter(c=>c.kind==='client'):selection==='CONSENTED'?contacts.filter(c=>c.marketing_email_opt_in):[];
     setDraft({...blank,content_json:campaignContent({format,headline:'A special offer for your event',text_body:'',html_body:''}),audience_json:{...blank.audience_json,ids:picked.map(c=>c.id),companies:selection.startsWith('COMPANY:')?[selection.slice(8)]:[]}});
-    setSchedule('');setEditing(true);setStep(importOnly?1:0);setPreview(null);
+    setSchedule('');setPreferLater(later);setEditing(true);setStep(importOnly?1:0);setPreview(null);
     if(later)setNotice('Choose the delivery date in Review & send. Starting a campaign does not send it.');
   }
   const lifecycleTarget = selectedCampaign || campaign;
@@ -177,7 +178,7 @@ export default function Campaigns() {
           setNotice('Duplicated as a draft with no recipients or delivery history.');
         })}>Duplicate</button>}</div></div>
  {error && <p role="alert" className="campaign-error">{error}</p>}{notice && <p role="status">{notice}</p>}
- {editing ? <CampaignBuilder draft={draft} setDraft={setDraft} contacts={contacts} audience={audience} busy={busy} initialStep={step} onSave={save} onClose={()=>setEditing(false)} run={run} canSend={permitted('send')} canSchedule={permitted('schedule')} schedule={schedule} setSchedule={setSchedule} testEmail={testEmail} setTestEmail={setTestEmail} onDelivery={mode=>run(async()=>{await save();setAudience(await api.post('/campaigns/audience-preview',draft.audience_json));setConfirm(mode);})} onTest={sample=>run(async()=>{const saved=await save();await api.post('/campaigns/'+saved.id+'/test',{email:testEmail,sample});setNotice('Test accepted by the email provider.');})}/> : !id ? <CampaignDashboard campaigns={list} contacts={contacts} canCreate={permitted('create')} canTemplates={can('read:sales')} onCreate={startCampaign} onImport={()=>startCampaign('HTML','',false,true)}><div className="campaign-toolbar campaign-filters"><Field label="Search campaigns, companies or emails" value={filter.search} onChange={v => setFilter({
+ {editing ? <CampaignBuilder draft={draft} setDraft={setDraft} contacts={contacts} audience={audience} busy={busy} initialStep={step} initialDeliveryLater={preferLater} onSave={save} onClose={()=>setEditing(false)} run={run} canSend={permitted('send')} canSchedule={permitted('schedule')} schedule={schedule} setSchedule={setSchedule} testEmail={testEmail} setTestEmail={setTestEmail} onDelivery={mode=>run(async()=>{await save();setAudience(await api.post('/campaigns/audience-preview',draft.audience_json));setConfirm(mode);})} onTest={sample=>run(async()=>{const saved=await save();await api.post('/campaigns/'+saved.id+'/test',{email:testEmail,sample});setNotice('Test accepted by the email provider.');})}/> : !id ? <CampaignDashboard campaigns={list} contacts={contacts} canCreate={permitted('create')} canTemplates={can('read:sales')} onCreate={startCampaign} onImport={()=>startCampaign('HTML','',false,true)}><div className="campaign-toolbar campaign-filters"><Field label="Search campaigns, companies or emails" value={filter.search} onChange={v => setFilter({
           ...filter,
           search: v
         })} /><Field label="Audience / company / tag" value={filter.audience||''} onChange={v=>setFilter({...filter,audience:v})}/><Field label="Created from" type="date" value={filter.from||''} onChange={v=>setFilter({...filter,from:v})}/><Field label="Created through" type="date" value={filter.to||''} onChange={v=>setFilter({...filter,to:v})}/><label className="campaign-field">Creator<select value={filter.owner||''} onChange={e=>setFilter({...filter,owner:e.target.value})}><option value="">All creators</option>{[...new Map(list.filter(c=>c.created_by).map(c=>[c.created_by,c])).values()].map(c=><option key={c.created_by} value={c.created_by}>{c.creator_name||c.created_by}</option>)}</select></label><label className="campaign-field">Status<select value={filter.status} onChange={e => setFilter({
