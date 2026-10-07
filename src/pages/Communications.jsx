@@ -26,10 +26,10 @@ const blankTemplate = {
 export default function Communications() {
   const [automationEdit,setAutomationEdit]=useState(null);
   const location=useLocation();
-  const [section, setSection] = useState("Communications");
+  const [section, setSection] = useState(() => ["Templates","Automations"].includes(new URLSearchParams(location.search).get("section")) ? new URLSearchParams(location.search).get("section") : "Communications");
   useEffect(()=>{const params=new URLSearchParams(location.search);setSection(["Templates","Automations"].includes(params.get("section"))?params.get("section"):"Communications");if(params.get("status")==="SCHEDULED")setCommunicationTab("SCHEDULED");},[location.search]);
   const [templateTab, setTemplateTab] = useState("All");
-  const [communicationTab, setCommunicationTab] = useState("SENT_TO_PROVIDER");
+  const [communicationTab, setCommunicationTab] = useState(() => new URLSearchParams(location.search).get("status") === "SCHEDULED" ? "SCHEDULED" : "SENT_TO_PROVIDER");
   const [communicationSearch,setCommunicationSearch]=useState(""),[communicationSort,setCommunicationSort]=useState("created_at"),[communicationPage,setCommunicationPage]=useState(1);
   const communicationRequest=useRef(0);
   const [templates, setTemplates] = useState(null);
