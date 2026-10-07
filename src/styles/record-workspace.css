@@ -52,3 +52,5 @@
 @media(max-width:700px){.lola-app-shell .record-module.cms-workspace .website-faq-layout,.lola-app-shell .record-module.cms-workspace .website-settings-grid{grid-template-columns:1fr}.lola-app-shell .record-module.cms-workspace .website-faq-categories{flex-direction:row;flex-wrap:wrap}}
 .lola-app-shell .record-module .record-panel .table-wrap{max-width:100%;overflow-x:auto!important}.lola-app-shell .record-module .record-panel{min-width:0}.lola-app-shell .record-module .record-workspace-main{min-width:0}
 @media(max-width:760px){.lola-app-shell .record-module{overflow-x:clip}.lola-app-shell .record-module .record-table-panel{overflow:hidden}.lola-app-shell .record-module .record-table-panel>.table-wrap{overflow:auto!important;contain:inline-size}}
+
+@media(max-width:760px){html:has(.record-module),body:has(.record-module),.lola-app-shell:has(.record-module){max-width:100%;overflow-x:hidden}}
