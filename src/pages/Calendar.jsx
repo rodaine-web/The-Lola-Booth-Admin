@@ -12,7 +12,7 @@ const statusOptions = ["", "INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "RE
 
 export default function Calendar({ embedded = false }) {
   const Container = embedded ? "section" : "main";
-  const [advancedFilters,setAdvancedFilters]=useState(false);
+  const [advancedFilters,setAdvancedFilters]=useState(true);
   const [view, setView] = useState("month");
   const [date, setDate] = useState(businessToday());
   const [filters, setFilters] = useState({ status: "", eventType: "", venue: "", city: "", experienceId: "", packageId: "", staffId: "", equipmentId: "" });

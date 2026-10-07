@@ -18,12 +18,12 @@ export function EmptyInsight({ children = 'No activity recorded in this view.' }
   return <p className="insight-empty">{children}</p>;
 }
 export function Bars({ data = [], vertical = false, percent = false }) {
-  const values = data.slice(0, 6), maximum = Math.max(1, ...values.map(item => Number(item.value) || 0)), total = values.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const values = data.slice(0, 6), maximum = Math.max(1, ...values.map(item => Number(item.value) || 0)), total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
   if (!values.length) return <EmptyInsight />;
   return <div className={vertical ? 'insight-bars-vertical' : 'insight-bars'}>{values.map((item, index) => <div key={item.name}><span>{item.name}</span><i style={vertical ? { height: `${Math.max(2, item.value / maximum * 85)}px`, background: chartColours[index % chartColours.length] } : { '--bar-size': `${item.value / maximum * 100}%` }} /><strong>{percent ? `${total ? Math.round(item.value / total * 100) : 0}%` : item.value}</strong></div>)}</div>;
 }
 export function Ring({ data = [], centre, label = 'Total', money = false }) {
-  const values = data.filter(item => Number(item.value) > 0), total = values.reduce((sum, item) => sum + Number(item.value), 0);
+  const values = data.filter(item => Number(item.value) > 0), total = data.reduce((sum, item) => sum + Number(item.value), 0);
   let angle = 0;
   const slices = values.map((item, index) => { const start = angle; angle += Number(item.value) / total * 100; return `${chartColours[index % chartColours.length]} ${start}% ${angle}%`; });
   return <div className="insight-ring-layout"><div className={`insight-ring ${total ? '' : 'is-empty'}`} style={total ? { background: `conic-gradient(${slices.join(',')})` } : undefined}><div><strong>{centre ?? (money ? formatMoney(total) : total)}</strong><span>{label}</span></div></div><div className="insight-ring-legend">{values.length ? values.slice(0, 6).map((item, index) => <div key={item.name}><i style={{ background: chartColours[index % chartColours.length] }} /><span>{item.name}</span><strong>{money ? formatMoney(item.value) : `${Math.round(item.value / total * 100)}%`}</strong></div>) : <EmptyInsight />}</div></div>;
