@@ -1,3 +1,4 @@
+import "../styles/record-workspace.css";
 import {calendarCells} from "../utils/calendar-grid.js";
 import AsyncState from "../components/AsyncState.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
@@ -46,7 +47,7 @@ export default function Calendar({ embedded = false }) {
   if (error) return <Container className={embedded?"calendar-workspace":"page calendar-redesign"}><h1>{embedded?"Events":"Calendar"}</h1><AsyncState error={error} onRetry={()=>setRevision(r=>r+1)} noun="calendar"/></Container>;
 
   return (
-    <Container className={embedded ? "calendar-workspace embedded-calendar" : "page calendar-workspace"}>
+    <Container className={embedded ? "calendar-workspace embedded-calendar" : "page calendar-workspace record-module"}>
       <div className="page-heading">
         <div>
           <p className="eyebrow">Event operations</p>

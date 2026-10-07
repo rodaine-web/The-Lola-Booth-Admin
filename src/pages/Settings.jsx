@@ -1,3 +1,4 @@
+import "../styles/record-workspace.css";
 import { Link } from "react-router-dom";
 
 import AsyncState from "../components/AsyncState.jsx";
@@ -66,7 +67,7 @@ export default function Settings(){
   if(error&&!settings)return <main className="page"><AsyncState error={error} noun="settings" onRetry={()=>{setError("");setRevision(v=>v+1);}}/></main>;
   if(!settings)return <main className="page"><AsyncState loading noun="settings"/></main>;
 
-  return <main className="page settings-redesign">
+  return <main className="page settings-redesign record-module">
     <section className="page-heading lola-page-heading">
       <div><p className="eyebrow">Settings</p><h1>Settings</h1><p className="lede">Configure your business.</p></div>
       <div className="button-row"><Link className="lola-secondary-button" to="/system/proposal-templates">Proposal defaults</Link><button className="lola-secondary-button" onClick={()=>{setForm({...settings});setNotice("Unsaved changes reverted.");}}>Revert</button><button className="primary-action" disabled={busy} onClick={save}>{busy?"Saving...":"Save Changes"}</button></div>

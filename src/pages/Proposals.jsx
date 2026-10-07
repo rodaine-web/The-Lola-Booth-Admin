@@ -1,8 +1,9 @@
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 import { FilePlus2, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
-import DataTable from "../components/DataTable.jsx";
 
 const statuses=["","DRAFT","READY","SENT","VIEWED","ACCEPTED","CONVERTED","DECLINED","EXPIRED","ARCHIVED"];
 
@@ -11,7 +12,7 @@ export default function Proposals(){
   const [rows,setRows]=useState([]);
   const [search,setSearch]=useState("");
   const [error,setError]=useState("");
-  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [filtersOpen,setFiltersOpen]=useState(true);
   const status=urlParams.get("status")||"";
 
   useEffect(()=>{load();},[search,status,urlParams.toString()]);
@@ -36,7 +37,7 @@ export default function Proposals(){
     });
   }
 
-  return <main className="page lola-list-page">
+  return <main className="page lola-list-page record-module">
     <section className="page-heading lola-page-heading">
       <div>
         <p className="eyebrow">Sales</p>
@@ -49,6 +50,7 @@ export default function Proposals(){
       </div>
     </section>
 
+    <RecordMetrics module="Proposals" rows={rows}/>
     <section className="lola-status-tabs">
       {statuses.slice(0,7).map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
     </section>
@@ -65,11 +67,11 @@ export default function Proposals(){
     {urlParams.has("funnel")&&<p className="note-text">Showing one matching proposal per lead for the selected dashboard funnel.</p>}
     {error&&<div className="toast error">{error}</div>}
 
-    <DataTable
+    <RecordWorkspace module="Proposals" rows={rows}>    <RecordTable title="Proposals"
       rows={rows}
       columns={["proposal_number","client_name","event_name","event_date","total","status","sent_at","valid_through"]}
       getRowHref={row=>`/sales/proposals/${row.id}`}
       empty="No proposals found."
-    />
+    /></RecordWorkspace>
   </main>;
 }

@@ -1,3 +1,4 @@
+import "../styles/record-workspace.css";
 import GalleryOverview from "../components/GalleryOverview.jsx";
 import GalleryImports from "../components/GalleryImports.jsx";
 import { useEffect, useState, useRef } from "react";
@@ -184,11 +185,11 @@ export default function GalleryAdmin() {
     }
   };
   return (
-    <main className="page gallery-admin">
+    <main className="page gallery-admin record-module">
       <div className="page-heading">
         <div>
           <p className="eyebrow">EXPERIENCE / GALLERIES</p>
-          <h1>{data ? data.album.title : "Gallery"}</h1>
+          <h1>{data ? data.album.title : "Event Galleries"}</h1>
           <p className="lede">
             {data
               ? `${formatDateOnly(data.album.event_date)} · Private event gallery`

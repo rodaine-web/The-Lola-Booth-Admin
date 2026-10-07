@@ -1,9 +1,10 @@
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 
 import { FilePlus2, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
-import DataTable from "../components/DataTable.jsx";
 
 const statuses=["","DRAFT","SENT","VIEWED","PARTIALLY_PAID","PAID","OVERDUE","REFUNDED","VOID"];
 
@@ -12,7 +13,7 @@ export default function Invoices(){
   const [rows,setRows]=useState([]);
   const [search,setSearch]=useState("");
   const [error,setError]=useState("");
-  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [filtersOpen,setFiltersOpen]=useState(true);
   const status=urlParams.get("status")||"";
 
   useEffect(()=>{load();},[search,status,urlParams.toString()]);
@@ -32,12 +33,13 @@ export default function Invoices(){
     setUrlParams(current=>{const next=new URLSearchParams(current);if(value)next.set(name,value);else next.delete(name);return next;});
   }
 
-  return <main className="page lola-list-page">
+  return <main className="page lola-list-page record-module">
     <section className="page-heading lola-page-heading">
       <div><p className="eyebrow">Finance</p><h1>Invoices</h1><p className="lede">Create, send, and track what is owed.</p></div>
       <div className="button-row"><button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button><Link className="primary-action" to="/finance/invoices/new"><FilePlus2 size={15}/>Create Invoice</Link></div>
     </section>
 
+    <RecordMetrics module="Invoices" rows={rows}/>
     <section className="lola-status-tabs">
       {statuses.slice(0,7).map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
     </section>
@@ -50,6 +52,6 @@ export default function Invoices(){
     </section>}
 
     {error&&<div className="toast error">{error}</div>}
-    <DataTable rows={rows} columns={["invoice_number","client_name","event_name","event_date","total","amount_outstanding","status","due_date"]} getRowHref={row=>"/finance/invoices/"+row.id} empty="No invoices found."/>
+    <RecordWorkspace module="Invoices" rows={rows}>    <RecordTable title="Invoices" rows={rows} columns={["invoice_number","client_name","event_name","event_date","total","amount_outstanding","status","due_date"]} getRowHref={row=>"/finance/invoices/"+row.id} empty="No invoices found."/></RecordWorkspace>
   </main>;
 }

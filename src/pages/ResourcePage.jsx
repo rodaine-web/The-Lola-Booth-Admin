@@ -1,3 +1,5 @@
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 import {experienceImage} from "../utils/experience-assets.js";
 import EventTypeSelect from '../components/EventTypeSelect.jsx';
 import {useDialogFocus} from "../utils/use-dialog-focus.js";
@@ -190,16 +192,17 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   }
 
   return (
-    <main className={isCatalog ? "page resource-redesign catalog-redesign" : "page resource-redesign"}>
+    <main className={isCatalog ? "page resource-redesign catalog-redesign record-module" : endpoint === "/tasks" ? "page resource-redesign record-module" : "page resource-redesign"}>
       <div className="page-heading">
         <div>
           <p className="eyebrow">{phase || resourceEyebrow(endpoint)}</p>
-          <h1>{title}</h1>
+          <h1>{title}</h1>{endpoint==="/tasks"&&<p className="lede">Keep follow-ups, assignments, and to-dos on track.</p>}
         </div>
         {fields.length > 0 && <button className="primary-action" onClick={openCreate}>New {title.replace(/s$/, "")}</button>}
       </div>
       {isCatalog && <nav className="catalog-section-tabs" aria-label="Catalog sections">{[["experiences","Experiences"],["packages","Packages"],["addons","Add-ons"]].map(([path,label])=><Link key={path} to={`/content/${path}`} className={endpoint===`/${path}`?"active":""}>{label}</Link>)}</nav>}
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      {(endpoint==="/tasks"||isCatalog)&&<RecordMetrics module={isCatalog?"Content":"Tasks"} rows={rows}/>}
       <div className="toolbar">
         <input aria-label="Search records" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} />
 
@@ -207,7 +210,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
         <label>Sort<select value={sort} onChange={e=>setSort(e.target.value)}><option value="created_at">Newest first</option><option value="updated_at">Recently updated</option></select></label>
         {endpoint==='/tasks'&&<label>Overdue only<input type="checkbox" checked={overdue} onChange={e=>setOverdue(e.target.checked)}/></label>}
       </div>
-      <AsyncState loading={loading} error={error} onRetry={()=>setRevision(r=>r+1)} noun={title.toLowerCase()}>{!loading&&!error&&(isCatalog?<div className="catalog-card-grid">{rows.map(row=><article className="catalog-card" key={row.id}><div className="catalog-card-top"><img className="catalog-list-image" src={row.image_url || row.image || experienceImage(row.name)} alt="" loading="lazy"/></div><div><h2>{row.name||"Untitled"}</h2><p>{row.short_description||row.description||row.proposal_description||"No description yet."}</p></div><div className="catalog-meta">{endpoint==="/experiences"&&<><span>Base price</span><strong>{row.base_price!=null?"$"+Number(row.base_price).toLocaleString():"Custom"}</strong></>}{endpoint==="/packages"&&<><span>{row.pricing_mode==="CUSTOM"?"Custom pricing":"Starting price"}</span><strong>{row.pricing_mode==="CUSTOM"?"Let's create":"$"+Number(row.starting_price||0).toLocaleString()}</strong></>}{endpoint==="/addons"&&<><span>{row.pricing_type||"Add-on"}</span><strong>{"$"+Number(row.price||0).toLocaleString()}</strong></>}</div><div className="catalog-actions"><span className={row.active===false?"catalog-state inactive":"catalog-state"}>{row.active===false?"Inactive":"Active"}</span><button onClick={()=>openEdit(row)}>Edit</button>{row.most_popular&&<span>Most Popular</span>}</div></article>)}</div>:<DataTable rows={rows} columns={columns} getRowHref={rowHref} onEdit={fields.length ? openEdit : null} />)}</AsyncState>
+      <AsyncState loading={loading} error={error} onRetry={()=>setRevision(r=>r+1)} noun={title.toLowerCase()}>{!loading&&!error&&(isCatalog?<RecordTable title={title} rows={rows.map(row=>({...row,status:row.active===false?"INACTIVE":"ACTIVE"}))} renderCell={(row,column)=>column==="image"?<img className="record-thumbnail" src={row.image_url||row.image||experienceImage(row.name)} alt={row.name||""} loading="lazy"/>:undefined} columns={endpoint==="/experiences"?["image","name","default_duration","short_description","base_price","status"]:endpoint==="/packages"?["image","name","starting_price","pricing_mode","most_popular","status"]:["image","name","description","price","pricing_type","status"]} onEdit={openEdit}/>:endpoint==="/tasks"?<RecordWorkspace module="Tasks" rows={rows}><RecordTable title="Tasks" rows={rows} columns={columns} getRowHref={rowHref} onEdit={fields.length ? openEdit : null}/></RecordWorkspace>:<DataTable rows={rows} columns={columns} getRowHref={rowHref} onEdit={fields.length ? openEdit : null} />)}</AsyncState>
       {editing && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title+" editor"}>
           <form className="modal" onSubmit={saveForm}>

@@ -1,0 +1,15 @@
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Download, Columns3 } from 'lucide-react';
+import DataTable from '../DataTable.jsx';
+import { labelize } from '../../utils/display.js';
+import '../../styles/record-workspace.css';
+export function csvCell(value){const text=String(value??'');return '"'+(/^[=+@\-\t\r]/.test(text)?"'"+text:text).replaceAll('"','""')+'"';}
+export default function RecordTable({title='Records',rows=[],columns,...props}){
+ const [page,setPage]=useState(1);const [hidden,setHidden]=useState([]);const [sort,setSort]=useState('');const [direction,setDirection]=useState(1);
+ useEffect(()=>setPage(1),[rows]);
+ const visible=columns.filter(c=>!hidden.includes(c));
+ const sorted=useMemo(()=>sort?[...rows].sort((a,b)=>{const left=a[sort],right=b[sort];return direction*(typeof left==='number'&&typeof right==='number'?left-right:String(left??'').localeCompare(String(right??''),undefined,{numeric:true}));}):rows,[rows,sort,direction]);
+ const pages=Math.max(1,Math.ceil(rows.length/10));const active=Math.min(page,pages);
+ function download(){const csv=[visible.map(c=>csvCell(props.columnLabels?.[c]||labelize(c))).join(','),...sorted.map(row=>visible.map(c=>csvCell(row[c])).join(','))].join('\r\n');const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=title.toLowerCase().replaceAll(' ','-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+ return <section className="record-panel record-table-panel"><header><h2>{title} <span>({rows.length})</span></h2><div className="button-row"><button onClick={download} disabled={!rows.length}><Download size={15}/>Export</button><details className="record-columns"><summary><Columns3 size={15}/>Columns</summary><div>{columns.map(c=><label key={c}><input type="checkbox" checked={!hidden.includes(c)} disabled={visible.length===1&&!hidden.includes(c)} onChange={()=>setHidden(old=>old.includes(c)?old.filter(v=>v!==c):[...old,c])}/>{props.columnLabels?.[c]||labelize(c)}</label>)}</div></details><label className="record-sort">Sort<select aria-label={`Sort ${title}`} value={sort} onChange={e=>{setSort(e.target.value);setPage(1);}}><option value="">Original order</option>{columns.map(c=><option key={c} value={c}>{props.columnLabels?.[c]||labelize(c)}</option>)}</select></label>{sort&&<button onClick={()=>setDirection(d=>-d)} aria-label="Reverse sort direction">{direction===1?'↑':'↓'}</button>}</div></header><DataTable {...props} rows={sorted.slice((active-1)*10,active*10)} columns={visible}/><footer><span>{rows.length?`Showing ${(active-1)*10+1}–${Math.min(active*10,rows.length)} of ${rows.length} loaded records`:'No records'}</span><nav aria-label={`${title} pages`}><button aria-label="Previous records" disabled={active<=1} onClick={()=>setPage(p=>p-1)}><ChevronLeft size={16}/></button><span className="record-current-page">{active}</span><span>of {pages}</span><button aria-label="Next records" disabled={active>=pages} onClick={()=>setPage(p=>p+1)}><ChevronRight size={16}/></button></nav></footer></section>;
+}

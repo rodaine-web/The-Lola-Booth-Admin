@@ -1,8 +1,9 @@
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 import { Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
-import DataTable from "../components/DataTable.jsx";
 import { useDialogFocus } from "../utils/use-dialog-focus.js";
 
 const clientTypes=["","INDIVIDUAL","CORPORATE","PLANNER","VENUE","OTHER"];
@@ -17,7 +18,7 @@ export default function Clients(){
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [revision,setRevision]=useState(0);
-  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [filtersOpen,setFiltersOpen]=useState(true);
   const type=urlParams.get("client_type")||"";
   useDialogFocus(creating,()=>setCreating(false));
 
@@ -48,7 +49,7 @@ export default function Clients(){
     }finally{setSaving(false);}
   }
 
-  return <main className="page lola-list-page">
+  return <main className="page lola-list-page record-module">
     <section className="page-heading lola-page-heading">
       <div><p className="eyebrow">Sales</p><h1>Clients</h1><p className="lede">Manage your clients.</p></div>
       <div className="button-row">
@@ -57,6 +58,7 @@ export default function Clients(){
       </div>
     </section>
 
+    <RecordMetrics module="Clients" rows={rows}/>
     <section className="lola-list-toolbar">
       <div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search clients by name, email, phone or company..."/></div>
     </section>
@@ -64,7 +66,7 @@ export default function Clients(){
     {filtersOpen&&<section className="lola-filter-drawer"><label>Client type<select value={type} onChange={e=>setType(e.target.value)}>{clientTypes.map(item=><option key={item||"all"} value={item}>{item?item.replaceAll("_"," "):"All clients"}</option>)}</select></label></section>}
 
     {(error||notice)&&<div className={error?"toast error":"toast"}>{error||notice}</div>}
-    <DataTable rows={rows} columns={["name","email","phone","company","client_type"]} getRowHref={row=>`/sales/clients/${row.id}`} empty="No clients found."/>
+    <RecordWorkspace module="Clients" rows={rows}>    <RecordTable title="Clients" rows={rows} columns={["name","email","phone","company","client_type"]} getRowHref={row=>`/sales/clients/${row.id}`} empty="No clients found."/></RecordWorkspace>
 
     {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="New client">
       <form className="modal lola-create-modal" onSubmit={createClient}>

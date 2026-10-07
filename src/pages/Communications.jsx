@@ -1,3 +1,5 @@
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 import {timestampInput} from "../utils/display.js";
 import { Link, useLocation } from "react-router-dom";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
@@ -35,6 +37,7 @@ export default function Communications() {
   const [templates, setTemplates] = useState(null);
   const [automations, setAutomations] = useState(null);
   const [communications, setCommunications] = useState(null);
+  const [showTemplateEditor,setShowTemplateEditor]=useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [selectedCommunication, setSelectedCommunication] = useState(null);
   const [editor, setEditor] = useState(blankTemplate);
@@ -100,6 +103,7 @@ export default function Communications() {
   }, [templates, variableSearch]);
 
   function editTemplate(template = blankTemplate) {
+    setShowTemplateEditor(true);
     setSelectedTemplate(template.id ? template : null);
     setEditor({ ...blankTemplate, ...template, key: template.key || template.template_key || "" });
     setPreview(null);
@@ -209,40 +213,43 @@ export default function Communications() {
   if (!templates || !automations || !communications) return <main className="page communications-center"><h1>Communications</h1><AsyncState loading={loading} error={error} requestId={requestId} onRetry={load} noun="communications" /></main>;
 
   return (
-    <main className="page communications-redesign" aria-label="Communication Center">
+    <main className="page communications-redesign record-module" aria-label="Communication Center">
       <div className="page-heading">
-        <div><p className="eyebrow">Communications</p><h1>Communications</h1><p className="lede">Email and SMS in one place.</p></div>
+        <div><p className="eyebrow">Communications</p><h1>{section === "Communications" ? (communicationTab === "SCHEDULED" ? "Scheduled" : "Messages") : section}</h1><p className="lede">{section === "Templates" ? "Create and manage reusable email and SMS templates." : section === "Automations" ? "Build and monitor automated communication journeys." : communicationTab === "SCHEDULED" ? "Plan, review, and monitor upcoming sends." : "Manage communications with clients, leads, and event partners."}</p></div>
         <div className="button-row">
           <button className="lola-secondary-button" onClick={load}><RefreshCw size={16} />Refresh</button>
-          <button className="primary-action" onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>New Message</button>
+          {section==="Templates"?<button className="primary-action" onClick={()=>editTemplate()}><Edit3 size={16}/>New Template</button>:section==="Communications"?<button className="primary-action" onClick={()=>setSelectedCommunication({status:"DRAFT",channel:"EMAIL",recipient:"",rendered_subject:"",rendered_body:""})}><Mail size={16}/>{communicationTab==="SCHEDULED"?"Schedule Message":"New Message"}</button>:null}
         </div>
       </div>
       {error ? <AsyncState error={error} requestId={requestId} onRetry={load} noun="communications" /> : notice && <div role="status" className="toast">{notice}</div>}
 
       <div className="segmented-control page-tabs">
         <Link to="/communications/campaigns">Campaigns</Link>
-        {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item === "Communications" ? "Messages" : item}</button>)}
+        {["Communications", "Templates", "Automations"].map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item === "Communications" ? "Messages" : item}</button>)}<button className={section==="Communications"&&communicationTab==="SCHEDULED"?"active":""} onClick={()=>{setSection("Communications");setCommunicationPage(1);setCommunicationTab("SCHEDULED");}}>Scheduled</button>
       </div>
 
       {section === "Communications" && (
         <>
+          <RecordMetrics module={communicationTab==="SCHEDULED"?"Scheduled":"Messages"} rows={communications.data||[]}/>
+          <RecordWorkspace module={communicationTab==="SCHEDULED"?"Scheduled":"Messages"} rows={communications.data||[]}>
           <section className="panel">
             <div className="table-heading">
-              <div><h2>Messages</h2><p className="note-text">All outbound and internal communication activity.</p></div>
+              <div><h2>{communicationTab==="SCHEDULED"?"Scheduled Sends":"Messages"}</h2><p className="note-text">All outbound and internal communication activity.</p></div>
               <div className="segmented-control">
                 {communicationTabs.map((tab) => <button key={tab} className={communicationTab === tab ? "active" : ""} onClick={() => {setCommunicationPage(1);setCommunicationTab(tab);}}>{tab === "SENT_TO_PROVIDER" ? "Sent" : tab.toLowerCase().replaceAll("_"," ")}</button>)}
               </div>
             </div>
             <div className="toolbar"><label>Search communications<input value={communicationSearch} onChange={e=>{setCommunicationPage(1);setCommunicationSearch(e.target.value);}} placeholder="Recipient or subject"/></label><label>Sort<select aria-label="Sort" value={communicationSort} onChange={e=>setCommunicationSort(e.target.value)}><option value="created_at">Newest first</option><option value="scheduled_at">Scheduled time</option><option value="recipient">Recipient</option></select></label></div>
-            <DataTable rows={communications.data || []} columns={["status", "channel", "recipient", "rendered_subject", "template_name", "scheduled_at", "sent_at", "failure_message"]} empty="No communications match this view." onEdit={openCommunication} />
+            <RecordTable title={communicationTab==="SCHEDULED"?"Scheduled Sends":"Messages"} rows={communications.data || []} columns={["status", "channel", "recipient", "rendered_subject", "template_name", "scheduled_at", "sent_at", "failure_message"]} empty="No communications match this view." onEdit={openCommunication} />
             <div className="button-row"><button disabled={communicationPage<=1} onClick={()=>setCommunicationPage(p=>p-1)}>Previous page</button><span>Page {communicationPage} · {communications.pagination?.total??communications.data?.length??0} records</span><button disabled={communicationPage*50>=(communications.pagination?.total||0)} onClick={()=>setCommunicationPage(p=>p+1)}>Next page</button></div>
           </section>
+          </RecordWorkspace>
           {selectedCommunication && <CommunicationComposer communication={selectedCommunication} setCommunication={setSelectedCommunication} onAction={communicationAction} busy={busy} />}
         </>
       )}
 
       {section === "Templates" && (
-        <section className="template-admin-grid">
+        <><RecordMetrics module="Templates" rows={filteredTemplates}/><RecordWorkspace module="Templates" rows={filteredTemplates}><section className="template-admin-grid">
           <article className="panel">
             <div className="table-heading">
               <h2>Templates</h2>
@@ -251,34 +258,10 @@ export default function Communications() {
             <div className="segmented-control">
               {templateTabs.map((tab) => <button key={tab} className={templateTab === tab ? "active" : ""} onClick={() => setTemplateTab(tab)}>{tab}</button>)}
             </div>
-            <div className="template-card-list">
-              {filteredTemplates.map((template) => (
-                <article className="template-admin-card" key={template.id}>
-                  <div className="template-admin-card-heading">
-                    <div>
-                      <strong>{template.name}</strong>
-                      <small>{template.key || template.template_key}</small>
-                    </div>
-                    <span className="status-pill">{template.status || (template.active ? "ACTIVE" : "DRAFT")}</span>
-                  </div>
-                  <dl className="template-admin-meta">
-                    <div><dt>Type</dt><dd>{template.template_type || template.channel}</dd></div>
-                    <div><dt>Send mode</dt><dd>{template.default_send_mode || "SEND_NOW"}</dd></div>
-                    <div><dt>Version</dt><dd>v{template.version || 1}</dd></div>
-                    <div><dt>Updated</dt><dd>{template.updated_at ? new Date(template.updated_at).toLocaleDateString() : "New"}</dd></div>
-                  </dl>
-                  <div className="icon-actions template-card-actions">
-                    <button title="Edit template" aria-label="Edit template" onClick={() => editTemplate(template)}><Edit3 size={15} />Edit</button>
-                    <button title="Preview template" aria-label="Preview template" onClick={() => { editTemplate(template); previewTemplate(template.id); }}><Eye size={15} />Preview</button>
-                    <button title="Duplicate template" aria-label="Duplicate template" onClick={() => templateAction(template, "duplicate")}><Copy size={15} />Duplicate</button>
-                    <button title="Activate template" aria-label="Activate template" onClick={() => templateAction(template, "activate")}><CheckCircle2 size={15} />Activate</button>
-                    <button title="Archive template" aria-label="Archive template" onClick={() => templateAction(template, "archive")}><Archive size={15} />Archive</button>
-                  </div>
-                </article>
-              ))}
-            </div>
+            <RecordTable title="Templates" rows={filteredTemplates} columns={["name","channel","category","updated_at","status","version"]} onEdit={editTemplate} rowActions={template=><><button onClick={()=>{editTemplate(template);previewTemplate(template.id);}}>Preview</button><button onClick={()=>templateAction(template,"duplicate")}>Duplicate</button><button onClick={()=>templateAction(template,"activate")}>Activate</button><button onClick={()=>templateAction(template,"archive")}>Archive</button></>}/>
+
           </article>
-          <TemplateEditor
+          {showTemplateEditor&&<><button onClick={()=>setShowTemplateEditor(false)}>Close editor</button><TemplateEditor
             editor={editor}
             setEditor={setEditor}
             selectedTemplate={selectedTemplate}
@@ -291,35 +274,23 @@ export default function Communications() {
             insertVariable={insertVariable}
             setActiveField={setActiveField}
             refs={{ subjectRef, bodyRef, textRef }}
-          />
-        </section>
+          /></>}
+        </section></RecordWorkspace></>
       )}
 
       {section === "Automations" && (
-        <>
+        <><RecordMetrics module="Automations" rows={automations.data||[]}/><RecordWorkspace module="Automations" rows={automations.data||[]}>
           <section className="panel">
             <div className="table-heading"><div><h2>Automations</h2><p className="note-text">Rules and scheduled jobs.</p></div><button className="lola-secondary-button" onClick={processJobs}><Play size={15}/>Process Due Jobs</button></div>
-            <div className="automation-list">
-              {automations.data.map((row) => (
-                <article className="automation-row" key={row.id}>
-                  <button aria-label={row.enabled ? "Pause automation" : "Activate automation"} onClick={() => toggleAutomation(row)}>
-                    {row.enabled ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
-                  </button>
-                  <div>
-                    <strong>{row.name}</strong>
-                    <span>{row.trigger_key.replaceAll("_", " ")} · {row.action_type.replaceAll("_", " ")} · {row.action_config?.template_key || "No template"} · {row.action_config?.send_mode || "template default"}</span>
-                  </div>
-                  <button onClick={()=>setAutomationEdit({...row})}>Edit rule</button><small>{row.last_run_at ? new Date(row.last_run_at).toLocaleString() : "No runs yet"}</small>
-                </article>
-              ))}
-            </div>
+            <RecordTable title="Automation Workflows" rows={(automations.data||[]).map(row=>({...row,status:row.enabled?"ACTIVE":"PAUSED"}))} columns={["name","trigger_key","action_type","last_run_at","status"]} onEdit={row=>setAutomationEdit({...row})} rowActions={row=><button onClick={()=>toggleAutomation(row)}>{row.enabled?"Pause":"Activate"}</button>}/>
+
           </section>
           {automationEdit&&<form className="panel" onSubmit={async e=>{e.preventDefault();if(busy)return;setBusy(true);setError('');try{await api.patch(`/communications/automations/${automationEdit.id}`,{name:automationEdit.name,delay_amount:Number(automationEdit.delay_amount),delay_unit:automationEdit.delay_unit,enabled:automationEdit.enabled});await load();setNotice('Automation saved.');setAutomationEdit(null);}catch(error){setError(error.message);}finally{setBusy(false);}}}><h2>Edit automation rule</h2><p>Trigger: {automationEdit.trigger_key}. Existing jobs keep their scheduled time. Changes affect future triggers.</p><div className="form-grid"><label>Rule name<input required value={automationEdit.name} onChange={e=>setAutomationEdit({...automationEdit,name:e.target.value})}/></label><label>Delay amount<input type="number" min="0" max="365" required value={automationEdit.delay_amount} onChange={e=>setAutomationEdit({...automationEdit,delay_amount:e.target.value})}/></label><label>Delay unit<select value={automationEdit.delay_unit} onChange={e=>setAutomationEdit({...automationEdit,delay_unit:e.target.value})}>{['MINUTES','HOURS','DAYS'].map(v=><option key={v}>{v}</option>)}</select></label><label>Rule enabled<input type="checkbox" checked={automationEdit.enabled} onChange={e=>setAutomationEdit({...automationEdit,enabled:e.target.checked})}/></label></div><button disabled={busy}>Save automation</button><button type="button" onClick={()=>setAutomationEdit(null)}>Cancel</button></form>}
           <section className="dashboard-grid">
             <article className="panel"><h2>Jobs</h2><DataTable rows={automations.jobs} columns={["job_type", "related_entity_type", "scheduled_for", "status", "attempt_count", "last_error"]} empty="No automation jobs yet." /></article>
             <article className="panel"><h2>History</h2><DataTable rows={automations.runs} columns={["automation_name", "entity_type", "scheduled_for", "executed_at", "result", "error"]} empty="No automation runs yet." /></article>
           </section>
-        </>
+        </RecordWorkspace></>
       )}
     </main>
   );

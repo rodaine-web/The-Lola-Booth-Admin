@@ -1,3 +1,4 @@
+import "../styles/record-workspace.css";
 import StatusBadge from "../components/StatusBadge.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { AlertTriangle, CheckCircle2, Clock, RefreshCw, Users } from "lucide-react";
@@ -47,11 +48,11 @@ export default function LiveOperations() {
   }, [dashboard]);
 
   return (
-    <main className="page live-operations-redesign">
+    <main className="page live-operations-redesign record-module">
       <div className="page-heading">
         <div>
           <p className="eyebrow">Operations</p>
-          <h1>Live Board</h1>
+          <h1>Live Operations</h1><p className="lede">Monitor event readiness, team status and equipment in real time.</p>
         </div>
         <button className="primary-action" onClick={load} disabled={refreshing}><RefreshCw size={16} />Refresh</button>
       </div>

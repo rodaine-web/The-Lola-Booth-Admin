@@ -1,3 +1,4 @@
+import "../styles/record-workspace.css";
 import {useDialogFocus} from "../utils/use-dialog-focus.js";
 import AsyncState from "../components/AsyncState.jsx";
 import MediaThumbnail from "../components/MediaThumbnail.jsx";
@@ -226,7 +227,7 @@ function CmsEditor({ config }) {
   }
 
   return (
-    <main className="page">
+    <main className="page record-module website-record-module">
       <CmsHeading title={config.title} eyebrow={config.eyebrow} onCreate={openCreate} />
       {config.guidance && <p className="cms-guidance">{config.guidance}</p>}
       {(notice || error) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
@@ -288,7 +289,7 @@ function MediaLibrary() {
   }
 
   return (
-    <main className="page">
+    <main className="page record-module website-record-module">
       <CmsHeading title="Media Library" eyebrow="Website CMS" />
       {(notice || error) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <section className="panel cms-upload">
@@ -342,9 +343,9 @@ function SiteSettings() {
     } finally {setSaving(false);}
   }
 
-  if(!form)return <main className="page"><CmsHeading title="SEO / Site Settings" eyebrow="Website CMS"/><AsyncState loading={loading} error={error} onRetry={load} noun="site settings"/></main>;
+  if(!form)return <main className="page record-module website-record-module"><CmsHeading title="SEO / Site Settings" eyebrow="Website CMS"/><AsyncState loading={loading} error={error} onRetry={load} noun="site settings"/></main>;
   return (
-    <main className="page">
+    <main className="page record-module website-record-module">
       <CmsHeading title="SEO / Site Settings" eyebrow="Website CMS" />
       {(notice || error) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <section className="brand-settings-preview">

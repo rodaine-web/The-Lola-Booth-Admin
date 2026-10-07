@@ -1,3 +1,5 @@
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 
 import Calendar from "./Calendar.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
@@ -12,7 +14,7 @@ const eventTypes=["Wedding","Birthday","Private Party","Brand Activation","Corpo
 
 export default function Events(){
   const [urlParams,setUrlParams]=useSearchParams();
-  const [display,setDisplay]=useState("calendar");
+  const [display,setDisplay]=useState("list");
   const [rows,setRows]=useState([]);
   const [search,setSearch]=useState("");
   const [error,setError]=useState("");
@@ -20,7 +22,7 @@ export default function Events(){
   const [creating,setCreating]=useState(urlParams.get("create")==="true");
   const [step,setStep]=useState(1);
   const [saving,setSaving]=useState(false);
-  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [filtersOpen,setFiltersOpen]=useState(true);
   const [options,setOptions]=useState({packages:[],experiences:[]});
   const [duplicate,setDuplicate]=useState(null);
   const [form,setForm]=useState(emptyEvent());
@@ -86,9 +88,9 @@ export default function Events(){
     }finally{setSaving(false);}
   }
 
-  return <main className="page lola-events-page">
+  return <main className="page lola-events-page record-module">
     <section className="page-heading lola-page-heading">
-      <div className="events-display-toggle"><button className={display==="calendar"?"active":""} onClick={()=>setDisplay("calendar")}>Calendar</button><button className={display==="list"?"active":""} onClick={()=>setDisplay("list")}>List</button></div>
+      <div><h1>Events</h1><p className="lede">Track booked events, logistics, and readiness at a glance.</p><div className="events-display-toggle"><button className={display==="calendar"?"active":""} onClick={()=>setDisplay("calendar")}>Calendar</button><button className={display==="list"?"active":""} onClick={()=>setDisplay("list")}>List</button></div></div>
       <div className="button-row">
 
         {display==="list"&&<button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>}
@@ -96,7 +98,7 @@ export default function Events(){
       </div>
     </section>
 
-    {display==="list"&&<><section className="lola-status-tabs">
+    {display==="list"&&<><RecordMetrics module="Events" rows={rows}/><section className="lola-status-tabs">
       {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setStatus(item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
     </section>
 
@@ -111,15 +113,7 @@ export default function Events(){
 
     {(error||notice)&&<div className={error?"toast error":"toast"}>{error||notice}</div>}
 
-    <section className="event-card-list">
-      {rows.map(event=><Link className="event-row-card" to={"/events/events/"+event.id} key={event.id}>
-        <div className="event-date-tile"><strong>{day(event.event_date)}</strong><span>{month(event.event_date)}</span></div>
-        <div className="event-row-main"><strong>{event.event_name}</strong><span>{event.event_type||"Event"} · {event.venue_name||"Venue TBD"}</span><small>{event.start_time||"Time TBD"}{event.end_time?" – "+event.end_time:""}</small></div>
-        <div className="event-row-meta"><span>{event.guest_count?String(event.guest_count)+" guests":"Guest count TBD"}</span><StatusBadge status={event.status}/></div>
-        <ArrowRight size={16}/>
-      </Link>)}
-      {!rows.length&&<div className="empty-state">No events found.</div>}
-    </section>
+    <RecordWorkspace module="Events" rows={rows} getRowHref={row=>"/events/events/"+row.id}><RecordTable title="Events" rows={rows} columns={["event_name","event_type","event_date","venue_name","start_time","guest_count","status"]} getRowHref={row=>"/events/events/"+row.id}/></RecordWorkspace>
     </>}
     {display==="calendar"&&<Calendar embedded/>}
 

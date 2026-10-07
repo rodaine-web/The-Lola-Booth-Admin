@@ -2,7 +2,7 @@ import { formatDisplay, labelize } from "../utils/display.js";
 import StatusBadge from "./StatusBadge.jsx";
 import { useNavigate } from "react-router-dom";
 
-export default function DataTable({ columns, rows, empty = "No records found.", getRowHref, onEdit, onView, columnLabels = {} }) {
+export default function DataTable({ columns, rows, empty = "No records found.", getRowHref, onEdit, onView, columnLabels = {}, rowActions, renderCell }) {
   const navigate = useNavigate();
 
   if (!rows?.length) return <div className="empty-state">{empty}</div>;
@@ -13,7 +13,7 @@ export default function DataTable({ columns, rows, empty = "No records found.", 
         <thead>
           <tr>
             {columns.map((column) => <th key={column}>{columnLabels[column] || labelize(column)}</th>)}
-            {(onEdit || onView) && <th>Actions</th>}
+            {(onEdit || onView || rowActions) && <th>Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -26,8 +26,8 @@ export default function DataTable({ columns, rows, empty = "No records found.", 
               onKeyDown={event => { if (getRowHref && event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); navigate(getRowHref(row)); } }}
               onClick={() => getRowHref && navigate(getRowHref(row))}
             >
-              {columns.map((column) => <td key={column}>{/(^status$|_status$)/.test(column) ? <StatusBadge status={row[column]} /> : formatDisplay(row[column],column)}</td>)}
-              {(onEdit || onView) && <td>{onView && <button className="table-action" onClick={event=>{event.stopPropagation();onView(row);}}>History</button>}{onEdit && <button className="table-action" onClick={(event) => { event.stopPropagation(); onEdit(row); }}>Edit</button>}</td>}
+              {columns.map((column) => <td key={column}>{renderCell?.(row,column) ?? (/(^status$|_status$)/.test(column) ? <StatusBadge status={row[column]} /> : formatDisplay(row[column],column))}</td>)}
+              {(onEdit || onView || rowActions) && <td>{onView && <button className="table-action" onClick={event=>{event.stopPropagation();onView(row);}}>History</button>}{onEdit && <button className="table-action" onClick={(event) => { event.stopPropagation(); onEdit(row); }}>Edit</button>}{rowActions&&<span onClick={event=>event.stopPropagation()}>{rowActions(row)}</span>}</td>}
             </tr>
           ))}
         </tbody>
