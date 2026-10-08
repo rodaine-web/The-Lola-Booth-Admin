@@ -21,3 +21,13 @@ test('revoked document links cannot be recovered through a workspace',()=>{
 test('zero authoritative balance stays zero despite legacy balance',()=>{
  assert.equal(workspaceView({...base,invoices:[{...invoice,amount_outstanding:0,balance_due:1099}]}).invoices[0].balance,0);
 });
+
+test('planning workspace includes event agreements without exposing another event or client',()=>{
+ const agreement={id:'signed',proposal_id:'accepted-proposal',event_id:'event',client_id:'client',status:'SIGNED',title:'Signed event agreement',revision:2,url:'https://example.com/contract/token',terms:'Private terms',signer_ip:'Private IP'};
+ const view=workspaceView({proposal:{...proposal,id:null},eventScope:{eventId:'event',clientId:'client'},documentOrigin:base.documentOrigin,contracts:[agreement,{...agreement,id:'different-event',event_id:'other'},{...agreement,id:'different-client',client_id:'other'},{...agreement,id:'draft',status:'DRAFT'},{...agreement,id:'revoked',status:'REVOKED'},{...agreement,id:'expired',status:'ISSUED',expires_at:'2000-01-01'},{...agreement,id:'issued',status:'ISSUED',expires_at:'2099-01-01'}]});
+ assert.deepEqual(view.agreements.map(row=>row.id),['signed','issued']);
+ assert.equal(view.agreements[0].url,agreement.url);
+ const serialized=JSON.stringify(view);
+ assert.ok(!serialized.includes('Private terms'));assert.ok(!serialized.includes('Private IP'));
+ assert.ok(!serialized.includes('different-client'));assert.ok(!serialized.includes('different-event'));
+});

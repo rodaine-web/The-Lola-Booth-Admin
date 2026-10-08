@@ -1,5 +1,15 @@
 # LOLA sprint qualification — 2026-10-07
 
+## October 8 staging update — supersedes historical deployment statements below
+
+Release 10be19e was deployed to staging frontend/API/worker after a fresh verified backup restore and application migrations through 053. Outbound dispatch remains paused. Authenticated dashboard, event and appearance smoke checks passed; these are not complete A–J qualification.
+
+Controlled QA browser qualification found that the planning-token workspace omitted an existing signed agreement while the proposal-token workspace showed it. The correction loads only issued/unexpired or signed contracts linked to the grant's event AND client through a nondeleted proposal, uses existing contract access checks, and applies event/client filtering again in the public projection. Proposal-free access remains supported.
+
+Corrected service executed against the existing paid staging QA event: one signed agreement with a usable link, one invoice and one successful payment receipt PASS. Full regression: 610 tests, 600 passed, zero failed, ten skipped. Browser verification after correction deployment remains required. No payment, refund or email was sent by these checks. One planning invitation was queued for the approved QA record while dispatch remained paused; review it before activation.
+
+Gate A remains PARTIAL: existing deposit persistence and invitation/workspace service checks passed; customer save/return/submit and automatic confirmation still need complete browser evidence. All other mandatory gates retain their acceptance requirements. Production remains NO-GO.
+
 Source audit completed for sections 1–55. This is not a release certificate.
 
 ## Current local evidence

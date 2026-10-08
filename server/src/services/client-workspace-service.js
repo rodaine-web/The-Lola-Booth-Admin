@@ -40,9 +40,7 @@ export async function publicWorkspace(token){
     LEFT JOIN events e ON e.id=p.event_id WHERE p.id=$1 AND p.deleted_at IS NULL`,[workspace.proposal_id])).rows[0];
   if(!proposal)throw new AppError('This client workspace is unavailable.',404,'NOT_FOUND');
   const contracts=(await query("SELECT id,proposal_id,title,revision,status,signed_at,signer_name,expires_at FROM contracts WHERE proposal_id=$1 AND (status='SIGNED' OR (status='ISSUED' AND expires_at>now())) ORDER BY revision DESC",[proposal.id])).rows;
-  for(const contract of contracts){
-   try{contract.url=await contractSigningUrl(contract.id);}catch(error){if(['CONTRACT_ACCESS_UNAVAILABLE','NOT_FOUND','CONTRACT_STATE','CONTRACT_EXPIRED'].includes(error.code))contract.url=null;else throw error;}
-  }
+  await addContractLinks(contracts);
   const invoices=(await query("SELECT id,proposal_id,invoice_number,status,total,amount_outstanding,balance_due,amount_paid,due_date,secure_token,token_revoked_at,token_expires_at FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') ORDER BY created_at DESC",[proposal.id])).rows;
   const payments=(await query("SELECT p.id,p.invoice_id,p.amount,p.status,p.payment_date FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.proposal_id=$1 AND i.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') ORDER BY p.payment_date DESC",[proposal.id])).rows;
   return {...workspaceView({proposal,contracts,invoices,payments,documentOrigin:documentOrigin()}),journey:await eventJourney(proposal.event_id,proposal.client_id)};
@@ -69,11 +67,23 @@ async function planningWorkspace(token){
    AND e.status NOT IN ('CANCELLED','COMPLETED') FOR SHARE OF p`,[hashContractValue(token)])).rows[0];
  if(!grant)throw new AppError('This client workspace link is unavailable or expired.',404,'NOT_FOUND');
  // Campaign bookings can enter without a proposal. Scope every record to this event and client.
+ const contracts=(await query(`SELECT c.id,c.proposal_id,c.title,c.revision,c.status,c.signed_at,c.signer_name,c.expires_at,p.event_id,p.client_id
+  FROM contracts c JOIN proposals p ON p.id=c.proposal_id
+  WHERE p.event_id=$1 AND p.client_id=$2 AND p.deleted_at IS NULL
+   AND (c.status='SIGNED' OR (c.status='ISSUED' AND c.expires_at>now()))
+  ORDER BY c.created_at DESC,c.revision DESC`,[grant.event_id,grant.client_id])).rows;
+ await addContractLinks(contracts);
  const invoices=(await query(`SELECT id,NULL::uuid AS proposal_id,invoice_number,status,total,amount_outstanding,balance_due,amount_paid,due_date,secure_token,token_revoked_at,token_expires_at
   FROM invoices WHERE event_id=$1 AND client_id=$2 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID')`,[grant.event_id,grant.client_id])).rows;
  const payments=(await query(`SELECT p.id,p.invoice_id,p.amount,p.status,p.payment_date FROM payments p JOIN invoices i ON i.id=p.invoice_id
   WHERE i.event_id=$1 AND i.client_id=$2 AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID') AND p.deleted_at IS NULL
    AND p.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')`,[grant.event_id,grant.client_id])).rows;
- const view=workspaceView({proposal:{...grant,id:null},invoices,payments,documentOrigin:documentOrigin()});
+ const view=workspaceView({proposal:{...grant,id:null},contracts,invoices,payments,eventScope:{eventId:grant.event_id,clientId:grant.client_id},documentOrigin:documentOrigin()});
  return {...view,proposal:null,journey:await eventJourney(grant.event_id,grant.client_id)};
+}
+
+async function addContractLinks(contracts){
+ for(const contract of contracts){
+  try{contract.url=await contractSigningUrl(contract.id);}catch(error){if(['CONTRACT_ACCESS_UNAVAILABLE','NOT_FOUND','CONTRACT_STATE','CONTRACT_EXPIRED'].includes(error.code))contract.url=null;else throw error;}
+ }
 }
