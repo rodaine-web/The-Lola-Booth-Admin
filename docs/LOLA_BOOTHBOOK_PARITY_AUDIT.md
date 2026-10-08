@@ -602,3 +602,9 @@ Sections 22–23, 43: chargeable backdrop work requires accepted immutable terms
 Sections 42, 44, 49, 51 retain gaps: rule-based travel fees; scheduled installments beyond deposit/balance; post-event/referral/anniversary marketing and advanced segment workflows; package/source/lost-reason/resource reporting and drilldowns. They have not been claimed complete or deployed.
 
 Sections 21 and 52 remain BLOCKED on usable individual backdrop files/actual stock and external provider prerequisites. Sections 54–55 remain BLOCKED on mandatory application staging A–J certification. Release details: `LOLA_RELEASE_READINESS_2026-10-07.md`.
+
+## 2026-10-08 — public multi-experience booking inquiry follow-on
+
+Status PARTIAL, local implementation only. Existing parity functionality is reused. New form supports independent published catalog package selections for up to four experiences, compatible add-on quantities, versioned opt-in, structured lead persistence and proposal prefill. Migration 054 qualifies on a fresh restored staging database; no application migration or deployment for this follow-on yet. Real router tests pass for replay/concurrency, size, origin, honeypot and distributed quota. Ten generated representative add-on illustrations plus owner supplied Glam/360 photos are present in the local website.
+
+Hosted browser-to-lead-to-proposal/invoice, actual approved email delivery, specific desktop/mobile breakpoints and complete consent/suppression checks remain PARTIAL/BLOCKED. See LOLA_BOOKING_FORM_TEST_REPORT.md and LOLA_BOOKING_FORM_STAGING_UAT.md. This evidence does not mark production ready.

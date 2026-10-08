@@ -142,7 +142,7 @@ export function normalizeWebsiteLead(payload = {}) {
       preferred_package_id: payload.preferredPackageId || payload.preferred_package_id,
       referral_source: payload.referralSource || payload.referral_source,
       form_id: payload.form_id || "public-inquiry",
-      external_lead_id: payload.external_lead_id || crypto.createHash("sha256").update(JSON.stringify(payload.submissionId ? {...safePayload(payload),submissionId:payload.submissionId} : safePayload(payload))).digest("hex").slice(0, 24),
+      external_lead_id: payload.external_lead_id || crypto.createHash("sha256").update(JSON.stringify(payload.submissionId ? {email:normalizeEmail(payload.email),submissionId:payload.submissionId} : safePayload(payload))).digest("hex").slice(0, 24),
       source_subtype: "WEBSITE"
     },
     sourceSubtype: publicFormKind(payload)==="CONTACT" ? "CONTACT" : "BOOKING",
@@ -228,9 +228,14 @@ export async function ingestProviderLead({ provider, payload, sourceSubtype, web
   }
 
   const result = await transaction(async (client) => {
+    if(normalizedProvider==='WEBSITE' && normalized.external_lead_id)await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['website-id:'+normalized.external_lead_id]);
     if(['META','TIKTOK'].includes(normalizedProvider))for(const key of [normalized.normalized_email&&`social-email:${normalized.normalized_email}`,normalized.normalized_phone&&`social-phone:${normalized.normalized_phone}`,normalized.external_lead_id&&`social-id:${normalizedProvider}:${normalized.external_lead_id}`].filter(Boolean).sort())await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[key]);
     const duplicate = await duplicateCheck(client, normalized);
     if (duplicate.type === "IDEMPOTENT_REPLAY" || (["META","TIKTOK"].includes(normalizedProvider)&&duplicate.leadId)) {
+      if(normalizedProvider==='WEBSITE' && payload.source_details?.bookingInquiry){
+        const prior=(await client.query('SELECT source_details FROM leads WHERE id=$1',[duplicate.leadId])).rows[0];
+        if(prior?.source_details?.bookingInquiry?.submissionFingerprint!==payload.source_details.bookingInquiry.submissionFingerprint)throw new AppError('This request changed after submission. Start a new inquiry.',409,'SUBMISSION_CHANGED');
+      }
       const action = duplicate.type === "IDEMPOTENT_REPLAY" ? "IDEMPOTENT_REPLAY" : "ATTACHED_TO_EXISTING";
       await captureAttribution(duplicate.leadId,payload);
       await client.query(
@@ -274,7 +279,7 @@ export async function ingestProviderLead({ provider, payload, sourceSubtype, web
     return { action: duplicate.type === "UNIQUE" || duplicate.type === "TEST" ? "CREATED_LEAD" : "POSSIBLE_DUPLICATE", lead, duplicateOf: duplicate.leadId };
   });
 
-  if (result.lead?.id && !(result.action === "IDEMPOTENT_REPLAY" && ["META","TIKTOK"].includes(normalizedProvider))) {
+  if (result.lead?.id && result.action !== "IDEMPOTENT_REPLAY") {
     await recordActivity({
       entityType: "lead",
       entityId: result.lead.id,

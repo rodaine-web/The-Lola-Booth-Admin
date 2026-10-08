@@ -106,6 +106,7 @@ export default function ProposalWizard(){
       if(!isCurrent())return;
       const prefill=proposalBookingPrefill(record,experiences,packages);
       setLead(record);
+      setSelectedAddons(prefill.selectedAddons||[]);
       setForm(current=>({...current,...prefill.fields}));
       if(params.get('campaignId')&&params.get('offerKey')){const campaigns=await api.get('/campaigns/offers-for-proposals');if(!isCurrent())return;const offer=campaigns.data?.find(c=>c.id===params.get('campaignId'))?.offers.find(o=>o.key===params.get('offerKey'));if(offer)setSelectedExperiences(offer.selections);else setError('The campaign offer is unavailable. Choose another package.');}else setSelectedExperiences(prefill.selectedExperiences);
     }catch(err){if(isCurrent())setError(err.message);}

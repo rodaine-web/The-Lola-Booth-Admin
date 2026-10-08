@@ -1,3 +1,5 @@
+import {PostgresPublicRateLimitStore} from '../middleware/postgres-rate-limit-store.js';
+import {preparePublicBooking,publicBookingCatalog} from '../services/public-booking-service.js';
 import {publicContractsRouter,publicWorkspaceRouter} from './contracts.js';
 import {campaignPublicRouter} from "./campaigns.js";
 import {inquirySchema,publicFormKind} from "../services/public-form-schema.js";
@@ -11,7 +13,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { recordActivity } from "../services/activity-service.js";
 import { createNotification } from "../services/notification-service.js";
-import { query } from "../db/pool.js";
+import { query, transaction } from "../db/pool.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { AppError } from "../utils/errors.js";
 import { validate } from "../utils/validation.js";
@@ -40,7 +42,9 @@ publicRouter.use('/staging',(_req,_res,next)=>isStaging()?next():next(new AppErr
 
 publicRouter.use(rateLimit({
   windowMs: env.rateLimitWindowMs,
-  limit: 20,
+  limit: Math.max(1, Math.min(10000, Number(process.env.PUBLIC_WRITE_RATE_LIMIT_MAX)||20)),
+  store: new PostgresPublicRateLimitStore(),
+  message:{error:{code:"RATE_LIMITED",message:"We’re receiving too many requests right now. Please wait a little and try again."}},
   skip: req => ["GET", "HEAD", "OPTIONS"].includes(req.method),
   standardHeaders: true,
   legacyHeaders: false
@@ -53,7 +57,11 @@ publicRouter.use('/workspaces', publicWorkspaceRouter);
 
 publicRouter.use(campaignPublicRouter);
 
+publicRouter.get("/booking-catalog",asyncHandler(async (_req,res)=>{res.set("Cache-Control","no-store").json(await publicBookingCatalog());}));
+
 publicRouter.post("/inquiries", (req, _res, next) => {
+  if(!req.body || typeof req.body!=="object" || Array.isArray(req.body))return next(new AppError("Submit a JSON inquiry object.",400,"INVALID_REQUEST"));
+  if(Buffer.byteLength(JSON.stringify(req.body))>65536)return next(new AppError("This request is too large.",413,"REQUEST_TOO_LARGE"));
   const origin = req.headers.origin;
   if (origin && !env.publicInquiryAllowedOrigins.includes(origin)) {
     return next(new AppError("Inquiry submissions are not allowed from this origin.", 403, "CORS_REJECTED"));
@@ -63,14 +71,17 @@ publicRouter.post("/inquiries", (req, _res, next) => {
 }, validate(inquirySchema), asyncHandler(async (req, res) => {
   const payload = {...req.body, referrer_url: req.body.referrer_url || req.headers.referer || null};
   if (isStaging()) {
-    payload.marketing_email_opt_in = false;
+    if(!payload.selections)payload.marketing_email_opt_in = false;
     for (const [field,type] of [['preferredExperienceId','experiences'],['preferredPackageId','packages']]) if (payload[field]) {
       const record = (await query("SELECT payload FROM website_channel_records WHERE id=$1 AND channel='STAGING' AND cms_type=$2 AND status='PUBLISHED'", [payload[field],type])).rows[0];
       if (!record?.payload.source_catalog_id) throw new AppError('Choose an available staging catalog item.',422,'STAGING_SELECTION_INVALID');
       payload[field] = record.payload.source_catalog_id;
     }
   }
-  const result = await ingestProviderLead({provider: "WEBSITE", payload, testMode: isStaging(), skipAutomations: isStaging() || publicFormKind(payload)==="CONTACT"});
+  const result = await transaction(async()=>{
+    const validated=await preparePublicBooking(payload);
+    return ingestProviderLead({provider: "WEBSITE", payload:validated, testMode: isStaging(), skipAutomations: isStaging() || publicFormKind(payload)==="CONTACT"});
+  });
 
   await sendPublicInquiryEmails({
     lead: result.lead,

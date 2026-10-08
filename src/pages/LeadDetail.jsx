@@ -173,6 +173,10 @@ export default function LeadDetail() {
             <Field label="Venue" value={lead.venue_name} />
             <Field label="Address" value={[lead.venue_address, lead.city, lead.state, lead.zip].filter(Boolean).join(", ")} />
           </Panel>
+          {lead.source_details?.bookingInquiry&&<Panel title="Requested experiences & add-ons">
+            {lead.source_details.bookingInquiry.selections.map(item=><p key={item.experienceId}><strong>{item.experienceName}</strong> — {item.packageName}{item.customNotes&&<span> · {item.customNotes}</span>}</p>)}
+            {lead.source_details.bookingInquiry.addons.map(item=><p key={item.addonId}>{item.name} × {item.quantity}{item.pricingType==='CUSTOM'?' · Custom quote':''}</p>)}
+          </Panel>}
           <Panel title="Notes">
             <p className="note-text">{lead.message || "No notes yet."}</p>
             <div className="inline-form note-form">
