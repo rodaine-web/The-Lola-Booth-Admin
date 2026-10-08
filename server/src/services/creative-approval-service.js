@@ -63,7 +63,7 @@ export async function listCreativeApprovals(filters = {}, user = null) {
      LEFT JOIN clients c ON c.id=ca.client_id
      LEFT JOIN events e ON e.id=ca.event_id
      WHERE ${clauses.join(" AND ")}
-     ORDER BY ca.updated_at DESC, ca.created_at DESC
+     ORDER BY ca.updated_at DESC, ca.requested_at DESC, ca.id DESC
      LIMIT 100`,
     values
   );

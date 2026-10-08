@@ -25,6 +25,12 @@ test('disposable database: concurrent holds, expiry, atomic confirmation, invent
   const equipment=(await query("INSERT INTO equipment(name,category) VALUES('Hold QA booth','BOOTH') RETURNING id")).rows[0];
   const event=async(date)=>(await query("INSERT INTO events(event_name,client_id,event_type,event_date,start_time,end_time) VALUES('Hold QA',$1,'Wedding',$2,'18:00','23:00') RETURNING id",[client.id,date])).rows[0];
   const first=await event('2030-01-05'),second=await event('2030-01-05');
+  const {listCreativeApprovals}=await import('../server/src/services/creative-approval-service.js');
+  await query("INSERT INTO creative_approvals(event_id,client_id,approval_type) VALUES($1,$2,'DESIGN')",[first.id,client.id]);
+  const proofs=await listCreativeApprovals({event_id:first.id},{permissions:['*']});
+  assert.equal(proofs.data.length,1,'Creative proof list works against the migrated schema');
+  assert.equal(proofs.data[0].event_id,first.id);
+  assert.equal(Object.hasOwn(proofs.data[0],'public_token'),false,'Admin lists omit customer access tokens');
   const options={equipmentIds:[equipment.id]};
   const competing=await Promise.allSettled([holds.createBookingHold(first.id,options),holds.createBookingHold(second.id,options)]);
   assert.equal(competing.filter(x=>x.status==='fulfilled').length,1,'Exactly one competing reservation wins');
