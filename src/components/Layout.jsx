@@ -1,3 +1,5 @@
+import { AppearanceProvider } from "../context/AppearanceContext.jsx";
+import "../styles/admin-appearance.css";
 import { GALLERY_ENABLED } from "../utils/features.js";
 import EnvironmentBadge from "./EnvironmentBadge.jsx";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -150,7 +152,7 @@ const navGroups = [{
 }, {
   label: 'Catalog',
   icon: Package,
-  items: [{
+  items: [{label:'Backdrops',to:'/catalog/backdrops',permission:'read:events'}, {
     label: 'Experiences',
     to: '/content/experiences',
     permission: 'read:content'
@@ -299,7 +301,7 @@ export default function Layout() {
     setQuery("");
     if (item.type === "lead") navigate(`/sales/leads/${item.id}`);else if (item.type === "event") navigate(`/events/events/${item.id}`);else if (item.type === "client") navigate(`/sales/clients/${item.id}`);else if (item.type === "proposal") navigate(`/sales/proposals/${item.id}`);else if (item.type === "invoice") navigate(`/finance/invoices/${item.id}`);else navigate("/");
   }
-  return <div className="lola-app-shell">
+  return <AppearanceProvider><div className="lola-app-shell">
       <a className="lola-skip-link" href="#workspace-content">Skip to content</a>
       <aside id="lola-navigation" className={navigationOpen ? "lola-sidebar open" : "lola-sidebar"}>
         <Link className="lola-brand" to="/" aria-label="LOLA home">
@@ -364,6 +366,7 @@ export default function Layout() {
                   </div>}
               </div>}
             <NotificationCenter />
+            <Link className="lola-icon-button" aria-label="Appearance & Display" title="Appearance & Display" to="/system/settings?section=appearance"><Sparkles size={17}/></Link>
             <div className="lola-user-chip">
               <span className="lola-avatar">{initials(user?.name)}</span>
               <div><strong>{user?.name || "User"}</strong><small>{user?.roles?.[0] || "Admin"}</small></div>
@@ -375,7 +378,7 @@ export default function Layout() {
           <Outlet />
         </div>
       </section>
-    </div>;
+    </div></AppearanceProvider>;
 }
 function initials(name = "") {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "LO";

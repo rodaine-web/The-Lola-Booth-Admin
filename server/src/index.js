@@ -1,3 +1,4 @@
+import {externalOAuthRouter} from './routes/external-integrations.js';
 import {pool} from './db/pool.js';
 import {assertDatabaseIdentity} from './config/database-identity.js';
 import {originAllowed} from '../../shared/environment-isolation.js';
@@ -34,6 +35,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(pinoHttp({ logger, genReqId: (_req, res) => { const id = crypto.randomUUID(); res.setHeader("X-Request-ID", id); return id; }, serializers: { req: safeRequestLog, res: safeResponseLog } }));
+app.use("/api/integrations",externalOAuthRouter);
 app.use("/api/webhooks", express.raw({ type: "application/json", limit: "1mb" }), webhookRouter);
 app.use(express.json({ limit: "14mb" }));
 app.use(createApiRateLimits({windowMs:env.rateLimitWindowMs,limit:env.rateLimitMax}));

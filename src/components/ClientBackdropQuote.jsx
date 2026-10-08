@@ -1,0 +1,9 @@
+import {useEffect,useState} from 'react';
+import {formatMoney} from '../utils/display.js';
+export default function ClientBackdropQuote({base}){
+ const [quote,setQuote]=useState(null),[name,setName]=useState(''),[consent,setConsent]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ useEffect(()=>{const controller=new AbortController();fetch(base+'/quote',{signal:controller.signal}).then(async r=>{const body=await r.json();if(!r.ok)throw new Error(body.error?.message||'Unable to load your quote.');return body;}).then(setQuote).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>controller.abort();},[base]);
+ async function accept(){setBusy(true);setError('');try{const response=await fetch(base+'/quote/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quoteId:quote.id,name,consent:true})});const body=await response.json();if(!response.ok)throw new Error(body.error?.message||'Unable to accept quote.');setQuote(body);}catch(e){setError(e.message);}finally{setBusy(false);}}
+ if(!quote&&!error)return null;
+ return <section className="panel"><h2>Your backdrop quote</h2>{error&&<p role="alert">{error}</p>}{quote&&<><p>{quote.description}</p><p>Total {formatMoney(quote.total)} · Required before work {formatMoney(quote.requiredPayment)}</p>{quote.status==='ISSUED'?<><label>Your name<input value={name} onChange={e=>setName(e.target.value)} disabled={busy}/></label><label><input type="checkbox" checked={consent} disabled={busy} onChange={e=>setConsent(e.target.checked)}/>I accept this scope, price and required payment.</label><button disabled={busy||!consent||name.trim().length<2} onClick={accept}>Accept quote</button></>:<p>{quote.status} · Your payment invoice will appear when issued.</p>}{quote.paymentUrl&&<a className="primary-action" href={quote.paymentUrl}>View invoice and pay</a>}</>}</section>;
+}

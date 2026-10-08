@@ -1,3 +1,4 @@
+import {externalConnections} from './external-connections-service.js';
 import {buildInfo,isStaging} from '../config/staging-safety.js';
 import { azureBlobStorage } from './azure-blob-storage.js';
 import fs from "node:fs/promises";
@@ -73,12 +74,13 @@ export async function getSystemHealth() {
   checks.push(await workerCheck());
   checks.push(await jobBacklogCheck());
   checks.push(await integrationCheck());
+  try { for(const row of await externalConnections())checks.push(check(`integrations.${row.provider.toLowerCase()}`,row.status==="CONNECTED"?"CONNECTED":["ERROR","EXPIRED"].includes(row.status)?"ERROR":["DEGRADED","CONNECTING"].includes(row.status)?"DEGRADED":"NOT_CONFIGURED",row.last_error||`${row.provider}: ${row.status}`,{account_name:row.account_name,last_success:row.last_sync_at,token_expires_at:row.token_expires_at,last_webhook_at:row.last_webhook_at})); } catch { checks.push(check("integrations.external","DEGRADED","External connection health is unavailable.")); }
   checks.push(await retentionCheck());
 
   for (const item of checks) {
     item.optional = item.name.startsWith("payments.")
       ? !item.details?.businessEnabled
-      : ["sms", "integrations"].includes(item.name);
+      : ["sms", "integrations"].includes(item.name)||item.name.startsWith("integrations.");
   }
   const status = overallStatus(checks.filter(item => !item.optional));
   await query("INSERT INTO system_health_snapshots (status, checks) VALUES ($1,$2)", [status, checks]).catch(() => null);

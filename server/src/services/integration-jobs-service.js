@@ -1,4 +1,5 @@
-import {stagingJobsPaused,stagingAutomationScope} from '../config/staging-safety.js';
+import {dispatchExternalJob,externalJobFailed} from './external-integration-jobs.js';
+import {stagingJobsPaused,stagingAutomationScope,isStaging} from '../config/staging-safety.js';
 import crypto from 'node:crypto';
 import {MARKETING_PROVIDERS,marketingConfiguration,dispatchMarketing} from './marketing-adapters.js';
 import {query,transaction} from '../db/pool.js';
@@ -75,6 +76,7 @@ export async function queueSmsEscalation(input){
  const job=await enqueueIntegrationEvent({provider:'TWILIO',eventName:input.rule,entityType:input.entityType,entityId:input.entityId,payload:input,idempotencyKey:`SMS:${input.rule}:${input.entityId}:${input.occurrence||'once'}`});return {queued:true,id:job.id};
 }
 async function defaultDispatch(job){
+ if(job.mode==='EXTERNAL')return dispatchExternalJob(job);
  if(MARKETING_PROVIDERS.includes(job.provider)){
   if(job.mode==='PROVIDER')return dispatchMarketing(job);
   if(env.nodeEnv==='production')return {mode:'DISABLED',result:'DISABLED'};
@@ -86,13 +88,13 @@ async function developmentDispatch(job){
  // This adapter persists synthetic acceptance only. It never calls a provider.
  await query(`INSERT INTO integration_dispatches(idempotency_key,provider,provider_reference) VALUES($1,$2,$3) ON CONFLICT(idempotency_key) DO NOTHING`,[job.idempotency_key,job.provider,'mock_'+crypto.createHash('sha256').update(job.idempotency_key).digest('hex').slice(0,24)]);
 }
-export async function processIntegrationJobs({limit=25,dispatch=defaultDispatch}={}){
- if(stagingJobsPaused())return [];
+export async function processIntegrationJobs({limit=25,dispatch=defaultDispatch,externalOnly=false}={}){
+ if(stagingJobsPaused()&&!(externalOnly&&isStaging()&&process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'))return [];
  if(dispatch!==defaultDispatch&&env.nodeEnv!=='test')throw new AppError('Test adapter unavailable.',403,'TEST_ONLY');
- await query("UPDATE integration_jobs SET status=CASE WHEN mode='PROVIDER' THEN 'FAILED' ELSE 'QUEUED' END,last_error=CASE WHEN mode='PROVIDER' THEN 'PROVIDER_OUTCOME_UNKNOWN' ELSE last_error END,available_at=now() WHERE status='PROCESSING' AND started_at<now()-interval '5 minutes'");
+ await query("UPDATE integration_jobs SET status=CASE WHEN mode='PROVIDER' THEN 'FAILED' ELSE 'QUEUED' END,last_error=CASE WHEN mode='PROVIDER' THEN 'PROVIDER_OUTCOME_UNKNOWN' ELSE last_error END,available_at=now() WHERE status='PROCESSING' AND started_at<now()-interval '5 minutes' AND ($1::boolean=false OR mode='EXTERNAL')",[externalOnly]);
  const results=[];
  for(let i=0;i<limit;i++){
- const job=await transaction(async client=>{const row=(await client.query("SELECT * FROM integration_jobs WHERE status='QUEUED' AND available_at<=now() ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED")).rows[0];if(!row)return null;return (await client.query("UPDATE integration_jobs SET status='PROCESSING',attempts=attempts+1,started_at=now() WHERE id=$1 RETURNING *",[row.id])).rows[0];});if(!job)break;
+ const job=await transaction(async client=>{const row=(await client.query(`SELECT * FROM integration_jobs WHERE status='QUEUED' AND available_at<=now() ${externalOnly?"AND mode='EXTERNAL'":""} ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];if(!row)return null;return (await client.query("UPDATE integration_jobs SET status='PROCESSING',attempts=attempts+1,started_at=now() WHERE id=$1 RETURNING *",[row.id])).rows[0];});if(!job)break;
  try{await transaction(async client=>{
  const locked=(await client.query('SELECT * FROM integration_jobs WHERE id=$1 FOR UPDATE',[job.id])).rows[0];if(locked.status==='SUCCEEDED')return;
  if(job.provider==='TWILIO'){const eligible=await smsEligibility({entityType:job.entity_type,entityId:job.entity_id,...job.payload});if(!eligible.allowed){await client.query("UPDATE integration_jobs SET status='CANCELLED',last_error=$2 WHERE id=$1",[job.id,eligible.reason]);return;}}
@@ -100,7 +102,7 @@ export async function processIntegrationJobs({limit=25,dispatch=defaultDispatch}
  await client.query("INSERT INTO integration_attempts(job_id,provider,event_name,attempt,mode,result,response_summary) VALUES($1,$2,$3,$4,$5,$6,$7)",[job.id,job.provider,job.event_name,job.attempts,result.mode,result.result,JSON.stringify(result)]);
  if(result.result==='DISABLED'){await client.query("UPDATE integration_jobs SET status='CANCELLED',last_error='PROVIDER_DISABLED' WHERE id=$1",[job.id]);return;}
  await client.query("UPDATE integration_jobs SET status='SUCCEEDED',completed_at=now(),last_error=NULL WHERE id=$1",[job.id]);});results.push({id:job.id,status:'PROCESSED'});
- }catch(error){await query("INSERT INTO integration_attempts(job_id,provider,event_name,attempt,mode,result,response_summary) VALUES($1,$2,$3,$4,$5,'FAILED',$6)",[job.id,job.provider,job.event_name,job.attempts,job.mode,JSON.stringify({code:error.code||'INTEGRATION_DISPATCH_FAILED',httpStatus:error.providerStatus})]);await query("UPDATE integration_jobs SET status=$2,last_error=$3,available_at=now()+interval '1 minute' WHERE id=$1",[job.id,job.attempts>=3||(job.mode==='PROVIDER'&&!error.retryable)?'FAILED':'QUEUED',error.code||'INTEGRATION_DISPATCH_FAILED']);results.push({id:job.id,status:'RETRY_OR_FAILED'});}
+ }catch(error){if(job.mode==='EXTERNAL')await externalJobFailed(job,error);await query("INSERT INTO integration_attempts(job_id,provider,event_name,attempt,mode,result,response_summary) VALUES($1,$2,$3,$4,$5,'FAILED',$6)",[job.id,job.provider,job.event_name,job.attempts,job.mode,JSON.stringify({code:error.code||'INTEGRATION_DISPATCH_FAILED',httpStatus:error.providerStatus})]);await query("UPDATE integration_jobs SET status=$2,last_error=$3,available_at=now()+($4::int * interval '1 second') WHERE id=$1",[job.id,job.attempts>=3||(['PROVIDER','EXTERNAL'].includes(job.mode)&&!error.retryable)?'FAILED':'QUEUED',error.code||'INTEGRATION_DISPATCH_FAILED',Math.min(3600,60*2**(job.attempts-1))]);results.push({id:job.id,status:'RETRY_OR_FAILED'});}
  }
  return results;
 }

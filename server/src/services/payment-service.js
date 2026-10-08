@@ -15,6 +15,7 @@ import { AppError, notFound } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { writeAudit } from "./audit-service.js";
 import { applyBookingConfirmationPolicy, reconcileInvoice } from "./payment-reconciliation-service.js";
+import {assertCheckoutHold} from './booking-hold-service.js';
 
 const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 const cents = (value) => Math.round(Number(value || 0) * 100);
@@ -86,6 +87,7 @@ export async function publicPaymentOptions(invoice) {
 export async function createPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey }) {
   const invoice = await loadInvoiceByToken(token);
   if (!isInvoicePayable(invoice)) throw new AppError("This invoice is not payable.", 409, "INVOICE_NOT_PAYABLE");
+  await assertCheckoutHold(invoice.event_id);
   const normalizedProvider = String(provider || "").toUpperCase();
   if (!["STRIPE", "PAYPAL"].includes(normalizedProvider)) throw new AppError("Unsupported payment provider.", 400, "UNSUPPORTED_PROVIDER");
   const options = await publicPaymentOptions(invoice);
@@ -138,7 +140,7 @@ export async function recordManualPayment(req) {
   if (payment.invoice_id) {
     await reconcileInvoice(payment.invoice_id, { req, actorUserId: req.user.id, action: "manual_payment_recorded" });
     Object.assign(payment,(await query('SELECT * FROM payments WHERE id=$1',[payment.id])).rows[0]);
-    await applyBookingConfirmationPolicy(payment.event_id);
+    await applyBookingConfirmationPolicy(payment.event_id).catch(error=>flagBookingConfirmationFailure(payment,error));
   }
   await writeAudit({ req, action: "payment_recorded", entity: "payment", entityId: payment.id, after: payment });
   await recordActivity({ actorUserId: req.user.id, entityType: payment.event_id ? "event" : "invoice", entityId: payment.event_id || payment.invoice_id, action: "payment_recorded", summary: `Payment recorded: $${payment.amount}` });
@@ -340,6 +342,7 @@ async function recordProviderPayment(input) {
   Object.assign(payment,(await query('SELECT * FROM payments WHERE id=$1',[payment.id])).rows[0]);
   await applyBookingConfirmationPolicy(payment.event_id).catch((error)=>{
     logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"BOOKING_CONFIRMATION_FAILED"},"Booking confirmation side effect failed after payment posting");
+    return flagBookingConfirmationFailure(payment,error);
   });
   await query("INSERT INTO payment_receipts(payment_id,invoice_id) VALUES($1,$2) ON CONFLICT(payment_id) DO NOTHING",[payment.id,input.invoiceId]).catch((error)=>{
     logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"RECEIPT_RECORD_FAILED"},"Receipt record side effect failed after payment posting");
@@ -717,4 +720,20 @@ function paypalBaseUrl() {
 
 function safeProviderMessage(message = "Payment provider request failed.") {
   return String(message).replace(/sk_(test|live)_[A-Za-z0-9]+/g, "[redacted]").slice(0, 240);
+}
+
+async function flagBookingConfirmationFailure(payment,error){
+  // Money already posted remains posted. Alert operators instead of retrying the charge.
+  logger.warn({paymentId:payment.id,eventId:payment.event_id,code:error.code||'BOOKING_CONFIRMATION_FAILED'},'Payment received; booking requires availability review');
+  try{
+    await transaction(async()=>{
+      await query('SELECT id FROM payments WHERE id=$1 FOR UPDATE',[payment.id]);
+      if((await query("SELECT 1 FROM notifications WHERE metadata->>'bookingPaymentId'=$1 LIMIT 1",[payment.id])).rowCount)return;
+      await createNotification({roleTarget:'OWNER_ADMIN',category:'PAYMENTS',severity:'CRITICAL',title:'Payment received — booking needs review',
+        body:'Availability confirmation failed. Recheck the hold and resource reservations before confirming this booking; do not charge again.',
+        entityType:'event',entityId:payment.event_id,actionUrl:payment.event_id?`/events/events/${payment.event_id}`:null,
+        metadata:{bookingPaymentId:payment.id,code:error.code||'BOOKING_CONFIRMATION_FAILED'}});
+      if(payment.event_id)await recordActivity({entityType:'event',entityId:payment.event_id,action:'paid_booking_needs_review',summary:'Payment recorded; resource confirmation needs operator review'});
+    });
+  }catch(notificationError){logger.warn({paymentId:payment.id,code:notificationError.code||'NOTIFICATION_FAILED'},'Booking review alert could not be persisted');}
 }

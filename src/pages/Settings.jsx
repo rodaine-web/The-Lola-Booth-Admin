@@ -1,3 +1,5 @@
+import AppearanceSettings from "../components/AppearanceSettings.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import "../styles/record-workspace.css";
 import { Link } from "react-router-dom";
 
@@ -15,14 +17,16 @@ const sections=[
   ["Operations",UsersRound],
   ["Website",Globe2],
   ["Notifications",Bell],
+  ["Appearance & Display",Sparkles],
   ["Advanced",SlidersHorizontal]
 ];
 
 const fields=[
-  "business_name","legal_business_name","business_email","phone","website","service_area","address","timezone","business_week_start","currency","sales_tax_percent","default_deposit_percent","default_balance_due_days","invoice_prefix","proposal_prefix","next_invoice_number","next_proposal_number","booking_confirmation_policy","default_deposit_type","default_deposit_value","default_balance_due_days_before_event","default_equipment_turnaround_buffer_minutes","default_staff_travel_buffer_minutes","setup_warning_minutes","event_start_warning_minutes","equipment_return_warning_hours","delivery_default_expiration_days","lead_assignment_mode","lead_assignment_user_id","auto_acknowledge_website_leads","auto_acknowledge_social_leads","google_review_url","facebook_review_url","other_review_url","offline_payment_instructions","proposal_default_validity_days","invoice_default_due_days","brand_line","proposal_acceptance_wording","proposal_default_intro","proposal_default_next_steps","proposal_default_terms","invoice_default_payment_terms","invoice_default_notes","default_setup_buffer_minutes","default_breakdown_buffer_minutes"
+  "business_name","legal_business_name","business_email","phone","website","service_area","address","timezone","business_week_start","currency","sales_tax_percent","default_deposit_percent","default_balance_due_days","invoice_prefix","proposal_prefix","next_invoice_number","next_proposal_number","booking_confirmation_policy","default_deposit_type","default_deposit_value","default_balance_due_days_before_event","default_equipment_turnaround_buffer_minutes","default_staff_travel_buffer_minutes","setup_warning_minutes","event_start_warning_minutes","equipment_return_warning_hours","delivery_default_expiration_days","lead_assignment_mode","lead_assignment_user_id","auto_acknowledge_website_leads","auto_acknowledge_social_leads","google_review_url","facebook_review_url","other_review_url","offline_payment_instructions","proposal_default_validity_days","invoice_default_due_days","brand_line","proposal_acceptance_wording","proposal_default_intro","proposal_default_next_steps","proposal_default_terms","invoice_default_payment_terms","invoice_default_notes","default_setup_buffer_minutes","default_breakdown_buffer_minutes","default_planning_due_days","default_creative_due_days"
 ];
 
 export default function Settings(){
+  const {can}=useAuth();
   const [settings,setSettings]=useState(null);
   const [form,setForm]=useState({});
   const [notificationPrefs,setNotificationPrefs]=useState(null);
@@ -30,9 +34,10 @@ export default function Settings(){
   const [error,setError]=useState("");
   const [busy,setBusy]=useState(false);
   const [revision,setRevision]=useState(0);
-  const [active,setActive]=useState("Business Profile");
+  const [active,setActive]=useState(new URLSearchParams(window.location.search).get("section")==="appearance"?"Appearance & Display":"Business Profile");
 
   useEffect(()=>{
+    if(!can("read:settings"))return;
     api.get("/settings").then(result=>{
       // Display the saved value so correcting legacy contact data is persisted.
       setSettings(result);setForm(result);
@@ -64,13 +69,14 @@ export default function Settings(){
 
   const groupFields=useMemo(()=>fields.filter(field=>sectionForField(field)===active),[active]);
 
+  if(!can("read:settings"))return <main className="page settings-redesign"><h1>Settings</h1><AppearanceSettings/></main>;
   if(error&&!settings)return <main className="page"><AsyncState error={error} noun="settings" onRetry={()=>{setError("");setRevision(v=>v+1);}}/></main>;
   if(!settings)return <main className="page"><AsyncState loading noun="settings"/></main>;
 
   return <main className="page settings-redesign record-module">
     <section className="page-heading lola-page-heading">
       <div><p className="eyebrow">Settings</p><h1>Settings</h1><p className="lede">Configure your business.</p></div>
-      <div className="button-row"><Link className="lola-secondary-button" to="/system/proposal-templates">Proposal defaults</Link><button className="lola-secondary-button" onClick={()=>{setForm({...settings});setNotice("Unsaved changes reverted.");}}>Revert</button><button className="primary-action" disabled={busy} onClick={save}>{busy?"Saving...":"Save Changes"}</button></div>
+      {active!=="Appearance & Display"&&<div className="button-row"><Link className="lola-secondary-button" to="/system/proposal-templates">Proposal defaults</Link><button className="lola-secondary-button" onClick={()=>{setForm({...settings});setNotice("Unsaved changes reverted.");}}>Revert</button><button className="primary-action" disabled={busy} onClick={save}>{busy?"Saving...":"Save Changes"}</button></div>}
     </section>
 
     {(notice||error)&&<div className={error?"toast error":"toast"}>{error||notice}</div>}
@@ -81,7 +87,7 @@ export default function Settings(){
       </aside>
 
       <section className="settings-content">
-        {active==="Branding"?<Branding/>:active==="Notifications"?<Notifications prefs={notificationPrefs} setPrefs={setNotificationPrefs} save={saveNotificationPrefs}/>:active==="Documents & Payments"?<>
+        {active==="Appearance & Display"?<AppearanceSettings/>:active==="Branding"?<Branding/>:active==="Notifications"?<Notifications prefs={notificationPrefs} setPrefs={setNotificationPrefs} save={saveNotificationPrefs}/>:active==="Documents & Payments"?<>
           <SettingsSection title="Documents & payments" description="Proposal, invoice, deposit, tax, and payment defaults.">
             <div className="settings-grid-redesign">{groupFields.map(field=><Setting key={field} field={field} value={form[field]} onChange={value=>setForm(current=>({...current,[field]:value}))}/>)}</div>
           </SettingsSection>
@@ -123,7 +129,7 @@ function sectionForField(field){
   if(["business_name","legal_business_name","business_email","phone","service_area","address"].includes(field))return"Business Profile";
   if(["website","google_review_url","facebook_review_url","other_review_url"].includes(field))return"Website";
   if(/proposal|invoice|deposit|payment|tax|currency|balance/.test(field))return"Documents & Payments";
-  if(/equipment|staff|warning|buffer|delivery/.test(field))return"Operations";
+  if(/equipment|staff|warning|buffer|delivery|planning|creative/.test(field))return"Operations";
   return"Advanced";
 }
 function sectionDescription(section){return({["Business Profile"]:"Core business identity and contact information.",Operations:"Timing buffers, equipment, staffing, and delivery defaults.",Website:"Public website and review destinations.",Advanced:"System defaults and assignment behavior."})[section]||"";}

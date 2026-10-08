@@ -25,7 +25,7 @@ import { getInvoice } from "../services/invoice-service.js";
 import { createPaymentSession, publicPaymentOptions } from "../services/payment-service.js";
 import { applyBookingConfirmationPolicy } from "../services/payment-reconciliation-service.js";
 import { getProposal, proposalPdfBuffer, proposalPreviewHtml, userDocumentFilename } from "../services/proposal-service.js";
-import { publicCreativeApproval, respondToCreativeApproval } from "../services/creative-approval-service.js";
+import { publicCreativeApproval, publicCreativeProof, respondToCreativeApproval } from "../services/creative-approval-service.js";
 import { getStorageProvider } from "../services/storage-service.js";
 import { publicDelivery } from "../services/field-operations-service.js";
 import {
@@ -34,6 +34,7 @@ import {
   publicSitePayload
 } from "../services/website-cms-service.js";
 
+import { publicPlanningRouter } from "./event-planning.js";
 export const publicRouter = Router();
 publicRouter.use('/staging',(_req,_res,next)=>isStaging()?next():next(new AppError('Staging routes are unavailable in this environment.',404,'NOT_FOUND')));
 
@@ -44,6 +45,7 @@ publicRouter.use(rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 }));
+publicRouter.use("/planning",publicPlanningRouter);
 publicRouter.use('/contracts', publicContractsRouter);
 publicRouter.use('/workspaces', publicWorkspaceRouter);
 
@@ -171,17 +173,23 @@ publicRouter.get("/delivery/:token", asyncHandler(async (req, res) => {
 }));
 
 publicRouter.get("/approvals/:token", asyncHandler(async (req, res) => {
-  res.json(await publicCreativeApproval(req.params.token));
+  res.set({"Cache-Control":"private, no-store","Referrer-Policy":"no-referrer"}).json(await publicCreativeApproval(req.params.token));
+}));
+
+publicRouter.get("/approvals/:token/proof", asyncHandler(async (req,res) => {
+  const file = await publicCreativeProof(req.params.token);
+  res.set({"Cache-Control":"private, no-store","Referrer-Policy":"no-referrer","Content-Security-Policy":"sandbox"}).type(file.mime_type).attachment(file.filename).send(await getStorageProvider().get(file.storage_key));
 }));
 
 publicRouter.post("/approvals/:token/respond", asyncHandler(async (req, res) => {
   const body = z.object({
     action: z.enum(["approve", "request_changes"]),
-    name: z.string().trim().min(2).max(160).optional(),
-    email: z.string().trim().email().max(160).optional(),
+    version: z.number().int().positive(),
+    name: z.string().trim().min(2).max(160),
+    email: z.string().trim().email().max(160),
     notes: z.string().trim().max(3000).optional()
   }).parse(req.body);
-  res.json(await respondToCreativeApproval(req.params.token, body));
+  res.json(await respondToCreativeApproval(req.params.token, body, req));
 }));
 
 publicRouter.get("/proposals/:token", asyncHandler(async (req, res) => {

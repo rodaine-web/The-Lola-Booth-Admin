@@ -3,11 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pool } from "./pool.js";
 import { logger } from "../config/logger.js";
+import { assertDatabaseIdentity } from "../config/database-identity.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.resolve(__dirname, "../../migrations");
 
 async function migrate() {
+  // Validate the hosted target before any schema write, including startup migrations.
+  await assertDatabaseIdentity(pool);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       filename TEXT PRIMARY KEY,

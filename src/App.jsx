@@ -62,6 +62,9 @@ function PrivateRoute({ children }) {
 }
 
 const ClientWorkspace = lazy(() => import("./pages/ClientWorkspace.jsx"));
+const PublicEventPlanning = lazy(() => import("./pages/PublicEventPlanning.jsx"));
+const Backdrops = lazy(() => import("./pages/Backdrops.jsx"));
+const PublicCreativeApproval = lazy(() => import("./pages/PublicCreativeApproval.jsx"));
 const PublicContract = lazy(() => import("./pages/PublicContract.jsx"));
 
 export default function App() {
@@ -73,7 +76,9 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
       <Route path="/client/:token" element={<ClientWorkspace />} />
-      <Route path="/contract/:token" element={<PublicContract />} />
+      <Route path="/planning/:token" element={<PublicEventPlanning />} />
+      <Route path="/approvals/:token" element={<PublicCreativeApproval />} />
+          <Route path="/contract/:token" element={<PublicContract />} />
       <Route path="/proposal/:token" element={<PublicProposal />} />
       <Route path="/receipt/:token/:id" element={<PublicReceipt />} />
       <Route path="/pay" element={<InvoiceLookup />} />
@@ -141,6 +146,7 @@ export default function App() {
         <Route path="system/audit-log" element={<AuditLog/>} />
         <Route path="system/data-review" element={<DataReview/>}/>
         <Route path="system/proposal-templates" element={<ProposalTemplates />} />
+        <Route path="catalog/backdrops" element={<Backdrops />} />
         <Route path="system/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={

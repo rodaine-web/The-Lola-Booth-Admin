@@ -1,0 +1,22 @@
+/* Scoped to Layout: no variables or classes are applied to the document root. */
+.admin-appearance{min-height:100vh}.admin-appearance .lola-app-shell,.admin-appearance .lola-workspace,.admin-appearance .lola-page-stage{background:var(--admin-background,#faf8f4)}
+.admin-appearance .lola-sidebar{background:#101112!important;color:#fff}
+.appearance-settings fieldset{border:1px solid var(--line);border-radius:8px;margin:18px 0;padding:16px}.appearance-settings legend{font-weight:600;padding:0 8px}.appearance-radio{display:flex;align-items:center;gap:10px;margin:10px 0}.appearance-radio input{width:auto}.appearance-swatches{display:flex;gap:4px}.appearance-swatches i{width:20px;height:20px;border-radius:50%;border:1px solid #777}.appearance-settings input[type=color]{width:70px;min-height:44px}.appearance-preview{display:grid;grid-template-columns:1fr 1fr;gap:24px}.admin-appearance .insight-bars i:after{background:var(--bar-color,var(--chart-0,#a58342))}
+.admin-night{--admin-background:#111827!important;--night-surface:#1e293b;--night-ink:#e8edf5;--night-muted:#b8c5d8}
+.admin-appearance.admin-night .lola-app-shell{--ink:var(--night-ink);--lola-text:var(--night-ink);--muted:var(--night-muted);--lola-muted:var(--night-muted);--line:#475569;--lola-border:#475569;--ivory:var(--night-surface);color:var(--night-ink);color-scheme:dark}
+.admin-appearance.admin-night .lola-app-shell :is(.panel,.settings-card,.record-card,.insight-panel,.workspace-metric,.metric,.record-stat,.dashboard-kpi-card,.lola-topbar,.settings-content,.table-wrap,.reports-kpi,.insight-ring>div){background:var(--night-surface);border-color:#475569;color:var(--night-ink)}
+.admin-appearance.admin-night .lola-page-stage :is(h1,h2,h3,label,td,strong,.lede,.insight-note,.insight-empty,.record-subline,.record-table-summary){color:var(--night-ink)}
+.admin-appearance.admin-night .lola-app-shell :is(input,select,textarea){background:#0f172a;color:var(--night-ink);border-color:#64748b}
+.admin-appearance.admin-night .lola-app-shell :is(th,.lola-search,.settings-nav button,.workspace-tabs button,.lola-status-tabs button){background:#263449;color:var(--night-ink);border-color:#64748b}
+.admin-appearance.admin-night .lola-app-shell :is(td,th){border-color:#475569}.admin-appearance.admin-night .lola-app-shell tr:hover td{background:#263449}.admin-appearance.admin-night .lola-page-stage a{color:#e0bb76}.admin-appearance.admin-night .lola-app-shell :is(.lola-user-chip strong,.lola-user-chip small,.lola-search input){color:var(--night-ink)}
+.admin-appearance.admin-night .lola-app-shell .insight-ring:after{background:var(--night-surface)}
+@media(max-width:640px){.appearance-preview{grid-template-columns:1fr}.appearance-settings .button-row{flex-wrap:wrap}}
+
+.admin-appearance .lola-page-stage .record-module{background:var(--admin-background,#faf8f4)!important}
+.admin-appearance.admin-night .lola-page-stage .record-module :is(h1,h2,h3){color:var(--night-ink)!important}
+.admin-appearance.admin-night .lola-page-stage :is(.record-panel,.record-metrics article,.record-filter-bar,.record-columns>div,.insight-panel,.campaign-card,.campaign-stats article,.settings-card,.lola-list-toolbar,.lola-filter-drawer,.record-module>.toolbar,.reports-kpi-grid article){background:var(--night-surface)!important;border-color:#475569;color:var(--night-ink)}
+.admin-appearance.admin-night .lola-page-stage :is(input,select,textarea){background:#0f172a!important;color:var(--night-ink)!important;border-color:#64748b}
+.admin-appearance.admin-night .lola-page-stage :is(th,.record-columns summary,.record-panel button){background:#263449!important;color:var(--night-ink)!important;border-color:#64748b}
+.admin-appearance.admin-night .lola-page-stage :is(.lede,.record-metrics span,.record-scope,.record-muted,.record-activity small,.record-subline,small){color:var(--night-muted)}
+.admin-appearance.admin-night .lola-page-stage .insight-ring>div{background:var(--night-surface)}
+.admin-appearance .record-bar i{background:var(--chart-0,#a58342)}

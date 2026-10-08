@@ -91,7 +91,7 @@ test("frontend adds operations tab and attendant mobile experience without expos
   assert.match(app, /\/my-events/);
   assert.match(app, /roles\?\.includes\("ATTENDANT"\)/);
   assert.match(app, /!\w+\.roles\?\.some\(\(role\) => \["OWNER", "ADMIN", "SUPER_ADMIN", "EVENT_MANAGER"\]\.includes\(role\)\)/);
-  assert.match(eventDetail, /const tabs = \["Overview", "Timeline", "Team & Equipment", "Checklist"/);
+  assert.match(eventDetail, /const tabs = \["Overview", "Client Planning", "Timeline", "Team & Equipment", "Checklist", "Design & Creative"/);
   assert.match(eventDetail, /Apply Checklist Template/);
   assert.match(eventDetail, /Download Run Sheet/);
   assert.match(myEvents, /function MyEventsShell/);

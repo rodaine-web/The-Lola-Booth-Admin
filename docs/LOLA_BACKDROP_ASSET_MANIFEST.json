@@ -1,0 +1,72 @@
+[
+  {
+    "name": "LOLA Ivory",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Midnight",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Champagne Glow",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Silver Luxe",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Modern Arch",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Garden Romance",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Blush",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Emerald Luxe",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Celebration",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  },
+  {
+    "name": "Studio White",
+    "file": null,
+    "asset_status": "AWAITING_APPROVED_FILE",
+    "inventory_status": "AWAITING_ACTUAL_STOCK",
+    "catalog_status": "INACTIVE"
+  }
+]

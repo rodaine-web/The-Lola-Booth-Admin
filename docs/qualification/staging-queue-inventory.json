@@ -1,0 +1,42 @@
+[
+  {
+    "table": "communications",
+    "status": "CANCELLED",
+    "count": 1
+  },
+  {
+    "table": "communications",
+    "status": "DRAFT",
+    "count": 1
+  },
+  {
+    "table": "communications",
+    "status": "FAILED",
+    "count": 4
+  },
+  {
+    "table": "communications",
+    "status": "SCHEDULED",
+    "count": 5
+  },
+  {
+    "table": "communications",
+    "status": "SENT",
+    "count": 12
+  },
+  {
+    "table": "communications",
+    "status": "SENT_TO_PROVIDER",
+    "count": 51
+  },
+  {
+    "table": "automation_jobs",
+    "status": "COMPLETED",
+    "count": 14
+  },
+  {
+    "table": "integration_jobs",
+    "status": "QUEUED",
+    "count": 72
+  }
+]

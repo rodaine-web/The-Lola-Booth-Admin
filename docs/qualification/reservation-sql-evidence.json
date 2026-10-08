@@ -1,0 +1,38 @@
+[
+  {
+    "check": "concurrent holds: exactly one winner",
+    "status": "PASS"
+  },
+  {
+    "check": "expiry frees physical capacity",
+    "status": "PASS"
+  },
+  {
+    "check": "equipment confirmation transaction",
+    "status": "PASS"
+  },
+  {
+    "check": "reschedule conflict rollback",
+    "status": "PASS"
+  },
+  {
+    "check": "reserved equipment maintenance denial",
+    "status": "PASS"
+  },
+  {
+    "check": "cancellation releases equipment",
+    "status": "PASS"
+  },
+  {
+    "check": "backdrop overlapping stock reduction denial",
+    "status": "PASS"
+  },
+  {
+    "check": "reserved backdrop maintenance denial",
+    "status": "PASS"
+  },
+  {
+    "check": "accepted quote terms immutable",
+    "status": "PASS"
+  }
+]

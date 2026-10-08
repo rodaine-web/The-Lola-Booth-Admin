@@ -1,3 +1,6 @@
+import EventCreativePanel from "../components/EventCreativePanel.jsx";
+import BookingHoldPanel from '../components/BookingHoldPanel.jsx';
+import EventPlanningPanel from "../components/EventPlanningPanel.jsx";
 import ExperienceStrip from "../components/ExperienceStrip.jsx";
 import { TabNavigation, MetricCard as Metric, DetailSection as Panel } from "../components/WorkspaceUI.jsx";
 import { GALLERY_ENABLED } from "../utils/features.js";
@@ -10,7 +13,7 @@ import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 
-const tabs = ["Overview", "Timeline", "Team & Equipment", "Checklist", "Creative", ...(GALLERY_ENABLED ? ["Gallery"] : []), "Finance", "Communications", "Activity"];
+const tabs = ["Overview", "Client Planning", "Timeline", "Team & Equipment", "Checklist", "Design & Creative", ...(GALLERY_ENABLED ? ["Gallery"] : []), "Finance", "Communications", "Activity"];
 const sectionGroups = {
   "Team & Equipment": ["Staff", "Equipment"],
   "Finance": ["Finance", "Proposals", "Invoices"],
@@ -141,6 +144,8 @@ export default function EventDetail() {
 
       </>}
 
+      {tab === 'Overview' && <BookingHoldPanel event={event} equipment={equipmentOptions} onUpdated={load}/>}
+      {tab === "Client Planning" && <EventPlanningPanel eventId={id} onUpdated={load}/>}
       {tab === "Overview" && (<><ExperienceStrip items={event.experiences || (event.experience_name?[{name:event.experience_name}]:[])}/><details className="event-advanced-details"><summary>Venue, creative & event notes</summary>
         <section className="detail-grid">
           <Panel title="Event Information">
@@ -169,7 +174,7 @@ export default function EventDetail() {
         </section></details></>
       )}
 
-      {["Timeline", "Checklist", "Creative", "Gallery", "Overview"].includes(tab) && (
+      {["Timeline", "Checklist", "Design & Creative", "Gallery", "Overview"].includes(tab) && (
         <section className="detail-grid">
           {tab === "Checklist" && <Panel title="Readiness">
             <div className="readiness-score">
@@ -216,13 +221,13 @@ export default function EventDetail() {
               </div>
             ))}
           </Panel>}
-          {tab === "Creative" && <Panel title="Creative">
+          {tab === "Design & Creative" && <><EventCreativePanel event={event} onUpdated={load}/><Panel title="Internal creative notes">
             <select value={creative.approval_status} onChange={(e) => setCreative((c) => ({ ...c, approval_status: e.target.value }))}>{["NOT_STARTED", "IN_PROGRESS", "AWAITING_CLIENT", "APPROVED", "READY"].map((status) => <option key={status}>{status}</option>)}</select>
             <input value={creative.backdrop_selection} onChange={(e) => setCreative((c) => ({ ...c, backdrop_selection: e.target.value }))} placeholder="Backdrop selection" />
             <input value={creative.overlay_template} onChange={(e) => setCreative((c) => ({ ...c, overlay_template: e.target.value }))} placeholder="Overlay/template" />
             <textarea value={creative.special_design_instructions} onChange={(e) => setCreative((c) => ({ ...c, special_design_instructions: e.target.value }))} placeholder="Special design instructions" />
             <button className="primary-action" onClick={() => action(() => api.patch(`/events/${id}/creative`, creative), "Creative updated.")}>Save Creative</button>
-          </Panel>}
+          </Panel></>}
           {tab === "Timeline" && <Panel title="Incidents">
             <div className="inline-form">
               <select value={incident.quick_issue} onChange={(e) => setIncident((c) => ({ ...c, quick_issue: e.target.value }))}>{["Printer Offline", "Camera Issue", "Lighting Issue", "Internet Issue", "Software/App Issue", "360 Motor Issue", "Audio Guestbook Issue", "Other"].map((item) => <option key={item}>{item}</option>)}</select>

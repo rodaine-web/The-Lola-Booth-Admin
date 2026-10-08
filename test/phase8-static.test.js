@@ -119,7 +119,7 @@ test("frontend adds integrations and communications workflows without redesignin
   assert.match(integrationCatalog, /status=initiated\?\'PENDING_APPROVAL\':\'NOT_CONFIGURED\'/);
   assert.match(integrationCatalog, /mode=initiated\?\'SETUP_STARTED\':\'DISABLED\'/);
   assert.match(integrationCatalog, /No LinkedIn setup has been initiated/);
-  assert.match(communications, /<h2>Templates<\/h2>/);
+  assert.match(communications, /<RecordTable title="Templates"/);
   assert.match(communications, /Automations/);
   assert.match(communications, /Process Due Jobs/);
 });
@@ -139,5 +139,6 @@ test("dashboard and analytics include Phase 8 source quality signals", () => {
   assert.match(dashboard, /average_first_response_time/);
   assert.match(dashboard, /failed_integration_events/);
   assert.match(adminRoutes, /campaignPerformance/);
-  assert.match(analytics, /Lead Source Performance/);
+  assert.match(analytics, /Lead Source Breakdown/);
+  assert.match(analytics, /data\?\.leadSourcePerformance/);
 });

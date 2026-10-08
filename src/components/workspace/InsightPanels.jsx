@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom';
 import { CalendarDays, FileText, Mail, CheckCircle2 } from 'lucide-react';
 import { businessToday, formatDateOnly, formatMoney, labelize } from '../../utils/display.js';
 
-export const chartColours = ['#a58342', '#c5a66c', '#dbc59b', '#688c80', '#8ab6c3', '#81749b'];
+import {chartColours} from '../../../shared/admin-appearance.js';
+export {chartColours};
 export const rowName = row => row.name || [row.first_name, row.last_name].filter(Boolean).join(' ') || row.title || row.event_name || row.proposal_number || row.invoice_number || row.rendered_subject || row.recipient || row.reference_number || 'Record';
 export function groupRecords(rows, field) {
   return Object.entries(rows.reduce((result, row) => {
@@ -20,7 +21,7 @@ export function EmptyInsight({ children = 'No activity recorded in this view.' }
 export function Bars({ data = [], vertical = false, percent = false }) {
   const values = data.slice(0, 6), maximum = Math.max(1, ...values.map(item => Number(item.value) || 0)), total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
   if (!values.length) return <EmptyInsight />;
-  return <div className={vertical ? 'insight-bars-vertical' : 'insight-bars'}>{values.map((item, index) => <div key={item.name}><span>{item.name}</span><i style={vertical ? { height: `${Math.max(2, item.value / maximum * 85)}px`, background: chartColours[index % chartColours.length] } : { '--bar-size': `${item.value / maximum * 100}%` }} /><strong>{percent ? `${total ? Math.round(item.value / total * 100) : 0}%` : item.value}</strong></div>)}</div>;
+  return <div className={vertical ? 'insight-bars-vertical' : 'insight-bars'}>{values.map((item, index) => <div key={item.name}><span>{item.name}</span><i style={vertical ? { height: `${Math.max(2, item.value / maximum * 85)}px`, background: chartColours[index % chartColours.length] } : { '--bar-size': `${item.value / maximum * 100}%`, '--bar-color': chartColours[index % chartColours.length] }} /><strong>{percent ? `${total ? Math.round(item.value / total * 100) : 0}%` : item.value}</strong></div>)}</div>;
 }
 export function Ring({ data = [], centre, label = 'Total', money = false }) {
   const values = data.filter(item => Number(item.value) > 0), total = data.reduce((sum, item) => sum + Number(item.value), 0);

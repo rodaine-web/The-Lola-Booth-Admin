@@ -8,6 +8,7 @@ import { AppError, notFound } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { cancelJobsForEntity, triggerAutomations } from "./automation-service.js";
 import { createNotification } from "./notification-service.js";
+import {requiredCreativeComponents,creativeCoverage} from '../../../shared/event-planning.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logoPath = path.resolve(__dirname, "../../../public/brand/LOLA_Primary_Dark_Transparent.png");
@@ -51,7 +52,7 @@ export async function getEventOperations(eventId, user = null) {
   await assertEventAccess(user, eventId);
   const event = await eventHeader(eventId);
   if (!event) throw notFound("Event");
-  const [staff, equipment, contacts, checklists, creative, incidents, notes, galleries, activity] = await Promise.all([
+  const [staff, equipment, contacts, checklists, creative, incidents, notes, galleries, activity, planning, approvals] = await Promise.all([
     staffRows(eventId),
     equipmentRows(eventId),
     query("SELECT * FROM event_contacts WHERE event_id=$1 AND deleted_at IS NULL ORDER BY is_primary DESC, role, created_at", [eventId]),
@@ -60,9 +61,17 @@ export async function getEventOperations(eventId, user = null) {
     query("SELECT * FROM event_incidents WHERE event_id=$1 AND deleted_at IS NULL ORDER BY severity DESC, occurred_at DESC", [eventId]),
     query("SELECT * FROM event_notes WHERE event_id=$1 AND deleted_at IS NULL ORDER BY pinned DESC, created_at DESC", [eventId]),
     query("SELECT * FROM galleries WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [eventId]),
-    query("SELECT * FROM activities WHERE entity_type='event' AND entity_id=$1 ORDER BY created_at DESC LIMIT 40", [eventId])
+    query("SELECT * FROM activities WHERE entity_type='event' AND entity_id=$1 ORDER BY created_at DESC LIMIT 40", [eventId]),
+    query("SELECT p.status,p.submitted_at,p.requirements,p.backdrop_id,p.backdrop_path,p.backdrop_review_status,p.change_requests,p.planning_due_at,p.creative_due_at,(p.backdrop_path='CUSTOM' OR EXISTS(SELECT 1 FROM backdrops b WHERE b.id=p.backdrop_id AND b.premium AND b.upgrade_price>0)) AS chargeable_backdrop FROM event_planning p WHERE p.event_id=$1",[eventId]),
+    query("SELECT status,version,approved_version,metadata FROM creative_approvals WHERE event_id=$1 AND deleted_at IS NULL AND status NOT IN ('REVOKED','CANCELLED','SUPERSEDED')",[eventId])
   ]);
-  const readiness = await readinessScore(event, { staff: staff.rows, equipment: equipment.rows, checklists: checklists.rows, creative: creative.rows[0], incidents: incidents.rows, contacts: contacts.rows });
+  const experiences=(await query('SELECT x.id,x.name,x.staff_required FROM event_experiences ee JOIN experiences x ON x.id=ee.experience_id WHERE ee.event_id=$1 UNION SELECT x.id,x.name,x.staff_required FROM events e JOIN experiences x ON x.id=e.experience_id WHERE e.id=$1',[eventId])).rows;
+  const componentCoverage=creativeCoverage(requiredCreativeComponents(experiences,planning.rows[0]?.requirements?.includes('print_design')),approvals.rows);
+  if(planning.rows[0]?.chargeable_backdrop){
+    try{await (await import('./backdrop-quote-service.js')).assertBackdropPayment(eventId,event.client_id);planning.rows[0].payment_qualified=true;}
+    catch(error){if(error.code!=='BACKDROP_PAYMENT_REQUIRED')throw error;planning.rows[0].payment_qualified=false;}
+  }
+  const readiness = await readinessScore(event, { staff: staff.rows, equipment: equipment.rows, checklists: checklists.rows, creative: creative.rows[0], incidents: incidents.rows, contacts: contacts.rows, planning:planning.rows[0],componentCoverage,requiredStaff:Math.max(1,experiences.reduce((sum,x)=>sum+Number(x.staff_required||1),0)) });
   const payload = {
     event,
     readiness,
@@ -160,13 +169,17 @@ async function readinessScore(event, data) {
   add("VENUE", "Access instructions", Boolean(event.access_instructions || event.load_in_instructions || event.parking_loading_instructions), { severity: "WARNING" });
   add("VENUE", "Power requirements", Boolean(event.power_requirements), { severity: "WARNING" });
   add("STAFF", "Lead attendant assigned", data.staff.some((staff) => staff.lead_attendant || staff.assignment_role === "LEAD_ATTENDANT"), { severity: "CRITICAL" });
-  add("STAFF", "Required staff assigned", data.staff.length >= 1, { severity: "CRITICAL" });
+  add("STAFF", "Required staff assigned", data.staff.length >= (data.requiredStaff||1), { severity: "CRITICAL" });
   add("STAFF", "Staff acknowledged", data.staff.length > 0 && data.staff.every((staff) => staff.acknowledgement_status === "ACKNOWLEDGED"), { severity: "WARNING" });
   add("EQUIPMENT", "Primary booth assigned", data.equipment.some((item) => /booth|360|vogue|audio/i.test(`${item.category} ${item.name}`)), { severity: "CRITICAL" });
   add("EQUIPMENT", "Printer assigned", data.equipment.some((item) => /printer/i.test(`${item.category} ${item.name}`)), { notRequired: /digital|audio/i.test(event.experience_name || ""), severity: "WARNING" });
   add("EQUIPMENT", "Equipment checked out", data.equipment.length > 0 && data.equipment.every((item) => ["CHECKED_OUT", "IN_TRANSIT", "ON_SITE", "RETURNED"].includes(item.lifecycle_status)), { severity: "CRITICAL" });
-  add("CREATIVE", "Overlay/template approved", ["APPROVED", "READY"].includes(data.creative?.approval_status), { severity: "WARNING" });
-  add("CREATIVE", "Backdrop confirmed", Boolean(data.creative?.backdrop_selection || event.backdrop), { severity: "WARNING" });
+  const planningRequirements = data.planning?.requirements || [];
+  add("CLIENT", "Event planning submitted", Boolean(data.planning?.submitted_at && !Object.keys(data.planning.change_requests||{}).length), {severity:"WARNING"});
+  for(const item of data.componentCoverage||[])add('CREATIVE',`${item.experienceName}: ${item.component.replaceAll('_',' ')} approved`,item.complete,{severity:'CRITICAL'});
+  if(!data.componentCoverage?.length)add('CREATIVE','Creative requirements established',planningRequirements.length>0,{notRequired:planningRequirements.length>0,severity:'WARNING'});
+  add("CREATIVE", "Backdrop confirmed", Boolean((data.planning?.backdrop_id || data.planning?.backdrop_path) && data.planning.backdrop_review_status==='CONFIRMED'), {notRequired:planningRequirements.length>0&&!planningRequirements.includes("backdrop"),severity:"WARNING"});
+  add('FINANCE','Chargeable backdrop acceptance and net payment',data.planning?.payment_qualified===true,{notRequired:!data.planning?.chargeable_backdrop,severity:'CRITICAL'});
   add("FINANCE", "Balance status reviewed", Boolean(event.payment_status), { severity: "INFO" });
   add("OPERATIONS", "Setup time confirmed", Boolean(event.setup_time), { severity: "CRITICAL" });
   add("OPERATIONS", "Breakdown time confirmed", Boolean(event.breakdown_time), { severity: "WARNING" });

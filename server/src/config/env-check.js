@@ -18,7 +18,7 @@ function validateEntry(item) {
     return "PRESENT";
   }
   if (item.secret && (value.length < 32 || /development|example|change.?me|changeme|replace-with/i.test(value))) return "INVALID FORMAT";
-  if (item.key.includes("URL") || item.key.includes("ORIGIN")) {
+  if (item.key.includes("URL") || item.key.includes("ORIGIN") || item.key.endsWith("REDIRECT_URI")) {
     if (env.nodeEnv === "production" && !value.startsWith("https://")) return "INVALID FORMAT";
     if (!/^https?:\/\//.test(value)) return "INVALID FORMAT";
   }

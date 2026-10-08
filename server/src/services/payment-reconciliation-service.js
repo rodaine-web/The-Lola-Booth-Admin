@@ -1,7 +1,9 @@
+import {autoPlanningInvitation} from "./event-planning-service.js";
 import {convertPaidCampaignLead} from './campaign-lead-service.js';
 import { query, transaction } from "../db/pool.js";
 import { recordActivity } from "./activity-service.js";
 import { writeAudit } from "./audit-service.js";
+import {lockBookingReservations,confirmHeldBooking} from './booking-hold-service.js';
 
 const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 
@@ -79,10 +81,12 @@ export async function reconcileEventFinance(client, eventId) {
 
 export async function applyBookingConfirmationPolicy(eventId) {
   if (!eventId) return null;
+  return transaction(async () => {
+  await lockBookingReservations();
   const settings = await query("SELECT booking_confirmation_policy FROM business_settings LIMIT 1");
   const policy = settings.rows[0]?.booking_confirmation_policy || "DEPOSIT_PAID";
   if (policy === "MANUAL") return null;
-  const event = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [eventId]);
+  const event = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [eventId]);
   if (!event.rows[0] || event.rows[0].status === "CANCELLED") return null;
   const finance = await query(
     `SELECT
@@ -103,9 +107,14 @@ export async function applyBookingConfirmationPolicy(eventId) {
   const bookingDepositRequired = Number(booking.rows[0]?.deposit_required || 0);
   const depositRequired = invoiceDepositRequired > 0 ? invoiceDepositRequired : bookingDepositRequired;
   const depositSatisfied = depositRequired > 0 ? paid >= depositRequired : paid > 0;
-  const shouldConfirm = policy === "PROPOSAL_ACCEPTED" || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
+  const accepted = policy==='PROPOSAL_ACCEPTED' ? (await query("SELECT 1 FROM proposals WHERE event_id=$1 AND status IN ('ACCEPTED','CONVERTED') AND deleted_at IS NULL LIMIT 1",[eventId])).rows.length>0 : false;
+  const shouldConfirm = (policy === "PROPOSAL_ACCEPTED" && accepted) || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
   if (!shouldConfirm || !["TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
-  const updated = await query("UPDATE events SET status='CONFIRMED', updated_at=now() WHERE id=$1 RETURNING *", [eventId]);
+  const held=(await query("SELECT id FROM booking_holds WHERE event_id=$1 ORDER BY (status='ACTIVE') DESC,created_at DESC,id DESC LIMIT 1",[eventId])).rows[0];
+  // An expired checkout must not silently consume capacity after someone else reserved it.
+  const updated = held ? {rows:[await confirmHeldBooking(eventId,held.id)]} : await query("UPDATE events SET status='CONFIRMED', updated_at=now() WHERE id=$1 RETURNING *", [eventId]);
   await recordActivity({ entityType: "event", entityId: eventId, action: "booking_auto_confirmed", summary: `Booking auto-confirmed by ${policy} policy` });
+  await autoPlanningInvitation(eventId);
   return updated.rows[0];
+  });
 }

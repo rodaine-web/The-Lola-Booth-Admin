@@ -4,6 +4,35 @@ import { grantUsable } from './gallery-policy.js';
 
 // Recheck after claiming work. A provider request already in flight cannot be recalled.
 export async function dispatchDecision(client, message) {
+  if(message.trigger_key==='PLANNING_RECURRING_REMINDER'){
+    if(process.env.PLANNING_REMINDERS_ENABLED!=='true')return 'CANCELLED';
+    const allowed=await client.query(`SELECT 1 FROM planning_reminder_ledger l JOIN events e ON e.id=l.event_id
+      JOIN clients c ON c.id=e.client_id WHERE l.communication_id=$1 AND e.id=$2 AND c.id=$3
+      AND e.deleted_at IS NULL AND c.deleted_at IS NULL AND e.status IN ('CONFIRMED','PREPARING','READY') AND e.event_date>=current_date
+      AND ((l.kind='PLANNING' AND EXISTS(SELECT 1 FROM event_planning p WHERE p.id=l.entity_id AND p.event_id=e.id AND p.client_id=c.id
+        AND p.token_hash=l.grant_version AND p.revoked_at IS NULL AND p.expires_at>now() AND p.submitted_at IS NULL))
+       OR (l.kind='CREATIVE' AND EXISTS(SELECT 1 FROM creative_approvals a WHERE a.id=l.entity_id AND a.event_id=e.id AND a.client_id=c.id
+        AND a.version::text=l.grant_version AND a.deleted_at IS NULL AND a.expires_at>now() AND a.status IN ('PENDING_APPROVAL','VIEWED'))))`,[message.id,message.event_id,message.client_id]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+  if (message.trigger_key === 'PLANNING_INVITATION') {
+    const [prefix,planningId,tokenHash]=String(message.idempotency_key||'').split(':');
+    if(prefix!=='planning-invitation'||!planningId||!tokenHash)return 'CANCELLED';
+    const allowed=await client.query(`SELECT 1 FROM event_planning p JOIN events e ON e.id=p.event_id
+      JOIN clients c ON c.id=p.client_id AND c.id=e.client_id
+      WHERE p.id=$1 AND p.token_hash=$2 AND p.invitation_communication_id=$3
+      AND p.revoked_at IS NULL AND p.expires_at>now() AND e.deleted_at IS NULL AND c.deleted_at IS NULL
+      AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')`,[planningId,tokenHash,message.id]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+  if (message.trigger_key === 'APPROVAL_REQUESTED') {
+    const allowed=await client.query(`SELECT 1 FROM creative_approvals a JOIN events e ON e.id=a.event_id
+      JOIN clients c ON c.id=a.client_id AND c.id=e.client_id
+      WHERE a.communication_id=$1 AND a.deleted_at IS NULL AND a.status IN ('PENDING_APPROVAL','VIEWED')
+      AND a.expires_at>now() AND e.deleted_at IS NULL AND c.deleted_at IS NULL
+      AND e.status NOT IN ('CANCELLED','COMPLETED')`,[message.id]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
   if (message.trigger_key === 'GALLERY_DELIVERY' && message.idempotency_key?.startsWith('gallery-delivery:')) {
     const keyId = message.idempotency_key.split(':')[1];
     const grant = (await client.query(`SELECT k.*,a.status AS album_status,a.expires_at AS album_expires_at,

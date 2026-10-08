@@ -34,8 +34,8 @@ export async function publicWorkspace(token){
  // Lock the access grant while assembling its explicitly scoped records.
  return transaction(async()=>{
   const workspace=(await query('SELECT * FROM client_workspaces WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() FOR SHARE',[hashContractValue(token)])).rows[0];
-  if(!workspace)throw new AppError('This client workspace link is unavailable or expired.',404,'NOT_FOUND');
-  const proposal=(await query(`SELECT p.id,p.proposal_number,p.status,p.total,p.secure_token,
+  if(!workspace)return planningWorkspace(token);
+  const proposal=(await query(`SELECT p.id,p.event_id,p.client_id,p.proposal_number,p.status,p.total,p.secure_token,
     c.name AS client_name,e.event_name,e.event_date,e.venue_name FROM proposals p LEFT JOIN clients c ON c.id=p.client_id
     LEFT JOIN events e ON e.id=p.event_id WHERE p.id=$1 AND p.deleted_at IS NULL`,[workspace.proposal_id])).rows[0];
   if(!proposal)throw new AppError('This client workspace is unavailable.',404,'NOT_FOUND');
@@ -45,6 +45,35 @@ export async function publicWorkspace(token){
   }
   const invoices=(await query("SELECT id,proposal_id,invoice_number,status,total,amount_outstanding,balance_due,amount_paid,due_date,secure_token,token_revoked_at,token_expires_at FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') ORDER BY created_at DESC",[proposal.id])).rows;
   const payments=(await query("SELECT p.id,p.invoice_id,p.amount,p.status,p.payment_date FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.proposal_id=$1 AND i.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') ORDER BY p.payment_date DESC",[proposal.id])).rows;
-  return workspaceView({proposal,contracts,invoices,payments,documentOrigin:documentOrigin()});
+  return {...workspaceView({proposal,contracts,invoices,payments,documentOrigin:documentOrigin()}),journey:await eventJourney(proposal.event_id,proposal.client_id)};
  });
+}
+
+async function eventJourney(eventId,clientId){
+ if(!eventId||!clientId)return null;
+ const planning=(await query(`SELECT p.status,p.token_ciphertext FROM event_planning p JOIN events e ON e.id=p.event_id
+  WHERE p.event_id=$1 AND p.client_id=$2 AND e.client_id=$2 AND e.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED')
+   AND p.revoked_at IS NULL AND p.expires_at>now() AND p.token_hash IS NOT NULL`,[eventId,clientId])).rows[0];
+ const origin=env.clientOrigin.replace(/\/$/,'');
+ const proofs=(await query(`SELECT a.id,a.approval_type,a.status,a.version,a.public_token FROM creative_approvals a JOIN events e ON e.id=a.event_id
+  WHERE a.event_id=$1 AND a.client_id=$2 AND e.client_id=$2 AND e.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED')
+   AND a.deleted_at IS NULL AND a.expires_at>now() AND a.status IN ('PENDING_APPROVAL','VIEWED','APPROVED')`,[eventId,clientId])).rows;
+ return {planning:planning?{status:planning.status,url:`${origin}/planning/${decryptSecretJson(planning.token_ciphertext).token}`} : null,
+  creative:proofs.map(proof=>({id:proof.id,type:proof.approval_type,status:proof.status,version:proof.version,url:`${origin}/approvals/${proof.public_token}`}))};
+}
+
+async function planningWorkspace(token){
+ const grant=(await query(`SELECT p.event_id,p.client_id,c.name AS client_name,e.event_name,e.event_date,e.venue_name
+  FROM event_planning p JOIN events e ON e.id=p.event_id JOIN clients c ON c.id=p.client_id AND c.id=e.client_id
+  WHERE p.token_hash=$1 AND p.revoked_at IS NULL AND p.expires_at>now() AND e.deleted_at IS NULL AND c.deleted_at IS NULL
+   AND e.status NOT IN ('CANCELLED','COMPLETED') FOR SHARE OF p`,[hashContractValue(token)])).rows[0];
+ if(!grant)throw new AppError('This client workspace link is unavailable or expired.',404,'NOT_FOUND');
+ // Campaign bookings can enter without a proposal. Scope every record to this event and client.
+ const invoices=(await query(`SELECT id,NULL::uuid AS proposal_id,invoice_number,status,total,amount_outstanding,balance_due,amount_paid,due_date,secure_token,token_revoked_at,token_expires_at
+  FROM invoices WHERE event_id=$1 AND client_id=$2 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID')`,[grant.event_id,grant.client_id])).rows;
+ const payments=(await query(`SELECT p.id,p.invoice_id,p.amount,p.status,p.payment_date FROM payments p JOIN invoices i ON i.id=p.invoice_id
+  WHERE i.event_id=$1 AND i.client_id=$2 AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID') AND p.deleted_at IS NULL
+   AND p.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')`,[grant.event_id,grant.client_id])).rows;
+ const view=workspaceView({proposal:{...grant,id:null},invoices,payments,documentOrigin:documentOrigin()});
+ return {...view,proposal:null,journey:await eventJourney(grant.event_id,grant.client_id)};
 }

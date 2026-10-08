@@ -1,3 +1,4 @@
+import {redactProvider} from './external-provider-security.js';
 import {publicFormKind} from "./public-form-schema.js";
 import {attributionFrom,captureAttribution} from "./integration-jobs-service.js";
 import {emailIntegrationStatus} from "./integration-status.js";
@@ -43,10 +44,7 @@ function splitName(fullName = "") {
   };
 }
 
-function safePayload(payload = {}) {
-  const blocked = new Set(["access_token", "refresh_token", "token", "secret", "password", "authorization"]);
-  return Object.fromEntries(Object.entries(payload || {}).filter(([key]) => !blocked.has(String(key).toLowerCase())));
-}
+function safePayload(payload={}) { return redactProvider(payload); }
 
 function mappedValue(payload, mapping, field, fallbacks = []) {
   const providerField = mapping?.[field] || Object.entries(mapping || {}).find(([, localField]) => localField === field)?.[0];
@@ -108,7 +106,7 @@ function buildNormalizedLead({ provider, payload, mapping = {}, sourceSubtype, t
     utm_term: compact(payload.utm_term),
     landing_page_url: compact(payload.landing_page_url),
     referrer_url: compact(payload.referrer_url),
-    marketing_email_opt_in: Boolean(payload.marketing_email_opt_in),
+    marketing_email_opt_in: (payload.marketing_email_opt_in === true),
     consent_status: compact(payload.consent_status),
     consent_reference: compact(payload.consent_reference),
     raw_provider_reference: safePayload({
@@ -200,7 +198,7 @@ async function assignLead(client, normalized) {
 async function duplicateCheck(client, normalized) {
   if (normalized.provider && normalized.external_lead_id) {
     const replay = await client.query(
-      "SELECT id FROM leads WHERE provider=$1 AND external_lead_id=$2 AND deleted_at IS NULL LIMIT 1",
+      "SELECT id FROM leads WHERE provider=$1 AND external_lead_id=$2 AND deleted_at IS NULL UNION ALL SELECT l.id FROM lead_source_events s JOIN leads l ON l.id=s.lead_id WHERE s.provider=$1 AND s.external_lead_id=$2 AND l.deleted_at IS NULL LIMIT 1",
       [normalized.provider, normalized.external_lead_id]
     );
     if (replay.rows[0]) return { type: "IDEMPOTENT_REPLAY", leadId: replay.rows[0].id };
@@ -208,8 +206,8 @@ async function duplicateCheck(client, normalized) {
   const duplicates = await client.query(
     `SELECT id FROM leads
      WHERE deleted_at IS NULL AND (
-       ($1::text IS NOT NULL AND normalized_email=$1)
-       OR ($2::text IS NOT NULL AND normalized_phone=$2)
+       ($1::text IS NOT NULL AND COALESCE(normalized_email,lower(email))=$1)
+       OR ($2::text IS NOT NULL AND COALESCE(normalized_phone,NULLIF(regexp_replace(COALESCE(phone,''),'\\D','','g'),''))=$2)
      )
      ORDER BY created_at DESC LIMIT 1`,
     [normalized.normalized_email, normalized.normalized_phone]
@@ -230,15 +228,17 @@ export async function ingestProviderLead({ provider, payload, sourceSubtype, web
   }
 
   const result = await transaction(async (client) => {
+    if(['META','TIKTOK'].includes(normalizedProvider))for(const key of [normalized.normalized_email&&`social-email:${normalized.normalized_email}`,normalized.normalized_phone&&`social-phone:${normalized.normalized_phone}`,normalized.external_lead_id&&`social-id:${normalizedProvider}:${normalized.external_lead_id}`].filter(Boolean).sort())await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[key]);
     const duplicate = await duplicateCheck(client, normalized);
-    if (duplicate.type === "IDEMPOTENT_REPLAY") {
+    if (duplicate.type === "IDEMPOTENT_REPLAY" || (["META","TIKTOK"].includes(normalizedProvider)&&duplicate.leadId)) {
+      const action = duplicate.type === "IDEMPOTENT_REPLAY" ? "IDEMPOTENT_REPLAY" : "ATTACHED_TO_EXISTING";
       await captureAttribution(duplicate.leadId,payload);
       await client.query(
         `INSERT INTO lead_source_events (lead_id, webhook_event_id, provider, source_subtype, form_id, form_name, campaign_id, campaign_name, ad_set_id, ad_id, external_lead_id, status, test_mode, safe_payload, received_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'IDEMPOTENT_REPLAY',$12,$13,$14)`,
-        [duplicate.leadId, webhookEventId, normalized.provider, normalized.source_subtype, normalized.form_id, normalized.form_name, normalized.campaign_id, normalized.campaign_name, normalized.ad_set_id, normalized.ad_id, normalized.external_lead_id, normalized.test_mode, safePayload(payload), normalized.received_at]
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        [duplicate.leadId, webhookEventId, normalized.provider, normalized.source_subtype, normalized.form_id, normalized.form_name, normalized.campaign_id, normalized.campaign_name, normalized.ad_set_id, normalized.ad_id, normalized.external_lead_id, action, normalized.test_mode, safePayload(payload), normalized.received_at]
       );
-      return { action: "IDEMPOTENT_REPLAY", lead: { id: duplicate.leadId }, duplicateOf: duplicate.leadId };
+      return { action, lead: { id: duplicate.leadId }, duplicateOf: duplicate.leadId };
     }
 
     normalized.public_ack_pending=normalizedProvider==="WEBSITE";
@@ -274,16 +274,18 @@ export async function ingestProviderLead({ provider, payload, sourceSubtype, web
     return { action: duplicate.type === "UNIQUE" || duplicate.type === "TEST" ? "CREATED_LEAD" : "POSSIBLE_DUPLICATE", lead, duplicateOf: duplicate.leadId };
   });
 
-  if (result.lead?.id) {
+  if (result.lead?.id && !(result.action === "IDEMPOTENT_REPLAY" && ["META","TIKTOK"].includes(normalizedProvider))) {
     await recordActivity({
       entityType: "lead",
       entityId: result.lead.id,
       action: "lead_received",
-      summary: `Lead received from ${friendlySource(result.lead)}`,
-      metadata: { provider: normalized.provider, source_subtype: normalized.source_subtype, form_id: normalized.form_id, campaign: normalized.campaign }
+      summary: `Lead received from ${friendlySource(normalized)}`,
+      metadata: { provider: normalized.provider, source_subtype: normalized.source_subtype, form_id: normalized.form_id, campaign: normalized.campaign, campaign_id:normalized.campaign_id, ad_id:normalized.ad_id, received_at:normalized.received_at }
     });
+    if (result.action !== "ATTACHED_TO_EXISTING") {
     await logAutomationEvent({ triggerKey: "LEAD_CREATED", entityType: "lead", entityId: result.lead.id, payload: { source: normalized.provider, source_subtype: normalized.source_subtype } });
     if(!skipAutomations)await triggerAutomations({ triggerKey: "LEAD_CREATED", entityType: "lead", entityId: result.lead.id, payload: { source: normalized.provider, source_subtype: normalized.source_subtype } });
+    }
   }
   return result;
 }
