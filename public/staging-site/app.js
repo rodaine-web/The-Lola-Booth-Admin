@@ -194,7 +194,7 @@
   }
 
   function showFieldErrors(form,errors){ qsa('.field-error',form).forEach(e=>e.remove()); qsa('[aria-invalid="true"]',form).forEach(e=>e.removeAttribute('aria-invalid')); Object.entries(errors||{}).forEach(([name,msgs])=>{const f=form.elements[name]; if(f){f.setAttribute('aria-invalid','true'); const e=document.createElement('div'); e.className='field-error'; e.textContent=(msgs||[])[0]||'Please check this field.'; f.insertAdjacentElement('afterend',e);}}); }
-  qsa('form[data-lola-inquiry]').forEach(form=>form.addEventListener('submit',async e=>{
+  qsa('form[data-lola-inquiry]:not([data-multi-booking])').forEach(form=>form.addEventListener('submit',async e=>{
     e.preventDefault(); const status=qs('[data-form-status]',form); showFieldErrors(form,{});
     if(!stagingApiReady || window.LOLA_CONFIG?.formsEnabled !== true){if(status){status.className='form-status';status.textContent='Staging preview: submissions are disabled until the staging API is connected.';}return;}
     if(!form.reportValidity())return;

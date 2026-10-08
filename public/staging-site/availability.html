@@ -50,7 +50,7 @@
 }
 </script>
 
-<link href="styles.css" rel="stylesheet">
+<link href="styles.css" rel="stylesheet"><link href="booking.css" rel="stylesheet">
 
 <style>
 .booking-hero{
@@ -376,117 +376,10 @@
   <a href="availability.html" data-cms-copy="availability.016">Book Now</a>
 </div>
 
-<main data-cms-booking="page">
-
-<section class="booking-hero" data-cms-booking-section="hero">
-<div class="container">
-  <p class="eyebrow" data-cms-copy="availability.017">Booking Request</p>
-  <h1 class="display" data-cms-copy="availability.018">Check availability for your event.</h1>
-  <p class="muted" data-cms-copy="availability.019">Tell us your event date, location, guest count, and preferred experience. We will check availability and prepare a personalized quote. This form does not confirm a reservation.</p>
-
-  <div class="booking-progress" aria-label="Booking process summary">
-    <span data-cms-copy="availability.106">1. Send Request</span>
-    <span data-cms-copy="availability.107">2. Confirm Availability</span>
-    <span data-cms-copy="availability.108">3. Review Proposal</span>
-    <span data-cms-copy="availability.109">4. Pay 30% Down</span>
-    <span data-cms-copy="availability.110">5. Booking Confirmed</span>
-  </div>
-</div>
-</section>
-
-<section class="booking-main">
-<div class="container booking-layout">
-
-  <aside class="booking-intro">
-    <p class="eyebrow" data-cms-copy="availability.020">Let’s Get Started</p>
-    <h2 data-cms-copy="availability.021">Tell us what you’re planning.</h2>
-    <p data-cms-copy="availability.022">Use this form for an event booking request. For general questions, partnerships, or help with an existing booking, please use Contact instead.</p>
-
-    <div class="booking-note">
-      <strong>Important booking note</strong>
-      <p data-cms-copy="availability.023">Submitting this form is a booking request, not a confirmed reservation. Your date is secured only after the required booking documents and 30% down payment are completed.</p>
-    </div>
-
-    <div class="booking-contact">
-      <div class="booking-contact-card">
-        <strong>Email</strong>
-        <a data-site-email="true" href="mailto:info@thelolabooth.com">info@thelolabooth.com</a>
-      </div>
-      <div class="booking-contact-card">
-        <strong>Phone</strong>
-        <a data-site-phone="true" href="tel:+17732402744">(773) 240-2744</a>
-      </div>
-      <div class="booking-contact-card">
-        <strong>Not ready to book?</strong>
-        <a href="contact.html" data-cms-copy="availability.026">Ask us a question instead →</a>
-      </div>
-    </div>
-
-    <div class="booking-links">
-      <a href="experiences.html" data-cms-copy="availability.027">Compare Experiences</a>
-      <a href="packages.html" data-cms-copy="availability.028">View Packages</a>
-      <a href="faq.html" data-cms-copy="availability.029">Read FAQs</a>
-    </div>
-  </aside>
-
-  <div class="booking-form-shell">
-    <!-- Existing CMS/API integration preserved:
-         data-lola-inquiry
-         data-event-type-select
-         data-experience-select
-         data-package-select
-         data-form-status
-         existing field names
-         honeypot field
-    -->
-    <form class="form booking-form" data-lola-inquiry="true" data-form-kind="BOOKING" data-form-id="booking" novalidate="novalidate">
-
-      <section class="form-section">
-        <div class="form-section-head">
-          <p class="eyebrow" data-cms-copy="availability.030">01</p>
-          <h2 data-cms-copy="availability.031">Your Details</h2>
-          <p data-cms-copy="availability.032">Who should we contact about the event?</p>
-        </div>
-
-        <div class="form-grid">
-          <div>
-            <label for="book-first">First Name *</label>
-            <input id="book-first" maxlength="80" name="firstName" required="">
-          </div>
-
-          <div>
-            <label for="book-last">Last Name *</label>
-            <input id="book-last" maxlength="80" name="lastName" required="">
-          </div>
-
-          <div>
-            <label for="book-email">Email *</label>
-            <input id="book-email" maxlength="160" name="email" required="" type="email">
-          </div>
-
-          <div>
-            <label for="book-phone">Phone *</label>
-            <input id="book-phone" maxlength="40" name="phone" required="" type="tel">
-          </div>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="form-section-head">
-          <p class="eyebrow" data-cms-copy="availability.033">02</p>
-          <h2 data-cms-copy="availability.034">Your Event</h2>
-          <p data-cms-copy="availability.035">Give us the details we need to check availability and logistics.</p>
-        </div>
-
-        <div class="form-grid">
-          <div>
-            <label for="book-date">Event Date *</label>
-            <input id="book-date" name="eventDate" required="" type="date">
-          </div>
-
-          <div>
-            <label for="book-type">Event Type *</label>
-            <select data-event-type-select="" id="book-type" name="eventType" required="">
+<main class="lola-booking" data-cms-booking="page">
+<section class="lola-booking-intro"><div><p class="eyebrow">CHECK AVAILABILITY</p><h1>Plan Your LOLA Experience</h1><p>Tell us about your event, choose your experience(s) and add-ons. We’ll check availability and get back to you with the next steps.</p></div><div class="booking-signature">Book Your Moment<small>LET’S MAKE IT UNFORGETTABLE.</small></div></section>
+<form data-lola-inquiry data-multi-booking class="lola-booking-form">
+<section><h2><span>1</span> Event Details</h2><div class="booking-fields"><label>Event name *<input name="eventName" type="text" maxlength="240" required ></label><label>Event type *<select name="eventType" data-event-type-select required>
               <option value="">Select event type</option>
               <option>Wedding</option>
               <option>Birthday</option>
@@ -497,206 +390,14 @@
               <option>Graduation</option>
               <option>Private Event</option>
               <option>Other</option>
-            </select>
-          </div>
-
-          <div>
-            <label for="book-guests">Estimated Guest Count</label>
-            <input id="book-guests" min="1" name="guestCount" placeholder="e.g. 150" type="number">
-          </div>
-
-          <div>
-            <label for="book-start">Event Start Time</label>
-            <input id="book-start" name="eventStartTime" type="time">
-          </div>
-
-          <div>
-            <label for="book-venue">Venue Name</label>
-            <input id="book-venue" maxlength="160" name="venueName" placeholder="If known">
-          </div>
-
-          <div>
-            <label for="book-city">City *</label>
-            <input id="book-city" maxlength="100" name="city" required="">
-          </div>
-
-          <div>
-            <label for="book-state">State *</label>
-            <input id="book-state" maxlength="40" name="state" placeholder="e.g. IL" required="">
-          </div>
-
-          <div>
-            <label for="book-referral">How did you hear about us?</label>
-            <select id="book-referral" name="referralSource">
-              <option value="">Select one</option>
-              <option>Instagram</option>
-              <option>TikTok</option>
-              <option>Google</option>
-              <option>Friend / Referral</option>
-              <option>Venue / Planner</option>
-              <option>Previous Event</option>
-              <option>Other</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="form-section-head">
-          <p class="eyebrow" data-cms-copy="availability.036">03</p>
-          <h2 data-cms-copy="availability.037">Choose Your LOLA Experience</h2>
-          <p data-cms-copy="availability.038">If you are not sure which option fits your event, choose “Not sure yet” and we’ll recommend one.</p>
-        </div>
-
-        <div class="form-grid">
-          <div>
-            <label for="book-exp">Preferred Experience</label>
-            <select data-experience-select="" id="book-exp" name="preferredExperienceId">
-              <option value="">Not sure yet</option>
-            </select>
-            <div class="field-help">Choose an experience, or let us recommend one.</div>
-          </div>
-
-          <div>
-            <label for="book-package">Package</label>
-            <select data-package-select="" id="book-package" name="preferredPackageId">
-              <option value="">Not sure yet</option>
-            </select>
-            <div class="field-help">Package options continue to populate from the CMS.</div>
-          </div>
-        </div>
-
-        <div class="booking-links">
-          <a href="experiences.html" data-cms-copy="availability.039">See Experiences →</a>
-          <a href="packages.html" data-cms-copy="availability.040">Compare Packages →</a>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="form-section-head">
-          <p class="eyebrow" data-cms-copy="availability.041">04</p>
-          <h2 data-cms-copy="availability.042">Anything Else We Should Know?</h2>
-          <p data-cms-copy="availability.043">Tell us about the feel of the event, special requests, branding needs, or anything unusual.</p>
-        </div>
-
-        <div>
-          <label for="book-message">Tell us about your event</label>
-          <textarea id="book-message" maxlength="2500" name="message" placeholder="Theme, venue details, what you’re celebrating, special requests, branding needs, or anything else we should know."></textarea>
-        </div>
-      </section>
-
-      <label class="marketing-optin">
-        <input name="marketing_email_opt_in" type="checkbox">
-        I’d like occasional LOLA updates and inspiration.
-      </label>
-
-      <input aria-hidden="true" autocomplete="off" class="hp-field" name="website" tabindex="-1">
-
-      <button class="btn dark" style="margin-top:18px" type="submit">Send Booking Request →</button>
-      <div aria-live="polite" class="form-status" data-form-status=""></div>
-
-      <p class="form-help" data-cms-copy="availability.044">
-        We’ll use these details to review availability and prepare a personalized quote. Your date is not reserved until your booking is confirmed.
-      </p>
-    </form>
-  </div>
-
-</div>
-</section>
-
-<section class="booking-steps" data-cms-booking-section="steps">
-<div class="container">
-  <div class="booking-steps-head">
-    <p class="eyebrow" data-cms-copy="availability.045">What Happens Next</p>
-    <h2 data-cms-copy="availability.046">From request to confirmed.</h2>
-    <p data-cms-copy="availability.047">We keep the booking process clear so you always know what happens next.</p>
-  </div>
-
-  <div class="booking-steps-grid">
-    <article class="booking-step">
-      <span class="num" data-cms-copy="availability.111">01</span>
-      <h3 data-cms-copy="availability.048">Request submitted</h3>
-      <p data-cms-copy="availability.049">You send the event details through this form.</p>
-    </article>
-
-    <article class="booking-step">
-      <span class="num" data-cms-copy="availability.112">02</span>
-      <h3 data-cms-copy="availability.050">Availability reviewed</h3>
-      <p data-cms-copy="availability.051">We check the date, equipment, staffing, venue needs, and requested experience.</p>
-    </article>
-
-    <article class="booking-step">
-      <span class="num" data-cms-copy="availability.113">03</span>
-      <h3 data-cms-copy="availability.052">Proposal and next steps</h3>
-      <p data-cms-copy="availability.053">You receive the appropriate package, proposal, or custom recommendation.</p>
-    </article>
-
-    <article class="booking-step">
-      <span class="num" data-cms-copy="availability.114">04</span>
-      <h3 data-cms-copy="availability.054">30% down payment</h3>
-      <p data-cms-copy="availability.055">The required down payment and booking documents move the event into confirmation.</p>
-    </article>
-
-    <article class="booking-step">
-      <span class="num" data-cms-copy="availability.115">05</span>
-      <h3 data-cms-copy="availability.056">Booking confirmed</h3>
-      <p data-cms-copy="availability.057">Once confirmed, we move into creative approvals, logistics, and event preparation.</p>
-    </article>
-  </div>
-</div>
-</section>
-
-<section class="deposit-band" data-cms-booking-section="deposit">
-<div class="container deposit-band-grid">
-  <div>
-    <p class="eyebrow" style="color:#d7b67c" data-cms-copy="availability.058">Securing Your Date</p>
-    <h2 data-cms-copy="availability.059">Your date is held when the booking is confirmed.</h2>
-    <p data-cms-copy="availability.060">Submitting a request does not reserve the date. After availability is confirmed, the required booking documents and 30% down payment secure the event in the LOLA calendar.</p>
-  </div>
-
-  <div class="deposit-badge">
-    <strong>30%</strong>
-    <span data-cms-copy="availability.116">down payment</span>
-  </div>
-</div>
-</section>
-
-<section class="booking-help" data-cms-booking-section="help">
-<div class="container">
-  <div class="booking-help-grid">
-
-    <article class="booking-help-card">
-      <h3 data-cms-copy="availability.061">Still choosing an experience?</h3>
-      <p data-cms-copy="availability.062">Compare The Glam, 360 Booth, Vogue, and Audio Guest Book before submitting.</p>
-      <a href="experiences.html" data-cms-copy="availability.063">Explore Experiences →</a>
-    </article>
-
-    <article class="booking-help-card">
-      <h3 data-cms-copy="availability.064">Need pricing details?</h3>
-      <p data-cms-copy="availability.065">Review starting prices, package lengths, included features, and add-ons.</p>
-      <a href="packages.html" data-cms-copy="availability.066">View Packages →</a>
-    </article>
-
-    <article class="booking-help-card">
-      <h3 data-cms-copy="availability.067">Have a question first?</h3>
-      <p data-cms-copy="availability.068">Check common questions about setup, deposits, printing, travel, customization, and more.</p>
-      <a href="faq.html" data-cms-copy="availability.069">Browse FAQs →</a>
-    </article>
-
-  </div>
-</div>
-</section>
-
-<section class="cta">
-<div class="container cta-inner">
-  <p class="eyebrow" data-cms-copy="availability.070">NEED HELP FIRST?</p>
-  <h2 class="display" data-cms-copy="availability.071">Not ready to book yet?</h2>
-  <p data-cms-copy="availability.072">Send us a question and we’ll help you figure out the right experience before you submit a booking request.</p>
-  <a class="btn gold" href="contact.html" data-cms-copy="availability.073">Contact Us →</a>
-</div>
-</section>
-
-</main>
+            </select></label><label>Event date *<input name="eventDate" type="date" maxlength="240" required ></label><label>Start time *<input name="eventStartTime" type="time" maxlength="240" required ></label><label>End time *<input name="eventEndTime" type="time" maxlength="240" required ></label><label>Expected guests *<input name="guestCount" type="number" maxlength="240" required min=1 max=100000></label><label>Venue name<input name="venueName" type="text" maxlength="240"  ></label><label>Venue address<input name="venueAddress" type="text" maxlength="240"  ></label><label>City *<input name="city" type="text" maxlength="240" required ></label><label>State *<input name="state" type="text" maxlength="240" required ></label></div><label>Special requests or notes<textarea name="message" maxlength="3000" placeholder="Parking, loading access, theme or other details"></textarea></label><p class="booking-help">Venue details may be left blank if not yet confirmed. For an overnight event, the end time is on the following day.</p></section>
+<section><h2><span>2</span> Your Information</h2><div class="booking-fields information-fields"><label>First name *<input name="firstName" type="text" maxlength="240" required ></label><label>Last name *<input name="lastName" type="text" maxlength="240" required ></label><label>Email address *<input name="email" type="email" maxlength="240" required ></label><label>Phone number *<input name="phone" type="tel" maxlength="240" required ></label><label>How did you hear about us?<select name="referralSource"><option value="">Select a source</option><option>Instagram</option><option>Google</option><option>TikTok</option><option>Referral</option><option>Other</option></select></label></div></section>
+<section><h2><span>3</span> Choose Your Experience(s)</h2><p>Select one or more experiences for your event. Each experience has its own package. You can choose up to 4 experiences.</p><div data-booking-experiences class="booking-experience-grid"></div><p data-catalog-status role="status">Loading available experiences and packages…</p><button type="button" data-catalog-retry hidden>Retry loading options</button></section>
+<section><h2><span>4</span> Add-ons (Optional)</h2><p>Enhance your LOLA experience with optional extras. Images are illustrative; final options will be confirmed with your quote.</p><div data-booking-addons class="booking-addon-grid"></div><button type="button" data-more-addons aria-expanded="false" hidden></button><div data-booking-more-addons class="booking-addon-grid" hidden></div></section>
+<section class="booking-summary" aria-live="polite"><h2>Your LOLA Experience</h2><div data-booking-summary>Select an experience to start your request.</div><p>Starting prices are estimates. Availability, custom services and the final quote will be confirmed by LOLA.</p></section>
+<section class="booking-submit"><label class="booking-consent"><input type="checkbox" name="marketing_email_opt_in"> I’d like to receive occasional LOLA offers, updates and inspiration by email.</label><p><strong>Your privacy matters.</strong> We’ll use the information you provide to review your event request, prepare a quote and contact you about your booking. We won’t add you to promotional emails unless you choose to subscribe. <a href="https://thelolabooth.com/privacy.html">Privacy policy</a></p><div class="booking-submit-row"><p>We’ll review availability and prepare a custom quote. Your date is not reserved by this request.</p><button type="submit" disabled>Submit Request →</button></div><div data-form-status role="status" tabindex="-1"></div></section>
+<div class="honeypot" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+</form></main>
 
 <footer class="site-footer">
 <div class="container footer-top">
@@ -769,7 +470,7 @@
 </footer>
 
 <script src="config.js"></script>
-<script src="app.js"></script>
+<script src="app.js"></script><script src="booking.js"></script>
 
 
 
