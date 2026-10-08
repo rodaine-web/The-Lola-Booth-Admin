@@ -6,6 +6,10 @@ Audit started 2026-10-07. Baseline: existing `work/lola-admin` checkout, includi
 
 Each numbered section below traces to the supplied complete requirement checklist. Acceptance requires every applicable bullet in that section and its related A–J journey, not merely page rendering. COMPLETE requires applicable workflow, persistence, security and failure-handling evidence. PARTIAL means reusable implementation with unresolved gaps. BLOCKED means a required external prerequisite is missing. FAILED means an executed acceptance check failed. Historical gap text below is retained as baseline context; the current implementation/evidence tables supersede it for touched requirements. Dependencies: existing authenticated API, PostgreSQL migrations, private Azure storage, communications/worker, and environment-specific customer origins.
 
+## October 8 staging qualification update
+
+Staging migrations through 053 and release 9f6d127 are deployed. Controlled QA browser evidence now verifies planning save/return/submission and the coherent workspace entry to agreements, invoice, receipt and creative review. Creative upload/download, V1 change request, V2 approval, persisted history and component readiness passed. Real database/service checks rejected stale versions and wrong customer emails, prevented duplicate invitation/approval processing and blocked changes to approved revision data. A 375px approval confirmation smoke check passed. Mandatory A–J gates remain PARTIAL: new-booking handoff, private Azure storage, complete permission matrix, actual email delivery, payment/refund journeys and full mobile journeys are not certified. Production remains NO-GO.
+
 ## Current implementation update — local only
 
 Baseline classifications below describe the initial audit. The following supersedes baseline gaps for touched sections; every row is PARTIAL until A–J qualification.
