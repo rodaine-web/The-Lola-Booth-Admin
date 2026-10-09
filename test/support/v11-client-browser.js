@@ -22,7 +22,7 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   await page.goto(issued.data.signing_url);
   await page.getByRole('heading',{name:'Browser demo agreement',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Sign agreement',exact:true}).isDisabled(),true);
-  await page.getByLabel('Full name',{exact:true}).fill('Demo Client');
+  await page.getByLabel('Full legal name',{exact:true}).fill('Demo Client');
   await page.getByLabel('Client email',{exact:true}).fill('wrong@example.com');
   await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Sign agreement',exact:true}).click();
   await page.getByRole('alert').waitFor();assert.ok((await page.getByRole('alert').innerText()).length>0);
