@@ -26,9 +26,9 @@ export async function sessionWorkspace(session,eventId){
    FROM proposals p JOIN clients c ON c.id=p.client_id JOIN events e ON e.id=p.event_id
    WHERE p.id=$1`,[grant.proposal_id])).rows[0];
   const agreements=(await query("SELECT id,title,revision,status,signed_at,signer_name FROM contracts WHERE proposal_id=$1 AND status='SIGNED' ORDER BY revision DESC",[proposal.id])).rows;
-  const invoices=(await query("SELECT id,invoice_number,status,total,amount_paid,amount_outstanding,balance_due,due_date FROM invoices WHERE proposal_id=$1 AND client_id=$2 AND event_id=$3 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') ORDER BY created_at DESC",[proposal.id,session.client_id,eventId])).rows;
+  const invoices=(await query("SELECT id,invoice_number,status,total,amount_paid,amount_outstanding,balance_due,due_date FROM invoices WHERE (proposal_id=$1 OR EXISTS(SELECT 1 FROM backdrop_quotes q WHERE q.invoice_id=invoices.id AND q.event_id=$3 AND q.client_id=$2 AND q.status='ACCEPTED')) AND client_id=$2 AND event_id=$3 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') ORDER BY created_at DESC",[proposal.id,session.client_id,eventId])).rows;
   const receipts=(await query(`SELECT pay.id,pay.invoice_id,pay.amount,pay.refunded_amount,pay.status,pay.payment_date FROM payments pay
-   JOIN invoices i ON i.id=pay.invoice_id WHERE i.proposal_id=$1 AND i.client_id=$2 AND i.event_id=$3
+   JOIN invoices i ON i.id=pay.invoice_id WHERE (i.proposal_id=$1 OR EXISTS(SELECT 1 FROM backdrop_quotes q WHERE q.invoice_id=i.id AND q.event_id=$3 AND q.client_id=$2 AND q.status='ACCEPTED')) AND i.client_id=$2 AND i.event_id=$3
     AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID') AND pay.deleted_at IS NULL
     AND pay.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') ORDER BY pay.payment_date DESC`,[proposal.id,session.client_id,eventId])).rows;
   const creative=(await query("SELECT id,approval_type,version,status FROM creative_approvals WHERE event_id=$1 AND client_id=$2 AND deleted_at IS NULL AND status IN ('PENDING_APPROVAL','VIEWED','APPROVED','CHANGES_REQUESTED') ORDER BY requested_at DESC NULLS LAST,id DESC",[eventId,session.client_id])).rows;
@@ -41,7 +41,7 @@ export async function sessionWorkspace(session,eventId){
 }
 export async function sessionInvoice(session,eventId,invoiceId){
  const grant=await clientEventGrant(session,eventId);
- const row=(await query(`SELECT id FROM invoices WHERE id=$1 AND proposal_id=$2 AND client_id=$3 AND event_id=$4
+ const row=(await query(`SELECT id FROM invoices WHERE id=$1 AND (proposal_id=$2 OR EXISTS(SELECT 1 FROM backdrop_quotes q WHERE q.invoice_id=invoices.id AND q.event_id=$4 AND q.client_id=$3 AND q.status='ACCEPTED')) AND client_id=$3 AND event_id=$4
    AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID')`,[invoiceId,grant.proposal_id,session.client_id,eventId])).rows[0];
  if(!row)throw new AppError('Invoice unavailable.',404,'NOT_FOUND');return row;
 }

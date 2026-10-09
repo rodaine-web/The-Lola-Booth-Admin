@@ -18,7 +18,7 @@ export default function SecureClientWorkspace(){
   request('/session').then(async data=>{
    if(!active)return;setSession(data);
    if(!eventId&&data.events.length){navigate('/client/events/'+data.events[0].id,{replace:true});return;}
-   if(eventId){const view=await request('/events/'+eventId);if(active)setWorkspace(view);}
+   if(eventId){const view=await request('/events/'+eventId);if(active){setWorkspace(view);const outcome=new URLSearchParams(location.search).get('payment');if(outcome)setNotice(outcome==='success'?'Checkout returned. Your invoice and receipt update after the provider payment is verified.':'Checkout was cancelled. No payment is confirmed by this return page.');}}
   }).catch(e=>{if(active){setSession(null);if(eventId)setError(e.message);}});
   return()=>{active=false;};
  },[eventId,location.pathname]);

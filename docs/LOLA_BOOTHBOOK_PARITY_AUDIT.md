@@ -1,4 +1,4 @@
-> October 8 secure journey checkpoint: [implementation, evidence and NO-GO criteria](LOLA_PHASE1_SECURE_JOURNEY_READINESS_2026-10-08.md). Migration 055 is rehearsed on a restored copy only; this revision is not yet staging-qualified. Historical milestones below do not certify the new revision.
+> October 8 secure journey checkpoint: [implementation, evidence and NO-GO criteria](LOLA_PHASE1_SECURE_JOURNEY_READINESS_2026-10-08.md). Migration 055 passed restored-copy rehearsal and guarded application staging migration; this revision is not yet staging-qualified. Historical milestones below do not certify the new revision.
 
 # LOLA BoothBook parity audit
 

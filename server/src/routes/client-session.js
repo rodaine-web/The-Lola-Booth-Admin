@@ -57,8 +57,8 @@ clientSessionRouter.post('/events/:eventId/planning/assets',event,asyncHandler(a
 clientSessionRouter.get('/events/:eventId/planning/assets/:id',validate(z.object({eventId:uuid,id:uuid}),'params'),asyncHandler(async(req,res)=>{
  const file=await planningFile(await planningToken(req),req.params.id);res.set('Content-Security-Policy','sandbox').type(file.mime_type).attachment(file.filename).send(await getStorageProvider().get(file.storage_key));
 }));
-clientSessionRouter.get('/events/:eventId/planning/quote',event,asyncHandler(async(req,res)=>res.json(await publicBackdropQuote(await planningToken(req)))));
-clientSessionRouter.post('/events/:eventId/planning/quote/accept',event,validate(z.object({quoteId:uuid,name:z.string().trim().min(2).max(200),consent:z.literal(true)}).strict()),asyncHandler(async(req,res)=>res.json(await acceptBackdropQuote(await planningToken(req,true),req.body.quoteId,req.body.name,req))));
+clientSessionRouter.get('/events/:eventId/planning/quote',event,asyncHandler(async(req,res)=>res.json(secureQuote(await publicBackdropQuote(await planningToken(req)),req.params.eventId))));
+clientSessionRouter.post('/events/:eventId/planning/quote/accept',event,validate(z.object({quoteId:uuid,name:z.string().trim().min(2).max(200),consent:z.literal(true)}).strict()),asyncHandler(async(req,res)=>res.json(secureQuote(await acceptBackdropQuote(await planningToken(req,true),req.body.quoteId,req.body.name,req),req.params.eventId))));
 
 const proofParams=validate(z.object({eventId:uuid,id:uuid}),'params');
 async function creativeToken(req,mutation=false){return sessionCreativeToken(await authenticateClient(req,{mutation}),req.params.eventId,req.params.id);}
@@ -67,3 +67,8 @@ clientSessionRouter.get('/events/:eventId/creative/:id/proof',proofParams,asyncH
  const file=await publicCreativeProof(await creativeToken(req));res.set('Content-Security-Policy','sandbox').type(file.mime_type).attachment(file.filename).send(await getStorageProvider().get(file.storage_key));
 }));
 clientSessionRouter.post('/events/:eventId/creative/:id/respond',proofParams,validate(z.object({action:z.enum(['approve','request_changes']),version:z.number().int().positive(),name:z.string().trim().min(2).max(160),email:z.string().trim().email().max(160),notes:z.string().trim().max(3000).optional()}).strict()),asyncHandler(async(req,res)=>res.json(await respondToCreativeApproval(await creativeToken(req,true),req.body,req))));
+
+function secureQuote(quote,eventId){
+ if(!quote)return null;
+ return {...quote,paymentUrl:quote.paymentUrl?`/client/events/${eventId}#payments`:null};
+}
