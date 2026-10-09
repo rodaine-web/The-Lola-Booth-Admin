@@ -369,6 +369,6 @@ The completed agreement and signature record will be made available electronical
 
 *Good people. Better photos.*
 
-www.thelolabooth.com  
-info@thelolabooth.com  
+www.thelolabooth.com
+info@thelolabooth.com
 (773) 240-2744
