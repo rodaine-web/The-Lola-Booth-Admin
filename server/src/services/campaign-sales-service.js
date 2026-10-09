@@ -1,57 +1,52 @@
-import crypto from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
 import {z} from 'zod';
 import {query,transaction} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
 import {linkCampaignInterest} from './campaign-lead-service.js';
 import {campaignOffers} from './campaign-offers.js';
-import {calculateInvoiceTotals,getInvoice,publicInvoiceUrl} from './invoice-service.js';
-import {nextNumber} from './proposal-service.js';
-import {brandedEmailHtml,createCommunicationDraft,sendCommunication} from './automation-service.js';
-import {writeAudit} from './audit-service.js';
+import {createInvoice,getInvoice} from './invoice-service.js';
+import {createProposal,createProposalVersion} from './proposal-service.js';
 
-const inputSchema=z.object({deposit_percent:z.coerce.number().gt(0).max(100).optional(),due_date:z.iso.date().optional(),send:z.boolean().default(false)});
-export async function campaignDepositInvoice(campaignId,interestId,input,req){
- const data=inputSchema.parse(input);
- const saved=await transaction(async client=>{
+// Interest is not contractual acceptance. The customer accepts the versioned
+// proposal through the existing acceptance journey, including its consent record.
+export async function campaignCommercialProposal(campaignId,interestId,req){
+ return transaction(async client=>{
   const linked=await linkCampaignInterest(campaignId,interestId,req.user.id);
-  const interest=(await query('SELECT * FROM campaign_interests WHERE id=$1 FOR UPDATE',[interestId])).rows[0];
-  const existing=(await query('SELECT * FROM invoices WHERE campaign_interest_id=$1',[interestId])).rows[0];
-  if(existing){if(existing.deleted_at||['VOID','REFUNDED'].includes(existing.status))throw new AppError('This campaign invoice was voided or refunded. Review it before replacing it.',409,'CAMPAIGN_INVOICE_CLOSED');return existing;}
-  const offer=interest.offer_snapshot||(await campaignOffers(campaignId)).offers.find(o=>o.key===interest.package);
-  if(!offer||!(offer.discounted>0))throw new AppError('This interest needs a priced campaign offer before an invoice can be created.',422,'CAMPAIGN_PRICE_REQUIRED');
-  const settings=(await query('SELECT * FROM business_settings LIMIT 1')).rows[0];
-  const percent=data.deposit_percent??Number(settings.default_deposit_percent||30);
-  if(!(percent>0&&percent<=100))throw new AppError('Set a deposit percentage between 0 and 100.',422,'INVALID_DEPOSIT');
-  const totals=calculateInvoiceTotals([{description:offer.name,quantity:1,unit_price:offer.original,discount:offer.saving,tax_rate:Number(settings.sales_tax_percent||0)}]);
-  const deposit=Math.round(totals.total*percent)/100;
-  if(!(deposit>0))throw new AppError('The deposit must be greater than zero.',422,'INVALID_DEPOSIT');
-  const number=await nextNumber(client,'next_invoice_number','invoice_prefix','LOLA-INV');
-  const invoice=(await query(`INSERT INTO invoices(invoice_number,lead_id,campaign_interest_id,status,subtotal,discount,tax,total,amount_paid,balance_due,amount_outstanding,due_date,notes,terms,secure_token,pricing_snapshot)
-   VALUES($1,$2,$3,'DRAFT',$4,$5,$6,$7,0,$7,$7,$8,$9,$10,$11,$12) RETURNING *`,[number,linked.lead_id,interestId,totals.subtotal,totals.discount,totals.tax,totals.total,data.due_date||new Date(Date.now()+Number(settings.invoice_default_due_days||7)*86400000).toISOString().slice(0,10),`Campaign offer: ${offer.campaign_name}. Event: ${interest.event_date} ${interest.event_time}. ${interest.location||''}`,settings.invoice_default_payment_terms,crypto.randomBytes(24).toString('hex'),JSON.stringify({...totals,campaign_id:campaignId,campaign_name:offer.campaign_name,campaign_offer:offer,payment_mode:'DEPOSIT_REQUEST',amount_due_now:deposit,deposit_amount:deposit,deposit_percent:percent,proposal_total:totals.total,allow_pay_in_full:true,allow_custom_amount:false})])).rows[0];
-  for(const item of totals.items)await query('INSERT INTO invoice_items(invoice_id,label,description,quantity,unit_price,taxable,tax_rate,discount,total,line_total) VALUES($1,$2,$2,1,$3,true,$4,$5,$6,$6)',[invoice.id,item.description,item.unit_price,item.tax_rate,item.discount,item.line_total]);
-  return invoice;
+  const interest=(await query('SELECT * FROM campaign_interests WHERE id=$1 AND campaign_id=$2 FOR UPDATE',[interestId,campaignId])).rows[0];
+  const existing=(await query("SELECT * FROM proposals WHERE content->>'campaign_interest_id'=$1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1",[interestId])).rows[0];
+  if(existing)return {proposal:existing};
+  if((await query('SELECT id FROM invoices WHERE campaign_interest_id=$1',[interestId])).rows.length)throw new AppError('This interest already has a legacy invoice. Review its payments and commercial terms before linking a proposal.',409,'CAMPAIGN_LEGACY_INVOICE_REVIEW');
+  const frozen=interest.offer_snapshot;
+  const current=(await campaignOffers(campaignId)).offers.find(o=>o.key===interest.package);
+  if(!frozen?.selections?.length||!current||!isDeepStrictEqual(frozen.selections,current.selections)||Number(frozen.discounted)!==Number(current.discounted))throw new AppError('The campaign offer has changed or is unavailable. Review the originally requested commercial terms before preparing a proposal.',409,'CAMPAIGN_OFFER_CHANGED');
+  const lead=(await query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[linked.lead_id])).rows[0];
+  let customer=lead.converted_client_id?(await query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL',[lead.converted_client_id])).rows[0]:null;
+  if(!customer)customer=(await query('SELECT * FROM clients WHERE lower(email)=lower($1) AND deleted_at IS NULL ORDER BY created_at LIMIT 1',[lead.email])).rows[0];
+  if(!customer)customer=(await query("INSERT INTO clients(name,email,phone,company,client_type,referral_source) VALUES($1,$2,$3,$4,'CORPORATE','Campaign') RETURNING *",[[lead.first_name,lead.last_name].filter(Boolean).join(' '),lead.email,lead.phone,lead.company])).rows[0];
+  let event=lead.converted_event_id?(await query('SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[lead.converted_event_id])).rows[0]:null;
+  if(event&&(event.client_id!==customer.id||['CANCELLED','COMPLETED','CONFIRMED','PREPARING','READY','IN_PROGRESS'].includes(event.status)))throw new AppError('Review the existing event before adding this commercial offer.',409,'CAMPAIGN_EVENT_REVIEW');
+  if(!event)event=(await query(`INSERT INTO events(client_id,event_name,event_type,event_date,start_time,venue_name,status,experience_id,package_id,client_notes)
+   VALUES($1,$2,$3,$4,$5,$6,'PENDING_DEPOSIT',$7,$8,$9) RETURNING *`,[customer.id,`${frozen.campaign_name} — ${customer.name}`,lead.event_type,interest.event_date,interest.event_time,interest.location,frozen.selections[0].experience_id,frozen.selections[0].packages[0]?.package_id||null,lead.message])).rows[0];
+  for(const [index,selection] of frozen.selections.entries()){
+   await query('INSERT INTO event_experiences(event_id,experience_id,display_order) VALUES($1,$2,$3) ON CONFLICT(event_id,experience_id) DO NOTHING',[event.id,selection.experience_id,index]);
+   for(const pkg of selection.packages||[])if(pkg.package_id)await query('INSERT INTO event_packages(event_id,package_id,display_order) VALUES($1,$2,$3) ON CONFLICT(event_id,package_id) DO NOTHING',[event.id,pkg.package_id,index]);
+  }
+  await query('UPDATE leads SET converted_client_id=$2,converted_event_id=$3,updated_at=now() WHERE id=$1',[lead.id,customer.id,event.id]);
+  const proposal=await createProposal({...req,body:{lead_id:lead.id,client_id:customer.id,event_id:event.id,scenario_enabled:true,selected_experiences:frozen.selections,deposit_type:'PERCENTAGE',deposit_value:30,proposal_title:frozen.name}});
+  const updated=(await query('UPDATE proposals SET content=content||$2::jsonb WHERE id=$1 RETURNING *',[proposal.id,JSON.stringify({campaign_interest_id:interestId,campaign_id:campaignId,campaign_offer:frozen})])).rows[0];
+  await createProposalVersion(client,updated,req.user.id);
+  return {proposal:updated};
  });
- await writeAudit({req,action:'campaign_deposit_invoice',entity:'invoice',entityId:saved.id,after:saved});
- const invoice=await getInvoice(saved.id);
- if(!data.send)return {invoice};
- if(['PAID','VOID','REFUNDED'].includes(invoice.status)||Number(invoice.amount_paid)>=Number(invoice.pricing_snapshot.amount_due_now))throw new AppError('This invoice does not need a deposit request.',409,'CAMPAIGN_INVOICE_CLOSED');
- const idempotencyKey='campaign-interest-invoice:'+interestId;
- let communication=await transaction(async()=>{
- await query('SELECT pg_advisory_xact_lock(hashtext($1))',[idempotencyKey]);
- let communication=(await query('SELECT * FROM communications WHERE idempotency_key=$1',[idempotencyKey])).rows[0];
- if(!communication){
-  const url=publicInvoiceUrl(invoice);
-  const body=`Hi ${invoice.client_name||'there'},\n\nThank you for your interest in ${invoice.pricing_snapshot.campaign_name}. Your selected offer is ${invoice.pricing_snapshot.campaign_offer.name}.\n\nYour event: ${invoice.event_date} at ${invoice.venue_name||'your selected location'}.\nOffer total: $${Number(invoice.total).toFixed(2)}.\nDeposit requested: $${Number(invoice.pricing_snapshot.amount_due_now).toFixed(2)}.\n\nView your invoice and pay your deposit securely:\n${url}\n\nWe look forward to celebrating with you.\nThe LOLA Booth`;
-  communication=await createCommunicationDraft({lead_id:invoice.lead_id,invoice_id:invoice.id,recipient:invoice.client_email,subject:'Thank you for your interest — your LOLA deposit invoice',body,html:brandedEmailHtml(body,{kicker:'Thank you for your interest',ctaLabel:'View & Pay Deposit',ctaUrl:url})},req.user);
-  await query('UPDATE communications SET idempotency_key=$2 WHERE id=$1',[communication.id,idempotencyKey]);
- }
- return communication;
- });
- if(!['SENT','SENT_TO_PROVIDER','DELIVERED'].includes(communication.status)){
-  const result=await sendCommunication(communication.id,req.user);
-  communication=result.communication;
-  if(!['SENT','SENT_TO_PROVIDER','DELIVERED'].includes(communication.status))throw new AppError('The thank-you email was not sent. Review the saved communication.',409,'CAMPAIGN_EMAIL_NOT_SENT');
- }
- await query("UPDATE invoices SET status=CASE WHEN status='DRAFT' THEN 'SENT' ELSE status END,sent_at=COALESCE(sent_at,now()) WHERE id=$1",[invoice.id]);
- return {invoice:await getInvoice(invoice.id),communication};
+}
+
+const invoiceInput=z.object({send:z.boolean().default(false)}).strict();
+export async function campaignDepositInvoice(campaignId,interestId,input,req){
+ const data=invoiceInput.parse(input);
+ const proposal=(await query("SELECT p.* FROM proposals p JOIN campaign_interests i ON i.id=(p.content->>'campaign_interest_id')::uuid WHERE i.id=$1 AND i.campaign_id=$2 AND p.deleted_at IS NULL ORDER BY p.created_at LIMIT 1",[interestId,campaignId])).rows[0];
+ if(!proposal?.accepted_version_id||!['ACCEPTED','CONVERTED'].includes(proposal.status))throw new AppError('Prepare the campaign proposal and obtain customer acceptance before creating an invoice.',409,'CAMPAIGN_ACCEPTANCE_REQUIRED');
+ // Delivery belongs to the dedicated acceptance handoff. This endpoint cannot
+ // independently send a second thank-you/payment email or bypass paused workers.
+ if(data.send)throw new AppError('Invoice delivery uses the accepted-proposal handoff. Review its communication and worker status instead of sending a separate campaign invoice.',409,'CAMPAIGN_HANDOFF_REQUIRED');
+ const invoice=await createInvoice({...req,body:{proposal_id:proposal.id,depositOnly:true}});
+ return {invoice:await getInvoice(invoice.id)};
 }

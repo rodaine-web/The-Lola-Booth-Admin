@@ -1,3 +1,4 @@
+import {WORKSPACE_HANDOFF_JOB,workspaceHandoffEnabled,deliverSignedWorkspace,deliverClientInvitation} from './client-session-service.js';
 import {AGREEMENT_HANDOFF_JOB,agreementHandoffEnabled,deliverPaidAgreement} from './booking-agreement-handoff-service.js';
 import { query, transaction } from '../db/pool.js';
 import { AppError } from '../utils/errors.js';
@@ -35,12 +36,13 @@ async function prepareInvoiceMessage(job) {
 
 /** Uses the existing job/communication ledger. Unknown provider outcomes require review. */
 export async function processBookingInvoiceHandoffs({limit=10}={}) {
-  const types=[...(invoiceHandoffEnabled()?[INVOICE_HANDOFF_JOB]:[]),...(agreementHandoffEnabled()?[AGREEMENT_HANDOFF_JOB]:[])];
+  const types=[...(invoiceHandoffEnabled()?[INVOICE_HANDOFF_JOB]:[]),...(agreementHandoffEnabled()?[AGREEMENT_HANDOFF_JOB]:[]),...(workspaceHandoffEnabled()?[WORKSPACE_HANDOFF_JOB,'CLIENT_WORKSPACE_SIGN_IN']:[])];
   if (!types.length || stagingJobsPaused()) return {processed:[]};
   const scope=stagingAutomationScope();
   const jobs = await transaction(async client => {
     await client.query(`UPDATE automation_jobs SET status='FAILED',last_error='Worker stopped during invoice handoff. Review invoice and provider history before retrying.',updated_at=now()
-      WHERE job_type=ANY($1::text[]) AND status='PROCESSING' AND started_at<now()-interval '10 minutes'`, [types]);
+      WHERE job_type=ANY($1::text[]) AND status='PROCESSING' AND started_at<now()-interval '10 minutes'
+       AND ($2::timestamptz IS NULL OR (created_at>=$2 AND EXISTS(SELECT 1 FROM proposals p JOIN clients c ON c.id=p.client_id WHERE p.id=related_entity_id AND lower(c.email)=ANY($3::text[]))))`, [types,scope?.since||null,scope?.recipients||[]]);
     const rows = (await client.query(`SELECT * FROM automation_jobs WHERE job_type=ANY($1::text[]) AND status='PENDING' AND scheduled_for<=now()
       AND ($3::timestamptz IS NULL OR (created_at>=$3 AND EXISTS(SELECT 1 FROM proposals p JOIN clients c ON c.id=p.client_id
         WHERE p.id=related_entity_id AND lower(c.email)=ANY($4::text[]))))
@@ -51,8 +53,8 @@ export async function processBookingInvoiceHandoffs({limit=10}={}) {
   const processed=[];
   for (const job of jobs) {
     try {
-      if(job.job_type===AGREEMENT_HANDOFF_JOB){
-        const result=await deliverPaidAgreement(job);
+      if([AGREEMENT_HANDOFF_JOB,WORKSPACE_HANDOFF_JOB,'CLIENT_WORKSPACE_SIGN_IN'].includes(job.job_type)){
+        const result=job.job_type===AGREEMENT_HANDOFF_JOB?await deliverPaidAgreement(job):job.job_type===WORKSPACE_HANDOFF_JOB?await deliverSignedWorkspace(job):await deliverClientInvitation(job.payload.invitationId);
         const status=result.cancelled?'CANCELLED':'COMPLETED';
         await query("UPDATE automation_jobs SET status=$2,completed_at=now(),last_error=NULL,updated_at=now() WHERE id=$1",[job.id,status]);
         processed.push({id:job.id,status});continue;
@@ -78,6 +80,9 @@ export async function processBookingInvoiceHandoffs({limit=10}={}) {
       const retry = error.details?.retryable !== false && job.attempt_count+1 < job.max_attempts;
       const status = retry ? 'PENDING' : 'FAILED';
       await query("UPDATE automation_jobs SET status=$2,scheduled_for=now()+interval '2 minutes',last_error=$3,updated_at=now() WHERE id=$1", [job.id,status,error.message]);
+      if(status==='FAILED')await query(`INSERT INTO tasks(lifecycle_key,title,description,event_id,client_id,priority)
+        SELECT $1,'Review failed booking handoff',$2,p.event_id,p.client_id,'HIGH' FROM proposals p WHERE p.id=$3
+        ON CONFLICT(lifecycle_key) WHERE lifecycle_key IS NOT NULL DO NOTHING`,['handoff-review:'+job.id,'Inspect provider delivery and communication history before retrying. '+error.code,job.related_entity_id]);
       processed.push({id:job.id,status});
     }
   }

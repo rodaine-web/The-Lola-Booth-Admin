@@ -1,3 +1,5 @@
+> October 8 secure journey checkpoint: [implementation, evidence and NO-GO criteria](LOLA_PHASE1_SECURE_JOURNEY_READINESS_2026-10-08.md). Migration 055 is rehearsed on a restored copy only; this revision is not yet staging-qualified. Historical milestones below do not certify the new revision.
+
 # LOLA BoothBook parity audit
 
 Audit started 2026-10-07. Baseline: existing `work/lola-admin` checkout, including pre-existing uncommitted design and integration changes. This is a source audit, not a production certification. No production migration or customer messages authorized by this sprint are executed as part of the audit.

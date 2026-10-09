@@ -45,7 +45,7 @@ adminPlanningRouter.delete('/events/:id/booking-hold',requirePermission('write:e
  res.json({hold:await releaseBookingHold(id)});
 }));
 adminPlanningRouter.get('/events/:id/planning',requirePermission('read:events'),asyncHandler(async(req,res)=>res.json(await adminPlanning(uuid(req.params.id),req.user))));
-const planningReviewSchema=z.object({backdrop_review_status:z.enum(['NEEDS_REVIEW','CONFIRMED','CHANGES_REQUIRED']).optional(),price_confirmed:z.boolean().optional(),planning_due_at:z.string().date().nullable().optional(),creative_due_at:z.string().date().nullable().optional()}).strict();
+const planningReviewSchema=z.object({status:z.enum(['APPROVED','CHANGES_REQUESTED']).optional(),review_notes:z.string().trim().max(3000).optional(),backdrop_review_status:z.enum(['NEEDS_REVIEW','CONFIRMED','CHANGES_REQUIRED']).optional(),price_confirmed:z.boolean().optional(),planning_due_at:z.string().date().nullable().optional(),creative_due_at:z.string().date().nullable().optional()}).strict();
 adminPlanningRouter.patch('/events/:id/planning/review',requirePermission('write:operations'),asyncHandler(async(req,res)=>res.json(await reviewPlanning(uuid(req.params.id),planningReviewSchema.parse(req.body),req))));
 adminPlanningRouter.post('/events/:id/planning/invite',requirePermission('write:events'),asyncHandler(async(req,res)=>res.json(await planningInvitation(uuid(req.params.id),req,{regenerate:req.body.regenerate===true}))));
 adminPlanningRouter.post('/events/:id/planning/revoke',requirePermission('write:events'),asyncHandler(async(req,res)=>res.json(await revokePlanning(uuid(req.params.id),req))));

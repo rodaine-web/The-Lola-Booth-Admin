@@ -1,0 +1,10 @@
+import {useEffect,useRef} from 'react';
+export default function SignaturePad({strokes,onChange,disabled}){
+ const canvas=useRef(null),drawing=useRef(null),value=useRef(strokes);value.current=strokes;
+ useEffect(()=>{const ctx=canvas.current.getContext('2d');ctx.clearRect(0,0,600,180);ctx.strokeStyle='#171717';ctx.lineWidth=2.5;ctx.lineCap='round';for(const stroke of strokes){ctx.beginPath();stroke.forEach(([x,y],i)=>i?ctx.lineTo(x*600,y*180):ctx.moveTo(x*600,y*180));ctx.stroke();}},[strokes]);
+ function point(e){const rect=canvas.current.getBoundingClientRect();return [Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width)),Math.max(0,Math.min(1,(e.clientY-rect.top)/rect.height))];}
+ function start(e){if(disabled||value.current.length>=80||value.current.reduce((total,stroke)=>total+stroke.length,0)>=5998)return;e.currentTarget.setPointerCapture(e.pointerId);drawing.current={id:e.pointerId,stroke:[point(e)]};}
+ function move(e){if(!drawing.current||drawing.current.id!==e.pointerId||disabled)return;const stroke=drawing.current.stroke;if(stroke.length>=1200||value.current.reduce((total,item)=>total+item.length,0)+stroke.length>=6000)return;stroke.push(point(e));const ctx=canvas.current.getContext('2d'),last=stroke[stroke.length-2],next=stroke[stroke.length-1];ctx.beginPath();ctx.moveTo(last[0]*600,last[1]*180);ctx.lineTo(next[0]*600,next[1]*180);ctx.stroke();}
+ function finish(e){if(!drawing.current||drawing.current.id!==e.pointerId)return;const stroke=drawing.current.stroke;drawing.current=null;if(stroke.length>=2)onChange([...value.current,stroke]);}
+ return <div><p id="draw-signature-help">Draw with your mouse or finger. You can choose Type to sign using your keyboard.</p><canvas ref={canvas} width="600" height="180" aria-label="Draw your signature" aria-describedby="draw-signature-help" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} style={{width:'100%',height:150,touchAction:'none',border:'1px solid #cfc7bb',borderRadius:6,background:'white'}}/><button type="button" disabled={disabled} onClick={()=>{drawing.current=null;onChange([]);}}>Clear signature</button></div>;
+}

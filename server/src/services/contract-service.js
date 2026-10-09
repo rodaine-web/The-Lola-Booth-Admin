@@ -1,6 +1,10 @@
+import {agreementPaymentQualified} from './booking-payment-exceptions.js';
 import crypto from 'node:crypto';
+import {queueSignedWorkspace} from './client-session-service.js';
 import {encryptSecretJson,decryptSecretJson} from './integration-secrets.js';
 import PDFDocument from 'pdfkit';
+import {createCanvas} from '@napi-rs/canvas';
+import {validDrawnSignature,DRAWN_CONTRACT_CONSENT} from '../../../shared/signature.js';
 import { query, transaction } from '../db/pool.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/errors.js';
@@ -26,6 +30,7 @@ async function proposalSnapshot(id) {
     proposal.total = accepted.total ?? accepted.pricing_snapshot?.total;
     proposal.items = accepted.line_items_snapshot;
   }
+  proposal.payment_exception=(await query(`SELECT x.id,x.minimum_before_agreement,x.minimum_before_confirmation,x.balance_due_date::text AS balance_due_date,x.reason FROM booking_payment_exceptions x JOIN proposals p ON p.event_id=x.event_id WHERE p.id=$1 AND x.revoked_at IS NULL`,[id])).rows[0]||null;
   delete proposal.accepted_snapshot;
   delete proposal.status;
   return proposal;
@@ -68,10 +73,14 @@ export async function issueContract(id, req) {
     const row = await lockedContract(id);
     if (row.status !== 'DRAFT') fail('This agreement is already issued. Revoke it before creating a replacement.');
     const snapshot = await proposalSnapshot(row.proposal_id);
+    await assertAgreementPrerequisites(row.proposal_id,snapshot.accepted_version_id);
+    if(snapshot.payment_exception&&!row.terms.includes(snapshot.payment_exception.id))fail('Include the approved written payment exception in these agreement terms before issuing.','AGREEMENT_EXCEPTION_REVIEW');
     const token = crypto.randomBytes(32).toString('hex');
     const digest = hashContractValue(contractDocument(row.title,row.terms,snapshot));
     const updated=(await query(`UPDATE contracts SET status='ISSUED',snapshot=$2,document_hash=$3,token_hash=$4,
-      issued_at=now(),expires_at=now()+interval '30 days',updated_at=now() WHERE id=$1 RETURNING *`,[id,snapshot,digest,hashContractValue(token)])).rows[0];
+      issued_at=now(),expires_at=now()+interval '30 days',
+      signing_due_at=((now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))+interval '5 days') AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'),
+      signing_grace_until=((now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))+interval '12 days') AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'),updated_at=now() WHERE id=$1 RETURNING *`,[id,snapshot,digest,hashContractValue(token)])).rows[0];
     await query('INSERT INTO contract_access_credentials(contract_id,token_ciphertext) VALUES($1,$2)',[id,encryptSecretJson({token})]);
     await writeAudit({req,action:'contract_issued',entity:'contract',entityId:id,after:{documentHash:digest,revision:row.revision}});
     // The admin app serves the signing route; the marketing website does not.
@@ -91,21 +100,30 @@ export async function revokeContract(id,req) {
 async function tokenContract(token,lock=false) {
   const row=(await query(`SELECT * FROM contracts WHERE token_hash=$1 ${lock?'FOR UPDATE':''}`,[hashContractValue(token)])).rows[0];
   if(!row || row.status==='REVOKED' || row.status==='DRAFT') throw new AppError('This agreement link is unavailable.',404,'NOT_FOUND');
-  if(row.status!=='SIGNED' && new Date(row.expires_at).getTime()<=Date.now()) throw new AppError('This agreement link has expired. Contact The Lola Booth.',410,'CONTRACT_EXPIRED');
+  if(new Date(row.expires_at).getTime()<=Date.now()) throw new AppError('This agreement link has expired. Contact The Lola Booth.',410,'CONTRACT_EXPIRED');
   return row;
 }
-export async function publicContract(token) { return visible(await tokenContract(token)); }
+export async function publicContract(token) { const {signing_grace_until,...contract}=visible(await tokenContract(token));return contract; }
 export async function signContract(token,body,req) {
   return transaction(async()=>{
     const row=await tokenContract(token,true);
     const decision=signingDecision(row,body);
     if(decision.error) throw new AppError(decision.message,decision.error==='SIGNER_EMAIL_MISMATCH'||decision.error==='CONSENT_REQUIRED'?400:409,decision.error);
-    if(decision.replay) return visible(row);
+    if(decision.replay) {const {signing_grace_until,...signed}=visible(row);return signed;}
+    if(row.signing_grace_until&&new Date(row.signing_grace_until)<=new Date())fail('This agreement needs LOLA review before signing. Contact us for help.','CONTRACT_SIGNING_REVIEW');
+    await assertAgreementPrerequisites(row.proposal_id,row.snapshot.accepted_version_id);
+    const method=body.signatureMethod||'TYPED';
+    if(method==='DRAWN'&&!validDrawnSignature(body.signatureStrokes))throw new AppError('Draw your signature or choose Type.',422,'SIGNATURE_REQUIRED');
+    if(!['TYPED','DRAWN'].includes(method))throw new AppError('Select a valid signature method.',422,'SIGNATURE_METHOD_INVALID');
+    const strokes=method==='DRAWN'?body.signatureStrokes:null;
+    const signatureHash=hashContractValue(JSON.stringify({documentHash:row.document_hash,name:body.name,method,strokes}));
     const updated=(await query(`UPDATE contracts SET status='SIGNED',signed_at=now(),signer_name=$2,signer_email=$3,
-      consent_text=$4,signer_ip=$5,signer_user_agent=$6,updated_at=now() WHERE id=$1 RETURNING *`,
-      [row.id,body.name,body.email.toLowerCase(),CONTRACT_CONSENT,req.ip,String(req.headers?.['user-agent']||'').slice(0,1000)])).rows[0];
+      consent_text=$4,signer_ip=$5,signer_user_agent=$6,signature_method=$7,signature_strokes=$8,signature_hash=$9,updated_at=now() WHERE id=$1 RETURNING *`,
+      [row.id,body.name,body.email.toLowerCase(),method==='DRAWN'?DRAWN_CONTRACT_CONSENT:CONTRACT_CONSENT,req.ip,String(req.headers?.['user-agent']||'').slice(0,1000),method,strokes?JSON.stringify(strokes):null,signatureHash])).rows[0];
     await writeAudit({req,action:'contract_signed',entity:'contract',entityId:row.id,after:{revision:row.revision,documentHash:row.document_hash}});
-    return visible(updated);
+    await query("UPDATE tasks SET status='DONE',updated_at=now() WHERE lifecycle_key IN ($1,$2) AND status IN ('OPEN','IN_PROGRESS')",['agreement-sign:'+row.id,'agreement-escalation:'+row.id]);
+    await queueSignedWorkspace(updated);
+    const {signing_grace_until,...signed}=visible(updated);return signed;
   });
 }
 export async function contractPdf(row) {
@@ -126,6 +144,11 @@ export async function contractPdf(row) {
     doc.moveDown().fontSize(11).text(row.terms,{lineGap:4});
     if(row.status==='SIGNED') {
       doc.moveDown().fontSize(14).text('Electronic signature');
+      if(row.signature_method==='DRAWN'&&validDrawnSignature(row.signature_strokes)){
+        const canvas=createCanvas(600,160),ctx=canvas.getContext('2d');ctx.strokeStyle='#171717';ctx.lineWidth=2.5;ctx.lineCap='round';
+        for(const stroke of row.signature_strokes){ctx.beginPath();stroke.forEach(([x,y],index)=>index?ctx.lineTo(x*600,y*160):ctx.moveTo(x*600,y*160));ctx.stroke();}
+        doc.image(canvas.toBuffer('image/png'),{width:300,height:80});
+      }
       doc.fontSize(10).text(`Signed by ${row.signer_name} (${row.signer_email})\nSigned at ${new Date(row.signed_at).toISOString()}\n${row.consent_text}`);
     }
     doc.moveDown().fontSize(8).text(`Document SHA-256: ${row.document_hash || 'Draft — not issued'}`,{lineBreak:true});
@@ -145,4 +168,24 @@ export async function contractSigningUrl(id) {
  const {token}=decryptSecretJson(credential.token_ciphertext);
  if((await publicContract(token)).id!==id) fail('Agreement credential is invalid.');
  return `${env.clientOrigin.replace(/\/$/,'')}/contract/${token}`;
+}
+
+export async function extendSigningDeadline(id,body,req){
+ if(!req.user?.roles?.includes('ADMIN'))throw new AppError('An Admin must approve signing extensions.',403,'FORBIDDEN');
+ return transaction(async()=>{
+  const before=await lockedContract(id);
+  if(before.status!=='ISSUED')fail('Only an unsigned, issued agreement can receive an extension.');
+  const row=(await query(`UPDATE contracts SET signing_due_at=$2,signing_grace_until=$2::timestamptz+interval '7 days',
+   expires_at=GREATEST(expires_at,$2::timestamptz+interval '7 days'),updated_at=now() WHERE id=$1 RETURNING *`,[id,body.dueAt])).rows[0];
+  await writeAudit({req,action:'contract_signing_extended',entity:'contract',entityId:id,before:{dueAt:before.signing_due_at},after:{dueAt:row.signing_due_at,reason:body.reason}});
+  return visible(row);
+ });
+}
+
+async function assertAgreementPrerequisites(proposalId,versionId){
+ const proposal=(await query('SELECT event_id,accepted_version_id,status FROM proposals WHERE id=$1 AND deleted_at IS NULL',[proposalId])).rows[0];
+ if(!proposal||!['ACCEPTED','CONVERTED'].includes(proposal.status)||proposal.accepted_version_id!==versionId)fail('Review the current accepted proposal before signing or issuing an agreement.','AGREEMENT_VERSION_CHANGED');
+ if(!proposal.event_id||!(await query('SELECT booking_journey_managed($1) AS managed',[proposal.event_id])).rows[0]?.managed)return;
+ const invoice=(await query("SELECT * FROM invoices WHERE proposal_id=$1 AND pricing_snapshot->>'accepted_version_id'=$2 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1",[proposalId,versionId])).rows[0];
+ if(!await agreementPaymentQualified(invoice))fail('Verify the required booking payment before issuing or signing this agreement.','AGREEMENT_PAYMENT_REQUIRED');
 }

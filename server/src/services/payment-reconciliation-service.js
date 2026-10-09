@@ -90,6 +90,11 @@ export async function applyBookingConfirmationPolicy(eventId) {
   if (policy === "MANUAL") return null;
   const event = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [eventId]);
   if (!event.rows[0] || event.rows[0].status === "CANCELLED") return null;
+  const managedJourney=(await query('SELECT booking_journey_managed($1) AS managed',[eventId])).rows[0]?.managed;
+  if(managedJourney){
+    const missing=(await query('SELECT booking_confirmation_missing($1) AS missing',[eventId])).rows[0]?.missing||[];
+    if(missing.length)return null;
+  }
   const finance = await query(
     `SELECT
        COALESCE(sum(amount_paid),0)::numeric AS paid,
@@ -112,23 +117,7 @@ export async function applyBookingConfirmationPolicy(eventId) {
   const accepted = policy==='PROPOSAL_ACCEPTED' ? (await query("SELECT 1 FROM proposals WHERE event_id=$1 AND status IN ('ACCEPTED','CONVERTED') AND deleted_at IS NULL LIMIT 1",[eventId])).rows.length>0 : false;
   const shouldConfirm = (policy === "PROPOSAL_ACCEPTED" && accepted) || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
   if (!shouldConfirm || !["TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
-  // A Phase 1 handoff marks a managed booking permanently, even if worker flags later change.
-  // Its confirmation must not inherit a legacy proposal-only or payment-only shortcut.
-  const managed=(await query(`SELECT p.id,p.status AS commercial_status,p.deleted_at AS proposal_deleted_at,p.accepted_version_id,i.total,i.amount_paid,
-      e.event_date-(now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date AS days_until_event,
-      (SELECT CASE WHEN c.snapshot->>'accepted_version_id'=p.accepted_version_id::text THEN c.status ELSE 'STALE_VERSION' END FROM contracts c WHERE c.proposal_id=p.id ORDER BY c.revision DESC LIMIT 1) AS contract_status
-    FROM proposals p JOIN events e ON e.id=p.event_id LEFT JOIN invoices i ON i.proposal_id=p.id
-      AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID','REFUNDED')
-    WHERE p.event_id=$1
-      AND EXISTS(SELECT 1 FROM automation_jobs j WHERE j.related_entity_id=p.id AND j.job_type='BOOKING_SEND_ACCEPTED_INVOICE')`,[eventId])).rows;
-  if(managed.length){
-    if(managed.some(row=>row.proposal_deleted_at || !['ACCEPTED','CONVERTED'].includes(row.commercial_status) || !row.accepted_version_id || row.contract_status!=='SIGNED' || !(Number(row.total)>0)
-      || Math.round(Number(row.amount_paid)*100)<(Number(row.days_until_event)<14?Math.round(Number(row.total)*100):Math.ceil(Math.round(Number(row.total)*100)*0.3))))return null;
-    const reserved=await query("SELECT 1 FROM equipment_assignments WHERE event_id=$1 AND released_at IS NULL LIMIT 1",[eventId]);
-    const activeHold=await query("SELECT 1 FROM booking_holds WHERE event_id=$1 AND status='ACTIVE' AND expires_at>clock_timestamp() LIMIT 1",[eventId]);
-    if(!reserved.rowCount&&!activeHold.rowCount)return null;
-    await query('SELECT assert_event_reservations($1)',[eventId]);
-  }
+  // Persisted journey checks above apply independently of worker flag changes.
   const held=(await query("SELECT id FROM booking_holds WHERE event_id=$1 ORDER BY (status='ACTIVE') DESC,created_at DESC,id DESC LIMIT 1",[eventId])).rows[0];
   // An expired checkout must not silently consume capacity after someone else reserved it.
   const updated = held ? {rows:[await confirmHeldBooking(eventId,held.id)]} : await query("UPDATE events SET status='CONFIRMED', updated_at=now() WHERE id=$1 RETURNING *", [eventId]);

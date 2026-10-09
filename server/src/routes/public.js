@@ -1,3 +1,4 @@
+import {clientSessionRouter} from './client-session.js';
 import { acceptProposal } from '../services/proposal-acceptance-service.js';
 import {PostgresPublicRateLimitStore} from '../middleware/postgres-rate-limit-store.js';
 import {preparePublicBooking,publicBookingCatalog} from '../services/public-booking-service.js';
@@ -50,6 +51,7 @@ publicRouter.use(rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 }));
+publicRouter.use('/client',clientSessionRouter);
 publicRouter.use("/planning",publicPlanningRouter);
 publicRouter.use('/contracts', publicContractsRouter);
 publicRouter.use('/workspaces', publicWorkspaceRouter);

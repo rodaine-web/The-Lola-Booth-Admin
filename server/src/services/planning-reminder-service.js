@@ -32,7 +32,8 @@ export async function queuePlanningReminders(){
     VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id`,[row.event_id,kind,row.id,row.grant_version,row.period])).rows[0];
    if(!ledger)continue;
    const token=kind==='PLANNING'?decryptSecretJson(row.token_ciphertext).token:row.public_token;
-   const url=`${env.clientOrigin.replace(/\/$/,'')}/${kind==='PLANNING'?'client':'approvals'}/${token}`;
+   const managed=(await query('SELECT booking_journey_managed($1) AS managed',[row.event_id])).rows[0]?.managed;
+   const url=managed?env.clientOrigin.replace(/\/$/,'')+'/client':`${env.clientOrigin.replace(/\/$/,'')}/${kind==='PLANNING'?'client':'approvals'}/${token}`;
    const action=kind==='PLANNING'?'complete your event planning':'review your current creative proof';
    const communication=await createCommunicationDraft({event_id:row.event_id,client_id:row.client_id,recipient:row.email,
     subject:`A reminder for ${row.event_name}`,body:`Hi ${row.name?.split(' ')[0]||'there'},\n\nPlease ${action} for ${row.event_name}.\n\n${url}\n\nThank you,\nThe LOLA Booth`,

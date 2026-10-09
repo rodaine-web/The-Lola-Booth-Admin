@@ -1,3 +1,4 @@
+import {assertPlanningPrerequisites} from './event-planning-service.js';
 import { creativeAccess, creativeResponseError, publicCreativeView } from "../../../shared/creative-approval-policy.js";
 import { writeAudit } from "./audit-service.js";
 import { createNotification } from "./notification-service.js";
@@ -175,6 +176,7 @@ export async function publicCreativeApproval(token) {
   return transaction(async () => {
     const approval = (await query("SELECT a.* FROM creative_approvals a JOIN events e ON e.id=a.event_id JOIN clients c ON c.id=a.client_id AND c.id=e.client_id WHERE a.public_token=$1 AND a.deleted_at IS NULL AND e.deleted_at IS NULL AND c.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED') FOR UPDATE OF a", [token])).rows[0];
     if (!creativeAccess(approval)) throw new AppError("This design link is unavailable or expired.",404,"APPROVAL_ACCESS_UNAVAILABLE");
+    await assertPlanningPrerequisites(approval.event_id);
     if (approval.status === "PENDING_APPROVAL") {
       await query("UPDATE creative_approvals SET status='VIEWED', viewed_at=COALESCE(viewed_at, now()), updated_at=now() WHERE id=$1", [approval.id]);
       await recordActivity({ entityType: "event", entityId: approval.event_id, action: "approval_viewed", summary: `Creative approval version ${approval.version} viewed` });
@@ -189,6 +191,7 @@ export async function respondToCreativeApproval(token, input = {}, req = {header
     const approval = (await query("SELECT a.* FROM creative_approvals a JOIN events e ON e.id=a.event_id JOIN clients c ON c.id=a.client_id AND c.id=e.client_id WHERE a.public_token=$1 AND a.deleted_at IS NULL AND e.deleted_at IS NULL AND c.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED') FOR UPDATE OF a", [token])).rows[0];
     const error = creativeResponseError(approval, input);
     if (error) throw new AppError(error === 'APPROVAL_VERSION_CHANGED' ? "The design has changed. Refresh and review the latest version." : "This response cannot be accepted. Check the design, your details and change comments.", error === 'APPROVAL_ACCESS_UNAVAILABLE' ? 404 : 409, error);
+    await assertPlanningPrerequisites(approval.event_id);
     const client = (await query("SELECT email FROM clients WHERE id=$1 AND deleted_at IS NULL", [approval.client_id])).rows[0];
     if (!client?.email || client.email.toLowerCase() !== input.email.trim().toLowerCase()) throw new AppError("Use the email associated with this event.",403,"APPROVAL_IDENTITY_REQUIRED");
     if (approval.status === "APPROVED") return { approval: publicCreativeView(approval), replayed: true };
@@ -213,6 +216,7 @@ export async function publicCreativeProof(token) {
   return transaction(async () => {
     const approval = (await query("SELECT a.* FROM creative_approvals a JOIN events e ON e.id=a.event_id JOIN clients c ON c.id=a.client_id AND c.id=e.client_id WHERE a.public_token=$1 AND a.deleted_at IS NULL AND e.deleted_at IS NULL AND c.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED') FOR SHARE OF a",[token])).rows[0];
     if (!creativeAccess(approval)) throw new AppError("This design link is unavailable or expired.",404,"APPROVAL_ACCESS_UNAVAILABLE");
+    await assertPlanningPrerequisites(approval.event_id);
     const file = (await query("SELECT filename,mime_type,storage_key FROM files WHERE id=$1 AND event_id=$2 AND client_id=$3 AND deleted_at IS NULL AND mime_type IN ('image/png','image/jpeg','application/pdf')",[approval.proof_document_id,approval.event_id,approval.client_id])).rows[0];
     if (!file?.storage_key) throw new AppError("Proof file unavailable.",404,"NOT_FOUND");
     return file;

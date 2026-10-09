@@ -175,7 +175,7 @@ async function readinessScore(event, data) {
   add("EQUIPMENT", "Printer assigned", data.equipment.some((item) => /printer/i.test(`${item.category} ${item.name}`)), { notRequired: /digital|audio/i.test(event.experience_name || ""), severity: "WARNING" });
   add("EQUIPMENT", "Equipment checked out", data.equipment.length > 0 && data.equipment.every((item) => ["CHECKED_OUT", "IN_TRANSIT", "ON_SITE", "RETURNED"].includes(item.lifecycle_status)), { severity: "CRITICAL" });
   const planningRequirements = data.planning?.requirements || [];
-  add("CLIENT", "Event planning submitted", Boolean(data.planning?.submitted_at && !Object.keys(data.planning.change_requests||{}).length), {severity:"WARNING"});
+  add("CLIENT", "Event planning approved by LOLA", Boolean(data.planning?.details_review_status==='APPROVED' && data.planning?.submitted_at && !Object.keys(data.planning.change_requests||{}).length), {severity:"WARNING"});
   for(const item of data.componentCoverage||[])add('CREATIVE',`${item.experienceName}: ${item.component.replaceAll('_',' ')} approved`,item.complete,{severity:'CRITICAL'});
   if(!data.componentCoverage?.length)add('CREATIVE','Creative requirements established',planningRequirements.length>0,{notRequired:planningRequirements.length>0,severity:'WARNING'});
   add("CREATIVE", "Backdrop confirmed", Boolean((data.planning?.backdrop_id || data.planning?.backdrop_path) && data.planning.backdrop_review_status==='CONFIRMED'), {notRequired:planningRequirements.length>0&&!planningRequirements.includes("backdrop"),severity:"WARNING"});

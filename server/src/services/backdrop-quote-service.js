@@ -1,3 +1,4 @@
+import {assertPlanningPrerequisites} from './event-planning-service.js';
 import {query,transaction} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
 import {recordActivity} from './activity-service.js';
@@ -11,7 +12,7 @@ async function planningGrant(token){
  const row=(await query(`SELECT p.event_id,p.client_id FROM event_planning p JOIN events e ON e.id=p.event_id
   JOIN clients c ON c.id=p.client_id AND c.id=e.client_id WHERE p.token_hash=$1 AND p.revoked_at IS NULL AND p.expires_at>now()
   AND e.deleted_at IS NULL AND c.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED') FOR SHARE OF p`,[hashContractValue(token)])).rows[0];
- if(!row)throw new AppError('Planning access unavailable.',404,'NOT_FOUND');return row;
+ if(!row)throw new AppError('Planning access unavailable.',404,'NOT_FOUND');await assertPlanningPrerequisites(row.event_id);return row;
 }
 export async function currentBackdropQuote(eventId,clientId=null){
  const row=(await query(`SELECT q.*,i.secure_token,i.token_expires_at,i.token_revoked_at,i.status AS invoice_status FROM backdrop_quotes q

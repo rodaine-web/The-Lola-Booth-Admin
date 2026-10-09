@@ -22,6 +22,7 @@ export async function ensureEventPlanning(eventId){
  return transaction(async()=>{
   await query('SELECT id FROM events WHERE id=$1 FOR UPDATE',[eventId]);
   const event=await eventRecord(eventId);if(!confirmed.includes(event.status))return null;
+  await assertPlanningPrerequisites(eventId);
   const experiences=(await query('SELECT x.name FROM event_experiences ee JOIN experiences x ON x.id=ee.experience_id WHERE ee.event_id=$1',[eventId])).rows;
   const requirements=planningRequirements(experiences.length?experiences:[{name:event.experience_name||''}],Boolean(event.print_template));
   const brief={event_name:event.event_name||'',event_type:event.event_type||'',event_date:String(event.event_date||''),start_time:event.start_time||'',end_time:event.end_time||'',venue_name:event.venue_name||'',venue_address:event.venue_address||'',guest_count:event.guest_count||0,primary_contact_name:event.client_name||'',primary_contact_email:event.client_email||'',primary_contact_phone:event.client_phone||'',theme:'',moods:[],colors:[]};
@@ -31,13 +32,13 @@ export async function ensureEventPlanning(eventId){
   return row||(await query('SELECT * FROM event_planning WHERE event_id=$1',[eventId])).rows[0];
  });
 }
-function view(row){return Object.fromEntries(['id','status','brief','change_requests','requirements','backdrop_id','backdrop_path','backdrop_review_status','invited_at','opened_at','started_at','last_saved_at','submitted_at','planning_due_at','creative_due_at'].map(key=>[key,row[key]]));}
+function view(row){return Object.fromEntries(['id','status','brief','change_requests','requirements','backdrop_id','backdrop_path','backdrop_review_status','invited_at','opened_at','started_at','last_saved_at','submitted_at','planning_due_at','creative_due_at','review_notes','reviewed_at','details_review_status'].map(key=>[key,row[key]]));}
 async function details(row){const assets=(await query("SELECT id,filename,mime_type,size_bytes FROM files WHERE event_id=$1 AND client_id=$2 AND category='CLIENT_UPLOAD' AND deleted_at IS NULL ORDER BY created_at",[row.event_id,row.client_id])).rows;const backdrops=(await query("SELECT id,name,description,image_url,category,kind,premium,upgrade_price,quantity,status FROM backdrops WHERE status='ACTIVE' OR id=$1 ORDER BY display_order,name",[row.backdrop_id])).rows;return {...view(row),assets,backdrops,progress:planningCompletion(row.brief,row.requirements,Boolean(row.backdrop_id||row.backdrop_path==='OWN'||row.backdrop_path==='CUSTOM'),assets.length)};}
 export async function adminPlanning(eventId,user){await access(eventId,user);const row=(await query('SELECT * FROM event_planning WHERE event_id=$1',[eventId])).rows[0];return row?details(row):null;}
 async function tokenRecord(token,lock='FOR UPDATE'){
  if(!/^[a-f0-9]{64}$/.test(token))throw new AppError('This planning link is unavailable.',404,'PLANNING_UNAVAILABLE');
  const row=(await query(`SELECT p.* FROM event_planning p JOIN events e ON e.id=p.event_id JOIN clients c ON c.id=p.client_id WHERE p.token_hash=$1 AND p.revoked_at IS NULL AND p.expires_at>now() AND e.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED') AND c.deleted_at IS NULL AND c.id=e.client_id ${lock} OF p`,[hashContractValue(token)])).rows[0];
- if(!row)throw new AppError('This planning link is unavailable or expired.',404,'PLANNING_UNAVAILABLE');return row;
+ if(!row)throw new AppError('This planning link is unavailable or expired.',404,'PLANNING_UNAVAILABLE');await assertPlanningPrerequisites(row.event_id);return row;
 }
 export async function planningInvitation(eventId,req,{regenerate=false}={}){
  await access(eventId,req.user);
@@ -51,7 +52,9 @@ export async function planningInvitation(eventId,req,{regenerate=false}={}){
    token=crypto.randomBytes(32).toString('hex');row=(await query("UPDATE event_planning SET token_hash=$1,token_ciphertext=$2,expires_at=now()+interval '120 days',revoked_at=NULL,invitation_communication_id=NULL WHERE id=$3 RETURNING *",[hashContractValue(token),encryptSecretJson({token}),row.id])).rows[0];
    await writeAudit({req,action:'planning_access_created',entity:'event',entityId:eventId});
   }else token=decryptSecretJson(row.token_ciphertext).token;
-  const url=`${env.clientOrigin.replace(/\/$/,'')}/client/${token}`;
+  await assertPlanningPrerequisites(eventId);
+  const managed=(await query('SELECT booking_journey_managed($1) AS managed',[eventId])).rows[0]?.managed;
+  const url=`${env.clientOrigin.replace(/\/$/,'')}/client${managed?'':'/'+token}`;
   if(!row.invitation_communication_id){
    if(!event.client_email)throw new AppError('Add a client email before sending an invitation.',422,'CLIENT_EMAIL_REQUIRED');
    const body=`Hi ${event.client_name?.split(' ')[0]||'there'},\n\nYour LOLA Experience is Booked! Now let's make it yours.\n\n${event.event_name} · ${event.event_date} · ${event.venue_name||'Venue to be confirmed'}\n\nConfirm your event details, tell us about your theme and colors, choose your backdrop and upload logos or images.\n\nCOMPLETE EVENT DETAILS: ${url}\n\nThis only takes a few minutes, and you can save and return anytime.`;
@@ -67,7 +70,7 @@ export async function publicPlanning(token){return transaction(async()=>{const r
 export async function savePlanning(token,input,req){
  const brief=briefSchema.parse(input.brief);
  return transaction(async()=>{
-  const row=await tokenRecord(token);if(['APPROVED','COMPLETE'].includes(row.status))throw new AppError('Contact LOLA to change approved event details.',409,'PLANNING_LOCKED');
+  const row=await tokenRecord(token);if(row.details_review_status==='APPROVED'||['APPROVED','COMPLETE'].includes(row.status))throw new AppError('Contact LOLA to change approved event details.',409,'PLANNING_LOCKED');
   const event=await eventRecord(row.event_id),changes={...row.change_requests};
   for(const key of protectedFields){const booked=normalizedPlanningValue(key,event[key]);if(normalizedPlanningValue(key,brief[key])!==booked)changes[key]={booked,requested:brief[key]};else delete changes[key];}
   const result=(await query("UPDATE event_planning SET brief=$1,change_requests=$2,status='IN_PROGRESS',submitted_at=NULL,started_at=COALESCE(started_at,now()),last_saved_at=now(),updated_at=now() WHERE id=$3 RETURNING *",[JSON.stringify(brief),JSON.stringify(changes),row.id])).rows[0];
@@ -78,7 +81,7 @@ export async function savePlanning(token,input,req){
 }
 export async function submitPlanning(token,req){return transaction(async()=>{
  const row=await tokenRecord(token);if(row.status==='SUBMITTED')return details(row);
- if(['APPROVED','COMPLETE'].includes(row.status))throw new AppError('This planning submission is locked.',409,'PLANNING_LOCKED');
+ if(row.details_review_status==='APPROVED'||['APPROVED','COMPLETE'].includes(row.status))throw new AppError('This planning submission is locked.',409,'PLANNING_LOCKED');
  const result=await details(row);const missing=missingPlanningFields(row.brief,row.requirements,Boolean(row.backdrop_id||row.backdrop_path==='OWN'||row.backdrop_path==='CUSTOM'),result.assets.length);
  if(missing.length)throw new AppError('Complete the listed required fields before submitting.',422,'PLANNING_INCOMPLETE',{missing});
  await query("UPDATE event_planning SET status='SUBMITTED',submitted_at=now(),updated_at=now() WHERE id=$1",[row.id]);
@@ -99,7 +102,7 @@ export async function submitPlanning(token,req){return transaction(async()=>{
  await createNotification({roleTarget:'MANAGERS',category:'EVENTS',title:'Client event planning submitted',body:'Review the creative brief, backdrop and client assets.',entityType:'event',entityId:row.event_id,actionUrl:`/events/events/${row.event_id}`});return {...result,status:'SUBMITTED'};
 });}
 export async function selectPlanningBackdrop(token,input,req){return transaction(async()=>{
- const row=await tokenRecord(token);if(['APPROVED','COMPLETE'].includes(row.status))throw new AppError('Contact LOLA to change an approved backdrop.',409,'PLANNING_LOCKED');
+ const row=await tokenRecord(token);if(row.details_review_status==='APPROVED'||['APPROVED','COMPLETE'].includes(row.status))throw new AppError('Contact LOLA to change an approved backdrop.',409,'PLANNING_LOCKED');
  if(!['COLLECTION','OWN','CUSTOM'].includes(input.path))throw new AppError('Choose a backdrop option.',422,'BACKDROP_INVALID');
  let backdrop=null;
  if(input.path==='COLLECTION'){
@@ -125,7 +128,7 @@ export async function planningUpload(token,input,req){
  if(typeof input.base64!=='string'||input.base64.length>12*1024*1024)throw new AppError('File must be 8 MB or smaller.',422,'UPLOAD_INVALID');
  const buffer=Buffer.from(input.base64,'base64');if(!validPlanningUpload(buffer,input.mime_type))throw new AppError('Upload an 8 MB or smaller PNG, JPG or PDF.',422,'UPLOAD_INVALID');
  return transaction(async()=>{
-  const row=await tokenRecord(token);if(['APPROVED','COMPLETE'].includes(row.status))throw new AppError('Planning is locked.',409,'PLANNING_LOCKED');
+  const row=await tokenRecord(token);if(row.details_review_status==='APPROVED'||['APPROVED','COMPLETE'].includes(row.status))throw new AppError('Planning is locked.',409,'PLANNING_LOCKED');
   const name=String(input.filename||'client-asset').replace(/[^a-zA-Z0-9_.-]/g,'_').slice(-150);
   const stored=await getStorageProvider().put({buffer,filename:name,mimeType:input.mime_type});
   const file=(await query("INSERT INTO files(client_id,event_id,category,filename,storage_provider,storage_key,mime_type,size_bytes,visibility) VALUES($1,$2,'CLIENT_UPLOAD',$3,$4,$5,$6,$7,'PRIVATE') RETURNING id,filename,mime_type,size_bytes",[row.client_id,row.event_id,name,stored.storageProvider,stored.storageKey,input.mime_type,buffer.length])).rows[0];
@@ -149,19 +152,50 @@ export async function reviewPlanning(eventId,input,req){
  return transaction(async()=>{
   const row=(await query('SELECT * FROM event_planning WHERE event_id=$1 FOR UPDATE',[eventId])).rows[0];
   if(!row)throw new AppError('Client planning has not started.',404,'NOT_FOUND');
+  if(input.status){
+   if(!['SUBMITTED','NEEDS_REVIEW','CHANGES_REQUESTED'].includes(row.status))throw new AppError('Review a submitted planning form before approving it or requesting corrections.',409,'PLANNING_REVIEW_STATE');
+   if(input.status==='CHANGES_REQUESTED'&&!input.review_notes?.trim())throw new AppError('Explain which details the client must correct.',422,'REVIEW_NOTES_REQUIRED');
+   if(input.status==='APPROVED'){
+    await assertPlanningPrerequisites(eventId);
+    const current=await details(row);
+    const missing=missingPlanningFields(row.brief,row.requirements,Boolean(row.backdrop_id||row.backdrop_path==='OWN'||row.backdrop_path==='CUSTOM'),current.assets.length);
+    if(missing.length)throw new AppError('Required client details are incomplete.',422,'PLANNING_INCOMPLETE',{missing});
+    const event=await eventRecord(eventId);
+    const pending=Object.entries(row.change_requests||{}).filter(([key,value])=>normalizedPlanningValue(key,event[key])!==normalizedPlanningValue(key,value.requested));
+    if(pending.length)throw new AppError('Resolve requested date, time and venue changes before planning approval.',409,'BOOKING_CHANGES_PENDING');
+    if(row.requirements.includes('backdrop')&&(input.backdrop_review_status||row.backdrop_review_status)!=='CONFIRMED')throw new AppError('Confirm the selected backdrop before planning approval.',422,'BACKDROP_REVIEW_REQUIRED');
+   }
+  }
   if(input.backdrop_review_status==='CONFIRMED'&&!row.backdrop_path)throw new AppError('Select a backdrop option before confirming it.',422,'BACKDROP_REQUIRED');
+  if(input.backdrop_review_status==='CONFIRMED'&&row.backdrop_path==='CUSTOM')await (await import('./backdrop-quote-service.js')).assertBackdropPayment(eventId,row.client_id);
   if(input.backdrop_review_status==='CONFIRMED'&&row.backdrop_id){
    const backdrop=(await query('SELECT status,premium,upgrade_price FROM backdrops WHERE id=$1 FOR SHARE',[row.backdrop_id])).rows[0];
    if(backdrop?.status!=='ACTIVE')throw new AppError('This collection backdrop is unavailable.',409,'BACKDROP_UNAVAILABLE');
    if(backdrop.premium&&Number(backdrop.upgrade_price)>0)await (await import('./backdrop-quote-service.js')).assertBackdropPayment(eventId,row.client_id);
   }
   if(input.backdrop_review_status==='CONFIRMED'&&row.backdrop_path==='CUSTOM')await (await import('./backdrop-quote-service.js')).assertBackdropPayment(eventId,row.client_id);
-  const fields=Object.keys(input).filter(key=>key!=='price_confirmed'),values=fields.map(key=>input[key]);
+  const reviewInput={...input,...(input.status?{reviewed_at:new Date().toISOString(),reviewed_by:req.user.id,details_review_status:input.status}:{}),...(input.status==='APPROVED'?{change_requests:{}}:{})};
+  const fields=Object.keys(reviewInput).filter(key=>key!=='price_confirmed'),values=fields.map(key=>reviewInput[key]);
   if(!fields.length)throw new AppError('Choose a review status or deadline.',422,'REVIEW_REQUIRED');
   values.push(row.id);
   const updated=(await query(`UPDATE event_planning SET ${fields.map((key,i)=>`${key}=$${i+1}`).join(',')},updated_at=now() WHERE id=$${values.length} RETURNING *`,values)).rows[0];
+  if(input.status==='CHANGES_REQUESTED'){
+   const event=await eventRecord(eventId);const managed=(await query('SELECT booking_journey_managed($1) AS managed',[eventId])).rows[0]?.managed;
+   const url=managed?env.clientOrigin.replace(/\/$/,'')+'/client':env.clientOrigin.replace(/\/$/,'')+'/planning/'+decryptSecretJson(row.token_ciphertext).token;
+   await query("UPDATE communications SET status='CANCELLED',updated_at=now() WHERE event_id=$1 AND trigger_key='PLANNING_CORRECTIONS' AND status IN ('DRAFT','SCHEDULED','FAILED')",[eventId]);
+   if(event.client_email){const message=await createCommunicationDraft({event_id:eventId,client_id:row.client_id,recipient:event.client_email,subject:'Please update your LOLA event details',body:input.review_notes+'\n\n'+url,trigger_key:'PLANNING_CORRECTIONS',status:'SCHEDULED',send_mode:'SCHEDULED',scheduled_at:new Date().toISOString()});await query('UPDATE communications SET idempotency_key=$2 WHERE id=$1',[message.id,'planning-correction:'+row.id+':'+new Date(updated.reviewed_at).toISOString()]);}
+  }
   await writeAudit({req,action:'planning_reviewed',entity:'event',entityId:eventId,before:{backdropReviewStatus:row.backdrop_review_status,planningDueAt:row.planning_due_at,creativeDueAt:row.creative_due_at},after:input});
   await recordActivity({actorUserId:req.user.id,entityType:'event',entityId:eventId,action:'planning_reviewed',summary:'LOLA reviewed planning deadlines / backdrop',metadata:input});
   return details(updated);
  });
+}
+
+export async function assertPlanningPrerequisites(eventId){
+ const event=await eventRecord(eventId);
+ if(!confirmed.includes(event.status))throw new AppError('Planning opens after booking confirmation.',409,'BOOKING_NOT_CONFIRMED');
+ if((await query('SELECT booking_journey_managed($1) AS managed',[eventId])).rows[0]?.managed){
+  const missing=(await query('SELECT booking_confirmation_missing($1) AS missing',[eventId])).rows[0]?.missing||[];
+  if(missing.length)throw new AppError(missing.join(' '),409,'BOOKING_PREREQUISITES_REQUIRED',{missing});
+ }
 }

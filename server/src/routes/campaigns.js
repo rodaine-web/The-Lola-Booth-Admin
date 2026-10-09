@@ -1,5 +1,5 @@
 import {proposalCampaignCatalog,campaignEmailContent} from '../services/campaign-offers.js';
-import {campaignDepositInvoice} from '../services/campaign-sales-service.js';
+import {campaignDepositInvoice,campaignCommercialProposal} from '../services/campaign-sales-service.js';
 import {campaignSenders} from '../services/email-service.js';
 import {recordCampaignTracking,transparentPixel} from '../services/campaign-tracking.js';
 import { importCampaignContacts } from '../services/campaign-contact-import.js';
@@ -18,6 +18,7 @@ route('post', '/import-contacts', 'campaigns.create', req => importCampaignConta
 route('post', '/audience-preview', 'campaigns.read', req => resolveCampaignAudience(campaignSchema.shape.audience_json.parse(req.body)));
 route('post', '/', 'campaigns.create', req => saveCampaign(req.body, req));
 route('get','/offers-for-proposals','write:sales',()=>proposalCampaignCatalog());
+campaignRouter.post('/:id/interests/:interestId/proposal',requirePermission('campaigns.read'),requirePermission('write:sales'),asyncHandler(async(req,res)=>res.json(await campaignCommercialProposal(z.uuid().parse(req.params.id),z.uuid().parse(req.params.interestId),req))));
 route('post','/:id/interests/:interestId/invoice','write:finance',req=>campaignDepositInvoice(z.uuid().parse(req.params.id),z.uuid().parse(req.params.interestId),req.body,req));
 route('get', '/:id', 'campaigns.read', req => campaignDetail(z.uuid().parse(req.params.id)));
 route('delete', '/:id', 'campaigns.edit', req => deleteCampaign(z.uuid().parse(req.params.id), req));

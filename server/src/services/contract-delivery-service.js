@@ -46,7 +46,7 @@ export async function sendContract(id,req,{send=sendEmail,policy=stagingEmailPol
     const eligible=await query(`SELECT 1 FROM invoices i JOIN proposals p ON p.id=i.proposal_id LEFT JOIN events e ON e.id=i.event_id
       WHERE i.id=$1 AND p.id=$2 AND p.accepted_version_id::text=$3 AND p.deleted_at IS NULL AND i.deleted_at IS NULL
       AND p.status IN ('ACCEPTED','CONVERTED') AND i.status NOT IN ('DRAFT','VOID','REFUNDED') AND i.total>0
-      AND round(i.amount_paid*100)>=ceil(round(i.total*100)*0.3)
+      AND round(i.amount_paid*100)>=COALESCE((SELECT round(x.minimum_before_agreement*100) FROM booking_payment_exceptions x WHERE x.event_id=i.event_id AND x.revoked_at IS NULL),ceil(round(i.total*100)*0.3))
       AND (i.event_id IS NULL OR (e.id IS NOT NULL AND e.deleted_at IS NULL AND e.status<>'CANCELLED'))`,
       [paymentRequirement.invoiceId,paymentRequirement.proposalId,paymentRequirement.acceptedVersionId]);
     if(!eligible.rowCount){

@@ -1,4 +1,6 @@
+import {assertPlanningPrerequisites} from './event-planning-service.js';
 import crypto from 'node:crypto';
+import {revokeSecureWorkspace} from './client-session-service.js';
 import {query,transaction} from '../db/pool.js';
 import {env} from '../config/env.js';
 import {AppError} from '../utils/errors.js';
@@ -26,6 +28,7 @@ export async function revokeWorkspace(proposalId,req){
  return transaction(async()=>{
   await query('SELECT id FROM proposals WHERE id=$1 FOR UPDATE',[proposalId]);
   await query('UPDATE client_workspaces SET revoked_at=now() WHERE proposal_id=$1 AND revoked_at IS NULL',[proposalId]);
+  await revokeSecureWorkspace(proposalId,req);
   await writeAudit({req,action:'workspace_access_revoked',entity:'proposal',entityId:proposalId});
   return {revoked:true};
  });
@@ -49,6 +52,7 @@ export async function publicWorkspace(token){
 
 async function eventJourney(eventId,clientId){
  if(!eventId||!clientId)return null;
+ try{await assertPlanningPrerequisites(eventId);}catch(error){if(['BOOKING_NOT_CONFIRMED','BOOKING_PREREQUISITES_REQUIRED'].includes(error.code))return {planning:null,creative:[],locked:true,reason:error.message};throw error;}
  const planning=(await query(`SELECT p.status,p.token_ciphertext FROM event_planning p JOIN events e ON e.id=p.event_id
   WHERE p.event_id=$1 AND p.client_id=$2 AND e.client_id=$2 AND e.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED')
    AND p.revoked_at IS NULL AND p.expires_at>now() AND p.token_hash IS NOT NULL`,[eventId,clientId])).rows[0];

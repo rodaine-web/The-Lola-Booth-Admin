@@ -1,3 +1,4 @@
+import {queueBookingLifecycleReminders} from './services/booking-lifecycle-reminders.js';
 import { processBookingInvoiceHandoffs } from './services/booking-invoice-handoff-service.js';
 import {queueDueExternalMaintenance} from './services/external-integration-jobs.js';
 import {processCampaignJobs} from "./services/campaign-service.js";
@@ -37,6 +38,7 @@ async function tick() {
     await queueDueReminders();
     await expireBookingHolds();
     await queuePlanningReminders();
+    await queueBookingLifecycleReminders();
     const result = await processDueJobs({ limit: 25 });
     if(!isStaging()){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25});}else if(process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}
     await recordWorkerProcessingResult("automation-worker", { success: result.processed.every(item=>item.status!=="FAILED"&& !item.error), processed: result.processed.length });

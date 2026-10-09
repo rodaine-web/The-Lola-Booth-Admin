@@ -61,6 +61,7 @@ function PrivateRoute({ children }) {
   return children;
 }
 
+const SecureClientWorkspace = lazy(() => import("./pages/SecureClientWorkspace.jsx"));
 const ClientWorkspace = lazy(() => import("./pages/ClientWorkspace.jsx"));
 const PublicEventPlanning = lazy(() => import("./pages/PublicEventPlanning.jsx"));
 const Backdrops = lazy(() => import("./pages/Backdrops.jsx"));
@@ -75,6 +76,11 @@ export default function App() {
       <Route path="/unsubscribe/:token" element={<CampaignInterest unsubscribe/>}/>
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
+      <Route path="/client" element={<SecureClientWorkspace />} />
+      <Route path="/client/access" element={<SecureClientWorkspace />} />
+      <Route path="/client/events/:eventId/creative/:approvalId" element={<PublicCreativeApproval />} />
+      <Route path="/client/events/:eventId/planning" element={<PublicEventPlanning />} />
+      <Route path="/client/events/:eventId" element={<SecureClientWorkspace />} />
       <Route path="/client/:token" element={<ClientWorkspace />} />
       <Route path="/planning/:token" element={<PublicEventPlanning />} />
       <Route path="/approvals/:token" element={<PublicCreativeApproval />} />

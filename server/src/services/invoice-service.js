@@ -70,7 +70,10 @@ export async function createInvoice(req) {
       ? money(Math.min(Number(source.pricing_snapshot.deposit_amount || 0), Number(totals.total || 0)))
       : money(totals.total);
     const invoiceNumber = await nextNumber(client, "next_invoice_number", "invoice_prefix", "LOLA-INV");
-    const dueDate = req.body.due_date || new Date(Date.now() + Number(settings.rows[0]?.invoice_default_due_days || 7) * 86400000).toISOString().slice(0, 10);
+    const managedDue=source.accepted_version_id?(await client.query(`SELECT GREATEST(event_date-14,(now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date)::text AS due FROM events WHERE id=$1`,[source.event_id])).rows[0]?.due:null;
+    const exceptionDue=source.accepted_version_id?(await client.query('SELECT balance_due_date::text AS due FROM booking_payment_exceptions WHERE event_id=$1 AND revoked_at IS NULL',[source.event_id])).rows[0]?.due:null;
+    if(managedDue && req.body.due_date && req.body.due_date!==(exceptionDue||managedDue))throw new AppError('Approve a written payment exception before changing the contractual balance due date.',409,'PAYMENT_EXCEPTION_REQUIRED');
+    const dueDate = exceptionDue || managedDue || req.body.due_date || new Date(Date.now() + Number(settings.rows[0]?.invoice_default_due_days || 7) * 86400000).toISOString().slice(0, 10);
     const documentTemplateKey = req.body.document_template_key || (req.body.corporate_billing ? "corporate_invoice" : "standard_invoice");
     const corporateBilling = {
       company: req.body.company || req.body.corporate_billing?.company || null,
@@ -83,9 +86,9 @@ export async function createInvoice(req) {
       payment_terms: req.body.payment_terms || req.body.corporate_billing?.payment_terms || null
     };
     const invoice = await client.query(
-      `INSERT INTO invoices (invoice_number, proposal_id, client_id, event_id, status, subtotal, discount, tax, total, amount_paid, balance_due, amount_outstanding, due_date, notes, terms, secure_token, pricing_snapshot, document_template_key, corporate_billing)
-       VALUES ($1,$2,$3,$4,'DRAFT',$5,$6,$7,$8,0,$8,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || source.content?.scenario?.copy.terms_intro || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, ...(source.content?.scenario?{proposal_scenario:source.content.scenario,deposit_amount:source.pricing_snapshot.deposit_amount,balance:source.pricing_snapshot.balance}:{}), payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling)]
+      `INSERT INTO invoices (invoice_number, proposal_id, client_id, event_id, status, subtotal, discount, tax, total, amount_paid, balance_due, amount_outstanding, due_date, notes, terms, secure_token, pricing_snapshot, document_template_key, corporate_billing, lead_id, campaign_interest_id)
+       VALUES ($1,$2,$3,$4,'DRAFT',$5,$6,$7,$8,0,$8,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || source.content?.scenario?.copy.terms_intro || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, ...(source.content?.campaign_interest_id?{campaign_id:source.content.campaign_id,campaign_name:source.content.campaign_offer?.campaign_name,campaign_offer:source.content.campaign_offer}:{}), ...(source.accepted_version_id?{accepted_version_id:source.accepted_version_id}:{}), ...(source.content?.scenario?{proposal_scenario:source.content.scenario,deposit_amount:source.pricing_snapshot.deposit_amount,balance:source.pricing_snapshot.balance}:{}), payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling), source.lead_id||null,source.content?.campaign_interest_id||null]
     );
     created = true;
     for (const item of totals.items) {

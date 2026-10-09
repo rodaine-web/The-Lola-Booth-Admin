@@ -84,7 +84,7 @@ export async function publicPaymentOptions(invoice) {
   };
 }
 
-export async function createPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey }) {
+export async function createPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey, workspaceEventId }) {
   const invoice = await loadInvoiceByToken(token);
   if (!isInvoicePayable(invoice)) throw new AppError("This invoice is not payable.", 409, "INVOICE_NOT_PAYABLE");
   await assertCheckoutHold(invoice.event_id);
@@ -112,8 +112,8 @@ export async function createPaymentSession({ token, provider, amountChoice = "DE
   const existing = await query("SELECT * FROM payment_attempts WHERE idempotency_key=$1 AND invoice_id=$2 AND provider=$3 LIMIT 1", [key, invoice.id, normalizedProvider]);
   if (existing.rows[0] && existing.rows[0].status === "PENDING" && Date.now()-new Date(existing.rows[0].created_at).getTime()<23*3600000) return safeSession(existing.rows[0], normalizedProvider);
   if (existing.rows[0]) throw new AppError("This checkout has ended. Please refresh and try again.", 409, "CHECKOUT_ENDED");
-  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice, stripeAccount);
-  return createPaypalOrder(invoice, key, options.currency, selectedAmount, amountChoice);
+  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice, stripeAccount,workspaceEventId);
+  return createPaypalOrder(invoice, key, options.currency, selectedAmount, amountChoice,workspaceEventId);
 }
 
 export async function recordManualPayment(req) {
@@ -566,12 +566,12 @@ async function recordProviderRefund(input) {
   return refund;
 }
 
-async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount) {
+async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount,workspaceEventId) {
   const params = new URLSearchParams({
     mode: "payment",
     integration_identifier: 'lola_invoice_' + [...crypto.createHash('sha256').update(key).digest().subarray(0,8)].map(n=>String.fromCharCode(97+n%26)).join(''),
-    success_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=cancelled`,
+    success_url: `${paymentReturnUrl(invoice,workspaceEventId)}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${paymentReturnUrl(invoice,workspaceEventId)}?payment=cancelled`,
     "line_items[0][price_data][currency]": currency.toLowerCase(),
     "line_items[0][price_data][product_data][name]": `LOLA Booths Invoice ${invoice.invoice_number}`,
     "line_items[0][price_data][unit_amount]": String(cents(amount)),
@@ -596,7 +596,7 @@ async function createStripeCheckout(invoice, key, currency, amount = invoiceBala
   return { provider: "STRIPE", checkoutUrl: data.url, sessionId: data.id, amount, currency };
 }
 
-async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT") {
+async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT",workspaceEventId) {
   const token = await paypalAccessToken();
   const response = await fetch(`${paypalBaseUrl()}/v2/checkout/orders`, {
     method: "POST",
@@ -604,7 +604,7 @@ async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance
     body: JSON.stringify({
       intent: "CAPTURE",
       purchase_units: [{ custom_id: invoice.id, invoice_id: invoice.id, amount: { currency_code: currency, value: amount.toFixed(2) } }],
-      application_context: { return_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success`, cancel_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=cancelled` }
+      application_context: { return_url: `${paymentReturnUrl(invoice,workspaceEventId)}?payment=success`, cancel_url: `${paymentReturnUrl(invoice,workspaceEventId)}?payment=cancelled` }
     })
   });
   const data = await response.json();
@@ -736,4 +736,9 @@ async function flagBookingConfirmationFailure(payment,error){
       if(payment.event_id)await recordActivity({entityType:'event',entityId:payment.event_id,action:'paid_booking_needs_review',summary:'Payment recorded; resource confirmation needs operator review'});
     });
   }catch(notificationError){logger.warn({paymentId:payment.id,code:notificationError.code||'NOTIFICATION_FAILED'},'Booking review alert could not be persisted');}
+}
+
+function paymentReturnUrl(invoice,eventId){
+ if(eventId&&eventId!==invoice.event_id)throw new AppError('Invoice event mismatch.',403,'FORBIDDEN');
+ return eventId?`${env.clientOrigin.replace(/\/$/,'')}/client/events/${eventId}`:`${documentOrigin()}/pay/${invoice.secure_token}`;
 }
