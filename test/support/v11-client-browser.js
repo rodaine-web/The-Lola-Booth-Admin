@@ -22,11 +22,11 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   await page.goto(issued.data.signing_url);
   await page.getByRole('heading',{name:'Browser demo agreement',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Sign agreement',exact:true}).isDisabled(),true);
-  await page.getByLabel('Full legal name',{exact:true}).fill('Demo Client');
-  await page.getByLabel('Client email',{exact:true}).fill('wrong@example.com');
+  await page.getByRole('textbox',{name:/^Full legal name/}).fill('Demo Client');
+  await page.getByRole('textbox',{name:/^Client email/}).fill('wrong@example.com');
   await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Sign agreement',exact:true}).click();
   await page.getByRole('alert').waitFor();assert.ok((await page.getByRole('alert').innerText()).length>0);
-  await page.getByLabel('Client email',{exact:true}).fill('demo@example.com');await page.getByRole('button',{name:'Sign agreement',exact:true}).click();
+  await page.getByRole('textbox',{name:/^Client email/}).fill('demo@example.com');await page.getByRole('button',{name:'Sign agreement',exact:true}).click();
   await page.getByRole('heading',{name:'Agreement signed',exact:true}).waitFor();
   await page.screenshot({path:fileURLToPath(new URL('signed-desktop.png',evidence)),fullPage:true});
   const pdfLink=await page.getByRole('link',{name:'Download signed copy PDF',exact:true}).getAttribute('href');

@@ -192,9 +192,9 @@ const addonFields = [
 ];
 
 const taskFields = [
-  ["title", "Title"], ["description", "Description", "textarea"], ["due_date", "Due date", "date"], ["assigned_user_id", "Owner", "relationship", { resource: "users" }], ["lead_id", "Lead", "relationship", { resource: "leads" }], ["client_id", "Client", "relationship", { resource: "clients" }], ["event_id", "Event", "relationship", { resource: "events" }], ["status", "Status", "select", { options: ["OPEN","IN_PROGRESS","DONE","CANCELLED"] }], ["priority", "Priority", "select", { options: ["LOW","NORMAL","HIGH","URGENT"] }]
+  ["title", "Title", "text", { required: true }], ["description", "Description", "textarea"], ["due_date", "Due date", "date"], ["assigned_user_id", "Owner", "relationship", { resource: "users" }], ["lead_id", "Lead", "relationship", { resource: "leads" }], ["client_id", "Client", "relationship", { resource: "clients" }], ["event_id", "Event", "relationship", { resource: "events" }], ["status", "Status", "select", { options: ["OPEN","IN_PROGRESS","DONE","CANCELLED"] }], ["priority", "Priority", "select", { options: ["LOW","NORMAL","HIGH","URGENT"] }]
 ];
 
 const paymentFields = [
-  ["event_id", "Event", "relationship", { resource: "events" }], ["client_id", "Client", "relationship", { resource: "clients" }], ["invoice_id", "Invoice", "relationship", { resource: "invoices" }], ["amount", "Amount", "number"], ["payment_method", "Payment method"], ["reference_number", "Reference number"], ["payment_date", "Payment date", "date"], ["notes", "Notes", "textarea"]
+  ["event_id", "Event", "relationship", { resource: "events" }], ["client_id", "Client", "relationship", { resource: "clients" }], ["invoice_id", "Invoice", "relationship", { resource: "invoices" }], ["amount", "Amount", "number", { required: true }], ["payment_method", "Payment method", "select", { required: true, options: ["CARD","CASH","CHECK","BANK_TRANSFER","ZELLE","EXTERNAL_CARD","OTHER"] }], ["reference_number", "Reference number"], ["payment_date", "Payment date", "date", { required: true }], ["notes", "Notes", "textarea"]
 ];

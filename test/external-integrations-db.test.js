@@ -48,7 +48,7 @@ test('external hub migration and queue run against disposable PostgreSQL', {
         audience_id: 'list1',
         needs_selection: false
       }]);
-      await query("INSERT INTO leads(first_name,email,marketing_email_opt_in,status) VALUES('QA','consented@example.invalid',true,'NEW')");
+      await query("INSERT INTO leads(first_name,last_name,email,event_type,marketing_email_opt_in,status) VALUES('QA','External','consented@example.invalid','Corporate',true,'NEW')");
       t.mock.method(globalThis, 'fetch', async (_url, opts) => new Response(JSON.stringify(opts.method === 'GET' ? {} : {
         id: 'member'
       }), {

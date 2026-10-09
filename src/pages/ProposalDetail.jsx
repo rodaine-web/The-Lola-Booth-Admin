@@ -84,7 +84,7 @@ export default function ProposalDetail() {
       {sendOpen && <form className="panel" onSubmit={event=>{event.preventDefault();action(async()=>{await api.post(`/proposals/${id}/send`,{recipient:recipient.trim()});setSendOpen(false);},"Proposal submitted to the email provider.");}}>
         <h2>Send proposal</h2>
         <p>The recipient will receive an HTML email with a proposal link and the option to download the PDF.</p>
-        <label>Recipient email<input type="email" required disabled={busy} value={recipient} onChange={event=>setRecipient(event.target.value)}/></label>
+        <label>Recipient email <span className="required-mark" aria-hidden="true">*</span><input aria-label="Recipient email" type="email" required disabled={busy} value={recipient} onChange={event=>setRecipient(event.target.value)}/></label>
         <div className="button-row"><button className="primary-action" disabled={busy}>{busy?"Sending…":"Send proposal email"}</button><button type="button" disabled={busy} onClick={()=>setSendOpen(false)}>Cancel</button></div>
       </form>}
       {proposal.status === "ACCEPTED" && !proposal.linked_invoice_id && <section className="panel"><h2>Proposal accepted</h2><p><strong>Next step:</strong> create one invoice for this proposal. The invoice tracks the full proposal total, requests the configured deposit first, and then continues with the remaining balance.</p><div className="button-row"><button className="primary-action" disabled={busy} onClick={createInvoiceFromProposal}><ReceiptText size={16} />Create Invoice</button></div></section>}

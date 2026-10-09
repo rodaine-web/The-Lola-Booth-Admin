@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 
-export default function RelationshipSelect({ resource, value, onChange, placeholder = "Select", disabled = false, filters = {} }) {
+export default function RelationshipSelect({ resource, value, onChange, placeholder = "Select", disabled = false, required = false, filters = {} }) {
   const [options, setOptions] = useState([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
@@ -25,7 +25,7 @@ export default function RelationshipSelect({ resource, value, onChange, placehol
   return (
     <div className="relationship-select">
       <input aria-label={`Search ${placeholder}`} value={search} disabled={disabled} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${placeholder.toLowerCase()}...`} />
-      <select aria-label={placeholder} value={value || ""} disabled={disabled} onChange={(event) => onChange(event.target.value || null, options.find(option => option.id === event.target.value) || null)}>
+      <select required={required} aria-label={placeholder} value={value || ""} disabled={disabled} onChange={(event) => onChange(event.target.value || null, options.find(option => option.id === event.target.value) || null)}>
         <option value="">{placeholder}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>

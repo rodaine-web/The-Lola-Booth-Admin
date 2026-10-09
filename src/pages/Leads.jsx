@@ -120,7 +120,7 @@ export default function Leads(){
           <label>Phone *<input required type="tel" value={draft.phone||""} onChange={e=>setDraft({...draft,phone:e.target.value})}/></label>
           <label>Event date *<input required type="date" value={draft.event_date||""} onChange={e=>setDraft({...draft,event_date:e.target.value})}/></label>
           <label>Event type *<select required value={draft.event_type||""} onChange={e=>setDraft({...draft,event_type:e.target.value})}><option value="">Select event type</option>{eventTypes.map(type=><option key={type}>{type}</option>)}</select></label>
-          {draft.event_type==="Other"&&<label>Describe event type<input required value={draft.custom_event_type||""} onChange={e=>setDraft({...draft,custom_event_type:e.target.value})}/></label>}
+          {draft.event_type==="Other"&&<label>Describe event type <span className="required-mark" aria-hidden="true">*</span><input aria-label="Describe event type" required value={draft.custom_event_type||""} onChange={e=>setDraft({...draft,custom_event_type:e.target.value})}/></label>}
           <label>Guests<input type="number" min="1" value={draft.guest_count||""} onChange={e=>setDraft({...draft,guest_count:e.target.value})}/></label>
           <label>Venue<input value={draft.venue_name||""} onChange={e=>setDraft({...draft,venue_name:e.target.value})}/></label>
           <label className="wide">Notes<textarea value={draft.message||""} onChange={e=>setDraft({...draft,message:e.target.value})} placeholder="What did the client tell us?"/></label>

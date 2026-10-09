@@ -219,23 +219,25 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
               <h2>{editing.mode === "edit" ? "Edit" : "New"} {title.replace(/s$/, "")}</h2>
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
+            <p className="note-text">Fields marked * are required.</p>
+            {endpoint==="/payments"&&<p>Select an invoice, or both a client and an event.</p>}
             <div className="form-grid">
               {fields.map(([name, label, type = "text", config = {}]) => (
                 <label key={name} className={type === "textarea" ? "wide" : ""}>
-                  {label}
+                  {label}{(config.required||(endpoint==="/events"&&["client_id","event_type"].includes(name)))&&<span className="required-mark" aria-hidden="true"> *</span>}
                   {name === "event_type" ? <EventTypeSelect value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))} required/> : name.endsWith("media_id") ? <MediaSelect label={label} value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "lines" ? (
-                    <textarea aria-label={label} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                    <textarea required={Boolean(config.required)} aria-label={label} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
                   ) : type === "select" ? (
-                    <select aria-label={label} value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
+                    <select required={Boolean(config.required)} aria-label={label} value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
                   ) : type === "checkbox" ? (
                     <input type="checkbox" checked={Boolean(form[name])} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.checked }))} />
                   ) : type === "relationship" ? (
                     <>
-                      <RelationshipSelect resource={config.resource} value={form[name]} placeholder={label} onChange={(value) => setForm((current) => ({ ...current, [name]: value }))} />
+                      <RelationshipSelect resource={config.resource} required={Boolean(config.required)||(endpoint==="/events"&&name==="client_id")} value={form[name]} placeholder={label} onChange={(value) => setForm((current) => ({ ...current, [name]: value }))} />
                       {endpoint === "/events" && name === "client_id" && editing?.mode === "create" && <button type="button" onClick={() => setInlineClientOpen((value) => !value)}>{inlineClientOpen ? "Cancel new client" : "Create new client"}</button>}
                     </>
                   ) : (
-                    <input required={Boolean(config.required)} type={type} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                    <input aria-label={label} required={Boolean(config.required)} type={type} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
                   )}
                 </label>
               ))}
@@ -255,9 +257,9 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
             {endpoint === "/events" && inlineClientOpen && <section className="panel wide">
               <h3>Create client without leaving this event</h3>
               <div className="form-grid">
-                <label>First name<input required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
-                <label>Last name<input required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
-                <label>Email<input required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
+                <label>First name <span className="required-mark" aria-hidden="true">*</span><input aria-label="First name" required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
+                <label>Last name <span className="required-mark" aria-hidden="true">*</span><input aria-label="Last name" required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
+                <label>Email <span className="required-mark" aria-hidden="true">*</span><input aria-label="Email" required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
                 <label>Phone<input value={inlineClient.phone} onChange={(event)=>setInlineClient(current=>({...current,phone:event.target.value}))}/></label>
               </div>
               <div className="button-row">

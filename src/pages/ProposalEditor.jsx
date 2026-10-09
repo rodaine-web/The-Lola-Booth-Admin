@@ -326,9 +326,9 @@ export default function ProposalEditor() {
           <h2>Create Client</h2>
           <p className="lede">Create the client here and continue building the proposal without leaving this page.</p>
           <div className="form-grid">
-            <label>First name<input required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
-            <label>Last name<input required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
-            <label>Email<input required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
+            <label>First name <span className="required-mark" aria-hidden="true">*</span><input aria-label="First name" required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
+            <label>Last name <span className="required-mark" aria-hidden="true">*</span><input aria-label="Last name" required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
+            <label>Email <span className="required-mark" aria-hidden="true">*</span><input aria-label="Email" required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
             <label>Phone (optional)<input type="tel" value={inlineClient.phone} onChange={(event)=>setInlineClient(current=>({...current,phone:event.target.value}))}/></label>
           </div>
           <div className="button-row">
@@ -341,11 +341,11 @@ export default function ProposalEditor() {
           <h2>Create Event</h2>
           <p className="lede">Create and link the event here. A client must be selected first.</p>
           <div className="form-grid">
-            <label>Event title<input required value={inlineEvent.event_name} onChange={(event)=>setInlineEvent(current=>({...current,event_name:event.target.value}))}/></label>
-            <label>Event type<input required value={inlineEvent.event_type} onChange={(event)=>setInlineEvent(current=>({...current,event_type:event.target.value}))}/></label>
-            <label>Event date<input required type="date" value={inlineEvent.event_date} onChange={(event)=>setInlineEvent(current=>({...current,event_date:event.target.value}))}/></label>
-            <label>Start time<input required type="time" value={inlineEvent.start_time} onChange={(event)=>setInlineEvent(current=>({...current,start_time:event.target.value}))}/></label>
-            <label>End time<input required type="time" value={inlineEvent.end_time} onChange={(event)=>setInlineEvent(current=>({...current,end_time:event.target.value}))}/></label>
+            <label>Event title <span className="required-mark" aria-hidden="true">*</span><input aria-label="Event title" required value={inlineEvent.event_name} onChange={(event)=>setInlineEvent(current=>({...current,event_name:event.target.value}))}/></label>
+            <label>Event type <span className="required-mark" aria-hidden="true">*</span><input aria-label="Event type" required value={inlineEvent.event_type} onChange={(event)=>setInlineEvent(current=>({...current,event_type:event.target.value}))}/></label>
+            <label>Event date <span className="required-mark" aria-hidden="true">*</span><input aria-label="Event date" required type="date" value={inlineEvent.event_date} onChange={(event)=>setInlineEvent(current=>({...current,event_date:event.target.value}))}/></label>
+            <label>Start time <span className="required-mark" aria-hidden="true">*</span><input aria-label="Start time" required type="time" value={inlineEvent.start_time} onChange={(event)=>setInlineEvent(current=>({...current,start_time:event.target.value}))}/></label>
+            <label>End time <span className="required-mark" aria-hidden="true">*</span><input aria-label="End time" required type="time" value={inlineEvent.end_time} onChange={(event)=>setInlineEvent(current=>({...current,end_time:event.target.value}))}/></label>
             <label>Venue<input value={inlineEvent.venue_name} onChange={(event)=>setInlineEvent(current=>({...current,venue_name:event.target.value}))}/></label>
             <label>Address<input value={inlineEvent.venue_address} onChange={(event)=>setInlineEvent(current=>({...current,venue_address:event.target.value}))}/></label>
             <label>City<input value={inlineEvent.city} onChange={(event)=>setInlineEvent(current=>({...current,city:event.target.value}))}/></label>
