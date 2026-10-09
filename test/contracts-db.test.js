@@ -16,17 +16,9 @@ test('contract lifecycle: snapshot, issue, lock, sign, replay, PDF, revoke and i
  try{await transaction(async()=>{
   const schema=`v11_${crypto.randomBytes(8).toString('hex')}`;
   await query(`CREATE SCHEMA ${schema}`);await query(`SET LOCAL search_path TO ${schema},public`);
-  await query(`CREATE TABLE users(id UUID PRIMARY KEY); CREATE TABLE clients(id UUID PRIMARY KEY,name TEXT,email TEXT);
-   CREATE TABLE events(id UUID PRIMARY KEY,event_name TEXT,event_type TEXT,event_date DATE,start_time TIME,end_time TIME,venue_name TEXT);
-   CREATE TABLE proposals(id UUID PRIMARY KEY,proposal_number TEXT,status TEXT,total NUMERIC,client_id UUID,event_id UUID,line_items_snapshot JSONB,secure_token TEXT,deleted_at TIMESTAMPTZ);
-   CREATE TABLE communications(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),proposal_id UUID,type TEXT,channel TEXT,direction TEXT,recipient TEXT,subject TEXT,rendered_subject TEXT,rendered_body TEXT,rendered_html TEXT,message_summary TEXT,status TEXT,send_mode TEXT,trigger_key TEXT,user_id UUID,created_by UUID,sent_by UUID,provider TEXT,provider_message_id TEXT,failure_code TEXT,failure_message TEXT,sent_at TIMESTAMPTZ);
-   CREATE TABLE invoices(id UUID PRIMARY KEY,proposal_id UUID,invoice_number TEXT,status TEXT,total NUMERIC,amount_outstanding NUMERIC,balance_due NUMERIC,amount_paid NUMERIC,due_date DATE,secure_token TEXT,token_revoked_at TIMESTAMPTZ,token_expires_at TIMESTAMPTZ,deleted_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT now());
-   CREATE TABLE payments(id UUID PRIMARY KEY,invoice_id UUID,amount NUMERIC,status TEXT,payment_date DATE,deleted_at TIMESTAMPTZ);
-   CREATE TABLE audit_logs(user_id UUID,actor_user_id UUID,action TEXT,entity TEXT,entity_type TEXT,entity_id UUID,before_value JSONB,before_json JSONB,after_value JSONB,after_json JSONB,ip_address TEXT,user_agent TEXT);`);
-  await query(await fs.readFile(new URL('../server/migrations/040_v11_contracts.sql',import.meta.url),'utf8'));
-  await query(await fs.readFile(new URL('../server/migrations/041_v11_agreement_delivery.sql',import.meta.url),'utf8'));
-  await query(await fs.readFile(new URL('../server/migrations/042_v11_client_workspaces.sql',import.meta.url),'utf8'));
-  await query('INSERT INTO users VALUES($1)',[user]);await query('INSERT INTO clients VALUES($1,$2,$3)',[client,'Demo Client','client@example.com']);
+  const directory=new URL('../server/migrations/',import.meta.url);
+  for(const filename of (await fs.readdir(directory)).filter(name=>name.endsWith('.sql')).sort())await query(await fs.readFile(new URL(filename,directory),'utf8'));
+  await query("INSERT INTO users(id,name,email,password_hash) VALUES($1,'QA Admin','qa-admin@example.invalid','test-only')",[user]);await query('INSERT INTO clients(id,name,email) VALUES($1,$2,$3)',[client,'Demo Client','client@example.com']);
   await query("INSERT INTO proposals(id,proposal_number,status,total,client_id,line_items_snapshot) VALUES($1,'DEMO-V11','ACCEPTED',1099,$2,$3)",[proposal,client,JSON.stringify([{description:'360 Signature',quantity:1,unit_price:1099}])]);
   const body={title:'Demo agreement',terms:'Approved demo service terms. A deposit is required to confirm the booking.'};
   const draft=await service.createContract(proposal,body,req);
@@ -34,7 +26,7 @@ test('contract lifecycle: snapshot, issue, lock, sign, replay, PDF, revoke and i
   const issued=await service.issueContract(draft.id,req);const token=issued.signing_url.split('/').at(-1);
   assert.equal(service.hashContractValue(contractDocument(issued.title,issued.terms,issued.snapshot)),issued.document_hash);
   assert.equal(await service.contractSigningUrl(draft.id),issued.signing_url);
-  assert.ok(!('token_hash' in issued));assert.equal((await service.publicContract(token)).snapshot.total,'1099');
+  assert.ok(!('token_hash' in issued));assert.equal(Number((await service.publicContract(token)).snapshot.total),1099);
   await assert.rejects(service.updateContract(draft.id,{...body,terms:'Changed'},req));
   await assert.rejects(service.signContract(token,{name:'Demo Client',email:'wrong@example.com',consent:true,documentHash:issued.document_hash},req));
   const {sendContract}=await import('../server/src/services/contract-delivery-service.js');

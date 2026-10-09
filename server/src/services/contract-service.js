@@ -171,7 +171,7 @@ export async function contractSigningUrl(id) {
 }
 
 export async function extendSigningDeadline(id,body,req){
- if(!req.user?.roles?.includes('ADMIN'))throw new AppError('An Admin must approve signing extensions.',403,'FORBIDDEN');
+ if(!req.user?.roles?.some(role=>['OWNER','ADMIN'].includes(role)))throw new AppError('An Admin must approve signing extensions.',403,'FORBIDDEN');
  return transaction(async()=>{
   const before=await lockedContract(id);
   if(before.status!=='ISSUED')fail('Only an unsigned, issued agreement can receive an extension.');

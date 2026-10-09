@@ -102,7 +102,7 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     await assert.rejects(signContract(signingToken,{name:'QA Client',email:'qa@example.invalid',consent:true,documentHash:hash},req),{code:'CONTRACT_SIGNING_REVIEW'},'Signing after escalation requires a manager extension');
     await assert.rejects(extendSigningDeadline(contract.id,{dueAt:new Date(Date.now()+86400000).toISOString(),reason:'QA extension authorized for testing'},req),{code:'FORBIDDEN'});
     const manager=(await query("INSERT INTO users(name,email,password_hash) VALUES('QA Manager','qa-manager@example.invalid','not-a-login') RETURNING id")).rows[0];
-    await extendSigningDeadline(contract.id,{dueAt:new Date(Date.now()+86400000).toISOString(),reason:'QA extension authorized for testing'},{...req,user:{id:manager.id,roles:['ADMIN']}});
+    await extendSigningDeadline(contract.id,{dueAt:new Date(Date.now()+86400000).toISOString(),reason:'QA extension authorized for testing'},{...req,user:{id:manager.id,roles:['OWNER']}});
     const {dispatchDecision:deadlineDispatchDecision}=await import('../server/src/services/communication-dispatch-policy.js');
     const obsoleteReminder=(await query("SELECT * FROM communications WHERE trigger_key='BOOKING_SIGNATURE_REMINDER' LIMIT 1")).rows[0];
     assert.equal(await transaction(client=>deadlineDispatchDecision(client,obsoleteReminder)),'CANCELLED','A revised deadline cancels the old reminder');

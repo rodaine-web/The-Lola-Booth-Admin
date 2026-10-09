@@ -3,7 +3,7 @@ import {query,transaction} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
 import {writeAudit} from './audit-service.js';
 export async function approveBookingPaymentException(eventId,input,req){
- if(!req.user?.roles?.includes('ADMIN'))throw new AppError('An Admin must approve payment exceptions.',403,'FORBIDDEN');
+ if(!req.user?.roles?.some(role=>['OWNER','ADMIN'].includes(role)))throw new AppError('An Admin must approve payment exceptions.',403,'FORBIDDEN');
  return transaction(async()=>{
   const event=(await query('SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[eventId])).rows[0];
   if(!event||event.status==='CANCELLED')throw new AppError('Event unavailable.',404,'NOT_FOUND');
