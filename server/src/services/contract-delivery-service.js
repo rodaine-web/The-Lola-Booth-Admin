@@ -10,10 +10,10 @@ import {contractDeliveryDecision,contractDeliveryFailure} from '../../../shared/
 export function contractEmailMessage(contract, signingUrl) {
  const signed=contract.status==='SIGNED';
  const subject=`${signed?'Your signed agreement':'Your agreement is ready'} — ${contract.snapshot.event_name||contract.snapshot.proposal_number}`;
- const body=`Hi ${contract.snapshot.client_name||'there'},\n\n${signed?'Thank you for signing your event service agreement. You can review it and download your signed copy below.':'Your event service agreement is ready. Please review the terms and sign online.'}\n\n${signingUrl}\n\nBooking confirmation follows your proposal’s deposit requirements. Signing does not process a payment.\n\nThe Lola Booth`;
+ const body=`Hi ${contract.snapshot.client_name||'there'},\n\n${signed?'Thank you for signing your event service agreement. You can review it and download your signed copy below.':'Your event service agreement is ready. Please review the terms and sign online.'}\n\n${signingUrl}\n\nYour booking is confirmed after accepted terms, required payment, agreement signing and availability checks. Signing does not process a payment.\n\nThe Lola Booth`;
  return {to:contract.snapshot.client_email,subject,body,html:brandedEmailHtml(body,{firstName:contract.snapshot.client_name||'there',kicker:signed?'Your signed agreement':'Your agreement is ready',ctaLabel:signed?'View Signed Agreement':'Review & Sign Agreement',ctaUrl:signingUrl,secondaryCta:{label:'Download PDF',url:`${signingUrl}?download=pdf`,copyLabel:'Download your agreement PDF:'}}),attachments:[]};
 }
-export async function sendContract(id,req,{send=sendEmail,policy=stagingEmailPolicy}={}) {
+export async function sendContract(id,req,{send=sendEmail,policy=stagingEmailPolicy,paymentRequirement=null}={}) {
  const contract=await getContract(id);
  const signingUrl=await contractSigningUrl(id);
  const purpose=contract.status==='SIGNED'?'SIGNED_COPY':'INVITATION';
@@ -42,6 +42,19 @@ export async function sendContract(id,req,{send=sendEmail,policy=stagingEmailPol
  // The durable claim above survives a provider timeout or process interruption.
  return transaction(async()=>{
   const current=(await query('SELECT status,expires_at FROM contracts WHERE id=$1 FOR UPDATE',[id])).rows[0];
+  if(paymentRequirement){
+    const eligible=await query(`SELECT 1 FROM invoices i JOIN proposals p ON p.id=i.proposal_id LEFT JOIN events e ON e.id=i.event_id
+      WHERE i.id=$1 AND p.id=$2 AND p.accepted_version_id::text=$3 AND p.deleted_at IS NULL AND i.deleted_at IS NULL
+      AND p.status IN ('ACCEPTED','CONVERTED') AND i.status NOT IN ('DRAFT','VOID','REFUNDED') AND i.total>0
+      AND round(i.amount_paid*100)>=ceil(round(i.total*100)*0.3)
+      AND (i.event_id IS NULL OR (e.id IS NOT NULL AND e.deleted_at IS NULL AND e.status<>'CANCELLED'))`,
+      [paymentRequirement.invoiceId,paymentRequirement.proposalId,paymentRequirement.acceptedVersionId]);
+    if(!eligible.rowCount){
+      await query("UPDATE contract_deliveries SET status='FAILED',failure_code='BOOKING_PAYMENT_CHANGED',completed_at=now() WHERE id=$1",[claim.id]);
+      await query("UPDATE communications SET status='CANCELLED',updated_at=now() WHERE id=$1",[claim.communication_id]);
+      return {status:'CANCELLED'};
+    }
+  }
   let outcome;
   try {
    if(current.status!==contract.status||(current.status==='ISSUED'&&new Date(current.expires_at)<=new Date()))throw new AppError('Agreement is no longer available for sending.',409,'CONTRACT_CHANGED');

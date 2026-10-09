@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {planningRequirements,planningCompletion,validPlanningUpload,BACKDROP_COLLECTION,normalizedPlanningValue} from '../shared/event-planning.js';
+import {planningRequirements,planningCompletion,missingPlanningFields,validPlanningUpload,BACKDROP_COLLECTION,normalizedPlanningValue} from '../shared/event-planning.js';
 import {safeRequestLog} from '../server/src/utils/request-log.js';
 test('multi-experience planning collects shared information once and only includes relevant questions',()=>{
  const requirements=planningRequirements([{name:'LOLA Glam'},{name:'LOLA 360'},{name:'Audio Guestbook'}],true);
@@ -38,4 +38,29 @@ test('protected time comparisons normalize database seconds without concealing d
 test('event details cannot be submitted when the venue or booked timing is missing',()=>{
  const brief={event_name:'Demo',primary_contact_name:'Client',primary_contact_email:'client@example.com'};
  assert.equal(planningCompletion(brief,['event_details'],false,0)[0].complete,false);
+});
+
+
+test('planning submission explains every missing field and sends clients to the applicable step',()=>{
+ const brief={event_name:'Demo',event_type:'Wedding',event_date:'2026-11-10',start_time:'18:00',end_time:'22:00',venue_name:'Venue',primary_contact_name:'Client',primary_contact_email:'client@example.com',primary_contact_phone:'5551234567',theme:'Romantic',colors:['#ffffff']};
+ const requirements=planningRequirements(['LOLA Glam','LOLA 360']);
+ const missing=missingPlanningFields(brief,requirements,false,0);
+ assert.deepEqual(new Set(missing.map(item=>item.key)),new Set(['backdrop','assets','music','environment']));
+ assert.equal(missing.find(item=>item.key==='backdrop').step,2);
+ assert.equal(missing.find(item=>item.key==='assets').step,3);
+ assert.ok(missing.every(item=>item.message&&item.label));
+ assert.ok(!missing.some(item=>['overlay','welcome_screen','video_overlay','intro_outro'].includes(item.key)),'future designer proof tasks must not block client submission');
+ brief.music='Jazz';brief.environment='Indoor';brief.assets_not_required=true;
+ assert.deepEqual(missingPlanningFields(brief,requirements,true,0),[]);
+ assert.ok(planningCompletion(brief,requirements,true,0).every(item=>item.complete));
+ delete brief.start_time;brief.primary_contact_phone='   ';
+ assert.deepEqual(missingPlanningFields(brief,requirements,true,0).map(item=>item.key),['start_time','primary_contact_phone']);
+});
+
+test('planning requirement diagnostics exclude inapplicable backdrop and upload actions',()=>{
+ const requirements=planningRequirements(['Audio Guestbook']);
+ const brief={theme:'Celebration',colors:['#ffffff'],greeting:'Welcome',phone_placement:'Entrance',signage:'Leave a message'};
+ assert.ok(!missingPlanningFields(brief,requirements,false,0).some(item=>['assets','backdrop'].includes(item.key)));
+ const keys=missingPlanningFields({},requirements,false,0).map(item=>item.key);
+ assert.equal(keys.filter(key=>key==='primary_contact_email').length,1);
 });

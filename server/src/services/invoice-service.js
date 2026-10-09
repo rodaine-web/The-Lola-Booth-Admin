@@ -35,23 +35,27 @@ export async function getInvoice(idOrToken, { publicView = false } = {}) {
 }
 
 export async function createInvoice(req) {
-  if (req.body.proposal_id) {
-    const proposal = await getProposal(req.body.proposal_id);
-    if (proposal.status !== "ACCEPTED" && proposal.status !== "CONVERTED") {
-      throw new AppError("Only an accepted proposal can be converted to an invoice.", 409, "PROPOSAL_NOT_ACCEPTED");
-    }
-    const existing = await query(
-      "SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1",
-      [req.body.proposal_id]
-    );
-    if (existing.rows[0]) return existing.rows[0];
-  }
+  let created = false;
   const invoice = await transaction(async (client) => {
+    // Serialize invoice creation with acceptance and other requests for this proposal.
+    if (req.body.proposal_id) {
+      const locked = (await client.query("SELECT status FROM proposals WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.body.proposal_id])).rows[0];
+      if (!locked || !["ACCEPTED", "CONVERTED"].includes(locked.status)) throw new AppError("Only an accepted proposal can be converted to an invoice.", 409, "PROPOSAL_NOT_ACCEPTED");
+      const existing = await client.query("SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1", [req.body.proposal_id]);
+      if (existing.rows[0]) return existing.rows[0];
+    }
     const settings = await client.query("SELECT * FROM business_settings LIMIT 1");
     let source = {};
     let items = req.body.items || [];
     if (req.body.proposal_id) {
       source = await getProposal(req.body.proposal_id);
+      if (source.accepted_version_id) {
+        const version = (await client.query("SELECT snapshot FROM proposal_versions WHERE id=$1 AND proposal_id=$2", [source.accepted_version_id, source.id])).rows[0];
+        if (!version) throw new AppError("The accepted proposal version is unavailable. Review this proposal before invoicing.", 409, "ACCEPTED_VERSION_UNAVAILABLE");
+        const agreed = version.snapshot.proposal_snapshot || version.snapshot;
+        source = {...source, content: agreed.content, pricing_snapshot: agreed.pricing_snapshot,
+          line_items_snapshot: agreed.line_items_snapshot, total: agreed.total};
+      }
       items = (source.line_items_snapshot || []).map((item) => ({
         description: item.description,
         quantity: item.quantity,
@@ -83,6 +87,7 @@ export async function createInvoice(req) {
        VALUES ($1,$2,$3,$4,'DRAFT',$5,$6,$7,$8,0,$8,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || source.content?.scenario?.copy.terms_intro || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, ...(source.content?.scenario?{proposal_scenario:source.content.scenario,deposit_amount:source.pricing_snapshot.deposit_amount,balance:source.pricing_snapshot.balance}:{}), payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling)]
     );
+    created = true;
     for (const item of totals.items) {
       await client.query(
         `INSERT INTO invoice_items (invoice_id, label, description, quantity, unit_price, taxable, tax_rate, discount, total, line_total)
@@ -98,8 +103,10 @@ export async function createInvoice(req) {
     }
     return invoice.rows[0];
   });
-  await recordActivity({ actorUserId: req.user.id, entityType: "invoice", entityId: invoice.id, action: "invoice_created", summary: `Invoice ${invoice.invoice_number} created` });
-  await writeAudit({ req, action: "invoice_created", entity: "invoice", entityId: invoice.id, after: invoice });
+  if (created) {
+    await recordActivity({ actorUserId: req.user.id, entityType: "invoice", entityId: invoice.id, action: "invoice_created", summary: `Invoice ${invoice.invoice_number} created` });
+    await writeAudit({ req, action: "invoice_created", entity: "invoice", entityId: invoice.id, after: invoice });
+  }
   return invoice;
 }
 

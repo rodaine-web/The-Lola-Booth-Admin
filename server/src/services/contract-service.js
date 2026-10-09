@@ -12,12 +12,21 @@ function fail(message, code = 'CONTRACT_STATE') { throw new AppError(message, 40
 async function proposalSnapshot(id) {
   const {rows} = await query(`SELECT p.proposal_number,p.status,p.total,c.name AS client_name,c.email AS client_email,
     e.event_name,e.event_type,e.event_date,e.start_time,e.end_time,e.venue_name,
-    p.line_items_snapshot AS items FROM proposals p LEFT JOIN clients c ON c.id=p.client_id
+    p.line_items_snapshot AS items,p.accepted_version_id,v.snapshot AS accepted_snapshot FROM proposals p
+    LEFT JOIN proposal_versions v ON v.id=p.accepted_version_id AND v.proposal_id=p.id
+    LEFT JOIN clients c ON c.id=p.client_id
     LEFT JOIN events e ON e.id=p.event_id WHERE p.id=$1 AND p.deleted_at IS NULL FOR UPDATE OF p`, [id]);
   const proposal = rows[0];
   if (!proposal) throw new AppError('Proposal not found.',404,'NOT_FOUND');
   if (!proposalAllowsAgreement(proposal.status)) fail('Accept the proposal before creating an agreement.');
   if (!proposal.client_email) fail('Add the client email before creating an agreement.');
+  if (proposal.accepted_version_id) {
+    if (!proposal.accepted_snapshot) fail('The accepted proposal version is unavailable. Review it before issuing an agreement.');
+    const accepted = proposal.accepted_snapshot.proposal_snapshot || proposal.accepted_snapshot;
+    proposal.total = accepted.total ?? accepted.pricing_snapshot?.total;
+    proposal.items = accepted.line_items_snapshot;
+  }
+  delete proposal.accepted_snapshot;
   delete proposal.status;
   return proposal;
 }

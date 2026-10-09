@@ -1,3 +1,4 @@
+import { acceptProposal } from '../services/proposal-acceptance-service.js';
 import {PostgresPublicRateLimitStore} from '../middleware/postgres-rate-limit-store.js';
 import {preparePublicBooking,publicBookingCatalog} from '../services/public-booking-service.js';
 import {publicContractsRouter,publicWorkspaceRouter} from './contracts.js';
@@ -227,19 +228,14 @@ publicRouter.get("/proposals/:token/pdf", asyncHandler(async (req, res) => {
 publicRouter.post("/proposals/:token/accept", asyncHandler(async (req, res) => {
   const body = z.object({ acceptedByName: z.string().trim().min(2).max(160) }).parse(req.body);
   const proposal = await getProposal(req.params.token, { publicView: true });
-  if (proposal.status === "ACCEPTED") return res.json({ proposal });
-  if (!["SENT", "VIEWED"].includes(proposal.status)) throw new AppError("This proposal is not available for acceptance.", 409, "PROPOSAL_NOT_ACCEPTABLE");
-  const version = await query("SELECT id FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC LIMIT 1", [proposal.id]);
-  const updated = await query(
-    `UPDATE proposals SET status='ACCEPTED', accepted_at=now(), accepted_by_name=$1, accepted_ip=$2, accepted_user_agent=$3, accepted_version_id=$4, updated_at=now()
-     WHERE id=$5 AND status IN ('SENT','VIEWED') AND (valid_through IS NULL OR valid_through >= current_date) RETURNING *`,
-    [body.acceptedByName, req.ip, req.headers["user-agent"] || null, version.rows[0]?.id || null, proposal.id]
-  );
-  if (!updated.rows[0]) throw new AppError("This proposal has already been updated. Refresh to see its current status.",409,"PROPOSAL_STATE_CHANGED");
-  await recordActivity({ entityType: "proposal", entityId: proposal.id, action: "proposal_accepted", summary: `Proposal ${proposal.proposal_number} accepted by ${body.acceptedByName}` });
+  const accepted = await acceptProposal(proposal.id, body.acceptedByName, req);
+  const automatic = accepted.invoiceQueued;
+  const nextStep = automatic ? { action: "INVOICE_QUEUED", label: "Your invoice will be emailed to you" }
+    : { action: "CREATE_DEPOSIT_INVOICE", label: "Create and send deposit invoice" };
+  if (accepted.duplicate) return res.json({ proposal: accepted.proposal, nextStep });
   if (proposal.event_id) await applyBookingConfirmationPolicy(proposal.event_id);
-  await createNotification({ roleTarget: "OWNER_ADMIN", category: "SALES", severity: "HIGH", title: `Proposal ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted ${proposal.proposal_number}. Next step: create and send the deposit invoice.`, entityType: "proposal", entityId: proposal.id, actionUrl: `/sales/proposals/${proposal.id}`, metadata: { nextStep: "CREATE_DEPOSIT_INVOICE", acceptedBy: body.acceptedByName }, email: { enabled: true, subject: `LOLA: ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted the proposal. Create and send the deposit invoice from the Admin portal.` } }).catch(error => req.log?.warn({ code:error.code }, "Proposal acceptance notification failed"));
-  res.json({ proposal: updated.rows[0], nextStep: { action: "CREATE_DEPOSIT_INVOICE", label: "Create and send deposit invoice" } });
+  await createNotification({ roleTarget: "OWNER_ADMIN", category: "SALES", severity: "HIGH", title: `Proposal ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted ${proposal.proposal_number}. ${automatic ? "The invoice handoff is queued." : "Next step: create and send the deposit invoice."}`, entityType: "proposal", entityId: proposal.id, actionUrl: `/sales/proposals/${proposal.id}`, metadata: { nextStep: nextStep.action, acceptedBy: body.acceptedByName }, email: { enabled: true, subject: `LOLA: ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted the proposal. ${automatic ? "The invoice handoff is queued for delivery." : "Create and send the deposit invoice from the Admin portal."}` } }).catch(error => req.log?.warn({ code:error.code }, "Proposal acceptance notification failed"));
+  res.json({ proposal: accepted.proposal, nextStep });
 }));
 
 publicRouter.post("/proposals/:token/decline", asyncHandler(async (req, res) => {

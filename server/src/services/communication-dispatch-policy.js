@@ -4,6 +4,22 @@ import { grantUsable } from './gallery-policy.js';
 
 // Recheck after claiming work. A provider request already in flight cannot be recalled.
 export async function dispatchDecision(client, message) {
+  if (message.trigger_key === 'BOOKING_SEND_ACCEPTED_INVOICE') {
+    if (process.env.BOOKING_INVOICE_HANDOFF_ENABLED !== 'true') return 'CANCELLED';
+    const [prefix, proposalId, versionId] = String(message.idempotency_key || '').split(':');
+    if (prefix !== 'booking-invoice' || !proposalId || !versionId) return 'CANCELLED';
+    const allowed = await client.query(`SELECT 1 FROM invoices i JOIN proposals p ON p.id=i.proposal_id
+      JOIN clients c ON c.id=i.client_id LEFT JOIN events e ON e.id=i.event_id
+      WHERE i.id=$1 AND p.id=$2 AND p.accepted_version_id::text=$3
+      AND i.deleted_at IS NULL AND p.deleted_at IS NULL AND c.deleted_at IS NULL
+      AND lower(c.email)=lower($4) AND p.status IN ('ACCEPTED','CONVERTED')
+      AND i.status NOT IN ('PAID','VOID','REFUNDED')
+      AND i.amount_paid < COALESCE((i.pricing_snapshot->>'amount_due_now')::numeric,0)
+      AND (i.event_id IS NULL OR (e.id IS NOT NULL AND e.deleted_at IS NULL AND e.status<>'CANCELLED'))`,
+    [message.invoice_id, proposalId, versionId, message.recipient]);
+    if (!allowed.rowCount) return 'CANCELLED';
+  }
+
   if(message.trigger_key==='PLANNING_RECURRING_REMINDER'){
     if(process.env.PLANNING_REMINDERS_ENABLED!=='true')return 'CANCELLED';
     const allowed=await client.query(`SELECT 1 FROM planning_reminder_ledger l JOIN events e ON e.id=l.event_id

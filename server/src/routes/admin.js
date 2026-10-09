@@ -1496,7 +1496,7 @@ adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(p
   const updated = await transaction(async (client) => {
     const result = await client.query(
       `UPDATE proposals SET lead_id=$1, client_id=$2, event_id=$3, package_id=$4, experience_id=$5, status=$6, notes=$7, total=$8, valid_through=$9, content=$10, pricing_snapshot=$11, line_items_snapshot=$12, document_template_key=$13, editable_sections=$14, proposal_title=$15, proposal_date=$16, proposal_type=$17, selected_experiences=$18, proposal_visuals=$19, updated_at=now()
-       WHERE id=$20 AND deleted_at IS NULL RETURNING *`,
+       WHERE id=$20 AND deleted_at IS NULL AND status IN ('DRAFT','READY') RETURNING *`,
       [merged.lead_id || null, merged.client_id || snapshot.client.id || null, merged.event_id || null, merged.package_id || null, merged.experience_id || null, merged.status || before.status, merged.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals), req.params.id]
     );
     if (!result.rows[0]) throw notFound("Proposal");
