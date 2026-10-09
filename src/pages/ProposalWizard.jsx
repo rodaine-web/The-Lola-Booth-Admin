@@ -42,6 +42,7 @@ export default function ProposalWizard(){
   const [previewError,setPreviewError]=useState('');
   const [createdId,setCreatedId]=useState('');
   const [error,setError]=useState("");
+  const [duplicateLead,setDuplicateLead]=useState(null);
   const [form,setForm]=useState({
     first_name:"",last_name:"",email:"",phone:"",event_name:"",event_type:"",custom_event_type:"",
     event_date:"",start_time:"",end_time:"",guest_count:"",venue_name:"",venue_address:"",city:"",state:"",
@@ -208,10 +209,10 @@ export default function ProposalWizard(){
     }
   }
 
-  async function createLeadIfNeeded(){
+  async function createLeadIfNeeded(allowDuplicate=false){
     if(context?.event)return null;
     if(leadId)return leadId;
-    const created=await api.post("/leads",{
+    const created=await api.post(allowDuplicate?"/leads?continueAnyway=1":"/leads",{
       first_name:form.first_name,last_name:form.last_name,email:form.email,phone:form.phone,
       event_date:form.event_date,event_start_time:form.start_time||null,event_end_time:form.end_time||null,
       event_type:actualEventType(),guest_count:form.guest_count?Number(form.guest_count):null,
@@ -243,12 +244,12 @@ export default function ProposalWizard(){
     return()=>{active=false;clearTimeout(timer);};
   },[step,previewKey]);
 
-  async function submit(send=false){
+  async function submit(send=false,allowDuplicate=false){
     if(busy||!previewReady||!validateStepOne())return;
     if(selectedExperiences.some(item=>!item.packages?.length)){setError("Choose a package for each selected experience.");return;}
-    setBusy(true);setError("");
+    setBusy(true);setError("");setDuplicateLead(null);
     try{
-      const ensuredLeadId=await createLeadIfNeeded();
+      const ensuredLeadId=await createLeadIfNeeded(allowDuplicate);
       const clientId=await createClientFromForm();
       const eventId=await createEventIfReady(clientId);
       const payload={...previewPayload,lead_id:ensuredLeadId,client_id:clientId,event_id:eventId,status:'DRAFT'};
@@ -256,7 +257,7 @@ export default function ProposalWizard(){
       setCreatedId(proposal.id);
       if(send){try{await api.post('/proposals/'+proposal.id+'/send',{});}catch(err){setError('Draft created. Sending failed: '+err.message+' Open the saved draft to retry.');return;}}
       navigate("/sales/proposals/"+proposal.id);
-    }catch(err){setError(err.message);}finally{setBusy(false);}
+    }catch(err){setError(err.message);if(err.code==="POSSIBLE_DUPLICATE"&&err.details?.duplicate)setDuplicateLead({...err.details.duplicate,send});}finally{setBusy(false);}
   }
 
   return <main className="page proposal-wizard-page">
@@ -353,6 +354,7 @@ export default function ProposalWizard(){
       {preview&&<ProposalScenarioReview scenario={preview.scenario} overrides={overrides} onChange={setOverrides} experiences={selectedExperiences} onExperiencesChange={setSelectedExperiences} assets={photoAssets}/>}
       <details className="wizard-section"><summary>Preview client proposal</summary>{previewReady?<iframe title="Client proposal preview" sandbox="" srcDoc={preview.html} style={{width:'100%',height:760,border:'1px solid #ded5c9'}}/>:<p role="status">{previewError||'Updating preview…'}</p>}</details>
       {createdId&&<Link to={'/sales/proposals/'+createdId}>Open saved draft</Link>}
+      {duplicateLead&&<section className="panel" role="alert"><h3>Review the matching lead</h3><p>{duplicateLead.first_name} {duplicateLead.last_name} · {duplicateLead.email}</p><p>A lead already uses this contact information. Review it before creating another inquiry for this event.</p><div className="button-row"><Link to={'/sales/leads/'+duplicateLead.id} target="_blank" rel="noreferrer">Review existing lead</Link><button disabled={busy||!previewReady} onClick={()=>submit(duplicateLead.send,true)}>Create a separate inquiry for this event</button><button onClick={()=>{setDuplicateLead(null);setError('');setStep(1);}}>Edit contact details</button></div></section>}
       <div className="wizard-actions"><button onClick={()=>setStep(2)}><ArrowLeft size={15}/>Back</button><div><button disabled={busy||!previewReady||Boolean(createdId)} onClick={()=>submit(false)}><FileText size={15}/>Create as Draft</button><button className="primary-action" disabled={busy||!previewReady||Boolean(createdId)} onClick={()=>submit(true)}><Send size={15}/>{busy?"Working...":"Create & Send Proposal"}</button></div></div>
     </section>}
   </main>;

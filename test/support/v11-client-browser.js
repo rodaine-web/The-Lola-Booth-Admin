@@ -68,7 +68,7 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
    assert.equal(await page.getByLabel('Or paste your HTML',{exact:true}).inputValue(),uploadedHtml);
    await page.getByLabel('Image URL — wedding_hero_url',{exact:true}).fill('https://thelolabooth.com/campaigns/year-end-2026/hero.jpg');
    await page.getByRole('navigation',{name:'Campaign steps'}).getByRole('button',{name:/Review & send/}).click();
-   await page.getByRole('button',{name:'Generate preview',exact:true}).click();
+   await page.getByRole('button',{name:'Generate preview',exact:true}).first().click();
    await page.frameLocator('iframe[title="Campaign email preview"]').getByRole('heading',{name:'Wedding upload QA',exact:true}).waitFor();
    assert.equal(await page.frameLocator('iframe[title="Campaign email preview"]').getByRole('img',{name:'Wedding hero',exact:true}).getAttribute('src'),'https://thelolabooth.com/campaigns/year-end-2026/hero.jpg');
    await page.getByRole('navigation',{name:'Campaign steps'}).getByRole('button',{name:/Design/}).click();
