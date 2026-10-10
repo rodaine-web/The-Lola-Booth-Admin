@@ -263,11 +263,25 @@ export async function handleStripeWebhook(rawBody, signature) {
     }
     if (event.type === "payment_intent.payment_failed") {
       const object = event.data?.object || {};
+      // A card decline can be retried in the same Checkout. Resolve its exact
+      // session instead of failing every pending attempt on the invoice.
+      const sessionId=await stripeSessionForIntent(object.id);
       await recordProviderPaymentFailure({
         provider: "STRIPE",
         providerPaymentId: object.id,
+        providerSessionId: sessionId,
+        retryable: true,
         invoiceId: object.metadata?.invoice_id,
         failureCode: object.last_payment_error?.code || object.last_payment_error?.decline_code || "payment_failed"
+      });
+    }
+    if (["checkout.session.expired", "checkout.session.async_payment_failed"].includes(event.type)) {
+      const object=event.data?.object || {};
+      if(object.payment_status!=='paid')await recordProviderPaymentFailure({
+        provider:'STRIPE',providerPaymentId:object.payment_intent,
+        providerSessionId:object.id,invoiceId:object.metadata?.invoice_id,
+        expired:event.type==='checkout.session.expired',
+        failureCode:event.type==='checkout.session.expired'?'checkout_expired':'async_payment_failed'
       });
     }
     if (['refund.created','refund.updated','refund.failed'].includes(event.type)) {
@@ -435,17 +449,18 @@ async function sendRecordedPaymentEmail({payment, invoice, to, subject, body, ht
 }
 
 async function recordProviderPaymentFailure(input) {
-  if (!input.invoiceId && !input.providerPaymentId) return null;
+  if (!input.providerSessionId && !input.providerPaymentId) return null;
   const updated = await query(
     `UPDATE payment_attempts
-     SET status='FAILED', provider_reference=COALESCE(provider_reference,$1), failure_code=$2, updated_at=now()
+     SET status=$6, failure_code=$2, updated_at=now()
      WHERE provider=$3 AND (
-       provider_reference=$1
-       OR provider_session_id=$1
-       OR ($4::uuid IS NOT NULL AND invoice_id=$4 AND status='PENDING')
-     ) AND status <> 'SUCCEEDED'
+       ($5::text IS NOT NULL AND provider_session_id=$5)
+       OR ($5::text IS NULL AND provider_reference=$1)
+     ) AND ($4::uuid IS NULL OR invoice_id=$4)
+       AND status IN ('PENDING','PROCESSING')
      RETURNING *`,
-    [input.providerPaymentId || null, input.failureCode || "payment_failed", input.provider, input.invoiceId || null]
+    [input.providerPaymentId || null, input.failureCode || "payment_failed", input.provider, input.invoiceId || null,
+      input.providerSessionId||null,input.retryable?'PENDING':input.expired?'EXPIRED':'FAILED']
   );
   const attempt = updated.rows[0];
   if (!attempt?.invoice_id) return { status: "FAILED" };
@@ -539,6 +554,13 @@ async function recordProviderRefund(input) {
 }
 
 function stripeHeaders(){return {Authorization:`Bearer ${env.stripeSecretKey}`,'Stripe-Version':'2026-08-26.dahlia'};}
+async function stripeSessionForIntent(id){
+  if(!/^pi_[A-Za-z0-9]+$/.test(id||''))throw new AppError('Invalid Stripe payment identifier.',422,'INVALID_PROVIDER_PAYMENT');
+  const response=await fetch(`https://api.stripe.com/v1/checkout/sessions?payment_intent=${encodeURIComponent(id)}&limit=2`,{headers:stripeHeaders(),signal:AbortSignal.timeout(15000)});
+  const page=await response.json();
+  if(!response.ok||!Array.isArray(page.data)||page.data.length>1||page.has_more)throw new AppError('Stripe checkout lookup requires reconciliation.',502,'STRIPE_SESSION_LOOKUP_FAILED');
+  return page.data[0]?.id||null;
+}
 async function retrieveStripeRefund(id){
   if(!/^re_[A-Za-z0-9]+$/.test(id||''))throw new AppError('Invalid Stripe refund identifier.',502,'INVALID_PROVIDER_REFUND');
   const response=await fetch(`https://api.stripe.com/v1/refunds/${encodeURIComponent(id)}`,{headers:stripeHeaders(),signal:AbortSignal.timeout(15000)});
