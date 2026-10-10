@@ -24,7 +24,7 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     await query("INSERT INTO business_settings(business_name) VALUES('Disposable QA')");
     const contact=(await query("INSERT INTO clients(name,email) VALUES('Lifecycle QA','qa@example.invalid') RETURNING id")).rows[0];
     const event=(await query("INSERT INTO events(client_id,event_name,event_type,event_date,start_time,end_time,status) VALUES($1,'Lifecycle QA','Wedding','2030-11-10','18:00','23:00','PENDING_DEPOSIT') RETURNING id",[contact.id])).rows[0];
-    const lead=(await query("INSERT INTO leads(first_name,last_name,email,status) VALUES('Lifecycle','QA','qa@example.invalid','PROPOSAL_SENT') RETURNING id")).rows[0];
+    const lead=(await query("INSERT INTO leads(first_name,last_name,email,event_type,status) VALUES('Lifecycle','QA','qa@example.invalid','Wedding','PROPOSAL_SENT') RETURNING id")).rows[0];
     const agreed={total:1000,pricing_snapshot:{total:1000,deposit_amount:300,tax_rate:0},line_items_snapshot:[{description:'Accepted experience',quantity:1,unit_price:1000}],content:{}};
     const proposal=(await query(`INSERT INTO proposals(client_id,proposal_number,status,total,pricing_snapshot,line_items_snapshot,content,secure_token,event_id)
       VALUES($1,'QA-P1','SENT',1000,$2,$3,$4,$5,$6) RETURNING *`,[contact.id,agreed.pricing_snapshot,JSON.stringify(agreed.line_items_snapshot),agreed.content,crypto.randomBytes(24).toString('hex'),event.id])).rows[0];
