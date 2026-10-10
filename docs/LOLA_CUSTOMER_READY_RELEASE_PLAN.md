@@ -1,6 +1,6 @@
 # LOLA customer-ready release plan
 
-Updated 2026-10-08 following owner scope decision. This plan supersedes the earlier requirement to complete galleries and broader event operations before the first customer-ready release. Production deployment still requires explicit owner approval after the in-scope staging gates pass.
+Updated 2026-10-10 following owner scope and confirmation decisions. This plan supersedes the earlier requirement to complete galleries and broader event operations before the first customer-ready release. Production deployment still requires explicit owner approval after the in-scope staging gates pass.
 
 ## Phase 1: booking clients
 
@@ -11,7 +11,7 @@ Deliver a connected, reliable customer acquisition and booking workflow:
 3. Invoicing: automatically generate and send the 30% Non-Refundable Booking Retainer Fee invoice after valid proposal acceptance or campaign-offer acceptance; issue balance invoices and approved payment schedules without duplicate creation. The fee is credited toward the total. Default balance due 14 days before the event; bookings made fewer than 14 days beforehand require full payment unless a written exception applies.
 4. Payments and receipts: authoritative provider verification, ledger reconciliation, partial payments, no overpayment, duplicate/replay protection and downloadable receipts. Verify refund/chargeback integrity even though customer-change workflows are deferred.
 5. Agreements: automatically prepare and send the agreement after authoritative payment verification confirms the required minimum payment; client signature sufficient by default; immutable accepted commercial snapshot, approved agreement text, typed/drawn signing, signed PDF, issuance deadline and escalation.
-6. Booking confirmation: commit only after accepted commercial terms, required payment, signature and deliverable resource availability; generate written confirmation. Agreement signing triggers the secure workspace invitation automatically; workspace access must not itself confirm the booking.
+6. Booking confirmation: commit only after accepted commercial terms, required payment and signature; generate written confirmation. Equipment assignment is an Admin task after confirmation and must not block signing confirmation. Existing conflict guards still protect subsequent equipment/backdrop assignments and rescheduling. Agreement signing triggers the secure workspace invitation automatically; workspace access must not itself confirm the booking.
 7. Client Workspace: automatically send a secure invitation once all required agreement signatures are verified and committed. Use the approved design, independent state indicators, next action and outstanding To-dos, secure single-use magic links and revocable sessions, returning-client access, event/proposal/agreement/invoice/receipt links. If booking confirmation is pending, show its actual pending status and keep planning, backdrop selection and creative uploads locked. Defer unfinished gallery, customer-change and event-day features rather than show actionable broken controls.
 8. Event details and planning: mandatory-field markers, conditional requirements, specific missing-field errors, saved drafts, submission, Admin review/approval/corrections and consistent status. Lock submission/backdrop selection/creative uploads until confirmed. Protect changes to accepted date, time and venue; do not silently mutate the booking.
 9. Automated reminders: proposal follow-up, payment, signing and event-detail submission/review reminders using existing workers, completion conditions, configured deadlines, escalation, idempotent sends and cancellation of obsolete jobs. Inspect historical queues before controlled activation.
@@ -25,7 +25,7 @@ Deliver a connected, reliable customer acquisition and booking workflow:
 - Successful transitions close completed To-dos and create the next eligible action automatically. Failed generation/delivery creates an actionable Admin retry/review task; do not report delivery success from queue creation.
 - Dispatch through existing communication workers only after the state transaction commits; use stable idempotency keys and recheck eligibility before sending. Repeated acceptance, payments, webhook deliveries and signatures cannot produce duplicate invoices, agreements or invitations.
 - Refunds/chargebacks, revoked commercial versions, cancelled bookings and superseded agreements must invalidate obsolete next actions and queued messages. Preserve signed documents and posted financial history.
-- Owner's latest instruction supersedes the earlier mandatory manual Admin invoice issuance/agreement sending steps. Admin retains visibility, authorized exception handling and safe retries. Booking confirmation requirements are unchanged.
+- Owner's latest instruction supersedes the earlier mandatory manual Admin invoice issuance/agreement sending steps. Admin retains visibility, authorized exception handling and safe retries. Equipment assignment is expressly excluded from booking confirmation prerequisites; Admin receives an assignment task.
 
 ## Phase 1 staging release gates
 
@@ -34,7 +34,7 @@ Deliver a connected, reliable customer acquisition and booking workflow:
 - Wrong-owner/expired/replayed access denial, session revocation, required fields and mobile completion.
 - Proposal acceptance automatically delivers one invoice; verified required payment automatically delivers one agreement; signing automatically delivers one secure workspace invitation. Verify the recipient and usable links for every handoff.
 - Payment retries and repeated webhooks do not duplicate charges, invoices, receipts, agreements, invitations or tasks; refunds/chargebacks correctly recalculate the ledger.
-- Required signatures and payment cannot be bypassed; confirmation rejects unavailable capacity. Minimal booking reservation/conflict checks remain in scope even though broader event operations are deferred.
+- Required signatures and payment cannot be bypassed; equipment assignment cannot block confirmation. Reservation/conflict guards remain mandatory when resources are assigned or changed, even though broader event operations are deferred.
 - Actual reminders deliver to approved recipients, stop after completion and remain safe under retries. Historical queued messages must not be blindly resumed.
 - Campaign preview, generated content and preloaded templates render correctly; accepted prices/discounts persist server-side and consent rules hold.
 - Backup/restore, migration ordering, rollback plan and focused production smoke checks are documented. Report failures/skips explicitly; no production-ready claim from rendering or code presence alone.

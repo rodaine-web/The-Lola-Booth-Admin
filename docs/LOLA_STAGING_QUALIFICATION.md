@@ -1,5 +1,9 @@
 > October 8 secure journey checkpoint: [implementation, evidence and NO-GO criteria](LOLA_PHASE1_SECURE_JOURNEY_READINESS_2026-10-08.md). Migration 055 passed restored-copy rehearsal and guarded application staging migration; this revision is not yet staging-qualified. Historical milestones below do not certify the new revision.
 
+## October 10 deployed qualification update
+
+Current release report: [Phase 1 release readiness](LOLA_PHASE1_RELEASE_READINESS_2026-10-10.md). This supersedes historical checkpoint statements below. Revision b4f9cc8 and migration 056 are deployed in staging after verified backup/restore. Equipment assignment no longer blocks booking confirmation; Admin receives an assignment task. Real Stripe TEST replay/refund/receipt and Microsoft known-failure recovery passed. Hosted reminders passed delivery/dedup/stop tests and staging lifecycle/planning flags were enabled after queue audit; historical messages remain excluded. Hosted access/permission checks passed. Campaign service qualification passed immutable invoice/delivery, synthetic minimum-payment agreement handoff, client conversion and prerequisite checks; the full campaign browser journey remains open. Authenticated mobile planning submission → correction → resubmission persisted; final approval requires the unconfirmed custom backdrop to be resolved. Remaining private asset storage, creative/readiness, mobile/role/appearance gates remain PARTIAL or BLOCKED. Production remains NO-GO and untouched.
+
 # LOLA sprint qualification — 2026-10-07
 
 ## October 8 staging update — supersedes historical deployment statements below
