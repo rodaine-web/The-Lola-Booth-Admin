@@ -66,6 +66,7 @@ jobs:
           psql -h localhost -U lola_test -d lola_v11_test -c 'CREATE DATABASE lola_phase1_qa_ci_qa'
           psql -h localhost -U lola_test -d lola_v11_test -c 'CREATE DATABASE lola_v11_test_ci_qa'
           psql -h localhost -U lola_test -d lola_v11_test -c 'CREATE DATABASE lola_phase1_qa_gallery_ci_qa'
+          DATABASE_URL="$GALLERY_TEST_DATABASE_URL" APP_ENV=test NODE_ENV=test npm run db:migrate
           node --test --test-concurrency=1
 
       - name: Production build
