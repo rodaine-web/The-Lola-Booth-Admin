@@ -24,7 +24,10 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   assert.equal(await page.getByRole('button',{name:'Sign agreement',exact:true}).isDisabled(),true);
   await page.getByRole('textbox',{name:/^Full legal name/}).fill('Demo Client');
   await page.getByRole('textbox',{name:/^Client email/}).fill('wrong@example.com');
-  await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Sign agreement',exact:true}).click();
+  const consentBox=page.getByRole('checkbox',{name:/I have read and agree/});
+  const consentBounds=await consentBox.boundingBox();assert.ok(consentBounds.width>=24&&consentBounds.height>=24,'Consent checkbox must be visible and usable');
+  assert.equal(await page.getByRole('button',{name:'Sign agreement',exact:true}).isDisabled(),true,'Signing remains disabled without explicit agreement');
+  await consentBox.check();await page.getByRole('button',{name:'Sign agreement',exact:true}).click();
   await page.getByRole('alert').waitFor();assert.ok((await page.getByRole('alert').innerText()).length>0);
   await page.getByRole('textbox',{name:/^Client email/}).fill('demo@example.com');await page.getByRole('button',{name:'Sign agreement',exact:true}).click();
   await page.getByRole('heading',{name:'Agreement signed',exact:true}).waitFor();
@@ -35,13 +38,13 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Agreement must fit mobile width');
   await page.screenshot({path:fileURLToPath(new URL('signed-mobile.png',evidence)),fullPage:true});
-  await page.goto(`${base}/client/${workspaceToken}`);await page.getByRole('heading',{name:'Your agreements',exact:true}).waitFor();
+  await page.goto(`${base}/client/${workspaceToken}`);await page.getByRole('heading',{name:'Agreement',exact:true}).waitFor();
   await page.getByRole('heading',{name:'Browser demo agreement',exact:true}).waitFor();
   assert.equal(await page.getByRole('link',{name:'View signed agreement',exact:true}).count(),2);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Workspace must fit mobile width');
   await page.screenshot({path:fileURLToPath(new URL('workspace-mobile.png',evidence)),fullPage:true});
   await api(`/proposals/${proposalId}/workspace/revoke`,{method:'POST'});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
-  assert.equal(await page.getByRole('heading',{name:'Your agreements',exact:true}).count(),0,'Revoked workspace clears customer records');
+  assert.equal(await page.getByRole('heading',{name:'Agreement',exact:true}).count(),0,'Revoked workspace clears customer records');
   if(campaignSales){
    await page.addInitScript(token=>{if(window===window.top)localStorage.setItem('lola_access_token',token);},ownerToken);
    await page.setViewportSize({width:1440,height:1000});
