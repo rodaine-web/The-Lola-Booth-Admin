@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { query, transaction } from '../db/pool.js';
 import { AppError } from '../utils/errors.js';
 import { stagingJobsPaused, stagingAutomationScope } from '../config/staging-safety.js';
@@ -50,7 +51,7 @@ async function prepareWebsiteProposal(job) {
       await client.query('SELECT id FROM packages WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[booking.selections.map(x=>x.packageId)]);
       await client.query('SELECT id FROM addons WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[booking.addons.map(x=>x.addonId)]);
       const current = validateBookingSelections(selectionInput, await publicBookingCatalog());
-      if (JSON.stringify(current) !== JSON.stringify({ selections: booking.selections, addons: booking.addons })) throw new AppError('Catalogue or prices changed since submission. Review the quote.', 409, 'WEBSITE_CATALOG_CHANGED', { retryable: false });
+      if (!isDeepStrictEqual(current, { selections: booking.selections, addons: booking.addons })) throw new AppError('Catalogue or prices changed since submission. Review the quote.', 409, 'WEBSITE_CATALOG_CHANGED', { retryable: false });
       let customer = lead.converted_client_id ? (await client.query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL', [lead.converted_client_id])).rows[0] : null;
       // Do not attach an unauthenticated request to another customer's existing record by email alone.
       if (!customer) customer = (await client.query('INSERT INTO clients(name,email,phone,referral_source) VALUES($1,$2,$3,$4) RETURNING *', [[lead.first_name, lead.last_name].join(' '), lead.email, lead.phone, 'Website request'])).rows[0];

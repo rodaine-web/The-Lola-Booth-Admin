@@ -25,7 +25,7 @@ test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and
   await Promise.all(Array.from({length:8},()=>queueWebsiteProposal(lead.id)));
   assert.equal((await query("SELECT count(*)::int n FROM automation_jobs WHERE related_entity_id=$1",[lead.id])).rows[0].n,1);
   const outcomes=await Promise.all(Array.from({length:8},()=>processWebsiteProposalHandoffs()));
-  assert.deepEqual(outcomes.flatMap(x=>x.processed).map(x=>x.status),['COMPLETED']);
+  assert.deepEqual(outcomes.flatMap(x=>x.processed).map(x=>x.status),['COMPLETED'],JSON.stringify((await query('SELECT status,last_error FROM automation_jobs WHERE related_entity_id=$1',[lead.id])).rows));
   const proposals=(await query('SELECT * FROM proposals WHERE lead_id=$1',[lead.id])).rows;assert.equal(proposals.length,1);assert.equal(proposals[0].status,'SENT');assert.equal(Number(proposals[0].total),599);
   assert.equal((await query('SELECT count(*)::int n FROM email_messages')).rows[0].n,1);
   await queueWebsiteProposal(lead.id);assert.equal((await processWebsiteProposalHandoffs()).processed.length,0);
