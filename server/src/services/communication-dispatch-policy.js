@@ -11,7 +11,7 @@ export async function dispatchDecision(client, message) {
       AND p.status IN ('DRAFT','SENT','VIEWED') AND l.status NOT IN ('LOST','WON','ARCHIVED') AND e.status<>'CANCELLED'
       AND p.content=$5::jsonb AND p.pricing_snapshot=$6::jsonb AND p.line_items_snapshot=$7::jsonb
       AND lower(l.email)=lower($3) AND p.content->>'website_submission_fingerprint'=l.source_details->'bookingInquiry'->>'submissionFingerprint'
-      AND $4='website-proposal:'||l.id::text||':'||(p.content->>'website_submission_fingerprint')`, [message.proposal_id,message.lead_id,message.recipient,message.idempotency_key,message.merge_data?.website_quote_snapshot?.content||null,message.merge_data?.website_quote_snapshot?.pricing_snapshot||null,message.merge_data?.website_quote_snapshot?.line_items_snapshot||null]);
+      AND $4='website-proposal:'||l.id::text||':'||(p.content->>'website_submission_fingerprint')`, [message.proposal_id,message.lead_id,message.recipient,message.idempotency_key,JSON.stringify(message.merge_data?.website_quote_snapshot?.content ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.pricing_snapshot ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.line_items_snapshot ?? null)]);
     if (!allowed.rowCount) return 'CANCELLED';
   }
   if (message.trigger_key === 'BOOKING_SEND_ACCEPTED_INVOICE') {
