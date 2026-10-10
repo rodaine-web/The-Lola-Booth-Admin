@@ -52,12 +52,12 @@ export async function verifyCampaignSales({api,pool,viewerToken,origin}){
  assert.equal(snapshot.selectedExperiences[0].price,800,'Campaign price is resolved on the server, ignoring a modified client price');
  const pay=amount=>api('/payments',{method:'POST',body:{invoice_id:invoice.id,amount,payment_method:'BANK_TRANSFER',payment_date:'2099-12-18',idempotency_key:'campaign-sales-'+amount}});
  const partial=await pay(100);assert.equal(partial.status,201,JSON.stringify(partial.data));assert.equal(partial.data.client_id,invoice.client_id);
- assert.notEqual((await pool.query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'WON');
+ assert.equal((await pool.query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'WON','A posted campaign payment converts the lead to a client');
  await pool.query("INSERT INTO payments(invoice_id,amount,payment_method,payment_date,status) VALUES($1,1000,'CARD','2099-12-18','FAILED')",[invoice.id]);
  const {reconcileInvoice}=await import('../../server/src/services/payment-reconciliation-service.js');await reconcileInvoice(invoice.id);
- assert.notEqual((await pool.query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'WON','Failed payments never confirm the booking');
+ assert.notEqual((await pool.query('SELECT status FROM events WHERE id=$1',[invoice.event_id])).rows[0].status,'CONFIRMED','Failed payments never confirm the booking');
  const deposit=await pay(140);assert.equal(deposit.status,201,JSON.stringify(deposit.data));assert.ok(deposit.data.client_id);assert.ok(deposit.data.event_id);
- const won=(await pool.query('SELECT * FROM leads WHERE id=$1',[lead.id])).rows[0];assert.equal(won.status,'FOLLOW_UP');assert.equal(won.converted_client_id,deposit.data.client_id);
+ const won=(await pool.query('SELECT * FROM leads WHERE id=$1',[lead.id])).rows[0];assert.equal(won.status,'WON');assert.equal(won.converted_client_id,deposit.data.client_id);
  assert.equal((await pool.query('SELECT count(*)::int n FROM bookings WHERE event_id=$1',[deposit.data.event_id])).rows[0].n,1);
  assert.equal((await pool.query('SELECT experience_id FROM event_experiences WHERE event_id=$1',[deposit.data.event_id])).rows[0].experience_id,exp.id);
  const duplicatePayment=await pay(140);assert.equal(duplicatePayment.data.id,deposit.data.id);
