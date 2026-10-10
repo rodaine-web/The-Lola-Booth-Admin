@@ -204,7 +204,7 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
 
     // Actual PostgreSQL locks must prevent replay and competing over-refunds.
     const refundLedger=await import('../server/src/services/refund-ledger-service.js');
-    const manual=(await query("INSERT INTO payments(client_id,amount,currency,payment_method,payment_date,provider,status) VALUES($1,100,'USD','CASH',current_date,'MANUAL','SUCCEEDED') RETURNING *",[contact.id])).rows[0];
+    const manual=(await query("INSERT INTO payments(client_id,event_id,amount,currency,payment_method,payment_date,provider,status) VALUES($1,$2,100,'USD','CASH',current_date,'MANUAL','SUCCEEDED') RETURNING *",[contact.id,event.id])).rows[0];
     const refundRequest={paymentId:manual.id,amount:25,reason:'QA refund',key:crypto.randomUUID()};
     const replayed=await Promise.all(Array.from({length:8},()=>refundLedger.claimRefund(refundRequest)));
     assert.equal(replayed.filter(x=>x.created).length,1);
@@ -212,7 +212,7 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     await assert.rejects(refundLedger.claimRefund({...refundRequest,amount:30}),{code:'REFUND_REQUEST_CONFLICT'});
     const competing=await Promise.allSettled(Array.from({length:8},()=>refundLedger.claimRefund({...refundRequest,amount:50,key:crypto.randomUUID()})));
     assert.equal(competing.filter(x=>x.status==='fulfilled').length,1,'Competing refunds cannot overdraw the payment');
-    const stripePayment=(await query("INSERT INTO payments(client_id,amount,currency,payment_method,payment_date,provider,provider_payment_id,status) VALUES($1,100,'USD','CARD',current_date,'STRIPE','pi_QARefund','SUCCEEDED') RETURNING *",[contact.id])).rows[0];
+    const stripePayment=(await query("INSERT INTO payments(client_id,event_id,amount,currency,payment_method,payment_date,provider,provider_payment_id,status) VALUES($1,$2,100,'USD','CARD',current_date,'STRIPE','pi_QARefund','SUCCEEDED') RETURNING *",[contact.id,event.id])).rows[0];
     const stripeClaim=await refundLedger.claimRefund({paymentId:stripePayment.id,amount:40,reason:'QA provider refund',key:crypto.randomUUID()});
     await assert.rejects(refundLedger.claimRefund({paymentId:stripePayment.id,amount:70,reason:'Competing QA',key:crypto.randomUUID()}),{code:'INVALID_REFUND_AMOUNT'},'Uncertain requests reserve funds');
     const providerRefund={id:'re_QAOne',payment_intent:'pi_QARefund',currency:'usd',amount:4000,status:'pending',metadata:{lola_refund_id:stripeClaim.refund.id}};
