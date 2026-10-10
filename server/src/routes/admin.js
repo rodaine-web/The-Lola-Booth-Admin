@@ -341,6 +341,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         where.push(`status = $${params.length}`);
       }
       if (table === "leads") {
+        if (!filters.status && !filters.funnel) where.push("NOT (status='WON' AND converted_client_id IS NOT NULL)");
         if (filters.funnel === 'qualified') where.push("status IN ('QUALIFIED','PROPOSAL_DRAFT','PROPOSAL_SENT','WON')");
         if (filters.funnel === 'booked') where.push("status='WON'");
         if (filters.source_group) { params.push(filters.source_group);where.push(`COALESCE(referral_source,lead_source,'Other')=$${params.length}`); }

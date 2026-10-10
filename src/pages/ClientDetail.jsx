@@ -1,3 +1,4 @@
+import AgreementList from '../components/AgreementList.jsx';
 import { useAuth } from "../context/AuthContext.jsx";
 import { RecordIdentity, JourneyStrip, DashboardCard, NextBookingAction, RecordActivity, RequestedItems, RecordEditDialog, useRecordJourney } from "../components/RecordDashboard.jsx";
 import { formatDateOnly } from "../utils/display.js";
@@ -11,7 +12,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
-const tabs = ["Overview", "Events", "Proposals", "Invoices", "Payments", "Tasks", "Files", "Communications", "Activity"];
+const tabs = ["Overview", "Events", "Proposals", "Agreements", "Invoices", "Payments", "Tasks", "Files", "Communications", "Activity"];
 
 export default function ClientDetail() {
   const { id } = useParams();
@@ -104,6 +105,7 @@ export default function ClientDetail() {
       </section>}
       {tab === "Events" && <DataTable rows={client.events} columns={["event_name", "event_date", "venue_name", "status"]} getRowHref={(row) => `/events/events/${row.id}`} empty="No events yet." />}
       {tab === "Proposals" && <DataTable rows={client.proposals} columns={["proposal_number", "status", "total", "created_at"]} getRowHref={(row) => `/sales/proposals/${row.id}`} empty="No proposals linked." />}
+      {tab === 'Agreements' && can('read:sales') && <AgreementList clientId={id}/>}
       {tab === "Invoices" && <DataTable rows={client.invoices} columns={["invoice_number", "status", "total", "balance_due"]} getRowHref={(row) => `/finance/invoices/${row.id}`} empty="No invoices linked." />}
       {tab === "Payments" && <DataTable rows={client.payments} columns={["amount", "payment_method", "payment_date", "reference_number"]} empty="No payments recorded." />}
       {tab === "Tasks" && <DataTable rows={client.tasks} columns={["title", "due_date", "priority", "status"]} empty="No tasks linked." />}

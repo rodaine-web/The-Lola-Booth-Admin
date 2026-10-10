@@ -15,10 +15,11 @@ export default function ProposalAgreement({proposal}) {
       .catch(err=>{if(current){if(err.status===404)setAvailable(false);else setError(err.message);}});
     return()=>{current=false;};
   },[proposal.id]);
+  useEffect(()=>{if(records&&window.location.hash==='#agreements')document.getElementById('agreements')?.scrollIntoView({block:'start'});},[records]);
   async function act(fn){if(busy)return;setBusy(true);setError('');setNotice('');try{await fn();setRecords(await api.get(`/proposals/${proposal.id}/contracts`));}catch(err){setError(err.message);}finally{setBusy(false);}}
   if(!available)return null;
   const active=records?.find(r=>['DRAFT','ISSUED'].includes(r.status));
-  return <section className="panel"><p className="eyebrow">Version 1.1 · Agreement</p><h2>Client agreement</h2>
+  return <section id="agreements" className="panel"><p className="eyebrow">Version 1.1 · Agreement</p><h2>Client agreement</h2>
     <p>Review your approved service terms, then create a secure signing link. Signing is separate from accepting the proposal and paying the booking retainer fee.</p>
     {notice&&<p role="status">{notice}</p>}
     {error&&<p role="alert" className="toast error">{error}</p>}

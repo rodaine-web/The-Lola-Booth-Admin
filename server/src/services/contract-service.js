@@ -104,7 +104,7 @@ async function tokenContract(token,lock=false) {
 }
 export async function publicContract(token) { const {signing_grace_until,...contract}=visible(await tokenContract(token));return contract; }
 export async function signContract(token,body,req) {
-  return transaction(async()=>{
+  const signed=await transaction(async()=>{
     const row=await tokenContract(token,true);
     const decision=signingDecision(row,body);
     if(decision.error) throw new AppError(decision.message,decision.error==='SIGNER_EMAIL_MISMATCH'||decision.error==='CONSENT_REQUIRED'?400:409,decision.error);
@@ -124,6 +124,20 @@ export async function signContract(token,body,req) {
     await queueSignedWorkspace(updated);
     const {signing_grace_until,...signed}=visible(updated);return signed;
   });
+  // A valid signature stays recorded even when availability needs operator review.
+  const proposal=(await query('SELECT event_id FROM proposals WHERE id=$1',[signed.proposal_id])).rows[0];
+  if(proposal?.event_id){
+   try {const {applyBookingConfirmationPolicy}=await import('./payment-reconciliation-service.js');
+    const event=await applyBookingConfirmationPolicy(proposal.event_id,{signedAgreement:true});
+    signed.booking_confirmation={status:event?.status||'PENDING'};
+    if(event)await query("UPDATE tasks SET status='DONE',updated_at=now() WHERE lifecycle_key=$1",['booking-confirmation:'+proposal.event_id]);
+   } catch(error) {
+    signed.booking_confirmation={status:'PENDING',message:'Agreement signed. LOLA must review booking confirmation before planning opens.'};
+    await query(`INSERT INTO tasks(lifecycle_key,title,description,event_id,priority) VALUES($1,'Review signed booking confirmation',$2,$3,'HIGH')
+     ON CONFLICT(lifecycle_key) WHERE lifecycle_key IS NOT NULL DO UPDATE SET description=EXCLUDED.description,status='OPEN',updated_at=now()`,['booking-confirmation:'+proposal.event_id,String(error.message).slice(0,3000),proposal.event_id]);
+   }
+  }
+  return signed;
 }
 export async function contractPdf(row) { return renderContractPdf(row); }
 export async function getContract(id) { const row=(await query('SELECT * FROM contracts WHERE id=$1',[id])).rows[0];if(!row)throw new AppError('Agreement not found.',404,'NOT_FOUND');return visible(row); }
@@ -157,4 +171,18 @@ async function assertAgreementPrerequisites(proposalId,versionId){
  if(!proposal.event_id||!(await query('SELECT booking_journey_managed($1) AS managed',[proposal.event_id])).rows[0]?.managed)return;
  const invoice=(await query("SELECT * FROM invoices WHERE proposal_id=$1 AND pricing_snapshot->>'accepted_version_id'=$2 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1",[proposalId,versionId])).rows[0];
  if(!await agreementPaymentQualified(invoice))fail('Verify the required booking payment before issuing or signing this agreement.','AGREEMENT_PAYMENT_REQUIRED');
+}
+
+// Bounded Admin index; signing credentials and signature evidence never enter list responses.
+export async function searchContracts({search='',status,clientId,eventId,page=1,pageSize=25}) {
+ const values=[],where=['p.deleted_at IS NULL'];
+ const bind=value=>{values.push(value);return '$'+values.length;};
+ if(search){const key=bind('%'+search+'%');where.push(`(k.title ILIKE ${key} OR p.proposal_number ILIKE ${key} OR c.name ILIKE ${key} OR e.event_name ILIKE ${key} OR k.id::text ILIKE ${key})`);}
+ if(status)where.push(`k.status=${bind(status)}`);
+ if(clientId)where.push(`p.client_id=${bind(clientId)}`);
+ if(eventId)where.push(`p.event_id=${bind(eventId)}`);
+ const from=`FROM contracts k JOIN proposals p ON p.id=k.proposal_id LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id WHERE ${where.join(' AND ')}`;
+ const total=Number((await query(`SELECT count(*) AS total ${from}`,values)).rows[0].total);
+ const rows=(await query(`SELECT k.id,k.title,k.revision,k.status,k.created_at,k.issued_at,k.signed_at,k.signing_due_at,k.signer_name,p.id AS proposal_id,p.proposal_number,p.client_id,p.event_id,c.name AS client_name,e.event_name ${from} ORDER BY k.created_at DESC,k.id LIMIT ${bind(pageSize)} OFFSET ${bind((page-1)*pageSize)}`,values)).rows;
+ return {rows,total,page,pageSize};
 }

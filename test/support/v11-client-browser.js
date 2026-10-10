@@ -48,6 +48,19 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   if(campaignSales){
    await page.addInitScript(token=>{if(window===window.top)localStorage.setItem('lola_access_token',token);},ownerToken);
    await page.setViewportSize({width:1440,height:1000});
+   await page.goto(`${base}/sales/agreements`);
+   await page.getByRole('heading',{name:'Agreements',exact:true}).waitFor();
+   await page.getByRole('searchbox',{name:'Search agreements'}).fill('Browser demo agreement');
+   await page.getByRole('cell',{name:'SIGNED',exact:true}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'Download PDF',exact:true}).count(),1);
+   await page.getByRole('combobox',{name:'Status',exact:true}).selectOption('DRAFT');
+   await page.getByText('No agreements match these filters.',{exact:true}).waitFor();
+   await page.getByRole('combobox',{name:'Status',exact:true}).selectOption('SIGNED');
+   await page.getByRole('cell',{name:'SIGNED',exact:true}).waitFor();
+   await page.setViewportSize({width:390,height:844});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Agreement index must fit mobile width');
+   await page.screenshot({path:fileURLToPath(new URL('admin-agreements-mobile.png',evidence)),fullPage:true});
+   await page.setViewportSize({width:1440,height:1000});
    await api('/settings',{method:'PATCH',body:{business_email:'hello@lolabooths.com'}});
    await page.goto(`${base}/system/settings`);
    const businessEmail=page.getByRole('textbox',{name:'Business Email',exact:true});

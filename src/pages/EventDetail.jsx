@@ -1,3 +1,4 @@
+import AgreementList from '../components/AgreementList.jsx';
 import { useAuth } from "../context/AuthContext.jsx";
 import { RecordIdentity, JourneyStrip, DashboardCard, RecordActivity, RequestedItems, RecordEditDialog, useRecordJourney } from "../components/RecordDashboard.jsx";
 import EventCreativePanel from "../components/EventCreativePanel.jsx";
@@ -18,7 +19,7 @@ import StatusBadge from "../components/StatusBadge.jsx";
 const tabs = ["Overview", "Client", "Client Planning", "Timeline", "Team & Equipment", "Checklist", "Design & Creative", ...(GALLERY_ENABLED ? ["Gallery"] : []), "Finance", "Communications", "Files", "Tasks", "Activity"];
 const sectionGroups = {
   "Team & Equipment": ["Staff", "Equipment"],
-  "Finance": ["Finance", "Proposals", "Invoices"],
+  "Finance": ["Finance", "Proposals", "Agreements", "Invoices"],
   "Gallery": ["Gallery"],
 };
 function primarySection(tab) {
@@ -97,6 +98,7 @@ export default function EventDetail() {
       <div className="detail-back"><Link to="/events/events"><ArrowLeft size={16} />Back to events</Link></div>
       <RecordIdentity name={event.event_name} status={event.status} subtitle={<>{event.event_type} · {event.client_name || 'Client not linked'} · {event.venue_name || 'Venue TBD'}</>} event={event} image={event.image_url || (event.experience_name || event.experiences?.[0]?.name ? experienceImage(event.experience_name || event.experiences[0].name) : undefined)} actions={<><Link className="primary-action" to={`/sales/proposals/new?eventId=${event.id}`}>Create Proposal</Link><Link to={`/finance/invoices/new?eventId=${event.id}&clientId=${event.client_id}`}>Create Invoice</Link><button onClick={()=>setTab('Communications')}>Communications</button><details className="record-more"><summary aria-label="More event actions">•••</summary><label>Event Status<select aria-label="Event status" value={event.status} onChange={e=>action(()=>api.patch(`/events/${id}`,{status:e.target.value}),'Event status updated.')}>{eventStatuses.map(status=><option key={status} value={status}>{status.replaceAll('_',' ')}</option>)}</select></label></details></>}/>
       <JourneyStrip journey={journey}/>
+      {can('write:events')&&['INQUIRY','TENTATIVE','PENDING_DEPOSIT','PENDING_CONTRACT'].includes(event.status)&&<section className="panel"><h2>Booking confirmation</h2><p>Confirm after the accepted proposal, required booking retainer fee, signed agreement and available equipment reservation are verified.</p><button onClick={()=>action(()=>api.post(`/events/${id}/confirm-booking`,{}),'Booking confirmed. Client planning is now available.')}>Check requirements & confirm booking</button></section>}
 
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
 
@@ -236,6 +238,7 @@ export default function EventDetail() {
       {tab === "Communications" && <Panel title="Communications"><CommunicationForm communication={communication} setCommunication={setCommunication} onSubmit={() => action(() => api.post(`/events/${id}/communications`, communication), "Communication logged.")} /><DataTable rows={event.communications} columns={["type", "direction", "subject", "message_summary", "occurred_at"]} empty="No communication logged." /></Panel>}
       {tab === "Activity" && <Panel title="Activity"><Timeline rows={[...(event.activity || []), ...(event.audit || []).map((row) => ({ ...row, summary: row.action, action: "audit_log" }))]} /></Panel>}
       {tab === "Proposals" && <Panel title="Proposals"><DataTable rows={event.proposals} columns={["proposal_number", "status", "total", "created_at"]} getRowHref={(row) => `/sales/proposals/${row.id}`} empty="No proposals linked." /></Panel>}
+      {tab === 'Agreements' && can('read:sales') && <AgreementList eventId={id}/>}
       {tab === "Invoices" && <Panel title="Invoices"><DataTable rows={event.invoices} columns={["invoice_number", "status", "total", "balance_due"]} getRowHref={(row) => `/finance/invoices/${row.id}`} empty="No invoices linked." /></Panel>}
     </main>
   );

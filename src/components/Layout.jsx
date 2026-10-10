@@ -48,6 +48,10 @@ const navGroups = [{
     to: '/sales/proposals',
     permission: 'read:sales'
   }, {
+    label: 'Agreements',
+    to: '/sales/agreements',
+    permission: 'read:sales'
+  }, {
     label: 'Invoices',
     to: '/finance/invoices',
     permission: 'read:finance'

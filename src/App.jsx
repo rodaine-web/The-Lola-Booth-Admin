@@ -29,6 +29,7 @@ const Proposals = lazy(() => import("./pages/Proposals.jsx"));
 const ProposalEditor = lazy(() => import("./pages/ProposalEditor.jsx"));
 const ProposalTemplates = lazy(() => import("./pages/ProposalTemplates.jsx"));
 const ProposalWizard = lazy(() => import("./pages/ProposalWizard.jsx"));
+const Agreements = lazy(() => import("./pages/Agreements.jsx"));
 const ProposalDetail = lazy(() => import("./pages/ProposalDetail.jsx"));
 const Invoices = lazy(() => import("./pages/Invoices.jsx"));
 const InvoiceEditor = lazy(() => import("./pages/InvoiceEditor.jsx"));
@@ -103,6 +104,7 @@ export default function App() {
         <Route path="sales/leads/:id" element={<LeadDetail />} />
         <Route path="sales/clients" element={<Clients />} />
         <Route path="sales/clients/:id" element={<ClientDetail />} />
+        <Route path="sales/agreements" element={<Agreements />} />
         <Route path="sales/proposals" element={<Proposals />} />
         <Route path="communications/campaigns" element={<Campaigns/>}/>
         <Route path="communications/campaigns/:id" element={<Campaigns/>}/>

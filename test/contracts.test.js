@@ -63,7 +63,7 @@ test('contract delivery and workspace access enforce sales permissions before re
  const original=process.env.APP_ENV;process.env.APP_ENV='staging';
  const id='5f91bf0a-701f-4712-a2ca-19c1ebd71c05';
  try{
-  for(const [method,url] of [['GET',`/contracts/${id}/pdf`],['POST',`/contracts/${id}/access`],['POST',`/contracts/${id}/send`],['POST',`/proposals/${id}/workspace`],['POST',`/proposals/${id}/workspace/revoke`]]){
+  for(const [method,url] of [['GET','/contracts'],['POST',`/events/${id}/confirm-booking`],['GET',`/contracts/${id}/pdf`],['POST',`/contracts/${id}/access`],['POST',`/contracts/${id}/send`],['POST',`/proposals/${id}/workspace`],['POST',`/proposals/${id}/workspace/revoke`]]){
    const error=await new Promise(resolve=>contractsRouter.handle({method,url,headers:{},user:{permissions:[]}}, {set(){}},resolve));
    assert.equal(error.statusCode,403,`${method} ${url} must reject unprivileged users`);
   }
