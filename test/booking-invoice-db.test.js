@@ -202,6 +202,53 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     await assert.rejects(campaignSales.campaignDepositInvoice(campaign.id,interest.id,{send:true},req),{code:'CAMPAIGN_HANDOFF_REQUIRED'});
     await assert.rejects(query("UPDATE events SET status='CONFIRMED' WHERE id=$1",[commercial.event_id]),error=>error.code==='23514');
 
+    // Exercise the persisted planning review through the actual event summary query.
+    const {getEventOperations}=await import('../server/src/services/event-operations-service.js');
+    await query(`INSERT INTO event_planning(event_id,client_id,status,submitted_at,details_review_status)
+      VALUES($1,$2,'SUBMITTED',now(),'APPROVED')`,[event.id,contact.id]);
+    const planningReadiness=async()=>{
+      const summary=await getEventOperations(event.id,{roles:['OWNER']});
+      return summary.readiness.items.find(item=>item.label==='Event planning approved by LOLA').status;
+    };
+    assert.equal(await planningReadiness(),'COMPLETE','Persisted Admin approval counts toward readiness');
+    await query("UPDATE event_planning SET details_review_status='CHANGES_REQUESTED' WHERE event_id=$1",[event.id]);
+    assert.equal(await planningReadiness(),'INCOMPLETE','Requested corrections invalidate planning readiness');
+    await query("UPDATE event_planning SET details_review_status='APPROVED',change_requests=$2 WHERE event_id=$1",[event.id,{venue:'Confirm venue'}]);
+    assert.equal(await planningReadiness(),'INCOMPLETE','Outstanding corrections cannot be masked by approval');
+    await query("UPDATE event_planning SET change_requests='{}',submitted_at=NULL WHERE event_id=$1",[event.id]);
+    assert.equal(await planningReadiness(),'INCOMPLETE','Approval without a client submission is incomplete');
+
+    const {queuePlanningReminders}=await import('../server/src/services/planning-reminder-service.js');
+    const {encryptSecretJson}=await import('../server/src/services/integration-secrets.js');
+    const scopeKeys=['APP_ENV','PLANNING_REMINDERS_ENABLED','STAGING_AUTOMATIONS_ENABLED','STAGING_EMAIL_ENABLED','STAGING_AUTOMATIONS_SINCE','STAGING_EMAIL_ALLOWLIST'];
+    const savedScope=Object.fromEntries(scopeKeys.map(key=>[key,process.env[key]]));
+    try{
+      Object.assign(process.env,{APP_ENV:'staging',PLANNING_REMINDERS_ENABLED:'true',STAGING_AUTOMATIONS_ENABLED:'true',STAGING_EMAIL_ENABLED:'true',STAGING_EMAIL_ALLOWLIST:contact.email||'qa@example.invalid',STAGING_AUTOMATIONS_SINCE:new Date(Date.now()-5*86400000).toISOString()});
+      const outside=(await query("INSERT INTO clients(name,email) VALUES('Outside scope','outside@example.invalid') RETURNING id")).rows[0];
+      const eligible=[];
+      for(const [clientId,age] of [[contact.id,6],[outside.id,4],[contact.id,4]]){
+        const record=(await query("INSERT INTO events(client_id,event_name,event_type,event_date,status) VALUES($1,'Reminder QA','Wedding','2030-11-10','CONFIRMED') RETURNING id",[clientId])).rows[0];
+        await query(`INSERT INTO event_planning(event_id,client_id,token_hash,token_ciphertext,expires_at,invited_at,planning_due_at)
+          VALUES($1,$2,$3,$4,now()+interval '1 month',now()-$5*interval '1 day',current_date-1)`,[record.id,clientId,crypto.randomBytes(32).toString('hex'),encryptSecretJson({token:'qa-planning-token'}),age]);
+        await query(`INSERT INTO creative_approvals(event_id,client_id,approval_type,status,expires_at,requested_at)
+          VALUES($1,$2,'DESIGN','PENDING_APPROVAL',now()+interval '1 month',now()-$3*interval '1 day')`,[record.id,clientId,age]);
+        if(clientId===contact.id&&age===4)eligible.push(record.id);
+      }
+      process.env.STAGING_AUTOMATIONS_ENABLED='false';
+      assert.deepEqual(await queuePlanningReminders(),{queued:0,paused:true});
+      process.env.STAGING_AUTOMATIONS_ENABLED='true';
+      assert.equal((await queuePlanningReminders()).queued,2,'Only fresh, approved-recipient planning and creative requests qualify');
+      const reminders=(await query("SELECT event_id,recipient FROM communications WHERE trigger_key='PLANNING_RECURRING_REMINDER'")).rows;
+      assert.equal(reminders.length,2);
+      assert.ok(reminders.every(row=>eligible.includes(row.event_id)&&row.recipient==='qa@example.invalid'));
+      assert.equal((await queuePlanningReminders()).queued,0,'Repeated worker ticks do not duplicate reminders');
+      await query('UPDATE event_planning SET submitted_at=now() WHERE event_id=$1',[eligible[0]]);
+      await query("UPDATE creative_approvals SET status='APPROVED' WHERE event_id=$1",[eligible[0]]);
+      assert.equal((await queuePlanningReminders()).queued,0,'Completed planning and approvals stop reminders');
+    }finally{
+      for(const [key,value] of Object.entries(savedScope))if(value===undefined)delete process.env[key];else process.env[key]=value;
+    }
+
 
   } finally {
     if(pool)await pool.end();

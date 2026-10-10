@@ -1,5 +1,7 @@
 # Phase 1 secure booking journey — readiness checkpoint, October 8, 2026
 
+Latest qualification evidence and remaining gates: [9 October checkpoint](LOLA_PHASE1_QUALIFICATION_2026-10-09.md). The dated records below remain historical.
+
 **Production decision: NO-GO.** This checkpoint records implementation and local evidence. It does not certify customer readiness. No production changes are authorized or performed. Previous milestones and their evidence remain historical.
 
 ## Mandatory requirements
