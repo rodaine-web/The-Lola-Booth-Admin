@@ -374,11 +374,21 @@ function drawInvoicePayment(doc, invoice, flow) {
   flow.width = 536;
   drawFlowText(doc, flow, "PAYMENT INFORMATION", "Helvetica", 12);
   flow.y += 18;
-  drawFlowText(doc, flow, invoice.terms || "A retainer is required to secure your date. Remaining balance is due before the event.");
+  const payable = Number(invoice.amount_outstanding) > 0;
+  drawFlowText(doc, flow, payable
+    ? `Pay the required booking retainer fee or remaining balance using your secure payment link. Balance due: ${formatDate(invoice.due_date) || "see your agreed payment schedule"}. Booking confirmation requires accepted terms, required payment, a signed agreement and written confirmation from The LOLA Booth.`
+    : "No payment is due on this invoice. Keep this document with your payment receipts.");
+  if (invoice.terms) {
+    flow.y += 12;
+    drawFlowText(doc, flow, "SAVED INVOICE TERMS", "Helvetica-Bold", 10);
+    flow.y += 6;
+    // Preserve the saved commercial terms; current payment instructions are separate.
+    drawFlowText(doc, flow, invoice.terms);
+  }
   flow.y += 22;
   if (flow.y + 220 > flow.bottom) flow.nextPage();
   const y = flow.y;
-  const invoiceUrl = secureDocumentUrl(documentOrigin(), "pay", invoice);
+  const invoiceUrl = payable ? secureDocumentUrl(documentOrigin(), "pay", invoice) : null;
   const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", invoice.tax], ["TOTAL", invoice.total], ["PAID", invoice.amount_paid], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
   rows.forEach(([label, value], index) => {
     doc.font(index === 5 ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor(navy);
@@ -391,6 +401,8 @@ function drawInvoicePayment(doc, invoice, flow) {
   doc.font("Times-Roman").fontSize(8).text(invoiceUrl, 50, y + 38, { width: 226, align: "center", characterSpacing: 0, link: invoiceUrl });
   drawQrCode(doc, invoiceUrl, 80, y + 92, 84);
   doc.font("Helvetica").fontSize(8).fillColor(navy).text("SCAN TO PAY", 72, y + 184, { width: 100, align: "center", characterSpacing: 1, lineBreak: false });
+  } else if (!payable) {
+    doc.font("Helvetica-Bold").fontSize(12).fillColor(navy).text("NO PAYMENT DUE", 50, y + 14, { width: 226, align: "center", lineBreak: false });
   } else {
     doc.font("Helvetica").fontSize(10).text("Public access not available. Please contact The LOLA Booth.", 50, y + 14, {width:226});
   }

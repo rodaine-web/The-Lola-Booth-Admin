@@ -72,3 +72,31 @@ Pause reminder and handoff flags to stop new dispatch; preserve generated invoic
 Frontend revision `851ebf9726d4d27b0d6ddbf11e98844d49a7af99` is READY on the staging Vercel project (deployment `dpl_AphWuXY5VXnyoM89ra5eT9s52zo7`, aliases stagingadmin.thelolabooth.com/staging.thelolabooth.com). Backend qualification remains b4f9cc8; no backend behavior or schema changed in this follow-up. GitHub run `38078144644`, job `114289334029`: all validation steps PASS, including automated tests, full disposable DB suite, build and CI browser journey. Local build/diff checks also passed.
 
 At 390px the new planning header return link rendered and navigated to /client. The previously authenticated session expired by this final reload; the post-submit return action's current authenticated presentation and mobile payment/document journeys remain unqualified. The earlier authenticated submission/correction/resubmission evidence is valid and is not replaced with an expired-session rendering claim. Production remains NO-GO.
+
+
+## Additional qualification — private planning and creative, 10 October
+
+Owner skipped automatic website quote service-area setup. Keep the optional website proposal flag disabled in both environments; Admin reviews and sends the proposal. See `LOLA_PHASE1_WEBSITE_PROPOSAL_QUALIFICATION.md`. Downstream handoffs continue unchanged.
+
+Application commit `2cc91ae1b04fe501b7630ad96162253d56eeefd3`, GitHub run `38083449643`, job `114304931084`: all steps PASS. Full database-enabled suite **657 passed, zero failed, zero skipped**, V1.1 database suite, frontend build and CI browser journey PASS. Available suite remains 628 passes with 12 conditional skips; these are not presented as passes. Automatic-proposal defects found during DB qualification were corrected before activation; the feature remains disabled.
+
+Hosted qualification deployment `a6f871fc-5b1b-4940-a0f2-e10dcf5d0ae8` completed with explicit PASS markers:
+- Actual API private PNG upload and byte-identical readback, sandboxed attachment response, anonymous denial and wrong-event ownership denial. Invalid magic and >8MB rejected without creating file rows. Runtime provider LOCAL; API has persistent volume mounted at `/app/storage/uploads`. Cross-deployment readback/production storage and file backup remain separate requirements.
+- Selected Glam experience: own-artwork backdrop, required planning facts/style/assets, submit → Admin correction → client resubmit → Admin approval; approved planning refuses edits. No customer booking or custom payment rules bypassed.
+- Actual session-scoped proposal, signed agreement, invoice and receipt PDFs plus payment options. These HTTP tests do not claim mobile visual qualification.
+- Creative V1 change request → revision V2 → stale-version rejection → V2 approval → replay; approved overlay and welcome-screen coverage complete. Remaining operations readiness still incomplete. Proof is a synthetic 1px QA image, not a supplied production backdrop asset.
+- Revoked workspace grant denies workspace/file access with 401; no user grant was revoked. New QA fixture cancelled after checks, prior failed QA-only fixtures cancelled. Manual ledger payment and nonbinding QA-only agreement were used here; actual Stripe TEST evidence is recorded separately above.
+
+Gate C improves for deployed private upload/readback/security, but production persistence/backup remains PARTIAL. Gate D improves for hosted component/version logic; production creative assets and mobile proof review remain PARTIAL. Gate J includes actual revoked-grant denial. Phase 1 remains NO-GO pending the other applicable gates and production preflight/owner approval.
+
+## Authenticated mobile payment and document qualification
+
+Owner supplied a fresh staging workspace session. On the existing explicitly labelled QA client/event, actual 390px Stripe Sandbox Checkout paid the remaining $4,057.90 with a test card. The return workspace shows invoice TLBI-1010 PAID, total/paid $5,797.00, balance $0.00 and two succeeded receipts ($1,739.10 and $4,057.90). No live funds or production records were changed.
+
+Actual mobile buttons downloaded proposal, signed agreement, paid invoice and balance receipt PDFs. The 13-page signed agreement was rendered and visually checked, including the branded cover, all-page contact sheet and signature/hash page; the invoice and receipt were rendered and checked. Branding, signature evidence and zero-balance receipt are readable. A paid invoice still offered a payment QR and displayed copied proposal wording as payment instructions. The follow-up document fix removes payment links/QRs when no balance is due, adds current booking-retainer-fee/confirmation instructions, and labels saved invoice terms separately without changing saved commercial records.
+
+Authenticated Continue Planning opens the submitted confirmation; Return to The Client Workspace returns to the authenticated cards. Workspace widths 320/390/768px and submitted planning at 390px have no horizontal overflow. Temporary viewport overrides were reset. Private screenshots: `work/phase1-mobile-paid-invoice-20261010.png`, `work/phase1-mobile-planning-return-20261010.png`, `work/phase1-320-paid-invoice-20261010.png`. No sign-in tokens are included in the report.
+
+Local document regressions: 18 tests, 17 passed, zero failed, one conditional DB skip. Full available suite after the fix: 642 tests, 630 passed, zero failed, 12 conditional DB skips. Settled/void PDFs have no payment link annotation; outstanding invoices retain the actual decodable payment QR; saved terms/input records remain unchanged. Syntax and diff checks passed. Hosted regeneration of the corrected paid invoice remains pending deployment; earlier downloaded PDFs are evidence of the defect, not the correction.
+
+Gates E/H improve for mobile balance Checkout, receipts, downloads and planning return. Interrupted/failed payment recovery, mobile uploads/proof review, full campaign customer journey, remaining permissions/inbox evidence and production storage/backup/preflight remain open. This checkpoint is not production approval.

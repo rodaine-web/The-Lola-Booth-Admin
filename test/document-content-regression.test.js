@@ -103,6 +103,35 @@ test('invoice QR decodes from the actual PDF rendering to the stable invoice URL
   await loading.destroy();
 });
 
+test('settled and void invoice PDFs preserve terms without offering another payment', async () => {
+  for (const state of [{ status: 'PAID', amount_outstanding: 0, balance_due: 100 }, { status: 'VOID', amount_outstanding: 100 }]) {
+    const saved = { ...state, invoice_number: 'QA-SETTLED', secure_token: 'settled-token', items: [], total: 100, amount_paid: 100, terms: 'SAVED_COMMERCIAL_TERMS' };
+    const before = structuredClone(saved);
+    const loading = getDocument({ data: new Uint8Array(await generateInvoicePdf(saved)), useSystemFonts: true, verbosity: 0 });
+    const pdf = await loading.promise;
+    let text = '';
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      text += (await page.getTextContent()).items.map(item => item.str).join(' ');
+      assert.equal((await page.getAnnotations()).filter(item => item.url?.includes('/pay/')).length, 0);
+    }
+    assert.match(text, /NO PAYMENT DUE/);
+    assert.match(text, /SAVED_COMMERCIAL_TERMS/);
+    assert.doesNotMatch(text, /P\s*A\s*Y\s+O\s*N\s*L\s*I\s*N\s*E|S\s*C\s*A\s*N\s+TO\s+PAY/);
+    assert.deepEqual(saved, before);
+    await loading.destroy();
+  }
+});
+
+test('outstanding invoices explain the booking retainer fee and all confirmation prerequisites', async () => {
+  const pages = await readPdf(await generateInvoicePdf({invoice_number:'QA-DUE',items:[],total:100,amount_outstanding:100,due_date:'2026-11-01',secure_token:'due-token'}));
+  const text = pages.map(page => page.text).join(' ');
+  assert.match(text, /booking retainer fee/);
+  assert.match(text, /signed agreement and written confirmation/);
+  assert.match(text, /2026-11-01/);
+  assert.match(text, /P\s*A\s*Y\s+O\s*N\s*L\s*I\s*N\s*E/);
+});
+
 test('proposal pricing and terms paginate with continuous footers and preserve zero deposit', async () => {
   const pages = await readPdf(await generateProposalPdf({
     ...proposal, proposal_type: 'CORPORATE', guest_count: 80, start_time: '18:00', end_time: '21:00',
