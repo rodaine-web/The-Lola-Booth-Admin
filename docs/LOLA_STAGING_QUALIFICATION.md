@@ -1,3 +1,7 @@
+## October 10 authenticated mobile/payment/storage update
+
+Latest application source `08e5ec4` is deployed to staging API and worker. [Current Phase 1 release report](LOLA_PHASE1_RELEASE_READINESS_2026-10-10.md) contains the authoritative scoped gates; earlier rows below are historical checkpoints. Mobile Stripe Sandbox balance Checkout returned PAID/zero balance/two receipts; database persistence and corrected paid invoice PDF regeneration passed. Authenticated document downloads and planning return passed; workspace widths 320/390/768px have no horizontal overflow. Private upload survived the API redeployment byte-for-byte; assigned/unassigned/released/revoked staff-reader isolation passed. Full enabled database suite 659 passes, zero failures/skips; build and CI browser pass. Production remains NO-GO pending campaign/customer E2E, remaining mobile/roles/inbox checks, chargeback/recovery integrity and production preflight/approval. Automatic website proposals remain disabled following the owner's service-area skip; Admin reviews/sends proposals. No schema migration or production activation.
+
 > October 8 secure journey checkpoint: [implementation, evidence and NO-GO criteria](LOLA_PHASE1_SECURE_JOURNEY_READINESS_2026-10-08.md). Migration 055 passed restored-copy rehearsal and guarded application staging migration; this revision is not yet staging-qualified. Historical milestones below do not certify the new revision.
 
 ## October 10 deployed qualification update

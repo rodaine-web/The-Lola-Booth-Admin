@@ -1,3 +1,18 @@
+## October 10 mobile and storage qualification — latest checkpoint
+
+Current source revision `08e5ec4`, staging API/worker SUCCESS; latest full disposable DB suite **659 passed, zero failed/skipped**, build and CI browser passed. See [release readiness and evidence](LOLA_PHASE1_RELEASE_READINESS_2026-10-10.md). This checkpoint supersedes older presentation/local-database status statements below; the numbered requirements remain a traceable baseline.
+
+| Requirement area | Current qualification |
+|---|---|
+| 24–27 private assets/planning submission/Admin review | COMPLETE for tested staging upload/private access, submission → correction → resubmission → own-artwork approval/lock. Private bytes survive API redeployment; production storage/file backup preflight remains PARTIAL. |
+| 28–33 creative/version/component readiness | COMPLETE for tested hosted V1 changes → V2 approval, stale/replay controls and both required Glam components. Overall PARTIAL pending mobile proof/upload and usable production assets where required. |
+| 38–39 handoff/agreement/workspace | COMPLETE for tested equipment-free confirmation, secure grants, cards/CTAs, mobile planning return, branded signed PDF/download and revoked access; normal/campaign full customer E2E remains PARTIAL. |
+| 43 payment hardening | PARTIAL overall; actual mobile Stripe Sandbox balance payment, fully paid/no-controls state, two unique receipts and ledger persistence passed. Paid invoice PDF correction deployed/verified. Replay/refunds already passed; interruption/chargeback and inbox gates remain. |
+| 49 campaign/preloaded/generated templates | PARTIAL; immutable campaign invoice/agreement service and actual provider template delivery passed, full campaign browser journey/broadcast qualification remain. |
+| 53–55 security/qualification/reporting | PARTIAL overall; assigned/unassigned/released/revoked asset reader checks added; complete remaining in-scope role matrix and production preflight. |
+
+Owner skipped automatic website quote service-area setup. Automatic proposal flag stays disabled; website inquiries require Admin proposal review/send, then the approved automatic invoice/payment/agreement/workspace handoffs. Files/galleries and broader event operations/customer changes remain Phase 2. Ten backdrop seeds stay inactive; no stock/assets were invented. **Production NO-GO; no production changes.**
+
 > October 8 secure journey checkpoint: [implementation, evidence and NO-GO criteria](LOLA_PHASE1_SECURE_JOURNEY_READINESS_2026-10-08.md). Migration 055 passed restored-copy rehearsal and guarded application staging migration; this revision is not yet staging-qualified. Historical milestones below do not certify the new revision.
 
 ## October 10 deployed qualification update

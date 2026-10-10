@@ -1,6 +1,6 @@
 # Phase 1 release readiness — 10 October 2026
 
-**Production: NO-GO. Staging: available for owner testing.** Application revision `b4f9cc8810cf9714a545dcb0f9277126e0ca0386`; migration ledger through 056. This report supersedes earlier checkpoint statements about Railway connectivity, equipment-gated confirmation, paused reminders and unqualified payment replay/refunds. Production was not changed.
+**Production: NO-GO. Staging: available for owner testing.** Latest qualified application revision `08e5ec4c52b858cc5f4e571f6ae267374a32de81`; migration ledger through 056. This report supersedes earlier checkpoint statements about Railway connectivity, equipment-gated confirmation, paused reminders and unqualified payment replay/refunds. Production was not changed.
 
 ## Verified in this qualification
 
@@ -13,10 +13,10 @@
 | Signature/balance/planning/creative reminders | COMPLETE for tested schedules and stop conditions | Hosted Microsoft acceptance; duplicate queues suppressed; signed/submitted/approved/cancelled fixtures stop reminders; signing task closes. Fixed PostgreSQL microsecond/JavaScript millisecond deadline mismatch. Staging API/worker enabled after queue audit; historical cutoff retained. |
 | Secure Client Workspace access | COMPLETE for tested access controls | Actual hosted HTTP single-use redemption, replay/expired-link denial, Secure HttpOnly SameSite cookie, wrong-event ownership denial, anonymous denial, CSRF/origin denial, logout revocation; signed PDF requires fresh verification. Existing user sessions were not revoked by QA. |
 | Admin agreement permissions | COMPLETE for tested routes | Dedicated non-login QA identity: no-permission denied; read:sales allows index but not issue; revoked session denied. Wider role/action matrix remains PARTIAL. |
-| Mobile planning and correction | PARTIAL | Authenticated 390px workspace/planning; no document overflow; specific required-field links; saved answers; custom-backdrop request and no-assets declaration; submit, Admin correction, client resubmit and persisted audit. Final approval correctly rejects an unconfirmed custom backdrop. No paid custom-work prerequisite bypassed. |
+| Mobile planning and correction | COMPLETE for tested submission/correction/return path; PARTIAL overall | Authenticated 390px workspace/planning, required-field links, saved answers, custom-backdrop request and no-assets declaration, submit → correction → resubmit, and authenticated return navigation. Own-artwork final approval/lock and creative component coverage passed hosted HTTP. Unconfirmed/unpaid custom backdrop remains blocked. Mobile uploads/proof approval still required. |
 | Reusable/preloaded templates | COMPLETE for tested delivery | Existing template renders with persisted identity/version; newly created reusable template renders merge data, actual Microsoft acceptance, duplicate send suppressed. New QA template archived after testing. Inbox/content approval and campaign broadcasts remain separate gates. |
 | Campaign lifecycle | PARTIAL | Hosted service checks created one campaign proposal under concurrent preparation; accepted-price invoice and actual Microsoft invoice delivery; synthetic manual QA minimum payment → one issued agreement and WON client classification; no premature confirmation/workspace. Full hosted campaign customer/browser journey remains required. QA event cancelled after this test. |
-| Approved workspace / signed PDF presentation | PARTIAL overall | Owner confirmed corrected workspace works; earlier hosted branded signed PDF inspection. Current hosted access returns a signed PDF; full fresh-session mobile document/payment actions remain required. |
+| Approved workspace / signed PDF presentation | COMPLETE for tested cards/actions and downloads | Fresh authenticated 390px proposal/agreement/invoice/receipt downloads; all signed-agreement pages rendered, signature/hash evidence and receipt branding checked. Actual Sandbox balance Checkout returns PAID and two receipts. Paid-invoice payment-link defect fixed and deployed regeneration verified. Remaining mobile uploads/creative review are separate gates. |
 
 Provider acceptance is not proof of inbox receipt for every message. Owner confirmed prior smoke-email receipt, not every new reminder/refund email.
 
@@ -28,16 +28,16 @@ Original acceptance definitions remain in `LOLA_STAGING_QUALIFICATION.md`. Phase
 
 | Gate | Current status | Remaining qualification |
 |---|---|---|
-| A Booking → planning | PARTIAL | Full campaign browser lifecycle and final submitted-detail approval with eligible backdrop/creative requirements. Normal booking handoffs and equipment-free confirmation have hosted evidence. |
+| A Booking → planning | PARTIAL | Full campaign browser lifecycle remains. Normal booking handoffs, equipment-free confirmation, submission/correction/resubmission, own-artwork Admin approval/lock and selected-experience creative coverage have hosted evidence. Custom-work acceptance/payment path remains separate. |
 | B Backdrop | BLOCKED for production inventory; PARTIAL for logic | Ten inactive seeds stay inactive. Supply usable assets and actual inventory; qualify eligible selection/conflict and custom quote → acceptance → invoice → payment → work authorization. Unpaid custom work is correctly blocked. |
-| C Private client assets | PARTIAL | Confirm durable production storage, valid/invalid/oversized upload and actual cross-client denial on the deployed storage provider. No-assets planning declaration passed. Event-day files/galleries are Phase 2. |
+| C Private client assets | COMPLETE for tested staging provider; production preflight PARTIAL | Valid upload/byte readback, invalid/oversize rejection, private/scoped/anonymous/revoked denial and byte-identical readback across API redeployment passed. Production storage capacity and file backup/restore remain required. Event-day files/galleries are Phase 2. |
 | D Creative approval | PARTIAL | Earlier hosted V1/change/V2 evidence and current reminder stop evidence exist; finish current full component/readiness workflow with eligible production assets. |
-| E Payments | PARTIAL | Real TEST payment/replay/refund and receipt ledger passed. Complete balance/full and mobile Checkout, interruption recovery, chargeback and customer receipt/document journeys. |
+| E Payments | PARTIAL | Real TEST minimum/balance payment, replay/refund and receipt ledger passed; actual mobile balance Checkout yields fully PAID/zero balance, no payment controls and two unique receipts. PDF downloads and corrected paid-invoice regeneration passed. Interruption recovery, chargeback integrity and remaining inbox evidence still require qualification. |
 | F Availability | PARTIAL | Restored DB and CI concurrency/expiry/conflict checks passed. Equipment assignment is not confirmation prerequisite. Remaining customer/reschedule inventory journeys need qualification. |
 | G Automations | PARTIAL | Handoffs and reminder provider acceptance/dedup/stop passed; staging reminder activation audited. Finish generated/preloaded campaign delivery and inbox checks. Campaign broadcasts remain disabled. |
-| H Mobile | PARTIAL | 390px authenticated planning save/review/submit/correction passed. Finish actual documents/payments, uploads and creative proof at required breakpoints. Staff workflows are Phase 2. |
+| H Mobile | PARTIAL | 390px authenticated planning/correction/return, actual Sandbox Checkout and document downloads passed. Workspace has no horizontal overflow at 320/390/768px. Finish uploads, color/backdrop/proof approval at required breakpoints. Staff workflows are Phase 2. |
 | I Appearance | PARTIAL | Earlier settings smoke evidence exists; complete deployed contrast/mode/palette persistence matrix. |
-| J Permissions | PARTIAL | Hosted client ownership/expiry/CSRF/logout and agreement read/write/session checks passed. Complete remaining in-scope role/action matrix and grant revocation. |
+| J Permissions | PARTIAL | Client ownership/expiry/CSRF/logout, revoked grants, agreement read/write/session and assigned/unassigned/released staff asset access passed. Complete remaining in-scope role/action matrix. |
 
 ## Tests and evidence
 
@@ -63,7 +63,7 @@ Pause reminder and handoff flags to stop new dispatch; preserve generated invoic
 
 1. Close every applicable Phase 1 A–J gate with deployed workflow/persistence/security/failure/browser evidence, including full campaign and final planning/creative approval paths.
 2. Supply usable backdrop/inventory and verify durable private planning asset storage, or formally scope disabled optional features with coherent customer messaging and no broken required path.
-3. Complete mobile document/payment and remaining role/expiry/revocation matrix; verify inbox delivery/content for mandatory customer communications.
+3. Complete mobile uploads/proof review and remaining role/action matrix; verify inbox delivery/content for mandatory customer communications. Tested mobile payment/download/navigation and access expiry/revocation are recorded below.
 4. Re-audit queues, backups, target revisions/provider configuration and rollback before production activation. No unresolved critical financial, privacy, confirmation or delivery defects.
 5. Present the concrete production rollout to the owner and obtain explicit approval. **NO-GO until these conditions are met.**
 
@@ -100,3 +100,14 @@ Authenticated Continue Planning opens the submitted confirmation; Return to The 
 Local document regressions: 18 tests, 17 passed, zero failed, one conditional DB skip. Full available suite after the fix: 642 tests, 630 passed, zero failed, 12 conditional DB skips. Settled/void PDFs have no payment link annotation; outstanding invoices retain the actual decodable payment QR; saved terms/input records remain unchanged. Syntax and diff checks passed. Hosted regeneration of the corrected paid invoice remains pending deployment; earlier downloaded PDFs are evidence of the defect, not the correction.
 
 Gates E/H improve for mobile balance Checkout, receipts, downloads and planning return. Interrupted/failed payment recovery, mobile uploads/proof review, full campaign customer journey, remaining permissions/inbox evidence and production storage/backup/preflight remain open. This checkpoint is not production approval.
+
+## Deployed document correction and storage persistence evidence
+
+Staging API deployment `53dcba8d-d88c-4ee0-a30d-f61bd4e49c06` is SUCCESS on `08e5ec4c52b858cc5f4e571f6ae267374a32de81`. GitHub run `38085234032`, job `114310259141`: all steps PASS; available suite 630 passes/12 conditional skips, full enabled database suite **659 passed, zero failed, zero skipped**, V1.1 DB 3 passes, frontend build PASS and CI browser 1 pass. No schema migration or production activation was introduced.
+
+Hosted post-deployment runner `7640e387-4a49-452c-8794-b5562cf35c0d` explicitly passed:
+- The mobile QA invoice persists PAID/zero balance with exactly two Stripe succeeded payments and one receipt for each, without duplicate ledger entries.
+- A fresh actual session-scoped API PDF request regenerates the corrected paid invoice with NO PAYMENT DUE, saved terms preserved and no payment link annotation.
+- A private QA PNG uploaded before the API redeployment reads back byte-identically afterward from the mounted API volume. A dedicated non-login test reader is denied without permission, denied with read permission but no event assignment, allowed with assignment, denied for a different event, denied planning review writes, denied after assignment release and denied after session revocation. Test identity/profile were deactivated and assignment released; existing user privileges/sessions were not changed.
+
+This closes the tested staging storage-redeployment and paid-invoice correction checks. It does not certify production file backup/restore, all roles, inbox receipt or the remaining end-to-end campaign/mobile workflows. The private proof screenshot of the mobile PAID result is retained with the other evidence. Production remains NO-GO.
