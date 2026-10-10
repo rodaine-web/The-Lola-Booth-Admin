@@ -202,6 +202,28 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     await query("UPDATE invoices SET status='PAID',amount_paid=50,amount_outstanding=0,balance_due=0 WHERE id=$1",[other.id]);
     assert.equal(await applyBookingConfirmationPolicy(event.id),null,'Another paid invoice cannot bypass a refunded managed booking');
 
+    // Actual PostgreSQL locks must prevent replay and competing over-refunds.
+    const refundLedger=await import('../server/src/services/refund-ledger-service.js');
+    const manual=(await query("INSERT INTO payments(client_id,amount,currency,payment_method,payment_date,provider,status) VALUES($1,100,'USD','CASH',current_date,'MANUAL','SUCCEEDED') RETURNING *",[contact.id])).rows[0];
+    const refundRequest={paymentId:manual.id,amount:25,reason:'QA refund',key:crypto.randomUUID()};
+    const replayed=await Promise.all(Array.from({length:8},()=>refundLedger.claimRefund(refundRequest)));
+    assert.equal(replayed.filter(x=>x.created).length,1);
+    assert.equal(Number((await query('SELECT refunded_amount FROM payments WHERE id=$1',[manual.id])).rows[0].refunded_amount),25,'Manual refund replay only changes the ledger once');
+    await assert.rejects(refundLedger.claimRefund({...refundRequest,amount:30}),{code:'REFUND_REQUEST_CONFLICT'});
+    const competing=await Promise.allSettled(Array.from({length:8},()=>refundLedger.claimRefund({...refundRequest,amount:50,key:crypto.randomUUID()})));
+    assert.equal(competing.filter(x=>x.status==='fulfilled').length,1,'Competing refunds cannot overdraw the payment');
+    const stripePayment=(await query("INSERT INTO payments(client_id,amount,currency,payment_method,payment_date,provider,provider_payment_id,status) VALUES($1,100,'USD','CARD',current_date,'STRIPE','pi_QARefund','SUCCEEDED') RETURNING *",[contact.id])).rows[0];
+    const stripeClaim=await refundLedger.claimRefund({paymentId:stripePayment.id,amount:40,reason:'QA provider refund',key:crypto.randomUUID()});
+    await assert.rejects(refundLedger.claimRefund({paymentId:stripePayment.id,amount:70,reason:'Competing QA',key:crypto.randomUUID()}),{code:'INVALID_REFUND_AMOUNT'},'Uncertain requests reserve funds');
+    const providerRefund={id:'re_QAOne',payment_intent:'pi_QARefund',currency:'usd',amount:4000,status:'pending',metadata:{lola_refund_id:stripeClaim.refund.id}};
+    await refundLedger.settleStripeRefund(providerRefund);
+    assert.equal(Number((await query('SELECT refunded_amount FROM payments WHERE id=$1',[stripePayment.id])).rows[0].refunded_amount),0,'Pending refunds do not reduce posted payment');
+    await Promise.all(Array.from({length:8},()=>refundLedger.settleStripeRefund({...providerRefund,status:'succeeded'})));
+    await refundLedger.settleStripeRefund({id:'re_QATwo',payment_intent:'pi_QARefund',currency:'usd',amount:2000,status:'succeeded'});
+    assert.equal(Number((await query('SELECT refunded_amount FROM payments WHERE id=$1',[stripePayment.id])).rows[0].refunded_amount),60,'Separate partial refunds store individual amounts, not cumulative charge totals');
+    await refundLedger.settleStripeRefund({...providerRefund,status:'failed'});
+    assert.equal(Number((await query('SELECT refunded_amount FROM payments WHERE id=$1',[stripePayment.id])).rows[0].refunded_amount),20,'Canonical failed refund restores its posted amount');
+
     // Campaigns must use the same accepted commercial version and invoice journey.
     const campaign=(await query("INSERT INTO campaigns(name) VALUES('QA Wedding Planner') RETURNING id")).rows[0];
     await query("INSERT INTO experiences(name,slug,active) VALUES('The LOLA Glam','qa-glam',true)");

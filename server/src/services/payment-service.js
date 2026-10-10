@@ -1,3 +1,4 @@
+import {claimRefund,settleStripeRefund,markRefundRejected} from './refund-ledger-service.js';
 import {stripeConfiguration,assertStripeEventMode,verifyStripeAccount,verifyStripeEventAccount} from './stripe-configuration.js';
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {getReceiptView} from "./receipt-service.js";
@@ -5,7 +6,7 @@ import {enqueueLifecycle} from './integration-jobs-service.js';
 import { documentOrigin } from "../utils/public-document-url.js";
 import crypto from "node:crypto";
 import { invoiceBalance } from "../../../shared/invoice-balance.js";
-import { brandedEmailHtml } from "./automation-service.js";
+import { brandedEmailHtml, sendCommunication } from "./automation-service.js";
 import { sendEmail } from "./email-service.js";
 import { createNotification } from "./notification-service.js";
 import { env } from "../config/env.js";
@@ -163,30 +164,30 @@ export async function getPayment(id) {
 }
 
 export async function createRefund(req) {
-  const payment = await getPayment(req.params.id);
-  const amount = money(req.body.amount || (Number(payment.amount) - Number(payment.refunded_amount || 0)));
-  const max = money(Number(payment.amount) - Number(payment.refunded_amount || 0));
-  if (amount <= 0 || amount > max) throw new AppError("Refund amount is outside the refundable balance.", 409, "INVALID_REFUND_AMOUNT");
-  if (payment.provider !== "MANUAL") {
-    throw new AppError("Provider refund adapters are prepared, but live refund calls require configured Stripe or PayPal credentials.", 409, "PROVIDER_REFUND_NOT_CONFIGURED");
+  // Verify the configured provider/account before reserving any refund funds.
+  const source=await getPayment(req.params.id);
+  if(source.provider==='STRIPE')await verifyStripeAccount();
+  const claim=await claimRefund({paymentId:source.id,amount:req.body.amount,reason:req.body.reason,notes:req.body.notes,reference:req.body.reference_number,actorId:req.user.id,key:req.body.idempotency_key});
+  const {payment}=claim;
+  let {refund}=claim;
+  if(payment.provider==='STRIPE'){
+    if(!claim.created)return refund; // Pending/uncertain requests need canonical webhook/operator reconciliation.
+    const params=new URLSearchParams({payment_intent:payment.provider_payment_id,amount:String(cents(refund.amount)),'metadata[lola_refund_id]':refund.id});
+    let response,data;
+    try{
+      response=await fetch('https://api.stripe.com/v1/refunds',{method:'POST',headers:{Authorization:`Bearer ${env.stripeSecretKey}`,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':`lola-refund:${refund.id}`,'Stripe-Version':'2026-08-26.dahlia'},body:params,signal:AbortSignal.timeout(20000)});
+      data=await response.json();
+    }catch{throw new AppError('Refund outcome is uncertain. It remains reserved for review; do not start another refund.',502,'REFUND_OUTCOME_UNCERTAIN');}
+    if(!response.ok){
+      if(response.status>=400&&response.status<500&&response.status!==429)await markRefundRejected(refund.id);
+      throw new AppError(response.status>=500||response.status===429?'Refund outcome requires provider reconciliation. Do not submit another refund.':'Stripe rejected this refund. Check the payment and provider record.',502,'STRIPE_REFUND_FAILED');
+    }
+    const canonical=await retrieveStripeRefund(data.id);
+    const settled=await settleStripeRefund(canonical);
+    if(!settled)throw new AppError('Refund payment could not be reconciled.',409,'REFUND_PAYMENT_MISMATCH');
+    refund=settled.refund;
   }
-  const refund = await transaction(async (client) => {
-    const inserted = await client.query(
-      `INSERT INTO refunds (payment_id, invoice_id, event_id, client_id, provider, amount, currency, reason, notes, refund_type, status, provider_reference, created_by, idempotency_key)
-       VALUES ($1,$2,$3,$4,'MANUAL',$5,$6,$7,$8,$9,'SUCCEEDED',$10,$11,$12)
-       ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET updated_at=now()
-       RETURNING *`,
-      [payment.id, payment.invoice_id, payment.event_id, payment.client_id, amount, payment.currency, req.body.reason || null, req.body.notes || null, amount === Number(payment.amount) ? "FULL" : "PARTIAL", req.body.reference_number || null, req.user.id, req.body.idempotency_key || null]
-    );
-    await client.query(
-      `UPDATE payments SET refunded_amount=refunded_amount+$1::numeric,
-        status=CASE WHEN refunded_amount+$1::numeric >= amount THEN 'REFUNDED' ELSE 'PARTIALLY_REFUNDED' END,
-        updated_at=now()
-       WHERE id=$2`,
-      [amount, payment.id]
-    );
-    return inserted.rows[0];
-  });
+  if(refund.status!=='SUCCEEDED'||!claim.created)return refund;
   if (payment.invoice_id) await reconcileInvoice(payment.invoice_id, { req, actorUserId: req.user.id, action: "refund_completed" });
   const invoice = payment.invoice_id ? (await query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL", [payment.invoice_id])).rows[0] : null;
   const customer = payment.client_id ? (await query("SELECT name,email FROM clients WHERE id=$1 AND deleted_at IS NULL", [payment.client_id])).rows[0] : null;
@@ -225,7 +226,7 @@ export async function createRefund(req) {
     await createNotification({
       roleTarget: "OWNER_ADMIN",
       category: "PAYMENTS",
-      severity: "NORMAL",
+      severity: "INFO",
       title: `Refund processed — ${invoice.invoice_number}`,
       body: `${fmt(refund.amount)} refunded to ${customer?.name || "client"}.`,
       entityType: "payment",
@@ -241,9 +242,9 @@ export async function createRefund(req) {
 export async function handleStripeWebhook(rawBody, signature) {
   if (!env.stripeWebhookSecret) throw new AppError("Stripe webhook secret is not configured.", 503, "STRIPE_WEBHOOK_NOT_CONFIGURED");
   if (!validStripeSignature(rawBody, signature, env.stripeWebhookSecret)) throw new AppError("Invalid Stripe signature.", 400, "INVALID_STRIPE_SIGNATURE");
-  const event = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody));
-  assertStripeEventMode(event);
-  await verifyStripeEventAccount(event);
+  const receivedEvent = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody));
+  assertStripeEventMode(receivedEvent);
+  const event=await verifyStripeEventAccount(receivedEvent);
   return persistWebhookEvent("STRIPE", event.id, event.type, event, async () => {
     if (["checkout.session.completed", "checkout.session.async_payment_succeeded", "payment_intent.succeeded"].includes(event.type)) {
       const object = event.data?.object || {};
@@ -269,15 +270,21 @@ export async function handleStripeWebhook(rawBody, signature) {
         failureCode: object.last_payment_error?.code || object.last_payment_error?.decline_code || "payment_failed"
       });
     }
-    if (event.type === "charge.refunded") {
-      const object = event.data?.object || {};
-      await recordProviderRefund({
-        provider: "STRIPE",
-        providerPaymentId: object.payment_intent,
-        providerRefundId: object.refunds?.data?.[0]?.id || object.id,
-        amount: money((object.amount_refunded || 0) / 100),
-        currency: String(object.currency || "usd").toUpperCase()
-      });
+    if (['refund.created','refund.updated','refund.failed'].includes(event.type)) {
+      await recordProviderRefund(await retrieveStripeRefund(event.data?.object?.id));
+    }
+    if (event.type === 'charge.refunded') {
+      // amount_refunded is cumulative; each refund has its own amount and status.
+      const charge=event.data?.object || {};
+      let after='';
+      do{
+        const response=await fetch(`https://api.stripe.com/v1/refunds?charge=${encodeURIComponent(charge.id)}&limit=100${after?`&starting_after=${encodeURIComponent(after)}`:''}`,{headers:stripeHeaders(),signal:AbortSignal.timeout(15000)});
+        const page=await response.json();
+        if(!response.ok||!Array.isArray(page.data))throw new AppError('Stripe refund reconciliation failed.',502,'STRIPE_REFUND_LOOKUP_FAILED');
+        for(const object of page.data)await recordProviderRefund(await retrieveStripeRefund(object.id));
+        after=page.has_more?page.data.at(-1)?.id:'';
+        if(page.has_more&&!after)throw new AppError('Stripe refund pagination failed.',502,'STRIPE_REFUND_LOOKUP_FAILED');
+      }while(after);
     }
   });
 }
@@ -411,38 +418,20 @@ async function recordProviderPayment(input) {
 }
 
 async function sendRecordedPaymentEmail({payment, invoice, to, subject, body, html, idempotencyKey, triggerKey}) {
-  const existing=(await query("SELECT * FROM communications WHERE idempotency_key=$1 AND deleted_at IS NULL LIMIT 1",[idempotencyKey])).rows[0];
-  if(existing?.status==="SENT_TO_PROVIDER") return existing;
-  let communication=existing;
-  if(!communication){
-    communication=(await query(
+  const communication=await transaction(async client=>{
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`payment-email:${idempotencyKey}`]);
+    const existing=(await client.query("SELECT * FROM communications WHERE idempotency_key=$1 AND deleted_at IS NULL LIMIT 1",[idempotencyKey])).rows[0];
+    if(existing)return existing;
+    return (await client.query(
       `INSERT INTO communications(client_id,event_id,invoice_id,type,channel,direction,recipient,subject,rendered_subject,message_summary,rendered_body,rendered_html,status,send_mode,idempotency_key,trigger_key)
-       VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$7,$8,'PROCESSING','SEND_NOW',$9,$10)
+       VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$7,$8,'DRAFT','SEND_NOW',$9,$10)
        RETURNING *`,
       [payment.client_id,payment.event_id,invoice.id,to,subject,body.slice(0,500),body,html,idempotencyKey,triggerKey]
     )).rows[0];
-  } else {
-    communication=(await query("UPDATE communications SET status='PROCESSING',failure_code=NULL,failure_message=NULL,updated_at=now() WHERE id=$1 RETURNING *",[communication.id])).rows[0];
-  }
-  try{
-    const delivery=await sendEmail({to,subject,body,html});
-    await query(
-      "UPDATE communications SET status='SENT_TO_PROVIDER',sent_at=now(),provider=$1,provider_message_id=$2,updated_at=now() WHERE id=$3",
-      [delivery.provider,delivery.providerMessageId,communication.id]
-    );
-    await query(
-      `INSERT INTO email_messages(communication_id,provider,provider_message_id,to_email,subject,status,body_preview,sent_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,now())`,
-      [communication.id,delivery.provider,delivery.providerMessageId,to,subject,delivery.status||"SENT_TO_PROVIDER",body.slice(0,500)]
-    );
-    return {...communication,status:"SENT_TO_PROVIDER",delivery};
-  }catch(error){
-    await query(
-      "UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$1,failure_message=$2,updated_at=now() WHERE id=$3",
-      [error.code||"EMAIL_SEND_FAILED",error.message,communication.id]
-    );
-    throw error;
-  }
+  });
+  // Shared delivery claims prevent races and preserve uncertain outcomes for review.
+  const result=await sendCommunication(communication.id);
+  return {...result.communication,delivery:result.delivery};
 }
 
 async function recordProviderPaymentFailure(input) {
@@ -507,28 +496,11 @@ async function recordProviderPaymentFailure(input) {
 }
 
 async function recordProviderRefund(input) {
-  if (!input.providerPaymentId || !input.amount) return null;
-  const payment = (await query("SELECT * FROM payments WHERE provider=$1 AND provider_payment_id=$2 AND deleted_at IS NULL", [input.provider, input.providerPaymentId])).rows[0];
-  if (!payment) return null;
-  const refund = await transaction(async (client) => {
-    const inserted = await client.query(
-      `INSERT INTO refunds (payment_id, invoice_id, event_id, client_id, provider, amount, currency, reason, refund_type, status, provider_refund_id, idempotency_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'Stripe refund webhook',$8,'SUCCEEDED',$9,$10)
-       ON CONFLICT (provider, provider_refund_id) WHERE provider_refund_id IS NOT NULL DO UPDATE SET updated_at=now()
-       RETURNING *`,
-      [payment.id, payment.invoice_id, payment.event_id, payment.client_id, input.provider, input.amount, input.currency || payment.currency, input.amount >= Number(payment.amount) ? "FULL" : "PARTIAL", input.providerRefundId, `${input.provider}:refund:${input.providerRefundId}`]
-    );
-    await client.query(
-      `UPDATE payments SET refunded_amount=GREATEST(refunded_amount,$1::numeric),
-        status=CASE WHEN $1::numeric >= amount THEN 'REFUNDED' ELSE 'PARTIALLY_REFUNDED' END,
-        updated_at=now()
-       WHERE id=$2`,
-      [input.amount, payment.id]
-    );
-    return inserted.rows[0];
-  });
+  const settled=await settleStripeRefund(input);
+  if(!settled)return null;
+  const {payment,refund,changed}=settled;
   if (payment.invoice_id) await reconcileInvoice(payment.invoice_id, { action: "refund_completed" });
-  if (payment.invoice_id) {
+  if (refund.status==='SUCCEEDED' && changed && payment.invoice_id) {
     const invoice=(await query("SELECT * FROM invoices WHERE id=$1",[payment.invoice_id])).rows[0];
     const customer=(await query("SELECT name,email FROM clients WHERE id=$1",[payment.client_id])).rows[0];
     const currency=refund.currency || payment.currency || "USD";
@@ -564,6 +536,15 @@ async function recordProviderRefund(input) {
     }
   }
   return refund;
+}
+
+function stripeHeaders(){return {Authorization:`Bearer ${env.stripeSecretKey}`,'Stripe-Version':'2026-08-26.dahlia'};}
+async function retrieveStripeRefund(id){
+  if(!/^re_[A-Za-z0-9]+$/.test(id||''))throw new AppError('Invalid Stripe refund identifier.',502,'INVALID_PROVIDER_REFUND');
+  const response=await fetch(`https://api.stripe.com/v1/refunds/${encodeURIComponent(id)}`,{headers:stripeHeaders(),signal:AbortSignal.timeout(15000)});
+  const object=await response.json();
+  if(!response.ok||object.id!==id)throw new AppError('Stripe refund lookup failed. Keep the request reserved for review.',502,'STRIPE_REFUND_LOOKUP_FAILED');
+  return object;
 }
 
 async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount,workspaceEventId) {

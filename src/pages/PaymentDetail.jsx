@@ -1,6 +1,6 @@
 import { formatMoney } from "../utils/display.js";
 import { ArrowLeft, Download, RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
@@ -11,6 +11,8 @@ export default function PaymentDetail() {
   const [refund, setRefund] = useState({ amount: "", reason: "", notes: "" });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [submitting,setSubmitting]=useState(false);
+  const refundRequest=useRef(null);
 
   useEffect(() => { load(); }, [id]);
 
@@ -23,21 +25,25 @@ export default function PaymentDetail() {
   }
 
   async function submitRefund() {
-    setError("");
-    setNotice("");
+    if(submitting)return;
+    setError("");setNotice("");setSubmitting(true);
+    const fingerprint=JSON.stringify([id,refund.amount,refund.reason,refund.notes]);
+    if(refundRequest.current?.fingerprint!==fingerprint)refundRequest.current={fingerprint,key:crypto.randomUUID()};
     try {
-      await api.post(`/payments/${id}/refunds`, { ...refund, idempotency_key: `refund-${id}-${refund.amount}` });
-      setNotice("Refund recorded.");
+      const result=await api.post(`/payments/${id}/refunds`, { ...refund, idempotency_key:refundRequest.current.key });
+      setNotice(result.status==='SUCCEEDED'?"Refund completed.":`Refund ${String(result.status).toLowerCase()}. Funds remain reserved until provider reconciliation.`);
+      refundRequest.current=null;
       setRefund({ amount: "", reason: "", notes: "" });
       await load();
     } catch (err) {
       setError(err.message);
-    }
+    }finally{setSubmitting(false);}
   }
 
   if (error && !payment) return <main className="page record-detail-redesign"><div className="empty-state">{error}</div></main>;
   if (!payment) return <main className="page"><div className="empty-state">Loading payment...</div></main>;
-  const refundable = Math.max(0, Number(payment.amount || 0) - Number(payment.refunded_amount || 0));
+  const pendingRefunds=(payment.refunds||[]).filter(r=>["PENDING","PROCESSING"].includes(r.status)).reduce((sum,r)=>sum+Number(r.amount),0);
+  const refundable = Math.max(0, Number(payment.amount || 0) - Number(payment.refunded_amount || 0)-pendingRefunds);
 
   return (
     <main className="page">
@@ -61,9 +67,9 @@ export default function PaymentDetail() {
       <section className="panel">
         <h2>Refund</h2>
         <div className="inline-form note-form">
-          <input type="number" min="0" max={refundable} value={refund.amount} onChange={(event) => setRefund((current) => ({ ...current, amount: event.target.value }))} placeholder="Refund amount" />
-          <input value={refund.reason} onChange={(event) => setRefund((current) => ({ ...current, reason: event.target.value }))} placeholder="Reason" />
-          <button className="primary-action" disabled={!refund.amount || Number(refund.amount) > refundable} onClick={submitRefund}><RotateCcw size={16} />Refund</button>
+          <label>Refund amount <span aria-label="required">*</span><input required aria-label="Refund amount" type="number" min="0.01" step="0.01" max={refundable} value={refund.amount} onChange={(event) => setRefund((current) => ({ ...current, amount: event.target.value }))} placeholder="Refund amount" /></label>
+          <label>Reason <span aria-label="required">*</span><input required aria-label="Refund reason" value={refund.reason} onChange={(event) => setRefund((current) => ({ ...current, reason: event.target.value }))} placeholder="Reason" /></label>
+          <button className="primary-action" disabled={submitting || !refund.reason.trim() || !refund.amount || Number(refund.amount)<=0 || Number(refund.amount) > refundable} onClick={submitRefund}><RotateCcw size={16} />{submitting?"Processing…":"Refund"}</button>
         </div>
       </section>
       <section className="panel"><h2>Refund History</h2><DataTable rows={payment.refunds} columns={["refund_date", "amount", "status", "reason", "provider_reference"]} empty="No refunds recorded." /></section>
