@@ -127,9 +127,9 @@ export async function queueEventReminder(eventId){
 export async function queueDueReminders(){
  if(stagingJobsPaused())return [];
  const scope=stagingAutomationScope();
- const events=(await query("SELECT e.id FROM events e JOIN clients c ON c.id=e.client_id WHERE e.deleted_at IS NULL AND e.event_date BETWEEN current_date AND current_date+2 AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS') AND ($1::timestamptz IS NULL OR (e.created_at >= $1 AND lower(c.email)=ANY($2::text[]))) LIMIT 100",[scope?.since||null,scope?.recipients||[]])).rows;
+ const events=(await query("SELECT e.id FROM events e JOIN clients c ON c.id=e.client_id WHERE e.deleted_at IS NULL AND e.event_date BETWEEN current_date AND current_date+2 AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS') AND ($1::timestamptz IS NULL OR (e.created_at >= $1 AND (cardinality($2::text[])=0 OR lower(c.email)=ANY($2::text[])))) LIMIT 100",[scope?.since||null,scope?.recipients||[]])).rows;
  const results=[];for(const event of events)results.push(await queueEventReminder(event.id));
- const invoices=(await query("SELECT i.id FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.deleted_at IS NULL AND i.due_date<current_date AND i.balance_due>0 AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED') AND ($1::timestamptz IS NULL OR (i.created_at >= $1 AND lower(c.email)=ANY($2::text[]))) LIMIT 100",[scope?.since||null,scope?.recipients||[]])).rows;
+ const invoices=(await query("SELECT i.id FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.deleted_at IS NULL AND i.due_date<current_date AND i.balance_due>0 AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED') AND ($1::timestamptz IS NULL OR (i.created_at >= $1 AND (cardinality($2::text[])=0 OR lower(c.email)=ANY($2::text[])))) LIMIT 100",[scope?.since||null,scope?.recipients||[]])).rows;
  for(const invoice of invoices)results.push(await queueOverdueReminder(invoice.id));return results;
 }
 

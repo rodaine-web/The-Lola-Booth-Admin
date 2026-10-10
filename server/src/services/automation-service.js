@@ -1162,7 +1162,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
     const due = await client.query(
       `SELECT id,scheduled_attempt_count FROM communications
        WHERE status='SCHEDULED' AND channel='EMAIL' AND scheduled_at <= now() AND deleted_at IS NULL
-       AND ($2::timestamptz IS NULL OR (created_at >= $2 AND lower(recipient)=ANY($3::text[])))
+       AND ($2::timestamptz IS NULL OR (created_at >= $2 AND (cardinality($3::text[])=0 OR lower(recipient)=ANY($3::text[]))))
        ORDER BY scheduled_at LIMIT $1 FOR UPDATE SKIP LOCKED`,
       [limit,scope?.since||null,scope?.recipients||[]]
     );

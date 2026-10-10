@@ -42,10 +42,10 @@ export async function processBookingInvoiceHandoffs({limit=10}={}) {
   const jobs = await transaction(async client => {
     await client.query(`UPDATE automation_jobs SET status='FAILED',last_error='Worker stopped during invoice handoff. Review invoice and provider history before retrying.',updated_at=now()
       WHERE job_type=ANY($1::text[]) AND status='PROCESSING' AND started_at<now()-interval '10 minutes'
-       AND ($2::timestamptz IS NULL OR (created_at>=$2 AND EXISTS(SELECT 1 FROM proposals p JOIN clients c ON c.id=p.client_id WHERE p.id=related_entity_id AND lower(c.email)=ANY($3::text[]))))`, [types,scope?.since||null,scope?.recipients||[]]);
+       AND ($2::timestamptz IS NULL OR (created_at>=$2 AND EXISTS(SELECT 1 FROM proposals p JOIN clients c ON c.id=p.client_id WHERE p.id=related_entity_id AND (cardinality($3::text[])=0 OR lower(c.email)=ANY($3::text[])))))`, [types,scope?.since||null,scope?.recipients||[]]);
     const rows = (await client.query(`SELECT * FROM automation_jobs WHERE job_type=ANY($1::text[]) AND status='PENDING' AND scheduled_for<=now()
       AND ($3::timestamptz IS NULL OR (created_at>=$3 AND EXISTS(SELECT 1 FROM proposals p JOIN clients c ON c.id=p.client_id
-        WHERE p.id=related_entity_id AND lower(c.email)=ANY($4::text[]))))
+        WHERE p.id=related_entity_id AND (cardinality($4::text[])=0 OR lower(c.email)=ANY($4::text[])))))
       ORDER BY scheduled_for LIMIT $2 FOR UPDATE SKIP LOCKED`, [types, limit,scope?.since||null,scope?.recipients||[]])).rows;
     for (const job of rows) await client.query("UPDATE automation_jobs SET status='PROCESSING',started_at=now(),attempt_count=attempt_count+1,updated_at=now() WHERE id=$1", [job.id]);
     return rows;

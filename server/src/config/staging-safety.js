@@ -24,15 +24,21 @@ export function stagingEmailPolicy(message,config=process.env){
  if(production)return {...message,subject:String(message.subject||'').replace(/^\[LOLA PRODUCTION QA\]\s*/,'')};
  const allow=new Set(String(config[`${prefix}_EMAIL_ALLOWLIST`]||'').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean));
  const recipients=[message.to,message.cc,message.bcc].flatMap(v=>Array.isArray(v)?v:String(v||'').split(',')).map(v=>String(v).trim().toLowerCase()).filter(Boolean);
- if(!recipients.length||recipients.length>2||recipients.some(v=>!allow.has(v)))throw new AppError(`${prefix} email permits at most two approved QA recipients.`,403,`${prefix}_RECIPIENT_BLOCKED`);
+ if(config.STAGING_EMAIL_ALLOW_ANY_RECIPIENT==='true'){
+  const tag='[LOLA STAGING QA] ';
+  return {...message,subject:String(message.subject||'').startsWith(tag)?message.subject:tag+(message.subject||'')};
+ }
+ if(!recipients.length||recipients.length>2)throw new AppError(`${prefix} email requires one or two approved QA recipients, including CC and BCC.`,403,`${prefix}_RECIPIENT_BLOCKED`);
+ if(recipients.some(v=>!allow.has(v)))throw new AppError(`${prefix} email was blocked because a recipient is not on the approved QA email allowlist. Use an approved test inbox.`,403,`${prefix}_RECIPIENT_BLOCKED`);
  const tag=`[LOLA ${prefix} QA] `;
  return {...message,subject:String(message.subject||'').startsWith(tag)?message.subject:`${tag}${message.subject||''}`};
 }
 export function stagingAutomationScope(config=process.env){
  if(!isStaging(config))return null;
  const since=config.STAGING_AUTOMATIONS_SINCE;
+ const openRecipients=config.STAGING_EMAIL_ALLOW_ANY_RECIPIENT==='true';
  const recipients=String(config.STAGING_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(s=>s.trim()).filter(Boolean);
- if(config.STAGING_AUTOMATIONS_ENABLED!=='true'||config.STAGING_EMAIL_ENABLED!=='true'||!Number.isFinite(Date.parse(since||''))||!recipients.length)return null;
- return {since:new Date(since).toISOString(),recipients};
+ if(config.STAGING_AUTOMATIONS_ENABLED!=='true'||config.STAGING_EMAIL_ENABLED!=='true'||!Number.isFinite(Date.parse(since||''))||(!openRecipients&&!recipients.length))return null;
+ return {since:new Date(since).toISOString(),recipients:openRecipients?[]:recipients};
 }
 export function stagingJobsPaused(config=process.env){return (isStaging(config)&&!stagingAutomationScope(config))||(config.APP_ENV==='production'&&config.PRODUCTION_AUTOMATIONS_ENABLED!=='true');}

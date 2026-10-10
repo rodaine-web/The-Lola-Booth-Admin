@@ -19,7 +19,7 @@ export async function queuePlanningReminders(){
     AND p.token_hash IS NOT NULL AND p.token_ciphertext IS NOT NULL AND e.deleted_at IS NULL AND c.deleted_at IS NULL
     AND e.status IN ('CONFIRMED','PREPARING','READY') AND e.event_date>=current_date
     AND current_date>=COALESCE(p.planning_due_at,p.invited_at::date+3)
-    AND ($1::timestamptz IS NULL OR (p.invited_at>=$1 AND lower(c.email)=ANY($2::text[])))
+    AND ($1::timestamptz IS NULL OR (p.invited_at>=$1 AND (cardinality($2::text[])=0 OR lower(c.email)=ANY($2::text[]))))
    ORDER BY p.planning_due_at LIMIT 25 FOR UPDATE OF p SKIP LOCKED`,[scope?.since||null,scope?.recipients||[]])).rows;
   const creative=(await query(`SELECT a.id,a.event_id,a.client_id,a.version::text AS grant_version,a.public_token,c.email,c.name,e.event_name,
    LEAST(2,GREATEST(0,(current_date-a.requested_at::date-3)/3))::int AS period
@@ -27,7 +27,7 @@ export async function queuePlanningReminders(){
    WHERE a.deleted_at IS NULL AND a.status IN ('PENDING_APPROVAL','VIEWED') AND a.expires_at>now() AND a.public_token IS NOT NULL
     AND current_date>=a.requested_at::date+3 AND e.deleted_at IS NULL AND c.deleted_at IS NULL
     AND e.status IN ('CONFIRMED','PREPARING','READY') AND e.event_date>=current_date
-    AND ($1::timestamptz IS NULL OR (a.requested_at>=$1 AND lower(c.email)=ANY($2::text[])))
+    AND ($1::timestamptz IS NULL OR (a.requested_at>=$1 AND (cardinality($2::text[])=0 OR lower(c.email)=ANY($2::text[]))))
    ORDER BY a.requested_at LIMIT 25 FOR UPDATE OF a SKIP LOCKED`,[scope?.since||null,scope?.recipients||[]])).rows;
   let queued=0;
   for(const [kind,rows] of [['PLANNING',planning],['CREATIVE',creative]])for(const row of rows){

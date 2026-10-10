@@ -8,7 +8,11 @@ import {validDrawnSignature} from '../../../shared/signature.js';
 const assets = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../public/brand');
 const colors = {ink:'#151515',muted:'#66615a',gold:'#9c7133',line:'#dfd6c9',ivory:'#faf8f4'};
 const money = value => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(value || 0));
-const date = value => value ? new Date(String(value).slice(0,10)+'T12:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'long',day:'numeric',year:'numeric'}) : 'To be confirmed';
+const date = value => {
+  if (!value) return 'To be confirmed';
+  const parsed = value instanceof Date ? value : new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T12:00:00Z` : value);
+  return Number.isNaN(parsed.getTime()) ? 'To be confirmed' : parsed.toLocaleDateString('en-US',{timeZone:'UTC',month:'long',day:'numeric',year:'numeric'});
+};
 const time = value => { const match=String(value || '').match(/^(\d{2}):(\d{2})/); return match ? `${Number(match[1])%12||12}:${match[2]} ${Number(match[1])>=12?'PM':'AM'}` : 'To be confirmed'; };
 
 // Presentation only: the signed snapshot, terms, signature and document hash remain unchanged.

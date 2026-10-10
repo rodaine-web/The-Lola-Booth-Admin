@@ -19,12 +19,12 @@ export async function queueBookingLifecycleReminders(){
    WHERE k.status='ISSUED' AND k.signing_due_at IS NOT NULL AND p.deleted_at IS NULL AND c.deleted_at IS NULL
     AND (e.id IS NULL OR (e.deleted_at IS NULL AND e.status<>'CANCELLED'))
     AND k.snapshot->>'accepted_version_id'=p.accepted_version_id::text
-    AND ($1::timestamptz IS NULL OR (k.issued_at>=$1 AND lower(c.email)=ANY($2::text[])))
+    AND ($1::timestamptz IS NULL OR (k.issued_at>=$1 AND (cardinality($2::text[])=0 OR lower(c.email)=ANY($2::text[]))))
    ORDER BY k.signing_due_at LIMIT 100 FOR UPDATE OF k SKIP LOCKED`,[scope?.since||null,scope?.recipients||[]])).rows;
   const invoices=(await query(`SELECT i.*,c.email,e.event_name FROM invoices i JOIN clients c ON c.id=i.client_id JOIN events e ON e.id=i.event_id
    WHERE i.deleted_at IS NULL AND c.deleted_at IS NULL AND e.deleted_at IS NULL AND e.status<>'CANCELLED'
     AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED') AND i.amount_outstanding>0 AND booking_journey_managed(e.id)
-    AND ($1::timestamptz IS NULL OR (i.created_at>=$1 AND lower(c.email)=ANY($2::text[])))
+    AND ($1::timestamptz IS NULL OR (i.created_at>=$1 AND (cardinality($2::text[])=0 OR lower(c.email)=ANY($2::text[]))))
    ORDER BY i.due_date LIMIT 100 FOR UPDATE OF i SKIP LOCKED`,[scope?.since||null,scope?.recipients||[]])).rows;
   let queued=0;
   async function todo(key,title,row,due){await query(`INSERT INTO tasks(lifecycle_key,title,description,event_id,client_id,due_date,priority)
