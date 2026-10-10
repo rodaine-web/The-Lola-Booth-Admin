@@ -94,11 +94,14 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     const {publicContract}=await import('../server/src/services/contract-service.js');
     const issuedForDeadline=(await query('SELECT * FROM contracts WHERE id=$1',[contract.id])).rows[0];
     assert.ok(new Date(issuedForDeadline.signing_due_at)>new Date(issuedForDeadline.issued_at));
-    await query("UPDATE contracts SET signing_due_at=now()-interval '4 days',signing_grace_until=now()+interval '3 days' WHERE id=$1",[contract.id]);
+    await query("UPDATE contracts SET signing_due_at=date_trunc('milliseconds',now()-interval '4 days')+interval '123 microseconds',signing_grace_until=now()+interval '3 days' WHERE id=$1",[contract.id]);
     process.env.BOOKING_LIFECYCLE_REMINDERS_ENABLED='true';
     const {queueBookingLifecycleReminders}=await import('../server/src/services/booking-lifecycle-reminders.js');
     assert.equal((await queueBookingLifecycleReminders()).queued,1);
     assert.equal((await queueBookingLifecycleReminders()).queued,0,'Repeated worker ticks cannot duplicate signing reminders');
+    const {dispatchDecision:validReminderDispatch}=await import('../server/src/services/communication-dispatch-policy.js');
+    const validReminder=(await query("SELECT * FROM communications WHERE trigger_key='BOOKING_SIGNATURE_REMINDER' LIMIT 1")).rows[0];
+    assert.equal(await transaction(client=>validReminderDispatch(client,validReminder)),'SEND','PostgreSQL microsecond precision must not cancel the current JavaScript reminder deadline');
     process.env.BOOKING_WORKSPACE_HANDOFF_ENABLED='true';
     const {signContract}=await import('../server/src/services/contract-service.js');
     const {decryptSecretJson}=await import('../server/src/services/integration-secrets.js');

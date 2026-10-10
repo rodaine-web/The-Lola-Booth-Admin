@@ -26,7 +26,7 @@ export async function dispatchDecision(client, message) {
     const contractId=keyParts[2],deadline=keyParts.slice(3,-1).join(':');
     const allowed=message.trigger_key==='BOOKING_SIGNATURE_REMINDER'?await client.query(`SELECT 1 FROM contracts k JOIN proposals p ON p.id=k.proposal_id
       JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id
-      WHERE k.id=$1 AND k.signing_due_at=$3::timestamptz AND k.status='ISSUED' AND k.signing_grace_until>now() AND k.expires_at>now() AND p.deleted_at IS NULL AND c.deleted_at IS NULL
+      WHERE k.id=$1 AND date_trunc('milliseconds',k.signing_due_at)=$3::timestamptz AND k.status='ISSUED' AND k.signing_grace_until>now() AND k.expires_at>now() AND p.deleted_at IS NULL AND c.deleted_at IS NULL
        AND lower(c.email)=lower($2) AND k.snapshot->>'accepted_version_id'=p.accepted_version_id::text
        AND (e.id IS NULL OR (e.deleted_at IS NULL AND e.status<>'CANCELLED'))
        AND EXISTS(SELECT 1 FROM invoices i WHERE i.proposal_id=p.id AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID','REFUNDED')
