@@ -54,3 +54,23 @@ Combined automated suite with Phase 1 and V1.1 disposable PostgreSQL databases: 
 Staging API and worker successfully deployed revision `c956acb3a559f7a6f2809b1b0c4c90f6e7ec462f`; frontend shows the secure workspace entry page. Anonymous browser sign-in correctly rejects invitation dispatch while the workspace flag is paused. Authenticated Admin list access works. These are preliminary checks only. CI on that revision failed on obsolete conditional fixtures; fixture corrections require a fresh passing CI run. Email jobs remain paused with the owner-approved inbox scope. No production changes.
 
 Additional conditional database checks: reservation, gallery privacy, token recovery, receipt HTTP authorization, owner-only paused lane and public-inquiry persistence passed on the dedicated local `lola_phase1_20261009_qa` database (33/34 tests initially; external-integration fixture failed on missing required lead fields). Corrected the external fixture; separate rerun **1/1 PASS**. Combined with the earlier 620/627 run, all seven previously skipped database cases have now executed successfully across the two runs. This is local evidence; real providers and hosted workflow qualification remain outstanding. Required markers/native validation now cover generic event/task/payment forms and inline client/event/proposal contact forms. Browser CI is being corrected to use accessible textbox names after required-label markup changed.
+
+## October 9 record dashboards and run sheet release
+
+**Production decision remains NO-GO.** This release refreshes individual Lead, Client and Event dashboards and the database-backed Event Run Sheet. It does not certify the complete Phase 1 customer journey or enable automation dispatch. No migration, dependency change or production change is included.
+
+Local verification: **634 tests; 623 passed; zero failed; 11 skipped** with no conditional database URLs enabled in this run. The prior separate database evidence remains historical and is not substituted for current hosted qualification. Production frontend build, syntax checks and whitespace checks passed. The new run-sheet renderer tests confirm database-record content, explicit missing fields, two-page ordinary output, QR link inclusion and lossless long-note/equipment overflow. Both ordinary PDF pages and overflow output were rendered and visually inspected. The PDF preview uses synthetic data; a hosted database-backed download remains to be verified. Lead/Client/Event desktop, mobile and Night mode previews were checked using synthetic records; this does not prove hosted persistence or permissions.
+
+Predeploy target verification: staging Railway project `e2c4de11-8494-4f12-8112-5f1b696f9ae4`, environment `df5a961b-5e13-4102-a9b0-97244773b857`. API and worker successfully run previous revision `7089a42c7aa2736c7f1f41613eb22aca48268e24`; its GitHub Staging Validation run passed. Both services report APP_ENV=staging and the staging client origin. Automation/handoff/planning/campaign flags remain false; both staging email allowlists match the approved owner inbox. Deployment success and new revision CI must be verified separately after push.
+
+### Required before production GO
+
+- Qualify normal and campaign acceptance → immutable proposal → invoice → minimum payment → agreement → secure Client Workspace journeys on the deployed revision. Demonstrate that manual actions cannot bypass prerequisites.
+- Verify actual owner-inbox delivery of generated and preloaded templates, invoices, agreements, workspace invitations and receipts; verify real test-provider reconciliation, replay and refund behavior.
+- Verify single-use invitation replay/expiry, session expiry/revocation, access boundaries, mobile signing and scoped signed-PDF/receipt access.
+- Verify event-detail submission, correction/resubmission, Admin approval and accurate creative/readiness state; inventory remaining required-field forms.
+- Qualify reminder scheduling, stop conditions and uncertain-delivery recovery before activating processors. Historical queues must not be backfilled or dispatched as part of this design release.
+- Verify new hosted detail-page editing and run-sheet download with real staging records and permissions, plus mobile/day/night behavior.
+- Resolve revoked-access restoration and any critical defects; complete mandatory A–J qualification, review skipped conditional tests and obtain explicit owner approval for production rollout.
+
+Rollback is application-only to schema-compatible revision `7089a42`; keep workers paused and preserve invoices, payments, agreements, planning records and the additive database schema. No database restore or schema downgrade is required by these UI/PDF changes.

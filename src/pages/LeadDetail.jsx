@@ -1,3 +1,5 @@
+import { useAuth } from "../context/AuthContext.jsx";
+import { RecordIdentity, JourneyStrip, DashboardCard, NextBookingAction, RecordActivity, RequestedItems, RecordEditDialog, useRecordJourney } from "../components/RecordDashboard.jsx";
 import { TabNavigation, MetricCard as Metric, DetailSection as Panel } from "../components/WorkspaceUI.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import CustomerPreferences from "../components/CustomerPreferences.jsx";
@@ -10,10 +12,11 @@ import { api } from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 
 const statuses = ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_DRAFT", "PROPOSAL_SENT", "FOLLOW_UP", "WON", "LOST", "ARCHIVED"];
-const tabs = ["Overview", "Activity", "Communications", "Proposal", "Tasks", "Files"];
+const tabs = ["Overview", "Activity", "Communications", "Proposals", "Invoices", "Tasks", "Files"];
 
 export default function LeadDetail() {
   const { id } = useParams();
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [lead, setLead] = useState(null);
   const [addons, setAddons] = useState([]);
@@ -26,6 +29,16 @@ export default function LeadDetail() {
   const [note, setNote] = useState("");
   const [duplicates, setDuplicates] = useState([]);
   const [pendingMerge, setPendingMerge] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [bookingEvent, setBookingEvent] = useState(null);
+  const bookingEventId = lead?.converted_event_id || lead?.proposals?.find(proposal=>["ACCEPTED","CONVERTED"].includes(proposal.status))?.event_id;
+  useEffect(() => {
+    let current = true;
+    setBookingEvent(null);
+    if (bookingEventId) api.get(`/events/${bookingEventId}`).then(value => { if (current) setBookingEvent(value); }).catch(() => {});
+    return () => { current = false; };
+  }, [bookingEventId]);
+  const journey = useRecordJourney(bookingEvent, lead?.proposals, lead);
 
   useEffect(() => {
     loadLead();
@@ -139,53 +152,26 @@ export default function LeadDetail() {
   const canConvert = lead.status !== "WON" && !lead.converted_event_id;
 
   return (
-    <main className="page record-workspace leaddetail-workspace">
+    <main className="page record-workspace record-dashboard leaddetail-workspace">
       <div className="detail-back"><Link to="/sales/leads"><ArrowLeft size={16} />Back to leads</Link></div>
-      <div className="page-heading detail-heading">
-        <div className="lead-contact-profile">
-          <span className="lead-profile-avatar">{fullName.split(/\s+/).slice(0,2).map(part=>part[0]).join("")}</span>
-          <p className="eyebrow">Lead profile</p>
-          <h1>{fullName}</h1>
-          <p className="lead-contact-links"><a href={`mailto:${lead.email}`}>{lead.email}</a><a href={`tel:${lead.phone}`}>{lead.phone}</a></p>
-          <p className="lede">{lead.event_type} · {formatDate(lead.event_date)} · {lead.city || "Location TBD"}{lead.state ? `, ${lead.state}` : ""}</p>
-        </div>
-        <div className="detail-actions lead-quick-actions">
-          <h2>Quick Actions</h2>
-          <select aria-label="Lead status" value={lead.status} disabled={busy} onChange={(event) => updateStatus(event.target.value)}>
-            {statuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
-          </select>
-          <button className="primary-action" disabled={!canConvert || busy} onClick={openConvertReview}>
-            <CheckCircle2 size={16} />Convert to Booking
-          </button>
-          <Link className="primary-action" to={`/sales/proposals/new?leadId=${lead.id}`}>Create Proposal</Link>
-        </div>
-      </div>
+      <RecordIdentity name={fullName} status={lead.status === 'NEW' ? 'New Inquiry' : lead.status} subtitle={<>{lead.email} · {lead.phone || 'No phone'}</>} event={{...lead,start_time:lead.event_start_time,end_time:lead.event_end_time}} actions={<><Link className="primary-action" to={`/sales/proposals/new?leadId=${lead.id}`}>Create Proposal</Link><button onClick={()=>setTab('Communications')}>Communications</button><details className="record-more"><summary aria-label="More lead actions">•••</summary><button disabled={!canConvert || busy} onClick={openConvertReview}>Review Booking Conversion</button></details></>}/>
+      <JourneyStrip journey={journey} lead />
 
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
 
-      <TabNavigation items={tabs} value={tab} onChange={setTab} />
-
-      {tab === "Overview" && (<><section className="detail-grid lead-overview-grid">
-          <Panel title="Event Details">
-            <Field label="Date" value={formatDate(lead.event_date)} />
-            <Field label="Time" value={`${formatTime(lead.event_start_time)} - ${formatTime(lead.event_end_time)}`} />
-            <Field label="Type" value={lead.event_type} />
-            <Field label="Venue" value={lead.venue_name} />
-            <Field label="Address" value={[lead.venue_address, lead.city, lead.state, lead.zip].filter(Boolean).join(", ")} />
-          </Panel>
-          {lead.source_details?.bookingInquiry&&<Panel title="Requested experiences & add-ons">
-            {lead.source_details.bookingInquiry.selections.map(item=><p key={item.experienceId}><strong>{item.experienceName}</strong> — {item.packageName}{item.customNotes&&<span> · {item.customNotes}</span>}</p>)}
-            {lead.source_details.bookingInquiry.addons.map(item=><p key={item.addonId}>{item.name} × {item.quantity}{item.pricingType==='CUSTOM'?' · Custom quote':''}</p>)}
-          </Panel>}
-          <Panel title="Notes">
-            <p className="note-text">{lead.message || "No notes yet."}</p>
-            <div className="inline-form note-form">
-              <input value={note} onChange={(event) => setNote(event.target.value)} aria-label="Internal note" placeholder="Add an internal note..." />
-              <button className="primary-action" onClick={addNote} disabled={!note.trim()}>Add Note</button>
-            </div>
-          </Panel>
-
-        </section><details className="lead-advanced-details"><summary>Assignment, source, preferences & conversion details</summary>      <section className="detail-summary">
+      <div className="record-lead-layout">
+        <aside className="record-column">
+          <NextBookingAction journey={journey} proposalHref={`/sales/proposals/new?leadId=${lead.id}`} onTasks={()=>setTab('Tasks')}/>
+          <DashboardCard title="Lead Information" action={<button className="record-text-action" disabled={!can("write:sales")} onClick={()=>setEditing(true)}>Edit</button>}><Field label="Name" value={fullName}/><Field label="Email" value={lead.email}/><Field label="Phone" value={lead.phone}/><Field label="Source" value={friendlySource(lead)}/><Field label="Received" value={formatDateTime(lead.received_at || lead.created_at)}/><Field label="Assigned To" value={lead.assigned_user_name || (lead.assigned_user_id ? "Assigned · see assignment details" : "Unassigned")}/><Field label="Tags" value={lead.tags?.join(', ')}/></DashboardCard>
+          <DashboardCard title="Internal Notes"><textarea value={note} onChange={e=>setNote(e.target.value)} aria-label="Internal note" placeholder="Add an internal note about this lead…"/><button onClick={addNote} disabled={!note.trim()}>Add Note</button></DashboardCard>
+        </aside>
+        <div className="record-column">
+          <TabNavigation items={tabs} value={tab} onChange={setTab} />
+          {tab === 'Overview' && <>
+            <DashboardCard title="Event Details"><Field label="Date" value={formatDate(lead.event_date)}/><Field label="Time" value={`${formatTime(lead.event_start_time)} – ${formatTime(lead.event_end_time)}`}/><Field label="Venue" value={lead.venue_name || 'Venue TBD'}/><Field label="Address" value={[lead.venue_address,lead.city,lead.state].filter(Boolean).join(', ')}/><Field label="Event Type" value={lead.event_type}/><Field label="Estimated Guests" value={lead.guest_count}/><h3>Notes from Inquiry</h3><p className="record-inquiry-note">{lead.message || 'No inquiry notes recorded.'}</p></DashboardCard>
+            <DashboardCard title="Requested Experiences & Add-ons"><RequestedItems experiences={lead.source_details?.bookingInquiry?.selections || (lead.preferredExperience ? [lead.preferredExperience] : [])} packages={lead.source_details?.bookingInquiry ? [] : (lead.preferredPackage ? [lead.preferredPackage] : [])} addons={lead.source_details?.bookingInquiry?.addons || []}/></DashboardCard>
+          </>}
+{tab === "Overview" && <details className="lead-advanced-details"><summary>Assignment, source, preferences & conversion details</summary>      <section className="detail-summary">
         <Metric label="Preferred Package" value={lead.preferredPackage?.name || "Not selected"} />
         <Metric label="Experience" value={lead.preferredExperience?.name || "Not selected"} />
         <Metric label="Guest Count" value={lead.guest_count || "TBD"} />
@@ -237,14 +223,22 @@ export default function LeadDetail() {
               ))}
             </div>
             <div className="price-line"><CircleDollarSign size={16} />Selected add-ons: ${selectedTotal.toLocaleString()}</div>
-          </Panel></section></details></>
-      )}
+          </Panel></section></details>}
 
       {tab === "Activity" && <Panel title="Activity Timeline"><Timeline rows={lead.timeline} /></Panel>}
       {tab === "Communications" && <Panel title="Emails / Communications"><DataTable rows={lead.communications} columns={["type", "direction", "subject", "message_summary", "occurred_at"]} empty="No communication logged yet." /></Panel>}
-      {tab === "Proposal" && <Panel title="Proposal"><DataTable rows={lead.proposals} columns={["proposal_number", "status", "notes", "total", "created_at"]} getRowHref={(row) => `/sales/proposals/${row.id}`} empty="No proposal has been created yet." /></Panel>}
+      {tab === "Proposals" && <Panel title="Proposal"><DataTable rows={lead.proposals} columns={["proposal_number", "status", "notes", "total", "created_at"]} getRowHref={(row) => `/sales/proposals/${row.id}`} empty="No proposal has been created yet." /></Panel>}
+      {tab === "Invoices" && <Panel title="Invoices"><DataTable rows={bookingEvent?.invoices || []} columns={["invoice_number","status","total","balance_due"]} getRowHref={row=>`/finance/invoices/${row.id}`} empty="No event invoices available. Review the linked proposal for its invoice handoff."/></Panel>}
       {tab === "Tasks" && <Panel title="Tasks"><DataTable rows={lead.tasks} columns={["title", "due_date", "priority", "status"]} empty="No follow-up tasks yet." /></Panel>}
       {tab === "Files" && <Panel title="Files"><DataTable rows={lead.files} columns={["filename", "category", "storage_provider", "created_at"]} empty="No files attached yet." /></Panel>}
+        </div>
+        <aside className="record-column">
+          <DashboardCard title="Lead Status"><label className="record-input-label">Status<select aria-label="Lead status" value={lead.status} disabled={busy || !can("write:sales")} onChange={e=>updateStatus(e.target.value)}>{statuses.map(status=><option key={status} value={status}>{status === 'NEW' ? 'New Inquiry' : status.toLowerCase().replaceAll('_',' ')}</option>)}</select></label><Field label="Preferred Package" value={lead.preferredPackage?.name}/><Field label="Response SLA" value={responseLabel(lead)}/></DashboardCard>
+          <DashboardCard title="Quick Actions"><div className="record-quick-actions"><button onClick={()=>setTab('Communications')}>View Communications</button><Link to={`/sales/proposals/new?leadId=${lead.id}`}>Create Proposal</Link><Link to="/operations/tasks">Create Task / Schedule Call</Link><button className="record-danger" disabled={busy || !can('write:sales') || ['WON','LOST','ARCHIVED'].includes(lead.status)} onClick={()=>updateStatus('LOST')}>Mark as Lost</button></div></DashboardCard>
+          <RecordActivity rows={lead.timeline} onView={()=>setTab('Activity')}/>
+        </aside>
+      </div>
+      {editing && <RecordEditDialog title="Edit Lead" record={lead} fields={[{key:'first_name',label:'First Name',required:true},{key:'last_name',label:'Last Name',required:true},{key:'email',label:'Email',type:'email',required:true},{key:'phone',label:'Phone'},{key:'venue_name',label:'Venue'},{key:'city',label:'City'},{key:'state',label:'State'}]} onSave={async values=>{await api.patch(`/leads/${id}`,values);await loadLead();setNotice('Lead details saved.');}} onClose={()=>setEditing(false)}/>}
       {convertPreview && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal">
@@ -273,7 +267,7 @@ export default function LeadDetail() {
           </div>
         </div>
       )}
-      {tab==="Overview"&&<CustomerPreferences record={lead} type="lead" onSaved={loadLead}/>}
+      {tab==="Overview"&&<details className="record-advanced"><summary>Communication preferences & attribution</summary><CustomerPreferences record={lead} type="lead" onSaved={loadLead}/></details>}
       {pendingMerge && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal">
@@ -322,7 +316,7 @@ function DuplicateList({ duplicates, busy, onMerge }) {
 
 
 function Field({ label, value }) {
-  return <div className="field-row"><span>{label}</span><strong>{value || "—"}</strong></div>;
+  return <div className="field-row"><span>{label}</span><strong>{value === null || value === undefined || value === "" ? "—" : value}</strong></div>;
 }
 
 function Timeline({ rows }) {

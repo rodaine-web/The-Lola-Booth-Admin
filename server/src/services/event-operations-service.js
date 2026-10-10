@@ -1,18 +1,12 @@
 import { eventFinanceSummary, requiredDepositPaid } from "./event-finance-summary.js";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import PDFDocument from "pdfkit";
+import {renderRunSheetPdf} from "./run-sheet-pdf.js";
+import {env} from "../config/env.js";
 import { query, transaction } from "../db/pool.js";
 import { AppError, notFound } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { cancelJobsForEntity, triggerAutomations } from "./automation-service.js";
 import { createNotification } from "./notification-service.js";
 import {requiredCreativeComponents,creativeCoverage} from '../../../shared/event-planning.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const logoPath = path.resolve(__dirname, "../../../public/brand/LOLA_Primary_Dark_Transparent.png");
-const brand = { ivory: "#FAF7F1", gold: "#B89B6B", charcoal: "#1A1A1A", muted: "#6f665c" };
 
 const transitionTimestamps = {
   EN_ROUTE: "en_route_at",
@@ -614,30 +608,25 @@ export async function createChecklistTemplate(body) {
 }
 
 export async function generateRunSheetPdf(eventId, user) {
+  // Access and attendant redaction must run before loading supplementary data.
   const ops = await getEventOperations(eventId, user);
-  const chunks = [];
-  const doc = new PDFDocument({ size: "LETTER", margin: 48 });
-  doc.on("data", (chunk) => chunks.push(chunk));
-  const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
-  if (fs.existsSync(logoPath)) doc.image(logoPath, 48, 42, { width: 112 });
-  doc.fillColor(brand.gold).font("Helvetica").fontSize(10).text("EVENT RUN SHEET", 400, 58, { align: "right" });
-  doc.fillColor(brand.charcoal).font("Times-Roman").fontSize(28).text(ops.event.event_name, 48, 150, { width: 500 });
-  doc.font("Helvetica").fontSize(11).fillColor(brand.muted).text(`${ops.event.event_date} · ${ops.event.start_time || ""}-${ops.event.end_time || ""}\n${ops.event.venue_name || ""}\n${[ops.event.venue_address, ops.event.city, ops.event.state].filter(Boolean).join(", ")}`, 48, 190);
-  addRunSection(doc, "Timeline", ops.timeline.map((item) => `${item.label}: ${item.value}`));
-  addRunSection(doc, "Contacts", ops.contacts.map((item) => `${item.role}: ${item.name} ${item.phone || ""} ${item.email || ""}`));
-  addRunSection(doc, "Staff", ops.staff.map((item) => `${item.name} - ${item.assignment_role} - ${item.acknowledgement_status}`));
-  addRunSection(doc, "Equipment", ops.equipment.map((item) => `${item.name} - ${item.lifecycle_status} - ${item.asset_uid || item.equipment_id || ""}`));
-  addRunSection(doc, "Setup / Creative Notes", [ops.event.setup_instructions, ops.creative?.special_design_instructions, ...ops.notes.filter((note) => note.pinned).map((note) => note.body)].filter(Boolean));
-  addRunSection(doc, "Checklist Summary", [`${ops.readiness.complete} of ${ops.readiness.total} required items complete`, `${ops.readiness.critical} critical item(s)`]);
-  doc.fillColor(brand.gold).font("Helvetica-Bold").fontSize(10).text(`Generated ${new Date().toLocaleString()} · Good people. Better photos.`, 48, doc.page.height - 70);
-  doc.end();
-  return done;
-}
-
-function addRunSection(doc, title, rows) {
-  if (doc.y > 650) doc.addPage();
-  doc.moveDown().fillColor(brand.charcoal).font("Times-Roman").fontSize(17).text(title);
-  doc.moveDown(0.35).font("Helvetica").fontSize(10).fillColor(brand.charcoal);
-  if (!rows.length) doc.text("None recorded.");
-  for (const row of rows) doc.text(`- ${row || ""}`, { width: 500 });
+  const [experiences, packages, addons, agreements, approvals, backdrop] = await Promise.all([
+    query(`SELECT x.name FROM experiences x WHERE x.id IN
+      (SELECT experience_id FROM event_experiences WHERE event_id=$1 UNION SELECT experience_id FROM events WHERE id=$1) ORDER BY x.name`, [eventId]),
+    query(`SELECT p.name FROM packages p WHERE p.id IN
+      (SELECT package_id FROM event_packages WHERE event_id=$1 UNION SELECT package_id FROM events WHERE id=$1) ORDER BY p.name`, [eventId]),
+    query(`SELECT a.name,ea.quantity FROM event_addons ea JOIN addons a ON a.id=ea.addon_id WHERE ea.event_id=$1 ORDER BY a.name`, [eventId]),
+    query(`SELECT c.status FROM contracts c JOIN proposals p ON p.id=c.proposal_id
+      WHERE p.event_id=$1 AND p.deleted_at IS NULL AND c.status IN ('ISSUED','SIGNED')
+      AND (p.accepted_version_id IS NULL OR c.snapshot->>'accepted_version_id'=p.accepted_version_id::text)
+      ORDER BY c.signed_at DESC NULLS LAST,c.issued_at DESC NULLS LAST LIMIT 1`, [eventId]),
+    query(`SELECT approval_type,status,version,metadata FROM creative_approvals WHERE event_id=$1 AND deleted_at IS NULL
+      AND status='APPROVED' AND approved_version=version ORDER BY requested_at`, [eventId]),
+    query(`SELECT b.name FROM event_planning p JOIN backdrops b ON b.id=p.backdrop_id WHERE p.event_id=$1`, [eventId])
+  ]);
+  return renderRunSheetPdf({...ops,
+    experiences:experiences.rows,packages:packages.rows,
+    addons:addons.rows,agreement_status:agreements.rows[0]?.status,
+    approvals:approvals.rows,backdrop_name:backdrop.rows[0]?.name
+  }, {eventUrl:new URL(`${isAttendant(user)?'/my-events':'/events/events'}/${encodeURIComponent(eventId)}`,env.clientOrigin).href});
 }
