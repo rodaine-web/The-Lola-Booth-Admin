@@ -21,9 +21,9 @@ export async function clientEventGrant(session,eventId){
 export async function sessionWorkspace(session,eventId){
  return transaction(async()=>{
   const grant=await clientEventGrant(session,eventId);
-  const proposal=(await query(`SELECT p.id,p.proposal_number,p.status,p.total,c.name AS client_name,
+  const proposal=(await query(`SELECT p.id,p.proposal_number,p.status,p.total,p.selected_experiences,v.snapshot AS accepted_snapshot,pkg.name AS package_name,c.name AS client_name,
    e.event_name,e.event_date,e.venue_name,e.status AS event_status,e.start_time,e.end_time
-   FROM proposals p JOIN clients c ON c.id=p.client_id JOIN events e ON e.id=p.event_id
+   FROM proposals p LEFT JOIN proposal_versions v ON v.id=p.accepted_version_id AND v.proposal_id=p.id LEFT JOIN packages pkg ON pkg.id=p.package_id JOIN clients c ON c.id=p.client_id JOIN events e ON e.id=p.event_id
    WHERE p.id=$1`,[grant.proposal_id])).rows[0];
   const agreements=(await query("SELECT id,title,revision,status,signed_at,signer_name FROM contracts WHERE proposal_id=$1 AND status='SIGNED' ORDER BY revision DESC",[proposal.id])).rows;
   const invoices=(await query("SELECT id,invoice_number,status,total,amount_paid,amount_outstanding,balance_due,due_date FROM invoices WHERE (proposal_id=$1 OR EXISTS(SELECT 1 FROM backdrop_quotes q WHERE q.invoice_id=invoices.id AND q.event_id=$3 AND q.client_id=$2 AND q.status='ACCEPTED')) AND client_id=$2 AND event_id=$3 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') ORDER BY created_at DESC",[proposal.id,session.client_id,eventId])).rows;
@@ -32,7 +32,9 @@ export async function sessionWorkspace(session,eventId){
     AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID') AND pay.deleted_at IS NULL
     AND pay.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') ORDER BY pay.payment_date DESC`,[proposal.id,session.client_id,eventId])).rows;
   const creative=(await query("SELECT id,approval_type,version,status FROM creative_approvals WHERE event_id=$1 AND client_id=$2 AND deleted_at IS NULL AND status IN ('PENDING_APPROVAL','VIEWED','APPROVED','CHANGES_REQUESTED') ORDER BY requested_at DESC NULLS LAST,id DESC",[eventId,session.client_id])).rows;
-  return {creative:creative.map(row=>({id:row.id,type:row.approval_type,version:row.version,status:row.status})),client:proposal.client_name,event:{id:eventId,name:proposal.event_name,date:proposal.event_date,venue:proposal.venue_name,status:proposal.event_status,start:proposal.start_time,end:proposal.end_time},
+  const selections=proposal.accepted_snapshot?.selected_experiences??proposal.selected_experiences;
+  const packageLabel=Array.isArray(selections)?selections.map(row=>row.experienceName||row.experience_name||row.name).filter(value=>typeof value==='string').join(', '):'';
+  return {creative:creative.map(row=>({id:row.id,type:row.approval_type,version:row.version,status:row.status})),client:proposal.client_name,event:{id:eventId,name:proposal.event_name,date:proposal.event_date,venue:proposal.venue_name,status:proposal.event_status,start:proposal.start_time,end:proposal.end_time,package:packageLabel||proposal.package_name||null},
    proposal:{number:proposal.proposal_number,status:proposal.status,total:proposal.total},
    agreements:agreements.map(row=>({id:row.id,title:row.title,revision:row.revision,status:row.status,signedAt:row.signed_at,signerName:row.signer_name})),
    invoices:invoices.map(row=>({id:row.id,number:row.invoice_number,status:row.status,total:row.total,paid:row.amount_paid,balance:invoiceBalance(row),dueDate:row.due_date})),
@@ -73,4 +75,14 @@ export async function sessionCreativeToken(session,eventId,approvalId){
  const {assertPlanningPrerequisites}=await import('./event-planning-service.js');await assertPlanningPrerequisites(eventId);
  const row=(await query('SELECT public_token FROM creative_approvals WHERE id=$1 AND event_id=$2 AND client_id=$3 AND deleted_at IS NULL',[approvalId,eventId,session.client_id])).rows[0];
  if(!row?.public_token)throw new AppError('Creative proof unavailable.',404,'NOT_FOUND');return row.public_token;
+}
+
+export async function sessionProposalPdf(session,eventId){
+ const grant=await clientEventGrant(session,eventId);
+ const row=(await query('SELECT p.secure_token,v.snapshot AS accepted_snapshot FROM proposals p LEFT JOIN proposal_versions v ON v.id=p.accepted_version_id AND v.proposal_id=p.id WHERE p.id=$1 AND p.deleted_at IS NULL',[grant.proposal_id])).rows[0];
+ if(!row?.secure_token)throw new AppError('Proposal unavailable.',404,'NOT_FOUND');
+ const {getProposal,proposalPdfBuffer}=await import('./proposal-service.js');
+ const proposal=await getProposal(row.secure_token,{publicView:true});
+ // The session-scoped copy contains no reusable public access link.
+ return proposalPdfBuffer({...proposal,...(row.accepted_snapshot||{}),secure_token:null,public_url:null});
 }

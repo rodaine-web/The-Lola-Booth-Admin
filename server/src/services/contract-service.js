@@ -2,8 +2,7 @@ import {agreementPaymentQualified} from './booking-payment-exceptions.js';
 import crypto from 'node:crypto';
 import {queueSignedWorkspace} from './client-session-service.js';
 import {encryptSecretJson,decryptSecretJson} from './integration-secrets.js';
-import PDFDocument from 'pdfkit';
-import {createCanvas} from '@napi-rs/canvas';
+import {renderContractPdf} from './contract-pdf.js';
 import {validDrawnSignature,DRAWN_CONTRACT_CONSENT} from '../../../shared/signature.js';
 import { query, transaction } from '../db/pool.js';
 import { env } from '../config/env.js';
@@ -126,37 +125,7 @@ export async function signContract(token,body,req) {
     const {signing_grace_until,...signed}=visible(updated);return signed;
   });
 }
-export async function contractPdf(row) {
-  return new Promise((resolve,reject)=>{
-    const doc=new PDFDocument({size:'LETTER',margin:54,bufferPages:true});const chunks=[];
-    doc.on('data',chunk=>chunks.push(chunk));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject);
-    doc.fillColor('#967039').fontSize(14).text('THE LOLA BOOTH');
-    doc.moveDown().fillColor('#171717').fontSize(24).text(row.title);
-    doc.moveDown().fontSize(10).text(`${row.snapshot.proposal_number} · Agreement revision ${row.revision} · ${row.status}`);
-    doc.moveDown().fontSize(12);
-    for(const key of ['client_name','client_email','event_name','event_type','event_date','start_time','end_time','venue_name','total']) {
-      if(row.snapshot[key] != null) doc.text(`${key.replaceAll('_',' ')}: ${row.snapshot[key]}`);
-    }
-    if (Array.isArray(row.snapshot.items) && row.snapshot.items.length) {
-      doc.moveDown().fontSize(13).text('Selected services');
-      for(const item of row.snapshot.items) doc.fontSize(10).text(`${item.description || item.label || 'Service'} · ${item.quantity ?? 1} × ${item.unit_price ?? item.amount ?? ''}`);
-    }
-    doc.moveDown().fontSize(11).text(row.terms,{lineGap:4});
-    if(row.status==='SIGNED') {
-      doc.moveDown().fontSize(14).text('Electronic signature');
-      if(row.signature_method==='DRAWN'&&validDrawnSignature(row.signature_strokes)){
-        const canvas=createCanvas(600,160),ctx=canvas.getContext('2d');ctx.strokeStyle='#171717';ctx.lineWidth=2.5;ctx.lineCap='round';
-        for(const stroke of row.signature_strokes){ctx.beginPath();stroke.forEach(([x,y],index)=>index?ctx.lineTo(x*600,y*160):ctx.moveTo(x*600,y*160));ctx.stroke();}
-        doc.image(canvas.toBuffer('image/png'),{width:300,height:80});
-      }
-      doc.fontSize(10).text(`Signed by ${row.signer_name} (${row.signer_email})\nSigned at ${new Date(row.signed_at).toISOString()}\n${row.consent_text}`);
-    }
-    doc.moveDown().fontSize(8).text(`Document SHA-256: ${row.document_hash || 'Draft — not issued'}`,{lineBreak:true});
-    const pages=doc.bufferedPageRange();
-    for(let i=pages.start;i<pages.start+pages.count;i++){doc.switchToPage(i);doc.fontSize(8).text(`The Lola Booth · ${i+1} of ${pages.count}`,54,740,{lineBreak:false});}
-    doc.end();
-  });
-}
+export async function contractPdf(row) { return renderContractPdf(row); }
 export async function getContract(id) { const row=(await query('SELECT * FROM contracts WHERE id=$1',[id])).rows[0];if(!row)throw new AppError('Agreement not found.',404,'NOT_FOUND');return visible(row); }
 
 export async function contractSigningUrl(id) {

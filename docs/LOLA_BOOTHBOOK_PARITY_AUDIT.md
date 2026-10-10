@@ -2,6 +2,14 @@
 
 # LOLA BoothBook parity audit
 
+## October 10 presentation correction checkpoint
+
+Client Workspace CTAs/layout and agreement PDF branding corrections are implemented locally. Latest available suite passed (625 passed, 11 DB suites skipped); current DB qualification is blocked by local connection permissions. These corrections still require deployment and authenticated staging visual/download verification. See the latest checkpoint in the [Phase 1 qualification report](LOLA_PHASE1_QUALIFICATION_2026-10-09.md). Production remains **NO-GO**.
+
+## October 9 Phase 1 qualification checkpoint
+
+Latest evidence: [Phase 1 qualification report](LOLA_PHASE1_QUALIFICATION_2026-10-09.md). Staging revision `3af59c8` fixes persisted planning approval readiness and reminder cutoff/recipient enforcement. All available disposable database suites passed sequentially (651 tests, zero failures/skips). API/worker deployment and CI passed. Microsoft accepted one owner-scoped smoke email and duplicate send was prevented; the owner confirmed smoke-email receipt. Hosted anonymous access, real payment replay/refund, complete normal/campaign browser journeys and full mobile workflows must still qualify. Mandatory Phase 1 remains **PARTIAL; production NO-GO**. Historical implementation-only rows below do not certify this release.
+
 Audit started 2026-10-07. Baseline: existing `work/lola-admin` checkout, including pre-existing uncommitted design and integration changes. This is a source audit, not a production certification. No production migration or customer messages authorized by this sprint are executed as part of the audit.
 
 ## Evidence and release gates

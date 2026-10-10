@@ -53,7 +53,7 @@ test("proposal, invoice, receipt, and email outputs use branded language", () =>
     "Let’s make this one worth remembering.",
     "THE LOLA STANDARD",
     "Your Investment",
-    "Due to reserve your date:",
+    "Booking retainer fee:",
     "From proposal to booked.",
     "LOLA_Horizontal_Dark_Transparent.png",
     "LOLA_Primary_Dark_Transparent.png",

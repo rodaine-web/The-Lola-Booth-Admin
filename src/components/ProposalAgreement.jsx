@@ -19,7 +19,7 @@ export default function ProposalAgreement({proposal}) {
   if(!available)return null;
   const active=records?.find(r=>['DRAFT','ISSUED'].includes(r.status));
   return <section className="panel"><p className="eyebrow">Version 1.1 · Agreement</p><h2>Client agreement</h2>
-    <p>Review your approved service terms, then create a secure signing link. Signing is separate from accepting the proposal and paying the deposit.</p>
+    <p>Review your approved service terms, then create a secure signing link. Signing is separate from accepting the proposal and paying the booking retainer fee.</p>
     {notice&&<p role="status">{notice}</p>}
     {error&&<p role="alert" className="toast error">{error}</p>}
     {!records&&!error&&<p role="status">Loading agreements…</p>}

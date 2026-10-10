@@ -10,7 +10,7 @@ import {validate,uuid} from '../utils/validation.js';
 import {AppError} from '../utils/errors.js';
 import {contractsEnabled} from '../../../shared/contracts.js';
 import {assertClientOrigin,consumeClientInvitation,setClientCookie,clearClientCookie,authenticateClient,endClientSession,requestClientSignIn} from '../services/client-session-service.js';
-import {clientEvents,sessionWorkspace,sessionContract,sessionInvoice,sessionPlanningToken,sessionCreativeToken} from '../services/client-session-workspace-service.js';
+import {clientEvents,sessionProposalPdf,sessionWorkspace,sessionContract,sessionInvoice,sessionPlanningToken,sessionCreativeToken} from '../services/client-session-workspace-service.js';
 import {contractPdf} from '../services/contract-service.js';
 import {getInvoice} from '../services/invoice-service.js';
 import {generateInvoicePdf,generatePaymentReceiptPdf} from '../services/document-service.js';
@@ -25,6 +25,10 @@ clientSessionRouter.get('/session',asyncHandler(async(req,res)=>{const session=a
 clientSessionRouter.post('/logout',asyncHandler(async(req,res)=>{await endClientSession(req);clearClientCookie(res);res.sendStatus(204);}));
 const event=validate(z.object({eventId:uuid}),'params');
 clientSessionRouter.get('/events/:eventId',event,asyncHandler(async(req,res)=>res.json(await sessionWorkspace(await authenticateClient(req),req.params.eventId))));
+clientSessionRouter.get('/events/:eventId/proposal/pdf',event,asyncHandler(async(req,res)=>{
+ const session=await authenticateClient(req,{fresh:true});
+ res.type('pdf').attachment('LOLA-proposal.pdf').send(await sessionProposalPdf(session,req.params.eventId));
+}));
 clientSessionRouter.get('/events/:eventId/contracts/:id/pdf',validate(z.object({eventId:uuid,id:uuid}),'params'),asyncHandler(async(req,res)=>{
  const session=await authenticateClient(req,{fresh:true});const contract=await sessionContract(session,req.params.eventId,req.params.id);
  res.type('pdf').attachment('LOLA-signed-agreement.pdf').send(await contractPdf(contract));

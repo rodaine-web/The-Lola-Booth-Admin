@@ -54,6 +54,20 @@ jobs:
           V11_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test
         run: node --test --test-concurrency=1 test/contracts-db.test.js test/v11-migration-db.test.js test/v11-http-db.test.js
 
+      - name: Full Phase 1 disposable database regressions
+        env:
+          PGPASSWORD: lola_test
+          BOOKING_LIFECYCLE_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_ci
+          BOOTHBOOK_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_ci
+          V11_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test_ci
+          EXTERNAL_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test_ci
+          GALLERY_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_gallery_ci
+        run: |
+          psql -h localhost -U lola_test -d lola_v11_test -c 'CREATE DATABASE lola_phase1_qa_ci'
+          psql -h localhost -U lola_test -d lola_v11_test -c 'CREATE DATABASE lola_v11_test_ci'
+          psql -h localhost -U lola_test -d lola_v11_test -c 'CREATE DATABASE lola_phase1_qa_gallery_ci'
+          node --test --test-concurrency=1
+
       - name: Production build
         run: npm run build
 

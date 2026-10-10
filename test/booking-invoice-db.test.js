@@ -143,10 +143,13 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     const session=await secure.authenticateClient(clientReq,{mutation:true,fresh:true});
     await assert.rejects(secure.authenticateClient({headers:{...clientReq.headers,origin:'https://attacker.invalid'}},{mutation:true}),{code:'CLIENT_ORIGIN_REJECTED'});
     await assert.rejects(secure.authenticateClient({headers:{...clientReq.headers,'x-client-csrf':'a'.repeat(64)}},{mutation:true}),{code:'CLIENT_CSRF_REJECTED'});
-    const {sessionWorkspace,clientEventGrant}=await import('../server/src/services/client-session-workspace-service.js');
+    const {sessionWorkspace,clientEventGrant,sessionProposalPdf}=await import('../server/src/services/client-session-workspace-service.js');
     const workspace=await sessionWorkspace(session,event.id);
     assert.equal(workspace.event.id,event.id);
     assert.ok(workspace.agreements.some(row=>row.id===contract.id));
+    const sessionProposal=await sessionProposalPdf(session,event.id);assert.equal(sessionProposal.subarray(0,4).toString(),'%PDF');
+    await assert.rejects(sessionProposalPdf({...session,client_id:crypto.randomUUID()},event.id),{code:'NOT_FOUND'});
+    await assert.rejects(sessionProposalPdf(session,crypto.randomUUID()),{code:'NOT_FOUND'});
     assert.doesNotMatch(JSON.stringify(workspace),/secure_token|token_ciphertext|token_hash|signer_ip|signer_user_agent/);
     await assert.rejects(clientEventGrant({...session,client_id:crypto.randomUUID()},event.id),{code:'NOT_FOUND'},'Another client cannot read this event');
     await query("UPDATE client_workspace_sessions SET verified_at=now()-interval '16 minutes' WHERE id=$1",[session.id]);
