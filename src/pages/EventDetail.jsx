@@ -100,7 +100,7 @@ export default function EventDetail() {
       <JourneyStrip journey={journey}/>
       {can('write:events')&&['INQUIRY','TENTATIVE','PENDING_DEPOSIT','PENDING_CONTRACT'].includes(event.status)&&<section className="panel"><h2>Booking confirmation</h2><p>Confirm after the accepted proposal, required booking retainer fee, signed agreement and available equipment reservation are verified.</p><button onClick={()=>action(()=>api.post(`/events/${id}/confirm-booking`,{}),'Booking confirmed. Client planning is now available.')}>Check requirements & confirm booking</button></section>}
 
-      {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      {(error || notice) && <div role={error ? "alert" : "status"} className={error ? "toast error" : "toast"}>{error || notice}</div>}
 
       <TabNavigation items={tabs} value={primarySection(tab)} onChange={value => setTab(sectionGroups[value]?.[0] || value)} label="Event command center" className="event-command-tabs" />
       {sectionGroups[primarySection(tab)]?.length > 1 && <TabNavigation items={sectionGroups[primarySection(tab)]} value={tab} onChange={setTab} label={`${primarySection(tab)} sections`} className="workspace-subtabs" />}

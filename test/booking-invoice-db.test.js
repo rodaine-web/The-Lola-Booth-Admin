@@ -165,6 +165,7 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     const {sessionWorkspace,clientEventGrant,sessionProposalPdf}=await import('../server/src/services/client-session-workspace-service.js');
     const workspace=await sessionWorkspace(session,event.id);
     assert.equal(workspace.event.id,event.id);
+    assert.match(await (await import('../server/src/services/client-session-workspace-service.js')).sessionPlanningToken(session,event.id),/^[a-f0-9]{64}$/,'Confirmed signed booking unlocks secure workspace planning');
     assert.ok(workspace.agreements.some(row=>row.id===contract.id));
     const sessionProposal=await sessionProposalPdf(session,event.id);assert.equal(sessionProposal.subarray(0,4).toString(),'%PDF');
     await assert.rejects(sessionProposalPdf({...session,client_id:crypto.randomUUID()},event.id),{code:'NOT_FOUND'});
@@ -227,7 +228,7 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     // Exercise the persisted planning review through the actual event summary query.
     const {getEventOperations}=await import('../server/src/services/event-operations-service.js');
     await query(`INSERT INTO event_planning(event_id,client_id,status,submitted_at,details_review_status)
-      VALUES($1,$2,'SUBMITTED',now(),'APPROVED')`,[event.id,contact.id]);
+      VALUES($1,$2,'SUBMITTED',now(),'APPROVED') ON CONFLICT(event_id) DO UPDATE SET status='SUBMITTED',submitted_at=now(),details_review_status='APPROVED'`,[event.id,contact.id]);
     const planningReadiness=async()=>{
       const summary=await getEventOperations(event.id,{roles:['OWNER']});
       return summary.readiness.items.find(item=>item.label==='Event planning approved by LOLA').status;
