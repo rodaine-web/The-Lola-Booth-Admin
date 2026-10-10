@@ -112,7 +112,7 @@ export async function processWebsiteProposalHandoffs({ limit = 10 } = {}) {
         if (status === 'COMPLETED') {
           await client.query(`UPDATE proposals SET status=CASE WHEN status='DRAFT' THEN 'SENT' ELSE status END,sent_at=COALESCE(sent_at,now()),updated_at=now(),proposal_snapshot=COALESCE(proposal_snapshot,jsonb_build_object('content',content,'pricing_snapshot',pricing_snapshot,'line_items_snapshot',line_items_snapshot,'selected_experiences',selected_experiences)) WHERE id=$1`, [prepared.proposalId]);
           await client.query("UPDATE leads SET status='PROPOSAL_SENT',updated_at=now() WHERE id=$1 AND status IN ('NEW','CONTACTED','QUALIFIED','PROPOSAL_DRAFT','FOLLOW_UP')", [prepared.leadId]);
-          if (!(await client.query('SELECT 1 FROM proposal_deliveries WHERE proposal_id=$1', [prepared.proposalId])).rowCount) await client.query("INSERT INTO proposal_deliveries(proposal_id,recipient_email,delivery_method,status,sent_at) VALUES($1,$2,'EMAIL',$3,now())", [prepared.proposalId, sent.communication.recipient, sent.communication.status]);
+          if (!(await client.query('SELECT 1 FROM proposal_deliveries WHERE proposal_id=$1', [prepared.proposalId])).rowCount) await client.query("INSERT INTO proposal_deliveries(proposal_id,recipient_email,delivery_method,status,sent_at) VALUES($1,$2,'EMAIL',$3,now())", [prepared.proposalId, sent.communication.recipient, 'SENT']);
         }
         await client.query('UPDATE automation_jobs SET status=$2,completed_at=now(),last_error=NULL,updated_at=now() WHERE id=$1', [job.id, status]);
       });
