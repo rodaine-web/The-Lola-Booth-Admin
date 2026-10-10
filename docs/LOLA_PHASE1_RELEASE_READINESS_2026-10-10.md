@@ -66,3 +66,9 @@ Pause reminder and handoff flags to stop new dispatch; preserve generated invoic
 3. Complete mobile document/payment and remaining role/expiry/revocation matrix; verify inbox delivery/content for mandatory customer communications.
 4. Re-audit queues, backups, target revisions/provider configuration and rollback before production activation. No unresolved critical financial, privacy, confirmation or delivery defects.
 5. Present the concrete production rollout to the owner and obtain explicit approval. **NO-GO until these conditions are met.**
+
+## Return-navigation follow-up qualification
+
+Frontend revision `851ebf9726d4d27b0d6ddbf11e98844d49a7af99` is READY on the staging Vercel project (deployment `dpl_AphWuXY5VXnyoM89ra5eT9s52zo7`, aliases stagingadmin.thelolabooth.com/staging.thelolabooth.com). Backend qualification remains b4f9cc8; no backend behavior or schema changed in this follow-up. GitHub run `38078144644`, job `114289334029`: all validation steps PASS, including automated tests, full disposable DB suite, build and CI browser journey. Local build/diff checks also passed.
+
+At 390px the new planning header return link rendered and navigated to /client. The previously authenticated session expired by this final reload; the post-submit return action's current authenticated presentation and mobile payment/document journeys remain unqualified. The earlier authenticated submission/correction/resubmission evidence is valid and is not replaced with an expired-session rendering claim. Production remains NO-GO.
