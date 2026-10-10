@@ -129,7 +129,7 @@ export async function signContract(token,body,req) {
   if(proposal?.event_id){
    try {const {applyBookingConfirmationPolicy}=await import('./payment-reconciliation-service.js');
     const event=await applyBookingConfirmationPolicy(proposal.event_id,{signedAgreement:true});
-    signed.booking_confirmation={status:event?.status||'PENDING'};
+    signed.booking_confirmation={status:event&&['CONFIRMED','PREPARING','READY','IN_PROGRESS'].includes(event.status)?'CONFIRMED':'PENDING'};
     if(event)await query("UPDATE tasks SET status='DONE',updated_at=now() WHERE lifecycle_key=$1",['booking-confirmation:'+proposal.event_id]);
    } catch(error) {
     signed.booking_confirmation={status:'PENDING',message:'Agreement signed. LOLA must review booking confirmation before planning opens.'};

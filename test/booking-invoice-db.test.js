@@ -117,8 +117,8 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     assert.equal(Object.hasOwn(await publicContract(signingToken),'signing_grace_until'),false,'Internal grace must not appear in the signing interface');
     const signed=await Promise.all(Array.from({length:8},()=>signContract(signingToken,{name:'QA Client',email:'qa@example.invalid',consent:true,documentHash:issued.document_hash,signatureMethod:'DRAWN',signatureStrokes:[[[.1,.2],[.3,.4],[.7,.3]]]},req)));
     assert.ok(signed.every(row=>row.status==='SIGNED'));
-    assert.ok(signed.every(row=>row.booking_confirmation.status==='PENDING'));
-    assert.equal((await query("SELECT count(*)::int n FROM tasks WHERE lifecycle_key=$1",['booking-confirmation:'+event.id])).rows[0].n,1,'Missing equipment creates one confirmation review task despite concurrent signing');
+    assert.ok(signed.every(row=>row.booking_confirmation.status==='CONFIRMED'));
+    assert.equal((await query("SELECT count(*)::int n FROM tasks WHERE lifecycle_key=$1",['booking-equipment:'+event.id])).rows[0].n,1,'Missing equipment creates one assignment task despite concurrent signing');
     const {searchContracts}=await import('../server/src/services/contract-service.js');
     const index=await searchContracts({clientId:contact.id,status:'SIGNED',search:'QA-P1'});
     assert.equal(index.total,1);assert.equal(index.rows[0].id,contract.id);
@@ -127,12 +127,13 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
     assert.ok(signed.every(row=>row.signature_method==='DRAWN'&&row.signature_hash));
     const {contractPdf}=await import('../server/src/services/contract-service.js');assert.equal((await contractPdf(signed[0])).subarray(0,5).toString(),'%PDF-','Signed PDF renders the validated drawn signature');
     assert.equal((await query("SELECT status FROM tasks WHERE lifecycle_key=$1",['agreement-sign:'+contract.id])).rows[0].status,'DONE','Signing closes the Admin To-do');
-    await assert.rejects(query("UPDATE events SET status='CONFIRMED' WHERE id=$1",[event.id]),error=>error.code==='23514','Signature without reserved equipment cannot bypass confirmation');
+    assert.equal((await query('SELECT booking_confirmation_missing($1) AS missing',[event.id])).rows[0].missing.length,0,'Equipment assignment does not block confirmation');
+    assert.equal((await query("SELECT count(*)::int n FROM notifications WHERE entity_id=$1 AND category='EQUIPMENT'",[event.id])).rows[0].n,1,'Confirmation creates one Admin equipment notification');
     const asset=(await query("INSERT INTO equipment(name,category,status) VALUES('Signing QA booth','Photo Booth','AVAILABLE') RETURNING id")).rows[0];
     await query('INSERT INTO equipment_assignments(event_id,equipment_id) VALUES($1,$2)',[event.id,asset.id]);
     const replay=await signContract(signingToken,{name:'QA Client',email:'qa@example.invalid',consent:true,documentHash:issued.document_hash,signatureMethod:'DRAWN',signatureStrokes:[[[.1,.2],[.3,.4],[.7,.3]]]},req);
     assert.equal(replay.booking_confirmation.status,'CONFIRMED','Signing directly confirms a fully qualified booking without waiting for email delivery');
-    assert.equal((await query("SELECT status FROM tasks WHERE lifecycle_key=$1",['booking-confirmation:'+event.id])).rows[0].status,'DONE');
+    assert.equal((await query("SELECT status FROM tasks WHERE lifecycle_key=$1",['booking-equipment:'+event.id])).rows[0].status,'DONE');
     const {dispatchDecision}=await import('../server/src/services/communication-dispatch-policy.js');
     const reminder=(await query("SELECT * FROM communications WHERE trigger_key='BOOKING_SIGNATURE_REMINDER' LIMIT 1")).rows[0];
     assert.equal(await transaction(client=>dispatchDecision(client,reminder)),'CANCELLED','Signing stops queued reminders at dispatch');

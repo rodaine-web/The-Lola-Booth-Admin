@@ -121,9 +121,9 @@ export async function applyBookingConfirmationPolicy(eventId, {signedAgreement=f
   const depositSatisfied = depositRequired > 0 ? paid >= depositRequired : paid > 0;
   const accepted = policy==='PROPOSAL_ACCEPTED' ? (await query("SELECT 1 FROM proposals WHERE event_id=$1 AND status IN ('ACCEPTED','CONVERTED') AND deleted_at IS NULL LIMIT 1",[eventId])).rows.length>0 : false;
   const shouldConfirm = signedAgreement || (policy === "PROPOSAL_ACCEPTED" && accepted) || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
-  if (!shouldConfirm || !["TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
+  if (!shouldConfirm || !["DRAFT", "TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
   // Persisted journey checks above apply independently of worker flag changes.
-  const held=(await query("SELECT id FROM booking_holds WHERE event_id=$1 ORDER BY (status='ACTIVE') DESC,created_at DESC,id DESC LIMIT 1",[eventId])).rows[0];
+  const held=(await query("SELECT id FROM booking_holds WHERE event_id=$1 AND status='ACTIVE' ORDER BY created_at DESC,id DESC LIMIT 1",[eventId])).rows[0];
   // An expired checkout must not silently consume capacity after someone else reserved it.
   await query('SELECT assert_event_reservations($1)',[eventId]);
   const updated = held ? {rows:[await confirmHeldBooking(eventId,held.id)]} : await query("UPDATE events SET status='CONFIRMED', updated_at=now() WHERE id=$1 RETURNING *", [eventId]);
