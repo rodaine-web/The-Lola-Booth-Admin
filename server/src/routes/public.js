@@ -1,3 +1,4 @@
+import {queueWebsiteProposal} from '../services/website-proposal-handoff-service.js';
 import {clientSessionRouter} from './client-session.js';
 import { acceptProposal } from '../services/proposal-acceptance-service.js';
 import {PostgresPublicRateLimitStore} from '../middleware/postgres-rate-limit-store.js';
@@ -83,7 +84,9 @@ publicRouter.post("/inquiries", (req, _res, next) => {
   }
   const result = await transaction(async()=>{
     const validated=await preparePublicBooking(payload);
-    return ingestProviderLead({provider: "WEBSITE", payload:validated, testMode: isStaging(), skipAutomations: isStaging() || publicFormKind(payload)==="CONTACT"});
+    const ingested = await ingestProviderLead({provider: "WEBSITE", payload:validated, testMode: isStaging(), skipAutomations: isStaging() || publicFormKind(payload)==="CONTACT"});
+    if (ingested.action === "CREATED_LEAD") await queueWebsiteProposal(ingested.lead.id);
+    return ingested;
   });
 
   await sendPublicInquiryEmails({

@@ -940,7 +940,7 @@ async function recoverStaleProcessingJobs(client) {
          started_at=NULL,
          last_error=COALESCE(last_error, 'Recovered stale processing job after worker restart.'),
          updated_at=now()
-     WHERE status='PROCESSING' AND job_type NOT IN ('BOOKING_SEND_ACCEPTED_INVOICE','BOOKING_SEND_PAID_AGREEMENT','BOOKING_SEND_SIGNED_WORKSPACE','CLIENT_WORKSPACE_SIGN_IN')
+     WHERE status='PROCESSING' AND job_type NOT IN ('BOOKING_SEND_WEBSITE_PROPOSAL','BOOKING_SEND_ACCEPTED_INVOICE','BOOKING_SEND_PAID_AGREEMENT','BOOKING_SEND_SIGNED_WORKSPACE','CLIENT_WORKSPACE_SIGN_IN')
        AND started_at IS NOT NULL
        AND started_at < now() - ($1::int * interval '1 minute')`,
     [staleProcessingMinutes]
@@ -1114,7 +1114,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
       `SELECT j.*, a.action_config, a.name AS automation_name
        FROM automation_jobs j
        LEFT JOIN automations a ON a.id=j.automation_id
-       WHERE j.status='PENDING' AND j.scheduled_for <= now() AND j.job_type NOT IN ('BOOKING_SEND_ACCEPTED_INVOICE','BOOKING_SEND_PAID_AGREEMENT','BOOKING_SEND_SIGNED_WORKSPACE','CLIENT_WORKSPACE_SIGN_IN')
+       WHERE j.status='PENDING' AND j.scheduled_for <= now() AND j.job_type NOT IN ('BOOKING_SEND_WEBSITE_PROPOSAL','BOOKING_SEND_ACCEPTED_INVOICE','BOOKING_SEND_PAID_AGREEMENT','BOOKING_SEND_SIGNED_WORKSPACE','CLIENT_WORKSPACE_SIGN_IN')
        ORDER BY j.scheduled_for LIMIT $1 FOR UPDATE OF j SKIP LOCKED`,
       [limit]
     );
