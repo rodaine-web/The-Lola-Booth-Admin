@@ -1,4 +1,4 @@
-# Phase 1 release readiness — production activation, 11 October 2026
+# V1.1 / Phase 1 release readiness — production activation, 11 October 2026
 
 **Decision: GO for the scoped Phase 1 booking launch. Deployed and activated with owner authorization.** This is not a declaration of full BoothBook parity or a claim that every possible production journey is perfect.
 
@@ -41,7 +41,8 @@ PR 17 supplied the safe paused-live-key startup change; PR 18 merged the qualifi
 - Monitor the first real live payment and the complete resulting customer lifecycle. Escalate missing receipts, agreement/workspace delivery or incorrect balances immediately.
 - Database daily backup has run successfully. The file-backup schedule is configured; its first unattended run is still pending. Independent owner custody of the recovery key remains to be confirmed; the key is not published in this report.
 - Review the Azure trial expiry on 30 October and ensure storage/billing continuity.
-- The separately hosted public website was not redeployed in this rollout. Its existing inquiry form passed production persistence testing; the newer four-experience visual design still needs deployment alignment.
+- V1.1 follow-up: the public website is now deployed at commit `7b9618f6cbb8e45495ee4c4c500d49fd6c8250e6` (production deployment `dpl_GpzruwsVQE1NAr3aGpknurnUMw5e`, READY). The approved four-experience page, equipment photos and illustrative add-ons are live. Production catalog load, independent Glam/360 Essential selection, Extra Hour quantity 2 and a clearly marked QA-only submission passed in the actual production browser. All four equipment images loaded. Mobile 390px and desktop 1280px checks found no horizontal overflow. The QA inquiry reported success; no payment/contract was performed in this follow-up. Initial proposals still require Admin review.
+- The Admin V1.1 frontend release metadata was deployed in commit `d23a3d0ed0a9dd0aabd4d28bff13088ce33b012c` (deployment `dpl_8LfnTKY6gES9TwMtKwCsDDVJvWyT`, READY). Its application/backend remains the qualified Phase 1 code; no further migrations or worker activation changes were introduced. Website VERSION and package/lockfile agree on 1.1.0; 13 available website tests passed.
 - Supply usable backdrop assets and actual stock before activating the ten seeds. Own artwork and accepted/paid quoted custom requests remain available.
 
 ## GO/NO-GO operation and rollback
