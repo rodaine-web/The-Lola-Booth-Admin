@@ -1,10 +1,13 @@
+import {reconcileStripeDispute} from './payment-dispute-service.js';
+import {claimRefund,settleStripeRefund,markRefundRejected} from './refund-ledger-service.js';
+import {stripeConfiguration,assertStripeEventMode,verifyStripeAccount,verifyStripeEventAccount} from './stripe-configuration.js';
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import {getReceiptView} from "./receipt-service.js";
 import {enqueueLifecycle} from './integration-jobs-service.js';
 import { documentOrigin } from "../utils/public-document-url.js";
 import crypto from "node:crypto";
 import { invoiceBalance } from "../../../shared/invoice-balance.js";
-import { brandedEmailHtml } from "./automation-service.js";
+import { brandedEmailHtml, sendCommunication } from "./automation-service.js";
 import { sendEmail } from "./email-service.js";
 import { createNotification } from "./notification-service.js";
 import { env } from "../config/env.js";
@@ -14,23 +17,14 @@ import { AppError, notFound } from "../utils/errors.js";
 import { recordActivity } from "./activity-service.js";
 import { writeAudit } from "./audit-service.js";
 import { applyBookingConfirmationPolicy, reconcileInvoice } from "./payment-reconciliation-service.js";
+import {assertCheckoutHold} from './booking-hold-service.js';
 
 const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 const cents = (value) => Math.round(Number(value || 0) * 100);
 
 export function providerStatus() {
-  const stripeConfigured = Boolean(env.stripeSecretKey?.startsWith("sk_test_"));
-  const stripeWebhookConfigured = Boolean(env.stripeWebhookSecret);
-  const stripeMode = env.stripeSecretKey?.startsWith("sk_live_") ? "LIVE" : "TEST";
   return {
-    stripe: {
-      provider: "STRIPE",
-      configured: stripeConfigured,
-      webhookConfigured: stripeWebhookConfigured,
-      mode: stripeMode,
-      readiness: stripeMode === "LIVE" ? "DISABLED" : stripeConfigured && stripeWebhookConfigured ? "TEST_READY" : stripeConfigured ? "ERROR" : "NOT_CONFIGURED",
-      enabled: stripeConfigured
-    },
+    stripe: stripeConfiguration(),
     paypal: {
       provider: "PAYPAL",
       configured: Boolean(env.paypalClientId && env.paypalClientSecret),
@@ -46,7 +40,8 @@ export async function publicPaymentOptions(invoice) {
   const settings = await query("SELECT stripe_enabled, paypal_enabled, offline_payment_instructions, currency FROM business_settings LIMIT 1");
   const s = settings.rows[0] || {};
   const status = providerStatus();
-  const payable = isInvoicePayable(invoice);
+  const reviewRequired=(await query('SELECT invoice_payment_review($1) OR event_payment_review($2) AS held',[invoice.id,invoice.event_id||null])).rows[0]?.held===true;
+  const payable = isInvoicePayable(invoice) && !reviewRequired;
   if (process.env.APP_ENV === "staging") {
     logger.info({
       invoiceId: invoice.id,
@@ -74,6 +69,7 @@ export async function publicPaymentOptions(invoice) {
   const amountDue = depositAvailable ? money(depositRemaining) : balance;
   return {
     payable,
+    reviewRequired,
     amountDue,
     fullAmount: balance,
     minimumAmount: depositAvailable ? amountDue : Math.min(1, balance),
@@ -92,9 +88,11 @@ export async function publicPaymentOptions(invoice) {
   };
 }
 
-export async function createPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey }) {
+export async function createPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey, workspaceEventId }) {
   const invoice = await loadInvoiceByToken(token);
   if (!isInvoicePayable(invoice)) throw new AppError("This invoice is not payable.", 409, "INVOICE_NOT_PAYABLE");
+  if((await query('SELECT invoice_payment_review($1) OR event_payment_review($2) AS held',[invoice.id,invoice.event_id||null])).rows[0]?.held)throw new AppError('A payment dispute requires Admin review before another payment.',409,'PAYMENT_DISPUTE_REVIEW');
+  await assertCheckoutHold(invoice.event_id);
   const normalizedProvider = String(provider || "").toUpperCase();
   if (!["STRIPE", "PAYPAL"].includes(normalizedProvider)) throw new AppError("Unsupported payment provider.", 400, "UNSUPPORTED_PROVIDER");
   const options = await publicPaymentOptions(invoice);
@@ -112,18 +110,20 @@ export async function createPaymentSession({ token, provider, amountChoice = "DE
     selectedAmount = money(customAmount);
     if (!Number.isFinite(selectedAmount) || selectedAmount < options.minimumAmount || selectedAmount > options.fullAmount) throw new AppError(`Choose an amount between ${options.minimumAmount.toFixed(2)} and ${options.fullAmount.toFixed(2)}.`,422,"INVALID_PAYMENT_AMOUNT");
   }
-  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount])).rows[0];
+  const stripeAccount = normalizedProvider === "STRIPE" ? await verifyStripeAccount() : null;
+  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' AND ($4::text IS NULL OR (metadata->>'stripe_account_id'=$4 AND metadata->>'stripe_mode'=$5)) ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount,stripeAccount?.accountId||null,stripeAccount?.mode||null])).rows[0];
   if(pending)return safeSession(pending,normalizedProvider);
-  const key = `${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}`;
+  const key = `${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}${stripeAccount ? ":"+stripeAccount.accountId+":"+stripeAccount.mode : ""}`;
   const existing = await query("SELECT * FROM payment_attempts WHERE idempotency_key=$1 AND invoice_id=$2 AND provider=$3 LIMIT 1", [key, invoice.id, normalizedProvider]);
   if (existing.rows[0] && existing.rows[0].status === "PENDING" && Date.now()-new Date(existing.rows[0].created_at).getTime()<23*3600000) return safeSession(existing.rows[0], normalizedProvider);
   if (existing.rows[0]) throw new AppError("This checkout has ended. Please refresh and try again.", 409, "CHECKOUT_ENDED");
-  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice);
-  return createPaypalOrder(invoice, key, options.currency, selectedAmount, amountChoice);
+  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice, stripeAccount,workspaceEventId);
+  return createPaypalOrder(invoice, key, options.currency, selectedAmount, amountChoice,workspaceEventId);
 }
 
 export async function recordManualPayment(req) {
   const invoice = req.body.invoice_id ? await lockableInvoice(req.body.invoice_id) : null;
+  if((await query('SELECT event_payment_review($1) OR invoice_payment_review($2) AS held',[invoice?.event_id||req.body.event_id||null,invoice?.id||null])).rows[0]?.held)throw new AppError('Resolve the payment dispute before recording another payment.',409,'PAYMENT_DISPUTE_REVIEW');
   const amount = money(req.body.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new AppError("Payment amount must be greater than zero.", 422, "INVALID_PAYMENT_AMOUNT");
@@ -146,7 +146,7 @@ export async function recordManualPayment(req) {
   if (payment.invoice_id) {
     await reconcileInvoice(payment.invoice_id, { req, actorUserId: req.user.id, action: "manual_payment_recorded" });
     Object.assign(payment,(await query('SELECT * FROM payments WHERE id=$1',[payment.id])).rows[0]);
-    await applyBookingConfirmationPolicy(payment.event_id);
+    await applyBookingConfirmationPolicy(payment.event_id).catch(error=>flagBookingConfirmationFailure(payment,error));
   }
   await writeAudit({ req, action: "payment_recorded", entity: "payment", entityId: payment.id, after: payment });
   await recordActivity({ actorUserId: req.user.id, entityType: payment.event_id ? "event" : "invoice", entityId: payment.event_id || payment.invoice_id, action: "payment_recorded", summary: `Payment recorded: $${payment.amount}` });
@@ -169,30 +169,30 @@ export async function getPayment(id) {
 }
 
 export async function createRefund(req) {
-  const payment = await getPayment(req.params.id);
-  const amount = money(req.body.amount || (Number(payment.amount) - Number(payment.refunded_amount || 0)));
-  const max = money(Number(payment.amount) - Number(payment.refunded_amount || 0));
-  if (amount <= 0 || amount > max) throw new AppError("Refund amount is outside the refundable balance.", 409, "INVALID_REFUND_AMOUNT");
-  if (payment.provider !== "MANUAL") {
-    throw new AppError("Provider refund adapters are prepared, but live refund calls require configured Stripe or PayPal credentials.", 409, "PROVIDER_REFUND_NOT_CONFIGURED");
+  // Verify the configured provider/account before reserving any refund funds.
+  const source=await getPayment(req.params.id);
+  if(source.provider==='STRIPE')await verifyStripeAccount();
+  const claim=await claimRefund({paymentId:source.id,amount:req.body.amount,reason:req.body.reason,notes:req.body.notes,reference:req.body.reference_number,actorId:req.user.id,key:req.body.idempotency_key});
+  const {payment}=claim;
+  let {refund}=claim;
+  if(payment.provider==='STRIPE'){
+    if(!claim.created)return refund; // Pending/uncertain requests need canonical webhook/operator reconciliation.
+    const params=new URLSearchParams({payment_intent:payment.provider_payment_id,amount:String(cents(refund.amount)),'metadata[lola_refund_id]':refund.id});
+    let response,data;
+    try{
+      response=await fetch('https://api.stripe.com/v1/refunds',{method:'POST',headers:{Authorization:`Bearer ${env.stripeSecretKey}`,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':`lola-refund:${refund.id}`,'Stripe-Version':'2026-08-26.dahlia'},body:params,signal:AbortSignal.timeout(20000)});
+      data=await response.json();
+    }catch{throw new AppError('Refund outcome is uncertain. It remains reserved for review; do not start another refund.',502,'REFUND_OUTCOME_UNCERTAIN');}
+    if(!response.ok){
+      if(response.status>=400&&response.status<500&&response.status!==429)await markRefundRejected(refund.id);
+      throw new AppError(response.status>=500||response.status===429?'Refund outcome requires provider reconciliation. Do not submit another refund.':'Stripe rejected this refund. Check the payment and provider record.',502,'STRIPE_REFUND_FAILED');
+    }
+    const canonical=await retrieveStripeRefund(data.id);
+    const settled=await settleStripeRefund(canonical);
+    if(!settled)throw new AppError('Refund payment could not be reconciled.',409,'REFUND_PAYMENT_MISMATCH');
+    refund=settled.refund;
   }
-  const refund = await transaction(async (client) => {
-    const inserted = await client.query(
-      `INSERT INTO refunds (payment_id, invoice_id, event_id, client_id, provider, amount, currency, reason, notes, refund_type, status, provider_reference, created_by, idempotency_key)
-       VALUES ($1,$2,$3,$4,'MANUAL',$5,$6,$7,$8,$9,'SUCCEEDED',$10,$11,$12)
-       ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET updated_at=now()
-       RETURNING *`,
-      [payment.id, payment.invoice_id, payment.event_id, payment.client_id, amount, payment.currency, req.body.reason || null, req.body.notes || null, amount === Number(payment.amount) ? "FULL" : "PARTIAL", req.body.reference_number || null, req.user.id, req.body.idempotency_key || null]
-    );
-    await client.query(
-      `UPDATE payments SET refunded_amount=refunded_amount+$1::numeric,
-        status=CASE WHEN refunded_amount+$1::numeric >= amount THEN 'REFUNDED' ELSE 'PARTIALLY_REFUNDED' END,
-        updated_at=now()
-       WHERE id=$2`,
-      [amount, payment.id]
-    );
-    return inserted.rows[0];
-  });
+  if(refund.status!=='SUCCEEDED'||!claim.created)return refund;
   if (payment.invoice_id) await reconcileInvoice(payment.invoice_id, { req, actorUserId: req.user.id, action: "refund_completed" });
   const invoice = payment.invoice_id ? (await query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL", [payment.invoice_id])).rows[0] : null;
   const customer = payment.client_id ? (await query("SELECT name,email FROM clients WHERE id=$1 AND deleted_at IS NULL", [payment.client_id])).rows[0] : null;
@@ -231,7 +231,7 @@ export async function createRefund(req) {
     await createNotification({
       roleTarget: "OWNER_ADMIN",
       category: "PAYMENTS",
-      severity: "NORMAL",
+      severity: "INFO",
       title: `Refund processed — ${invoice.invoice_number}`,
       body: `${fmt(refund.amount)} refunded to ${customer?.name || "client"}.`,
       entityType: "payment",
@@ -247,9 +247,14 @@ export async function createRefund(req) {
 export async function handleStripeWebhook(rawBody, signature) {
   if (!env.stripeWebhookSecret) throw new AppError("Stripe webhook secret is not configured.", 503, "STRIPE_WEBHOOK_NOT_CONFIGURED");
   if (!validStripeSignature(rawBody, signature, env.stripeWebhookSecret)) throw new AppError("Invalid Stripe signature.", 400, "INVALID_STRIPE_SIGNATURE");
-  const event = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody));
-  if (event.livemode !== false || env.stripeSecretKey?.startsWith("sk_live_")) throw new AppError("Only Stripe test events are enabled.", 403, "LIVE_PAYMENTS_DISABLED");
+  const receivedEvent = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody));
+  assertStripeEventMode(receivedEvent);
+  const event=await verifyStripeEventAccount(receivedEvent);
   return persistWebhookEvent("STRIPE", event.id, event.type, event, async () => {
+    if(['charge.dispute.created','charge.dispute.updated','charge.dispute.closed','charge.dispute.funds_withdrawn','charge.dispute.funds_reinstated'].includes(event.type)){
+      await reconcileStripeDispute(event.data?.object?.id,event.livemode);
+      return;
+    }
     if (["checkout.session.completed", "checkout.session.async_payment_succeeded", "payment_intent.succeeded"].includes(event.type)) {
       const object = event.data?.object || {};
       if (event.type.startsWith("checkout.") && object.payment_status !== "paid") return;
@@ -267,22 +272,42 @@ export async function handleStripeWebhook(rawBody, signature) {
     }
     if (event.type === "payment_intent.payment_failed") {
       const object = event.data?.object || {};
+      // A card decline can be retried in the same Checkout. Resolve its exact
+      // session instead of failing every pending attempt on the invoice.
+      const sessionId=await stripeSessionForIntent(object.id);
       await recordProviderPaymentFailure({
         provider: "STRIPE",
         providerPaymentId: object.id,
+        providerSessionId: sessionId,
+        retryable: true,
         invoiceId: object.metadata?.invoice_id,
         failureCode: object.last_payment_error?.code || object.last_payment_error?.decline_code || "payment_failed"
       });
     }
-    if (event.type === "charge.refunded") {
-      const object = event.data?.object || {};
-      await recordProviderRefund({
-        provider: "STRIPE",
-        providerPaymentId: object.payment_intent,
-        providerRefundId: object.refunds?.data?.[0]?.id || object.id,
-        amount: money((object.amount_refunded || 0) / 100),
-        currency: String(object.currency || "usd").toUpperCase()
+    if (["checkout.session.expired", "checkout.session.async_payment_failed"].includes(event.type)) {
+      const object=event.data?.object || {};
+      if(object.payment_status!=='paid')await recordProviderPaymentFailure({
+        provider:'STRIPE',providerPaymentId:object.payment_intent,
+        providerSessionId:object.id,invoiceId:object.metadata?.invoice_id,
+        expired:event.type==='checkout.session.expired',
+        failureCode:event.type==='checkout.session.expired'?'checkout_expired':'async_payment_failed'
       });
+    }
+    if (['refund.created','refund.updated','refund.failed'].includes(event.type)) {
+      await recordProviderRefund(await retrieveStripeRefund(event.data?.object?.id));
+    }
+    if (event.type === 'charge.refunded') {
+      // amount_refunded is cumulative; each refund has its own amount and status.
+      const charge=event.data?.object || {};
+      let after='';
+      do{
+        const response=await fetch(`https://api.stripe.com/v1/refunds?charge=${encodeURIComponent(charge.id)}&limit=100${after?`&starting_after=${encodeURIComponent(after)}`:''}`,{headers:stripeHeaders(),signal:AbortSignal.timeout(15000)});
+        const page=await response.json();
+        if(!response.ok||!Array.isArray(page.data))throw new AppError('Stripe refund reconciliation failed.',502,'STRIPE_REFUND_LOOKUP_FAILED');
+        for(const object of page.data)await recordProviderRefund(await retrieveStripeRefund(object.id));
+        after=page.has_more?page.data.at(-1)?.id:'';
+        if(page.has_more&&!after)throw new AppError('Stripe refund pagination failed.',502,'STRIPE_REFUND_LOOKUP_FAILED');
+      }while(after);
     }
   });
 }
@@ -347,6 +372,7 @@ async function recordProviderPayment(input) {
   Object.assign(payment,(await query('SELECT * FROM payments WHERE id=$1',[payment.id])).rows[0]);
   await applyBookingConfirmationPolicy(payment.event_id).catch((error)=>{
     logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"BOOKING_CONFIRMATION_FAILED"},"Booking confirmation side effect failed after payment posting");
+    return flagBookingConfirmationFailure(payment,error);
   });
   await query("INSERT INTO payment_receipts(payment_id,invoice_id) VALUES($1,$2) ON CONFLICT(payment_id) DO NOTHING",[payment.id,input.invoiceId]).catch((error)=>{
     logger.warn({paymentId:payment.id,invoiceId:input.invoiceId,code:error.code||"RECEIPT_RECORD_FAILED"},"Receipt record side effect failed after payment posting");
@@ -415,52 +441,35 @@ async function recordProviderPayment(input) {
 }
 
 async function sendRecordedPaymentEmail({payment, invoice, to, subject, body, html, idempotencyKey, triggerKey}) {
-  const existing=(await query("SELECT * FROM communications WHERE idempotency_key=$1 AND deleted_at IS NULL LIMIT 1",[idempotencyKey])).rows[0];
-  if(existing?.status==="SENT_TO_PROVIDER") return existing;
-  let communication=existing;
-  if(!communication){
-    communication=(await query(
+  const communication=await transaction(async client=>{
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`payment-email:${idempotencyKey}`]);
+    const existing=(await client.query("SELECT * FROM communications WHERE idempotency_key=$1 AND deleted_at IS NULL LIMIT 1",[idempotencyKey])).rows[0];
+    if(existing)return existing;
+    return (await client.query(
       `INSERT INTO communications(client_id,event_id,invoice_id,type,channel,direction,recipient,subject,rendered_subject,message_summary,rendered_body,rendered_html,status,send_mode,idempotency_key,trigger_key)
-       VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$7,$8,'PROCESSING','SEND_NOW',$9,$10)
+       VALUES($1,$2,$3,'EMAIL','EMAIL','OUTBOUND',$4,$5,$5,$6,$7,$8,'DRAFT','SEND_NOW',$9,$10)
        RETURNING *`,
       [payment.client_id,payment.event_id,invoice.id,to,subject,body.slice(0,500),body,html,idempotencyKey,triggerKey]
     )).rows[0];
-  } else {
-    communication=(await query("UPDATE communications SET status='PROCESSING',failure_code=NULL,failure_message=NULL,updated_at=now() WHERE id=$1 RETURNING *",[communication.id])).rows[0];
-  }
-  try{
-    const delivery=await sendEmail({to,subject,body,html});
-    await query(
-      "UPDATE communications SET status='SENT_TO_PROVIDER',sent_at=now(),provider=$1,provider_message_id=$2,updated_at=now() WHERE id=$3",
-      [delivery.provider,delivery.providerMessageId,communication.id]
-    );
-    await query(
-      `INSERT INTO email_messages(communication_id,provider,provider_message_id,to_email,subject,status,body_preview,sent_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,now())`,
-      [communication.id,delivery.provider,delivery.providerMessageId,to,subject,delivery.status||"SENT_TO_PROVIDER",body.slice(0,500)]
-    );
-    return {...communication,status:"SENT_TO_PROVIDER",delivery};
-  }catch(error){
-    await query(
-      "UPDATE communications SET status='FAILED',failed_at=now(),failure_code=$1,failure_message=$2,updated_at=now() WHERE id=$3",
-      [error.code||"EMAIL_SEND_FAILED",error.message,communication.id]
-    );
-    throw error;
-  }
+  });
+  // Shared delivery claims prevent races and preserve uncertain outcomes for review.
+  const result=await sendCommunication(communication.id);
+  return {...result.communication,delivery:result.delivery};
 }
 
 async function recordProviderPaymentFailure(input) {
-  if (!input.invoiceId && !input.providerPaymentId) return null;
+  if (!input.providerSessionId && !input.providerPaymentId) return null;
   const updated = await query(
     `UPDATE payment_attempts
-     SET status='FAILED', provider_reference=COALESCE(provider_reference,$1), failure_code=$2, updated_at=now()
+     SET status=$6, failure_code=$2, updated_at=now()
      WHERE provider=$3 AND (
-       provider_reference=$1
-       OR provider_session_id=$1
-       OR ($4::uuid IS NOT NULL AND invoice_id=$4 AND status='PENDING')
-     ) AND status <> 'SUCCEEDED'
+       ($5::text IS NOT NULL AND provider_session_id=$5)
+       OR ($5::text IS NULL AND provider_reference=$1)
+     ) AND ($4::uuid IS NULL OR invoice_id=$4)
+       AND status IN ('PENDING','PROCESSING')
      RETURNING *`,
-    [input.providerPaymentId || null, input.failureCode || "payment_failed", input.provider, input.invoiceId || null]
+    [input.providerPaymentId || null, input.failureCode || "payment_failed", input.provider, input.invoiceId || null,
+      input.providerSessionId||null,input.retryable?'PENDING':input.expired?'EXPIRED':'FAILED']
   );
   const attempt = updated.rows[0];
   if (!attempt?.invoice_id) return { status: "FAILED" };
@@ -511,28 +520,11 @@ async function recordProviderPaymentFailure(input) {
 }
 
 async function recordProviderRefund(input) {
-  if (!input.providerPaymentId || !input.amount) return null;
-  const payment = (await query("SELECT * FROM payments WHERE provider=$1 AND provider_payment_id=$2 AND deleted_at IS NULL", [input.provider, input.providerPaymentId])).rows[0];
-  if (!payment) return null;
-  const refund = await transaction(async (client) => {
-    const inserted = await client.query(
-      `INSERT INTO refunds (payment_id, invoice_id, event_id, client_id, provider, amount, currency, reason, refund_type, status, provider_refund_id, idempotency_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'Stripe refund webhook',$8,'SUCCEEDED',$9,$10)
-       ON CONFLICT (provider, provider_refund_id) WHERE provider_refund_id IS NOT NULL DO UPDATE SET updated_at=now()
-       RETURNING *`,
-      [payment.id, payment.invoice_id, payment.event_id, payment.client_id, input.provider, input.amount, input.currency || payment.currency, input.amount >= Number(payment.amount) ? "FULL" : "PARTIAL", input.providerRefundId, `${input.provider}:refund:${input.providerRefundId}`]
-    );
-    await client.query(
-      `UPDATE payments SET refunded_amount=GREATEST(refunded_amount,$1::numeric),
-        status=CASE WHEN $1::numeric >= amount THEN 'REFUNDED' ELSE 'PARTIALLY_REFUNDED' END,
-        updated_at=now()
-       WHERE id=$2`,
-      [input.amount, payment.id]
-    );
-    return inserted.rows[0];
-  });
+  const settled=await settleStripeRefund(input);
+  if(!settled)return null;
+  const {payment,refund,changed}=settled;
   if (payment.invoice_id) await reconcileInvoice(payment.invoice_id, { action: "refund_completed" });
-  if (payment.invoice_id) {
+  if (refund.status==='SUCCEEDED' && changed && payment.invoice_id) {
     const invoice=(await query("SELECT * FROM invoices WHERE id=$1",[payment.invoice_id])).rows[0];
     const customer=(await query("SELECT name,email FROM clients WHERE id=$1",[payment.client_id])).rows[0];
     const currency=refund.currency || payment.currency || "USD";
@@ -570,11 +562,28 @@ async function recordProviderRefund(input) {
   return refund;
 }
 
-async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT") {
+function stripeHeaders(){return {Authorization:`Bearer ${env.stripeSecretKey}`,'Stripe-Version':'2026-08-26.dahlia'};}
+async function stripeSessionForIntent(id){
+  if(!/^pi_[A-Za-z0-9]+$/.test(id||''))throw new AppError('Invalid Stripe payment identifier.',422,'INVALID_PROVIDER_PAYMENT');
+  const response=await fetch(`https://api.stripe.com/v1/checkout/sessions?payment_intent=${encodeURIComponent(id)}&limit=2`,{headers:stripeHeaders(),signal:AbortSignal.timeout(15000)});
+  const page=await response.json();
+  if(!response.ok||!Array.isArray(page.data)||page.data.length>1||page.has_more)throw new AppError('Stripe checkout lookup requires reconciliation.',502,'STRIPE_SESSION_LOOKUP_FAILED');
+  return page.data[0]?.id||null;
+}
+async function retrieveStripeRefund(id){
+  if(!/^re_[A-Za-z0-9]+$/.test(id||''))throw new AppError('Invalid Stripe refund identifier.',502,'INVALID_PROVIDER_REFUND');
+  const response=await fetch(`https://api.stripe.com/v1/refunds/${encodeURIComponent(id)}`,{headers:stripeHeaders(),signal:AbortSignal.timeout(15000)});
+  const object=await response.json();
+  if(!response.ok||object.id!==id)throw new AppError('Stripe refund lookup failed. Keep the request reserved for review.',502,'STRIPE_REFUND_LOOKUP_FAILED');
+  return object;
+}
+
+async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount,workspaceEventId) {
   const params = new URLSearchParams({
     mode: "payment",
-    success_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=cancelled`,
+    integration_identifier: 'lola_invoice_' + [...crypto.createHash('sha256').update(key).digest().subarray(0,8)].map(n=>String.fromCharCode(97+n%26)).join(''),
+    success_url: `${paymentReturnUrl(invoice,workspaceEventId)}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${paymentReturnUrl(invoice,workspaceEventId)}?payment=cancelled`,
     "line_items[0][price_data][currency]": currency.toLowerCase(),
     "line_items[0][price_data][product_data][name]": `LOLA Booths Invoice ${invoice.invoice_number}`,
     "line_items[0][price_data][unit_amount]": String(cents(amount)),
@@ -588,16 +597,18 @@ async function createStripeCheckout(invoice, key, currency, amount = invoiceBala
   });
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.stripeSecretKey}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": key },
-    body: params
+    headers: { Authorization: `Bearer ${env.stripeSecretKey}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": key, "Stripe-Version":"2026-08-26.dahlia" },
+    body: params,
+    signal: AbortSignal.timeout(20000)
   });
   const data = await response.json();
   if (!response.ok) throw new AppError(safeProviderMessage(data.error?.message), 502, "STRIPE_SESSION_FAILED");
-  await insertAttempt({ invoice, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice });
+  if(data.livemode !== (stripeAccount.mode === 'LIVE'))throw new AppError('Stripe checkout environment does not match this invoice.',502,'STRIPE_MODE_MISMATCH');
+  await insertAttempt({ invoice, stripeAccount, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice });
   return { provider: "STRIPE", checkoutUrl: data.url, sessionId: data.id, amount, currency };
 }
 
-async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT") {
+async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT",workspaceEventId) {
   const token = await paypalAccessToken();
   const response = await fetch(`${paypalBaseUrl()}/v2/checkout/orders`, {
     method: "POST",
@@ -605,7 +616,7 @@ async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance
     body: JSON.stringify({
       intent: "CAPTURE",
       purchase_units: [{ custom_id: invoice.id, invoice_id: invoice.id, amount: { currency_code: currency, value: amount.toFixed(2) } }],
-      application_context: { return_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=success`, cancel_url: `${documentOrigin()}/pay/${invoice.secure_token}?payment=cancelled` }
+      application_context: { return_url: `${paymentReturnUrl(invoice,workspaceEventId)}?payment=success`, cancel_url: `${paymentReturnUrl(invoice,workspaceEventId)}?payment=cancelled` }
     })
   });
   const data = await response.json();
@@ -615,12 +626,12 @@ async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance
   return { provider: "PAYPAL", checkoutUrl, sessionId: data.id, amount, currency };
 }
 
-async function insertAttempt({ invoice, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT" }) {
+async function insertAttempt({ invoice, stripeAccount, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT" }) {
   await query(
     `INSERT INTO payment_attempts (invoice_id, client_id, event_id, proposal_id, provider, provider_reference, provider_session_id, checkout_url, amount, currency, status, idempotency_key, metadata)
      VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number, amount_choice: amountChoice })]
+    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number, amount_choice: amountChoice, ...(stripeAccount ? {stripe_account_id:stripeAccount.accountId,stripe_mode:stripeAccount.mode} : {}) })]
   );
 }
 
@@ -721,4 +732,25 @@ function paypalBaseUrl() {
 
 function safeProviderMessage(message = "Payment provider request failed.") {
   return String(message).replace(/sk_(test|live)_[A-Za-z0-9]+/g, "[redacted]").slice(0, 240);
+}
+
+async function flagBookingConfirmationFailure(payment,error){
+  // Money already posted remains posted. Alert operators instead of retrying the charge.
+  logger.warn({paymentId:payment.id,eventId:payment.event_id,code:error.code||'BOOKING_CONFIRMATION_FAILED'},'Payment received; booking requires availability review');
+  try{
+    await transaction(async()=>{
+      await query('SELECT id FROM payments WHERE id=$1 FOR UPDATE',[payment.id]);
+      if((await query("SELECT 1 FROM notifications WHERE metadata->>'bookingPaymentId'=$1 LIMIT 1",[payment.id])).rowCount)return;
+      await createNotification({roleTarget:'OWNER_ADMIN',category:'PAYMENTS',severity:'CRITICAL',title:'Payment received — booking needs review',
+        body:'Availability confirmation failed. Recheck the hold and resource reservations before confirming this booking; do not charge again.',
+        entityType:'event',entityId:payment.event_id,actionUrl:payment.event_id?`/events/events/${payment.event_id}`:null,
+        metadata:{bookingPaymentId:payment.id,code:error.code||'BOOKING_CONFIRMATION_FAILED'}});
+      if(payment.event_id)await recordActivity({entityType:'event',entityId:payment.event_id,action:'paid_booking_needs_review',summary:'Payment recorded; resource confirmation needs operator review'});
+    });
+  }catch(notificationError){logger.warn({paymentId:payment.id,code:notificationError.code||'NOTIFICATION_FAILED'},'Booking review alert could not be persisted');}
+}
+
+function paymentReturnUrl(invoice,eventId){
+ if(eventId&&eventId!==invoice.event_id)throw new AppError('Invoice event mismatch.',403,'FORBIDDEN');
+ return eventId?`${env.clientOrigin.replace(/\/$/,'')}/client/events/${eventId}`:`${documentOrigin()}/pay/${invoice.secure_token}`;
 }

@@ -1,3 +1,6 @@
+import {recordCell} from '../components/workspace/RecordCells.jsx';
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 import {experienceImage} from "../utils/experience-assets.js";
 import EventTypeSelect from '../components/EventTypeSelect.jsx';
 import {useDialogFocus} from "../utils/use-dialog-focus.js";
@@ -14,7 +17,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   const isCatalog = ["/experiences","/packages","/addons"].includes(endpoint);
   const [rows, setRows] = useState([]);
   const [loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[saving,setSaving]=useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(""),[catalogStatus,setCatalogStatus]=useState("");
   const [statusFilter,setStatusFilter]=useState(routeParams.get("status")||""),[sort,setSort]=useState("created_at"),[overdue,setOverdue]=useState(routeParams.get("overdue")==="true");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -190,24 +193,25 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   }
 
   return (
-    <main className={isCatalog ? "page resource-redesign catalog-redesign" : "page resource-redesign"}>
+    <main className={isCatalog ? "page resource-redesign catalog-redesign record-module" : endpoint === "/tasks" ? "page resource-redesign record-module" : "page resource-redesign"}>
       <div className="page-heading">
         <div>
           <p className="eyebrow">{phase || resourceEyebrow(endpoint)}</p>
-          <h1>{title}</h1>
+          <h1>{title}</h1>{endpoint==="/tasks"&&<p className="lede">Keep follow-ups, assignments, and to-dos on track.</p>}
         </div>
         {fields.length > 0 && <button className="primary-action" onClick={openCreate}>New {title.replace(/s$/, "")}</button>}
       </div>
       {isCatalog && <nav className="catalog-section-tabs" aria-label="Catalog sections">{[["experiences","Experiences"],["packages","Packages"],["addons","Add-ons"]].map(([path,label])=><Link key={path} to={`/content/${path}`} className={endpoint===`/${path}`?"active":""}>{label}</Link>)}</nav>}
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
+      {(endpoint==="/tasks"||isCatalog)&&<RecordMetrics module={isCatalog?"Content":"Tasks"} rows={rows}/>}
       <div className="toolbar">
         <input aria-label="Search records" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} />
 
-        {columns.includes('status')&&(statusFilter||rows.some(r=>r.status))&&<label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">All statuses</option>{[...new Set([statusFilter,...rows.map(r=>r.status)].filter(Boolean))].map(status=><option key={status}>{status}</option>)}</select></label>}
+        {isCatalog&&<label>Status<select value={catalogStatus} onChange={event=>setCatalogStatus(event.target.value)}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></label>}{columns.includes('status')&&(statusFilter||rows.some(r=>r.status))&&<label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">All statuses</option>{[...new Set([statusFilter,...rows.map(r=>r.status)].filter(Boolean))].map(status=><option key={status}>{status}</option>)}</select></label>}
         <label>Sort<select value={sort} onChange={e=>setSort(e.target.value)}><option value="created_at">Newest first</option><option value="updated_at">Recently updated</option></select></label>
         {endpoint==='/tasks'&&<label>Overdue only<input type="checkbox" checked={overdue} onChange={e=>setOverdue(e.target.checked)}/></label>}
       </div>
-      <AsyncState loading={loading} error={error} onRetry={()=>setRevision(r=>r+1)} noun={title.toLowerCase()}>{!loading&&!error&&(isCatalog?<div className="catalog-card-grid">{rows.map(row=><article className="catalog-card" key={row.id}><div className="catalog-card-top"><img className="catalog-list-image" src={row.image_url || row.image || experienceImage(row.name)} alt="" loading="lazy"/></div><div><h2>{row.name||"Untitled"}</h2><p>{row.short_description||row.description||row.proposal_description||"No description yet."}</p></div><div className="catalog-meta">{endpoint==="/experiences"&&<><span>Base price</span><strong>{row.base_price!=null?"$"+Number(row.base_price).toLocaleString():"Custom"}</strong></>}{endpoint==="/packages"&&<><span>{row.pricing_mode==="CUSTOM"?"Custom pricing":"Starting price"}</span><strong>{row.pricing_mode==="CUSTOM"?"Let's create":"$"+Number(row.starting_price||0).toLocaleString()}</strong></>}{endpoint==="/addons"&&<><span>{row.pricing_type||"Add-on"}</span><strong>{"$"+Number(row.price||0).toLocaleString()}</strong></>}</div><div className="catalog-actions"><span className={row.active===false?"catalog-state inactive":"catalog-state"}>{row.active===false?"Inactive":"Active"}</span><button onClick={()=>openEdit(row)}>Edit</button>{row.most_popular&&<span>Most Popular</span>}</div></article>)}</div>:<DataTable rows={rows} columns={columns} getRowHref={rowHref} onEdit={fields.length ? openEdit : null} />)}</AsyncState>
+      <AsyncState loading={loading} error={error} onRetry={()=>setRevision(r=>r+1)} noun={title.toLowerCase()}>{!loading&&!error&&(isCatalog?<RecordTable title={title} rows={rows.filter(row=>!catalogStatus||(row.active===false?"INACTIVE":"ACTIVE")===catalogStatus).map(row=>({...row,status:row.active===false?"INACTIVE":"ACTIVE"}))} renderCell={(row,column)=>column==="image"?(row.image_url||row.image||endpoint==="/experiences"?<img className="record-thumbnail" src={row.image_url||row.image||experienceImage(row.name)} alt={row.name||""} loading="lazy"/>:<span className="record-thumbnail record-image-empty" aria-label="No image">◇</span>):column==="items"?<span>{(row.items||[]).join(" · ")||"—"}</span>:recordCell(row,column)} columns={endpoint==="/experiences"?["image","name","default_duration","base_price","status","created_at"]:endpoint==="/packages"?["image","name","items","starting_price","status","created_at"]:["image","name","description","price","pricing_type","status"]} onEdit={openEdit}/>:endpoint==="/tasks"?<RecordWorkspace module="Tasks" rows={rows}><RecordTable renderCell={recordCell} title="Tasks" rows={rows} columns={["title","related_to","owner_name","priority","due_date","status","notes"]} getRowHref={rowHref} onEdit={fields.length ? openEdit : null}/></RecordWorkspace>:<DataTable rows={rows} columns={columns} getRowHref={rowHref} onEdit={fields.length ? openEdit : null} />)}</AsyncState>
       {editing && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title+" editor"}>
           <form className="modal" onSubmit={saveForm}>
@@ -215,23 +219,25 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
               <h2>{editing.mode === "edit" ? "Edit" : "New"} {title.replace(/s$/, "")}</h2>
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
+            <p className="note-text">Fields marked * are required.</p>
+            {endpoint==="/payments"&&<p>Select an invoice, or both a client and an event.</p>}
             <div className="form-grid">
               {fields.map(([name, label, type = "text", config = {}]) => (
                 <label key={name} className={type === "textarea" ? "wide" : ""}>
-                  {label}
+                  {label}{(config.required||(endpoint==="/events"&&["client_id","event_type"].includes(name)))&&<span className="required-mark" aria-hidden="true"> *</span>}
                   {name === "event_type" ? <EventTypeSelect value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))} required/> : name.endsWith("media_id") ? <MediaSelect label={label} value={form[name]} onChange={value=>setForm(current=>({...current,[name]:value}))}/> : type === "textarea" || type === "lines" ? (
-                    <textarea aria-label={label} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                    <textarea required={Boolean(config.required)} aria-label={label} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
                   ) : type === "select" ? (
-                    <select aria-label={label} value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
+                    <select required={Boolean(config.required)} aria-label={label} value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))}><option value="">Select…</option>{config.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
                   ) : type === "checkbox" ? (
                     <input type="checkbox" checked={Boolean(form[name])} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.checked }))} />
                   ) : type === "relationship" ? (
                     <>
-                      <RelationshipSelect resource={config.resource} value={form[name]} placeholder={label} onChange={(value) => setForm((current) => ({ ...current, [name]: value }))} />
+                      <RelationshipSelect resource={config.resource} required={Boolean(config.required)||(endpoint==="/events"&&name==="client_id")} value={form[name]} placeholder={label} onChange={(value) => setForm((current) => ({ ...current, [name]: value }))} />
                       {endpoint === "/events" && name === "client_id" && editing?.mode === "create" && <button type="button" onClick={() => setInlineClientOpen((value) => !value)}>{inlineClientOpen ? "Cancel new client" : "Create new client"}</button>}
                     </>
                   ) : (
-                    <input required={Boolean(config.required)} type={type} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                    <input aria-label={label} required={Boolean(config.required)} type={type} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
                   )}
                 </label>
               ))}
@@ -251,9 +257,9 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
             {endpoint === "/events" && inlineClientOpen && <section className="panel wide">
               <h3>Create client without leaving this event</h3>
               <div className="form-grid">
-                <label>First name<input required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
-                <label>Last name<input required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
-                <label>Email<input required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
+                <label>First name <span className="required-mark" aria-hidden="true">*</span><input aria-label="First name" required value={inlineClient.first_name} onChange={(event)=>setInlineClient(current=>({...current,first_name:event.target.value}))}/></label>
+                <label>Last name <span className="required-mark" aria-hidden="true">*</span><input aria-label="Last name" required value={inlineClient.last_name} onChange={(event)=>setInlineClient(current=>({...current,last_name:event.target.value}))}/></label>
+                <label>Email <span className="required-mark" aria-hidden="true">*</span><input aria-label="Email" required type="email" value={inlineClient.email} onChange={(event)=>setInlineClient(current=>({...current,email:event.target.value}))}/></label>
                 <label>Phone<input value={inlineClient.phone} onChange={(event)=>setInlineClient(current=>({...current,phone:event.target.value}))}/></label>
               </div>
               <div className="button-row">

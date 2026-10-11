@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { generateProposalPdf, generateInvoicePdf } from '../server/src/services/document-service.js';
+import { generateProposalPdf, generateInvoicePdf, proposalHtml } from '../server/src/services/document-service.js';
 
 async function readPdf(buffer) {
   const loading = getDocument({ data: new Uint8Array(buffer), useSystemFonts: true, verbosity: 0 });
@@ -16,6 +16,25 @@ async function readPdf(buffer) {
   return pages;
 }
 const proposal = { proposal_number: 'QA-PROP', client_name: 'QA Client', event_name: 'QA Event', event_date: '2026-11-21', venue_name: 'QA Venue', package_name: 'QA Package' };
+
+test('proposal journey explains signing and workspace while preserving zero minimum and accepted terms', async () => {
+  const saved = { ...proposal, proposal_type: 'CORPORATE', total: 599, pricing_snapshot: { total: 599, amount_due_now: 0, deposit_amount: 179.70 }, content: { terms: 'IMMUTABLE_ACCEPTED_TERMS' } };
+  const before = structuredClone(saved);
+  const html = proposalHtml(saved);
+  assert.match(html, /Booking Retainer Fee/);
+  assert.match(html, /class="amt">\$0\.00/);
+  assert.match(html, /Sign Agreement/);
+  assert.match(html, /Open The Client Workspace/);
+  assert.match(html, /written confirmation/);
+  assert.match(html, /IMMUTABLE_ACCEPTED_TERMS/);
+  const pages = await readPdf(await generateProposalPdf(saved));
+  const text = pages.map(page => page.text).join(' ');
+  assert.match(text, /Booking retainer fee: \$0\.00/);
+  assert.match(text, /Sign your agreement/);
+  assert.match(text, /Open The Client Workspace/);
+  assert.match(text, /IMMUTABLE_ACCEPTED_TERMS/);
+  assert.deepEqual(saved, before);
+});
 
 test('proposal PDFs retain every custom section, late bullet, and long paragraph across pages', async () => {
   const sections = Array.from({ length: 12 }, (_, index) => ({
@@ -84,6 +103,35 @@ test('invoice QR decodes from the actual PDF rendering to the stable invoice URL
   await loading.destroy();
 });
 
+test('settled and void invoice PDFs preserve terms without offering another payment', async () => {
+  for (const state of [{ status: 'PAID', amount_outstanding: 0, balance_due: 100 }, { status: 'VOID', amount_outstanding: 100 }]) {
+    const saved = { ...state, invoice_number: 'QA-SETTLED', secure_token: 'settled-token', items: [], total: 100, amount_paid: 100, terms: 'SAVED_COMMERCIAL_TERMS' };
+    const before = structuredClone(saved);
+    const loading = getDocument({ data: new Uint8Array(await generateInvoicePdf(saved)), useSystemFonts: true, verbosity: 0 });
+    const pdf = await loading.promise;
+    let text = '';
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      text += (await page.getTextContent()).items.map(item => item.str).join(' ');
+      assert.equal((await page.getAnnotations()).filter(item => item.url?.includes('/pay/')).length, 0);
+    }
+    assert.match(text, /NO PAYMENT DUE/);
+    assert.match(text, /SAVED_COMMERCIAL_TERMS/);
+    assert.doesNotMatch(text, /P\s*A\s*Y\s+O\s*N\s*L\s*I\s*N\s*E|S\s*C\s*A\s*N\s+TO\s+PAY/);
+    assert.deepEqual(saved, before);
+    await loading.destroy();
+  }
+});
+
+test('outstanding invoices explain the booking retainer fee and all confirmation prerequisites', async () => {
+  const pages = await readPdf(await generateInvoicePdf({invoice_number:'QA-DUE',items:[],total:100,amount_outstanding:100,due_date:'2026-11-01',secure_token:'due-token'}));
+  const text = pages.map(page => page.text).join(' ');
+  assert.match(text, /booking retainer fee/);
+  assert.match(text, /signed agreement and written confirmation/);
+  assert.match(text, /2026-11-01/);
+  assert.match(text, /P\s*A\s*Y\s+O\s*N\s*L\s*I\s*N\s*E/);
+});
+
 test('proposal pricing and terms paginate with continuous footers and preserve zero deposit', async () => {
   const pages = await readPdf(await generateProposalPdf({
     ...proposal, proposal_type: 'CORPORATE', guest_count: 80, start_time: '18:00', end_time: '21:00',
@@ -95,7 +143,7 @@ test('proposal pricing and terms paginate with continuous footers and preserve z
   const all = pages.map(p => p.text).join(' ');
   for(let i=0;i<40;i++) assert.ok(all.includes(`SCOPE_ROW_${i}`));
   assert.ok(all.includes('END_SAVED_TERMS'));
-  assert.match(all, /Due to reserve your date: \$0\.00/);
+  assert.match(all, /Booking retainer fee: \$0\.00/);
   assert.match(all, /November 21, 2026/);
   assert.match(all, /6:00 PM - 9:00 PM/);
   for(const [index,page] of pages.entries()) {

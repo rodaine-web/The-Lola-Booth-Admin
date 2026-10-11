@@ -45,3 +45,17 @@ test('gallery delivery cannot retry an expired, revoked or unpublished access li
  assert.equal(await dispatchDecision(db(null),legacyMessage),'CANCELLED');
  assert.equal(await dispatchDecision(db(null,{}),legacyMessage),'SEND');
 });
+
+test('planning invitations stop when the exact current grant is no longer eligible',async()=>{
+ let parameters;
+ const message={id:'message',trigger_key:'PLANNING_INVITATION',idempotency_key:'planning-invitation:plan:hash'};
+ assert.equal(await dispatchDecision({query:async(sql,params)=>{parameters=params;return {rowCount:1};}},message),'SEND');
+ assert.deepEqual(parameters,['plan','hash','message']);
+ assert.equal(await dispatchDecision({query:async()=>({rowCount:0})},message),'CANCELLED');
+ assert.equal(await dispatchDecision({query:async()=>{throw new Error('No lookup for an invalid key');}},{...message,idempotency_key:null}),'CANCELLED');
+});
+test('a queued proof invitation stops after approval, expiry, revision or event cancellation',async()=>{
+ const message={id:'proof-message',trigger_key:'APPROVAL_REQUESTED'};
+ assert.equal(await dispatchDecision({query:async()=>({rowCount:1})},message),'SEND');
+ assert.equal(await dispatchDecision({query:async()=>({rowCount:0})},message),'CANCELLED');
+});

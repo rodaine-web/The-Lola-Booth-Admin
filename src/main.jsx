@@ -6,6 +6,7 @@ import App from "./App.jsx";
 import "./styles/global.css";
 import "./styles/experience.css";
 import "./styles/reference-design.css";
+import "./styles/record-dashboard.css";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

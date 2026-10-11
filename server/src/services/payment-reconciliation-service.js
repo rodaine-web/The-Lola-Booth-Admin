@@ -1,7 +1,12 @@
+import {convertPaidLead} from './paid-lead-conversion.js';
+import { queuePaidAgreement } from './booking-agreement-handoff-service.js';
+import {ensureEventPlanning,autoPlanningInvitation} from "./event-planning-service.js";
 import {convertPaidCampaignLead} from './campaign-lead-service.js';
 import { query, transaction } from "../db/pool.js";
 import { recordActivity } from "./activity-service.js";
+import {AppError} from '../utils/errors.js';
 import { writeAudit } from "./audit-service.js";
+import {lockBookingReservations,confirmHeldBooking} from './booking-hold-service.js';
 
 const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 
@@ -10,7 +15,7 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
     const invoice = await client.query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [invoiceId]);
     if (!invoice.rows[0]) return null;
     const payments = await client.query(
-      "SELECT COALESCE(sum(amount - refunded_amount),0)::numeric AS net_paid FROM payments WHERE invoice_id=$1 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL",
+      "SELECT COALESCE(sum(payment_net_received(payments)),0)::numeric AS net_paid FROM payments WHERE invoice_id=$1 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL",
       [invoiceId]
     );
     const refunded = await client.query(
@@ -19,7 +24,8 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
     );
     const paid = money(payments.rows[0].net_paid);
     const refundedAmount = money(refunded.rows[0].refunded);
-    const fullyRefunded = refundedAmount > 0 && paid === 0;
+    const reviewRequired=(await client.query('SELECT invoice_payment_review($1) AS held',[invoiceId])).rows[0]?.held===true;
+    const fullyRefunded = refundedAmount > 0 && paid === 0 && !reviewRequired;
     const outstanding = fullyRefunded ? 0 : money(Math.max(0, Number(invoice.rows[0].total || 0) - paid));
     const previousStatus = invoice.rows[0].status;
     let status = previousStatus;
@@ -35,7 +41,10 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
     );
     const converted=await convertPaidCampaignLead(client,updated.rows[0]);
     if(converted)Object.assign(updated.rows[0],converted);
+    const paidClient=await convertPaidLead(client,updated.rows[0]);
+    if(paidClient)Object.assign(updated.rows[0],paidClient);
     await reconcileEventFinance(client, updated.rows[0].event_id);
+    await queuePaidAgreement(client, updated.rows[0]);
     return { before: invoice.rows[0], after: updated.rows[0], refunded: money(refunded.rows[0].refunded) };
   });
   if (!result) return null;
@@ -77,13 +86,21 @@ export async function reconcileEventFinance(client, eventId) {
   return { ...t, refunded: refunded.rows[0].refunded, payment_status: paymentStatus };
 }
 
-export async function applyBookingConfirmationPolicy(eventId) {
+export async function applyBookingConfirmationPolicy(eventId, {signedAgreement=false}={}) {
   if (!eventId) return null;
+  return transaction(async () => {
+  await lockBookingReservations();
   const settings = await query("SELECT booking_confirmation_policy FROM business_settings LIMIT 1");
   const policy = settings.rows[0]?.booking_confirmation_policy || "DEPOSIT_PAID";
-  if (policy === "MANUAL") return null;
-  const event = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [eventId]);
+  if (policy === "MANUAL" && !signedAgreement) return null;
+  const event = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [eventId]);
   if (!event.rows[0] || event.rows[0].status === "CANCELLED") return null;
+  const managedJourney=(await query('SELECT booking_journey_managed($1) AS managed',[eventId])).rows[0]?.managed;
+  if(managedJourney || signedAgreement){
+    const missing=(await query('SELECT booking_confirmation_missing($1) AS missing',[eventId])).rows[0]?.missing||[];
+    if(missing.length){if(signedAgreement)throw new AppError(missing.join(" "),409,"BOOKING_PREREQUISITES",{missing});return null;}
+  }
+  if (["CONFIRMED","PREPARING","READY","IN_PROGRESS"].includes(event.rows[0].status)) return event.rows[0];
   const finance = await query(
     `SELECT
        COALESCE(sum(amount_paid),0)::numeric AS paid,
@@ -103,9 +120,17 @@ export async function applyBookingConfirmationPolicy(eventId) {
   const bookingDepositRequired = Number(booking.rows[0]?.deposit_required || 0);
   const depositRequired = invoiceDepositRequired > 0 ? invoiceDepositRequired : bookingDepositRequired;
   const depositSatisfied = depositRequired > 0 ? paid >= depositRequired : paid > 0;
-  const shouldConfirm = policy === "PROPOSAL_ACCEPTED" || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
-  if (!shouldConfirm || !["TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
-  const updated = await query("UPDATE events SET status='CONFIRMED', updated_at=now() WHERE id=$1 RETURNING *", [eventId]);
+  const accepted = policy==='PROPOSAL_ACCEPTED' ? (await query("SELECT 1 FROM proposals WHERE event_id=$1 AND status IN ('ACCEPTED','CONVERTED') AND deleted_at IS NULL LIMIT 1",[eventId])).rows.length>0 : false;
+  const shouldConfirm = signedAgreement || (policy === "PROPOSAL_ACCEPTED" && accepted) || (policy === "DEPOSIT_PAID" && depositSatisfied) || (policy === "FULL_PAYMENT" && paid > 0 && outstanding === 0);
+  if (!shouldConfirm || !["DRAFT", "TENTATIVE", "PENDING_DEPOSIT", "PENDING_CONTRACT", "INQUIRY"].includes(event.rows[0].status)) return null;
+  // Persisted journey checks above apply independently of worker flag changes.
+  const held=(await query("SELECT id FROM booking_holds WHERE event_id=$1 AND status='ACTIVE' ORDER BY created_at DESC,id DESC LIMIT 1",[eventId])).rows[0];
+  // An expired checkout must not silently consume capacity after someone else reserved it.
+  await query('SELECT assert_event_reservations($1)',[eventId]);
+  const updated = held ? {rows:[await confirmHeldBooking(eventId,held.id)]} : await query("UPDATE events SET status='CONFIRMED', updated_at=now() WHERE id=$1 RETURNING *", [eventId]);
   await recordActivity({ entityType: "event", entityId: eventId, action: "booking_auto_confirmed", summary: `Booking auto-confirmed by ${policy} policy` });
+  if(signedAgreement)await ensureEventPlanning(eventId);
+  else await autoPlanningInvitation(eventId);
   return updated.rows[0];
+  });
 }

@@ -121,11 +121,11 @@ export function renderProposalPdf(doc, proposal, { brand, logo, experiences, fea
   }
   if(y+130>685)y=start('Investment','Your total investment.');
   text('Total investment',42,y+10,370,20,'Times-Roman');text(money(pricing.total??proposal.total),432,y+10,138,20,'Times-Roman');y+=62;
-  text(`Due to reserve your date: ${money(pricing.deposit_amount??pricing.total??proposal.total)}`,42,y,528,12,'Helvetica-Bold',brand.gold);
-  text('Your date is secured when the required booking documents and down payment are completed.',42,y+28,528,10,'Helvetica',brand.muted);
+  text(`Booking retainer fee: ${money(pricing.amount_due_now??pricing.deposit_amount??pricing.total??proposal.total)}`,42,y,528,12,'Helvetica-Bold',brand.gold);
+  text('Booking requires the minimum payment, a signed agreement, availability and written LOLA confirmation.',42,y+28,528,10,'Helvetica',brand.muted);
 
   y=start('Next steps','From proposal to booked.');
-  for(const [i,[title,body]] of [['Accept your proposal','Confirm the selected experiences and scope.'],['Complete your booking','LOLA will provide your invoice and required booking documents.'],['Approve your creative','Review the guest-facing creative before your event.']].entries()){
+  for(const [i,[title,body]] of [['Accept your proposal','Confirm the selected experiences and scope.'],['Pay your booking retainer fee','Your invoice is sent after acceptance. Pay the required minimum or a higher amount.'],['Sign your agreement','After the required payment is recorded, sign your agreement within five days.'],['Open The Client Workspace','Use your secure invitation after signing. Planning opens once LOLA confirms your booking.']].entries()){
     text(String(i+1).padStart(2,'0'),42,y,32,11,'Helvetica-Bold',brand.gold);
     text(title,92,y-2,478,18,'Times-Roman');y=text(body,92,y+26,478,10,'Helvetica',brand.muted)+27;
   }

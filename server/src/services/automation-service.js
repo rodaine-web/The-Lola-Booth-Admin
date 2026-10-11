@@ -940,7 +940,7 @@ async function recoverStaleProcessingJobs(client) {
          started_at=NULL,
          last_error=COALESCE(last_error, 'Recovered stale processing job after worker restart.'),
          updated_at=now()
-     WHERE status='PROCESSING'
+     WHERE status='PROCESSING' AND job_type NOT IN ('BOOKING_SEND_WEBSITE_PROPOSAL','BOOKING_SEND_ACCEPTED_INVOICE','BOOKING_SEND_PAID_AGREEMENT','BOOKING_SEND_SIGNED_WORKSPACE','CLIENT_WORKSPACE_SIGN_IN')
        AND started_at IS NOT NULL
        AND started_at < now() - ($1::int * interval '1 minute')`,
     [staleProcessingMinutes]
@@ -1114,7 +1114,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
       `SELECT j.*, a.action_config, a.name AS automation_name
        FROM automation_jobs j
        LEFT JOIN automations a ON a.id=j.automation_id
-       WHERE j.status='PENDING' AND j.scheduled_for <= now()
+       WHERE j.status='PENDING' AND j.scheduled_for <= now() AND j.job_type NOT IN ('BOOKING_SEND_WEBSITE_PROPOSAL','BOOKING_SEND_ACCEPTED_INVOICE','BOOKING_SEND_PAID_AGREEMENT','BOOKING_SEND_SIGNED_WORKSPACE','CLIENT_WORKSPACE_SIGN_IN')
        ORDER BY j.scheduled_for LIMIT $1 FOR UPDATE OF j SKIP LOCKED`,
       [limit]
     );
@@ -1162,7 +1162,7 @@ export async function processDueJobs({ limit = 25 } = {}) {
     const due = await client.query(
       `SELECT id,scheduled_attempt_count FROM communications
        WHERE status='SCHEDULED' AND channel='EMAIL' AND scheduled_at <= now() AND deleted_at IS NULL
-       AND ($2::timestamptz IS NULL OR (created_at >= $2 AND lower(recipient)=ANY($3::text[])))
+       AND ($2::timestamptz IS NULL OR (created_at >= $2 AND (cardinality($3::text[])=0 OR lower(recipient)=ANY($3::text[]))))
        ORDER BY scheduled_at LIMIT $1 FOR UPDATE SKIP LOCKED`,
       [limit,scope?.since||null,scope?.recipients||[]]
     );

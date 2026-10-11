@@ -45,7 +45,7 @@ test("proposal and invoice admin workflows expose lifecycle actions", () => {
 test("secure public views track proposal and invoice access", () => {
   assert.match(publicRoutes, /getProposal\(req\.params\.token, \{ publicView: true \}\)/);
   assert.match(publicRoutes, /first_viewed_at=COALESCE\(first_viewed_at, now\(\)\)/);
-  assert.match(publicRoutes, /accepted_by_name/);
+  assert.match(publicRoutes, /acceptProposal\(proposal\.id, body\.acceptedByName, req\)/);
   assert.match(publicRoutes, /getInvoice\(req\.params\.token, \{ publicView: true \}\)/);
 });
 

@@ -1,0 +1,85 @@
+{
+  "scope": "disposable restored database only",
+  "results": [
+    {
+      "check": "service concurrent holds: one winner",
+      "status": "PASS"
+    },
+    {
+      "check": "service hold retry preserves expiry",
+      "status": "PASS"
+    },
+    {
+      "check": "service expired hold confirmation rejected",
+      "status": "PASS"
+    },
+    {
+      "check": "expired hold cannot start another checkout",
+      "status": "PASS"
+    },
+    {
+      "check": "manual confirmation cannot bypass held resource assignment",
+      "status": "PASS"
+    },
+    {
+      "check": "service atomic confirmation and replay",
+      "status": "PASS"
+    },
+    {
+      "check": "availability includes current equipment reservations",
+      "status": "PASS"
+    },
+    {
+      "check": "availability does not promise capacity without resource selection",
+      "status": "PASS"
+    },
+    {
+      "check": "late posted payment retained once with deduplicated operator review alert",
+      "status": "PASS"
+    },
+    {
+      "check": "proposal-free client workspace planning entry",
+      "status": "PASS"
+    },
+    {
+      "check": "changed backdrop scope hides old payment link and rejects stale acceptance",
+      "status": "PASS"
+    },
+    {
+      "check": "unlinked quote can be withdrawn with preserved history",
+      "status": "PASS"
+    },
+    {
+      "check": "quote acceptance without invoice/payment cannot confirm work",
+      "status": "PASS"
+    },
+    {
+      "check": "linked invoice prevents silent quote withdrawal",
+      "status": "PASS"
+    },
+    {
+      "check": "invoice linkage without payment cannot confirm work",
+      "status": "PASS"
+    },
+    {
+      "check": "required custom-work net payment qualifies",
+      "status": "PASS"
+    },
+    {
+      "check": "refund removes custom-work payment qualification",
+      "status": "PASS"
+    },
+    {
+      "check": "recurring reminder replay queues once",
+      "status": "PASS"
+    },
+    {
+      "check": "submitted planning cancels pending reminder at dispatch",
+      "status": "PASS"
+    },
+    {
+      "check": "revoked planning grant also revokes workspace entry",
+      "status": "PASS"
+    }
+  ]
+}

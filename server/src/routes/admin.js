@@ -1,3 +1,5 @@
+import {disconnect as disconnectExternal,retryExternalInbound} from '../services/external-connections-service.js';
+import {externalIntegrationsRouter} from './external-integrations.js';
 import {contractsRouter} from './contracts.js';
 import {searchAdmin} from '../services/admin-search-service.js';
 import { eventFinanceSummary } from "../services/event-finance-summary.js";
@@ -101,6 +103,7 @@ import {
   createCreativeApproval,
   getCreativeApproval,
   listCreativeApprovals,
+  revokeCreativeApproval,
   sendCreativeApprovalRequest
 } from "../services/creative-approval-service.js";
 import {
@@ -168,9 +171,15 @@ import { cancelSystemJob, getSystemHealth, listSystemJobs, retrySelectedSystemJo
 import {stagingCmsRouter} from './staging-cms.js';
 import {freezesPublicMutation} from '../services/staging-cms-service.js';
 import {isStaging} from '../config/staging-safety.js';
+import { adminPlanningRouter } from "./event-planning.js";
+import { autoPlanningInvitation } from "../services/event-planning-service.js";
+import { appearanceRouter } from "./appearance.js";
 export const adminRouter = Router();
 
 adminRouter.use(authenticate);
+adminRouter.use(appearanceRouter);
+adminRouter.use(adminPlanningRouter);
+adminRouter.use('/integrations',externalIntegrationsRouter);
 adminRouter.use(contractsRouter);
 adminRouter.use((req,_res,next)=>{
   if(isStaging()&&!['GET','HEAD','OPTIONS'].includes(req.method)){
@@ -332,6 +341,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         where.push(`status = $${params.length}`);
       }
       if (table === "leads") {
+        if (!filters.status && !filters.funnel) where.push("NOT (status='WON' AND converted_client_id IS NOT NULL)");
         if (filters.funnel === 'qualified') where.push("status IN ('QUALIFIED','PROPOSAL_DRAFT','PROPOSAL_SENT','WON')");
         if (filters.funnel === 'booked') where.push("status='WON'");
         if (filters.source_group) { params.push(filters.source_group);where.push(`COALESCE(referral_source,lead_source,'Other')=$${params.length}`); }
@@ -1253,6 +1263,7 @@ adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eve
   });
   await recordActivity({ actorUserId: req.user.id, entityType: "event", entityId: req.params.id, action: req.body.status ? "event_status_changed" : "event_edited", summary: req.body.status ? `Event status changed to ${req.body.status}` : "Event edited" });
   await writeAudit({ req, action: req.body.status ? "event_status_changed" : "event_edited", entity: "event", entityId: req.params.id, before: before.rows[0], after: updated });
+  if (["CONFIRMED","PREPARING","READY"].includes(updated.status)) await autoPlanningInvitation(req.params.id);
   res.json(updated);
 }));
 
@@ -1486,7 +1497,7 @@ adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(p
   const updated = await transaction(async (client) => {
     const result = await client.query(
       `UPDATE proposals SET lead_id=$1, client_id=$2, event_id=$3, package_id=$4, experience_id=$5, status=$6, notes=$7, total=$8, valid_through=$9, content=$10, pricing_snapshot=$11, line_items_snapshot=$12, document_template_key=$13, editable_sections=$14, proposal_title=$15, proposal_date=$16, proposal_type=$17, selected_experiences=$18, proposal_visuals=$19, updated_at=now()
-       WHERE id=$20 AND deleted_at IS NULL RETURNING *`,
+       WHERE id=$20 AND deleted_at IS NULL AND status IN ('DRAFT','READY') RETURNING *`,
       [merged.lead_id || null, merged.client_id || snapshot.client.id || null, merged.event_id || null, merged.package_id || null, merged.experience_id || null, merged.status || before.status, merged.notes || null, snapshot.pricing.total, snapshot.validThrough, JSON.stringify(snapshot.content), JSON.stringify(snapshot.pricing), JSON.stringify(snapshot.lineItems), snapshot.documentTemplateKey, JSON.stringify(snapshot.editableSections), snapshot.proposalTitle, snapshot.proposalDate, snapshot.proposalType, JSON.stringify(snapshot.selectedExperiences), JSON.stringify(snapshot.proposalVisuals), req.params.id]
     );
     if (!result.rows[0]) throw notFound("Proposal");
@@ -2312,6 +2323,10 @@ adminRouter.get("/integrations/overview", requirePermission("read:integrations")
 }));
 
 adminRouter.patch("/integrations/:provider", requirePermission("write:integrations"), asyncHandler(async (req, res) => {
+  if(['META','TIKTOK','GA4','MAILCHIMP'].includes(req.params.provider.toUpperCase())){
+    if(req.body.status==='DISCONNECTED'||req.body.status==='DISABLED')return res.json(await disconnectExternal(req.params.provider.toUpperCase(),req));
+    throw new AppError('Use the provider authorization and account selection controls.',422,'OAUTH_REQUIRED');
+  }
   res.json(await updateIntegrationState({ provider: req.params.provider, patch: req.body }));
 }));
 
@@ -2328,7 +2343,8 @@ adminRouter.get("/integrations/failed-inbound", requirePermission("read:integrat
 }));
 
 adminRouter.post("/integrations/failed-inbound/:id/retry", requirePermission("write:integrations"), asyncHandler(async (req, res) => {
-  res.json(await retryInboundLead(req.params.id));
+  const external=await retryExternalInbound(req.params.id,req);
+  res.json(external||await retryInboundLead(req.params.id));
 }));
 
 adminRouter.post("/integrations/failed-inbound/:id/resolve", requirePermission("write:integrations"), asyncHandler(async (req, res) => {
@@ -2455,21 +2471,23 @@ adminRouter.post("/communications/send", requireAnyPermission("communications.co
   res.status(201).json(await sendCommunication(draft.id, req.user));
 }));
 
-adminRouter.get("/creative-approvals", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
-  res.json(await listCreativeApprovals(req.query));
+adminRouter.get("/creative-approvals", requireAnyPermission("read:events", "approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
+  res.json(await listCreativeApprovals(req.query, req.user));
 }));
 
 adminRouter.post("/creative-approvals", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
   res.status(201).json(await createCreativeApproval(req.body, req.user));
 }));
 
-adminRouter.get("/creative-approvals/:id", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
-  res.json(await getCreativeApproval(req.params.id));
+adminRouter.get("/creative-approvals/:id", requireAnyPermission("read:events", "approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
+  res.json(await getCreativeApproval(req.params.id, req.user));
 }));
 
 adminRouter.post("/creative-approvals/:id/revisions", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
   res.status(201).json(await createApprovalRevision(req.params.id, req.body, req.user));
 }));
+
+adminRouter.post("/creative-approvals/:id/revoke", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req,res)=>res.json(await revokeCreativeApproval(req.params.id,req))));
 
 adminRouter.post("/creative-approvals/:id/send", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
   res.status(201).json(await sendCreativeApprovalRequest(req.params.id, req.user, req));
@@ -2737,6 +2755,8 @@ adminRouter.get("/settings", requirePermission("read:settings"), asyncHandler(as
 }));
 
 const settingsSchema = z.object({
+  default_planning_due_days:z.coerce.number().int().min(0).max(365).optional(),
+  default_creative_due_days:z.coerce.number().int().min(0).max(365).optional(),
   business_name: z.string().min(1).optional(),
   legal_business_name: z.string().optional().nullable(),
   business_email: z.string().email().optional().nullable(),

@@ -1,0 +1,11 @@
+import {useEffect,useState} from 'react';
+import {api} from '../api/client.js';
+import {useAuth} from '../context/AuthContext.jsx';
+export default function BookingHoldPanel({event,equipment=[],onUpdated}){
+ const {can}=useAuth();const [hold,setHold]=useState(null),[selected,setSelected]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[now,setNow]=useState(Date.now());
+ useEffect(()=>{let active=true;api.get('/events/'+event.id+'/booking-hold').then(value=>active&&setHold(value)).catch(e=>active&&setError(e.message));const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{active=false;clearInterval(timer);};},[event.id]);
+ const seconds=hold?Math.max(0,Math.ceil((Date.parse(hold.expires_at)-now)/1000)):0;
+ async function run(action){if(busy)return;setBusy(true);setError('');try{setHold(await action());onUpdated?.();}catch(e){setError(e.message);}finally{setBusy(false);}}
+ if(!['DRAFT','TENTATIVE','INQUIRY','PENDING_DEPOSIT','PENDING_CONTRACT'].includes(event.status))return null;
+ return <section className="panel"><h2>Temporary booking hold</h2>{error&&<p role="alert">{error}</p>}{hold&&<p role="status">{hold.status==='ACTIVE'&&seconds>0?`Reserved for ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')} remaining`:hold.status==='ACTIVE'?'Expired — recheck resources before checkout':hold.status}</p>}<p>A hold reserves selected units while booking requirements are completed. Repeating the request keeps the original expiry.</p>{can('write:events')&&<><fieldset disabled={busy||Boolean(hold?.status==='ACTIVE'&&seconds>0)}><legend>Select equipment to hold</legend>{equipment.filter(item=>!['MAINTENANCE','RETIRED'].includes(item.status)).map(item=><label key={item.id}><input type="checkbox" checked={selected.includes(item.id)} onChange={e=>setSelected(current=>e.target.checked?[...current,item.id]:current.filter(id=>id!==item.id))}/>{item.name}</label>)}</fieldset><button disabled={busy||!selected.length||Boolean(hold?.status==='ACTIVE'&&seconds>0)} onClick={()=>run(()=>api.post('/events/'+event.id+'/booking-hold',{equipmentIds:selected,minutes:15}))}>Reserve selected equipment for 15 minutes</button>{hold?.status==='ACTIVE'&&<button disabled={busy} onClick={()=>run(async()=>{await api.delete('/events/'+event.id+'/booking-hold');return null;})}>Release hold</button>}</>}</section>;
+}

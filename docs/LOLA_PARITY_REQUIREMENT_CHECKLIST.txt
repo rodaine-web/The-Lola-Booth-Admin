@@ -1,0 +1,2667 @@
+# THE LOLA BOOTH ADMIN
+## BoothBook Parity + Event Planning + Creative Production + Production Readiness Sprint
+
+You are working on the existing **The LOLA Booth Admin** application.
+
+This is an established application with substantial frontend, backend, database, payment, CRM, event operations, communications, automation, CMS and field-operations functionality already implemented.
+
+## THIS IS NOT A REBUILD.
+
+## THIS IS NOT A SAAS CONVERSION.
+
+The immediate objective is to make the existing application an excellent, reliable, production-ready operating platform for **The LOLA Booth**.
+
+The product must successfully run The LOLA Booth in live production before any future SaaS conversion is considered.
+
+Do NOT implement:
+
+- Multi-tenancy
+- SaaS signup
+- SaaS subscription billing
+- Tenant isolation
+- Multiple independent businesses
+- SaaS pricing tiers
+- White-label SaaS
+- SaaS onboarding
+- Marketplace functionality
+
+There is one business:
+
+**The LOLA Booth.**
+
+---
+
+# 1. PRIMARY PRODUCT OBJECTIVE
+
+Bring LOLA Admin to functional and UX parity with leading photo-booth business-management platforms such as BoothBook while preserving and strengthening the capabilities LOLA already has.
+
+The complete lifecycle should be:
+
+MARKET
+
+↓
+
+LEAD
+
+↓
+
+QUALIFY
+
+↓
+
+PROPOSAL
+
+↓
+
+CONTRACT
+
+↓
+
+BOOKING
+
+↓
+
+PAYMENT
+
+↓
+
+EVENT PLANNING
+
+↓
+
+CREATIVE PRODUCTION
+
+↓
+
+CLIENT APPROVAL
+
+↓
+
+STAFF + EQUIPMENT
+
+↓
+
+EVENT EXECUTION
+
+↓
+
+GALLERY DELIVERY
+
+↓
+
+REVIEW
+
+↓
+
+REMARKETING
+
+↓
+
+REBOOKING
+
+The system should feel like a **Photo Booth Business Operating System**, not a collection of unrelated admin modules.
+
+---
+
+# 2. REFERENCE ASSETS
+
+I will upload visual reference assets with this prompt.
+
+They include concepts for:
+
+1. Admin Event Details / Client Planning
+2. Client Event Planning workflow
+3. LOLA Backdrop Collection
+4. Client Event Planning email
+
+Inspect every uploaded asset before implementation.
+
+Treat them as:
+
+- visual references
+- hierarchy references
+- UX references
+- workflow references
+
+Do NOT blindly reproduce screenshots pixel-for-pixel.
+
+Adapt them to:
+
+- existing LOLA components
+- existing design system
+- current navigation
+- actual data
+- existing APIs
+- accessibility
+- responsive behavior
+- mobile
+- existing application architecture
+
+The screenshots are product-direction references.
+
+The implementation must be functional.
+
+---
+
+# 3. EXECUTION ORDER
+
+Work in this order.
+
+## PHASE 1 — AUDIT
+
+Audit everything before implementing.
+
+Review:
+
+- frontend
+- backend
+- API routes
+- database schema
+- migrations
+- authentication
+- RBAC
+- storage
+- public tokens
+- leads
+- clients
+- events
+- proposals
+- contracts
+- invoices
+- payments
+- Stripe
+- PayPal
+- calendar
+- packages
+- experiences
+- add-ons
+- staff
+- equipment
+- availability
+- operations
+- field operations
+- client portal
+- communications
+- email
+- SMS
+- templates
+- automations
+- campaigns
+- galleries
+- CMS
+- public APIs
+- settings
+- reporting
+- audit logs
+- tests
+
+Create:
+
+`docs/LOLA_BOOTHBOOK_PARITY_AUDIT.md`
+
+For every requirement in this prompt classify it:
+
+- EXISTS
+- PARTIAL
+- MISSING
+- BROKEN
+- NEEDS UX IMPROVEMENT
+
+Include:
+
+- evidence
+- relevant files
+- relevant API routes
+- relevant database tables
+- dependencies
+- known problems
+- proposed solution
+- acceptance criteria
+
+Do not implement duplicate functionality.
+
+---
+
+# 4. REUSE BEFORE BUILDING
+
+This rule is extremely important.
+
+Before creating:
+
+- a new database table
+- a new route
+- a new service
+- a new component
+- a new notification system
+- a new file-storage mechanism
+- a new automation mechanism
+- a new token mechanism
+
+search the existing application for functionality that already solves all or part of the problem.
+
+Prefer extending existing architecture.
+
+For example:
+
+Event Planning should reuse existing:
+
+- Events
+- Clients
+- Communications
+- Files/storage
+- Public tokens
+- Automations
+- Notifications
+- Readiness
+- Audit logs
+
+where appropriate.
+
+Do not create parallel systems unnecessarily.
+
+---
+
+# 5. PROTECT WORKING FUNCTIONALITY
+
+Do NOT:
+
+- rewrite the backend unnecessarily
+- replace authentication
+- remove working APIs
+- rename APIs without good reason
+- remove existing tests
+- bypass RBAC
+- weaken file security
+- break public website APIs
+- replace payment abstractions unnecessarily
+- destroy existing data
+- hardcode production data
+
+Database changes require migrations.
+
+Important actions require audit history.
+
+Maintain backward compatibility wherever practical.
+
+---
+
+# 6. PRODUCTION BLOCKERS FIRST
+
+Before cosmetic improvements, identify and resolve production blockers.
+
+Prioritize:
+
+1. Stripe payment confirmation
+2. Deposit/full-balance state
+3. Duplicate payment prevention
+4. Webhook reliability
+5. Invoice/payment reconciliation
+6. Booking availability
+7. Equipment conflicts
+8. Backdrop conflicts
+9. Permissions
+10. Private files
+11. Public token security
+12. Email reliability
+13. SMS reliability
+14. Reminder reliability
+15. Failed job retries
+16. Mobile-critical issues
+17. Broken client-facing flows
+18. Outstanding UI defects
+
+A beautiful screen with a broken workflow does NOT count as complete.
+
+---
+
+# 7. UX PRINCIPLES
+
+The interface should optimize around tasks.
+
+Every major screen should answer:
+
+**What is happening?**
+
+**What needs attention?**
+
+**What should I do next?**
+
+Use:
+
+- strong hierarchy
+- contextual actions
+- progressive disclosure
+- useful empty states
+- loading states
+- error states
+- success feedback
+- confirmation for destructive actions
+- responsive layouts
+- accessibility
+- consistent terminology
+
+Reduce unnecessary clicks.
+
+Do not expose complexity simply because the backend supports it.
+
+---
+
+# 8. EVENT DETAIL BECOMES THE COMMAND CENTER
+
+The Event Detail page should become the center of event management.
+
+Recommended navigation:
+
+OVERVIEW
+
+CLIENT PLANNING
+
+DESIGN & CREATIVE
+
+TIMELINE
+
+STAFF & EQUIPMENT
+
+PAYMENTS
+
+FILES
+
+COMMUNICATION
+
+Reuse existing functionality underneath these views.
+
+Do not create unnecessary duplicates.
+
+---
+
+# 9. EVENT HEADER
+
+Display:
+
+- Event name
+- Client
+- Event type
+- Date
+- Start/end time
+- Venue
+- Address
+- Guest count
+- Booking status
+- Experiences
+- Readiness
+
+Example:
+
+**JOHNSON WEDDING**
+
+CONFIRMED
+
+72% READY
+
+Saturday, June 20, 2027
+
+The Drake Chicago
+
+Wedding
+
+150 Guests
+
+Primary actions:
+
+EDIT EVENT
+
+CLIENT PORTAL
+
+MESSAGE CLIENT
+
+MORE
+
+---
+
+# 10. EVENT OVERVIEW
+
+Overview should provide a concise operational summary.
+
+## BOOKING
+
+Inquiry
+
+Proposal
+
+Contract
+
+Deposit
+
+Booking status
+
+Example:
+
+✓ Inquiry received
+
+✓ Proposal accepted
+
+✓ Contract signed
+
+✓ Deposit paid
+
+✓ Booking confirmed
+
+---
+
+## CREATIVE
+
+Experience
+
+Backdrop
+
+Overlay/template
+
+Welcome screen
+
+Assets
+
+Approval
+
+---
+
+## OPERATIONS
+
+Staff
+
+Equipment
+
+Setup
+
+Arrival
+
+Run sheet
+
+Checklist
+
+Readiness
+
+Incidents
+
+---
+
+## FINANCIAL
+
+Total
+
+Deposit
+
+Paid
+
+Balance
+
+Due date
+
+Payment history
+
+Refunds
+
+---
+
+## COMMUNICATION
+
+Last communication
+
+Next scheduled communication
+
+Internal notes
+
+Automations
+
+---
+
+# 11. EVENT PLANNING
+
+Add **Event Planning** as a first-class workflow.
+
+Do NOT treat this as merely "Backdrop Selection."
+
+Event Planning represents everything required from the client after booking.
+
+Lifecycle:
+
+BOOKING CONFIRMED
+
+↓
+
+EVENT PLANNING RECORD CREATED
+
+↓
+
+CLIENT PLANNING INVITATION SENT
+
+↓
+
+CLIENT OPENS SECURE PLANNING PAGE
+
+↓
+
+EVENT DETAILS
+
+↓
+
+STYLE & THEME
+
+↓
+
+BACKDROP
+
+↓
+
+CLIENT ASSETS
+
+↓
+
+REVIEW
+
+↓
+
+SUBMIT
+
+↓
+
+LOLA REVIEW
+
+↓
+
+CREATIVE PRODUCTION
+
+↓
+
+PROOF
+
+↓
+
+CLIENT REVIEW
+
+↓
+
+APPROVE / REQUEST CHANGES
+
+↓
+
+FINAL APPROVAL
+
+↓
+
+CREATIVE READY
+
+↓
+
+EVENT READINESS UPDATED
+
+---
+
+# 12. EVENT PLANNING CREATION
+
+When a booking reaches the configured confirmed state:
+
+Create an Event Planning record if one does not already exist.
+
+This operation must be idempotent.
+
+Webhook retries or repeated status updates must NOT create duplicates.
+
+Associate with:
+
+- event
+- client
+- booking
+- experience(s)
+
+Suggested planning statuses:
+
+NOT_STARTED
+
+INVITED
+
+IN_PROGRESS
+
+SUBMITTED
+
+NEEDS_REVIEW
+
+CREATIVE_IN_PROGRESS
+
+CLIENT_REVIEW
+
+CHANGES_REQUESTED
+
+APPROVED
+
+COMPLETE
+
+Reuse existing status patterns where appropriate.
+
+---
+
+# 13. CLIENT EVENT PLANNING INVITATION
+
+After booking confirmation, automatically send the planning email.
+
+Do not call it a "checklist" in customer-facing copy.
+
+Recommended subject:
+
+**Your LOLA Experience is Booked! Let's Make It Unforgettable. ✨**
+
+Email should contain:
+
+- client first name
+- event name
+- date
+- venue
+- experience(s)
+
+Copy direction:
+
+**Your LOLA Experience is Booked!**
+
+Now let's make it yours.
+
+Explain briefly that LOLA needs a few event and creative details.
+
+Checklist:
+
+✓ Confirm your event details
+
+✓ Tell us about your theme & colors
+
+✓ Choose your backdrop
+
+✓ Upload logos & images
+
+✓ Send everything to LOLA
+
+Primary CTA:
+
+**COMPLETE EVENT DETAILS**
+
+Secondary note:
+
+"This only takes a few minutes, and you can save and return anytime."
+
+Use existing email template infrastructure.
+
+Use The LOLA Booth branding.
+
+Use the uploaded email mockup as the visual reference.
+
+---
+
+# 14. SECURE CLIENT ACCESS
+
+The planning URL must be secure.
+
+Use the existing public token architecture where appropriate.
+
+Do NOT expose predictable database IDs.
+
+Support appropriate:
+
+- token expiration
+- revocation
+- regeneration
+- access validation
+
+Do not require unnecessary account creation if secure magic-link access provides a better client experience.
+
+---
+
+# 15. CLIENT PLANNING PAGE
+
+Create a polished mobile-first customer experience.
+
+This should NOT look like Admin.
+
+Use customer-facing LOLA branding.
+
+Five steps:
+
+**1 — Event Details**
+
+**2 — Your Style**
+
+**3 — Backdrop**
+
+**4 — Uploads**
+
+**5 — Review**
+
+Display progress.
+
+Provide:
+
+**SAVE & CONTINUE LATER**
+
+Autosave where practical.
+
+Do not lose progress when moving between steps.
+
+---
+
+# 16. STEP 1 — EVENT DETAILS
+
+Prefill everything already known.
+
+Do not ask clients to re-enter data unnecessarily.
+
+Fields:
+
+Event Name
+
+Event Type
+
+Event Date
+
+Start Time
+
+End Time
+
+Expected Guest Count
+
+Venue Name
+
+Venue Address
+
+Primary Contact Name
+
+Primary Contact Email
+
+Primary Contact Phone
+
+On-site Contact Name
+
+On-site Contact Phone
+
+Setup / Loading Instructions
+
+Parking Instructions
+
+Special Requests / Notes
+
+Clearly identify required fields.
+
+---
+
+# 17. CONTROLLED CLIENT CHANGES
+
+Do not silently allow customers to change operationally significant booking details.
+
+For fields such as:
+
+- event date
+- event time
+- venue
+- experience
+- package
+
+determine whether the existing workflow should:
+
+1. allow direct change, or
+2. create a CLIENT CHANGE REQUEST.
+
+Prefer a change-request workflow for modifications that can affect:
+
+- pricing
+- availability
+- equipment
+- staff
+- travel
+- contracts
+
+Admin should be notified.
+
+Audit the change.
+
+---
+
+# 18. STEP 2 — YOUR STYLE
+
+Create a visual creative brief.
+
+Ask:
+
+## WHAT'S THE VIBE?
+
+Options:
+
+Elegant
+
+Glamorous
+
+Modern
+
+Minimal
+
+Fun
+
+Romantic
+
+Corporate
+
+Luxury
+
+Bold
+
+Custom
+
+Allow multiple selections where appropriate.
+
+---
+
+## EVENT THEME
+
+Free text.
+
+Examples:
+
+Modern Romance
+
+Great Gatsby
+
+Winter Wonderland
+
+Company Holiday Party
+
+Brand Launch
+
+---
+
+## EVENT COLORS
+
+Allow multiple colors.
+
+Provide:
+
+- visual color picker
+- HEX input
+- add color
+- remove color
+- reorder
+
+Example:
+
+Black — #000000
+
+Gold — #D4AF37
+
+Ivory — #F7F3EA
+
+---
+
+## CREATIVE NOTES
+
+Prompt:
+
+**Anything we should know about the look you're going for?**
+
+Store this in the creative brief.
+
+---
+
+# 19. STEP 3 — BACKDROP SELECTION
+
+Create a visual backdrop browser.
+
+Do NOT use a dropdown.
+
+Backdrop card:
+
+- image
+- name
+- description
+- category
+- included/premium
+- availability if relevant
+
+Filters:
+
+ALL
+
+CLASSIC
+
+GLAM
+
+MODERN
+
+FLORAL
+
+CORPORATE
+
+Click card → larger preview.
+
+Primary action:
+
+**SELECT THIS BACKDROP**
+
+---
+
+# 20. THREE BACKDROP PATHS
+
+Clients need three paths.
+
+## A. LOLA COLLECTION
+
+Choose an existing backdrop.
+
+## B. UPLOAD YOUR OWN
+
+Upload custom background/artwork.
+
+Clearly state that it is subject to review.
+
+## C. REQUEST CUSTOM DESIGN
+
+LOLA creates a custom backdrop based on:
+
+- theme
+- colors
+- uploaded assets
+- notes
+
+Custom design must NOT automatically mean free.
+
+Admin should be able to:
+
+- approve
+- reject
+- quote
+- add an upgrade charge
+
+where appropriate.
+
+---
+
+# 21. INITIAL LOLA BACKDROP COLLECTION
+
+Use the uploaded reference asset.
+
+Initial collection:
+
+1. LOLA Ivory
+2. Midnight
+3. Champagne Glow
+4. Silver Luxe
+5. Modern Arch
+6. Garden Romance
+7. Blush
+8. Emerald Luxe
+9. Celebration
+10. Studio White
+
+If the uploaded collage contains preview thumbnails rather than production-quality individual images:
+
+Do NOT treat low-resolution thumbnails as final production assets.
+
+Build the data structure and UI.
+
+Document which final high-resolution assets are still required.
+
+---
+
+# 22. BACKDROP ADMIN
+
+Add a Backdrops management area.
+
+Place it logically within existing navigation.
+
+Potential location:
+
+RESOURCES → BACKDROPS
+
+or
+
+CREATIVE → BACKDROPS
+
+Choose based on current navigation architecture.
+
+Admin capabilities:
+
+CREATE
+
+EDIT
+
+VIEW
+
+ACTIVATE
+
+DEACTIVATE
+
+ARCHIVE
+
+REORDER
+
+Each backdrop can contain:
+
+- Name
+- Description
+- Main image
+- Thumbnail
+- Category
+- Physical / Digital
+- Included / Premium
+- Upgrade price
+- Active
+- Quantity
+- Dimensions
+- Notes
+- Tags
+- Availability rules
+- Created date
+- Updated date
+
+Do not hard-delete historical backdrops.
+
+Archive them.
+
+---
+
+# 23. BACKDROP INVENTORY & AVAILABILITY
+
+Physical backdrops should participate in availability.
+
+Consider:
+
+- quantity
+- event time
+- setup time
+- breakdown time
+- travel/buffer
+- existing reservations
+- maintenance/out-of-service
+
+Do not double-book a physical backdrop when only one is available.
+
+Digital backgrounds do not require physical inventory restrictions unless configured.
+
+---
+
+# 24. STEP 4 — CLIENT ASSETS
+
+Allow clients to upload:
+
+LOGO
+
+EVENT LOGO / MONOGRAM
+
+COMPANY LOGO
+
+SPONSOR LOGOS
+
+PHOTOS
+
+BRAND GUIDE
+
+INSPIRATION IMAGES
+
+OTHER ASSETS
+
+Support:
+
+- drag and drop
+- mobile upload
+- multiple files
+
+Use existing storage infrastructure.
+
+Validate:
+
+- file type
+- file size
+- authorization
+- ownership
+- safe filenames
+
+Support approved formats such as:
+
+PNG
+
+JPG/JPEG
+
+PDF
+
+SVG where safely handled
+
+Add optional external asset links:
+
+Google Drive
+
+Dropbox
+
+Canva
+
+Other URL
+
+Client files remain private unless explicitly published.
+
+---
+
+# 25. STEP 5 — REVIEW
+
+Show a visual summary.
+
+## YOUR EVENT
+
+## YOUR STYLE
+
+## YOUR BACKDROP
+
+## YOUR ASSETS
+
+## YOUR NOTES
+
+Each section should provide:
+
+**EDIT**
+
+Primary CTA:
+
+# SUBMIT EVENT DETAILS
+
+Do not label it merely "Submit Form."
+
+---
+
+# 26. SUBMISSION CONFIRMATION
+
+After submission show:
+
+# You're all set!
+
+We've received your event details.
+
+The LOLA team will review everything and begin preparing your experience.
+
+We'll let you know when your design is ready for approval.
+
+Also send an appropriate confirmation email if useful.
+
+Notify Admin.
+
+Create relevant internal task(s) if the existing task system supports this.
+
+---
+
+# 27. CLIENT PLANNING TAB IN ADMIN
+
+Use the uploaded Admin mockup as the visual reference.
+
+Event → CLIENT PLANNING
+
+Show:
+
+## CLIENT PLANNING PROGRESS
+
+Event Details — Complete
+
+Style & Theme — Complete
+
+Backdrop Selection — Complete
+
+Client Assets — Complete
+
+Photo Design — Needs Design
+
+Client Approval — Not Started
+
+---
+
+## SELECTED BACKDROP
+
+Large preview
+
+Name
+
+Description
+
+View Full Size
+
+Change
+
+---
+
+## EVENT STYLE & THEME
+
+Theme
+
+Mood
+
+Colors
+
+Client notes
+
+---
+
+## CLIENT ASSETS
+
+Thumbnail
+
+Filename
+
+Type
+
+View
+
+Download where permitted
+
+View All
+
+---
+
+## PLANNING FORM
+
+Invitation sent
+
+Started
+
+Last saved
+
+Submitted
+
+Submission timestamp
+
+Actions:
+
+VIEW RESPONSES
+
+RESEND INVITATION
+
+COPY CLIENT LINK
+
+---
+
+# 28. DESIGN & CREATIVE
+
+Add or improve:
+
+Event → DESIGN & CREATIVE
+
+Creative items may include:
+
+- photo overlay
+- print template
+- welcome screen
+- digital background
+- video overlay
+- intro/outro
+- brand activation creative
+- signage
+- other event artwork
+
+Each item should support versions.
+
+Suggested statuses:
+
+NOT_STARTED
+
+DESIGNING
+
+INTERNAL_REVIEW
+
+CLIENT_REVIEW
+
+CHANGES_REQUESTED
+
+APPROVED
+
+---
+
+# 29. CREATIVE PROOF WORKFLOW
+
+Admin uploads proof.
+
+Store:
+
+- creative type
+- version
+- file
+- creator
+- timestamp
+- notes
+
+Then send client notification:
+
+# Your LOLA Design Is Ready
+
+CTA:
+
+**REVIEW YOUR DESIGN**
+
+Client can:
+
+**APPROVE DESIGN**
+
+or
+
+**REQUEST CHANGES**
+
+Changes require comments.
+
+Notify Admin.
+
+Set status:
+
+CHANGES_REQUESTED
+
+Designer uploads next version.
+
+Repeat until approved.
+
+---
+
+# 30. CREATIVE VERSION HISTORY
+
+Never silently overwrite a proof.
+
+Maintain:
+
+V1
+
+V2
+
+V3
+
+etc.
+
+Store:
+
+- uploaded by
+- date
+- notes
+- client feedback
+- status
+
+Previous versions remain accessible to authorized Admin users.
+
+---
+
+# 31. FINAL CREATIVE APPROVAL — CONTINUED
+
+When approved, store:
+
+- client
+- timestamp
+- approved version
+- relevant request metadata
+- approval status
+
+Lock the approved version against accidental replacement.
+
+Any later revision creates a new version.
+
+Set:
+
+**CREATIVE APPROVED ✓**
+
+Update **Event Readiness** automatically.
+
+Log the approval in:
+
+- event activity
+- audit log
+- communication history where appropriate
+
+Notify appropriate internal users.
+
+The approved creative should be clearly identifiable as the production version.
+
+---
+
+# 32. EXPERIENCE-AWARE EVENT PLANNING
+
+Do not assume every LOLA experience requires the same planning information.
+
+Planning requirements should be configurable or derived from the experience(s) attached to the event.
+
+## GLAM BOOTH
+
+Potential requirements:
+
+- backdrop
+- theme
+- colors
+- overlay
+- welcome screen
+- print design when printing is included
+- logos
+- monogram
+- client assets
+
+## 360 BOOTH
+
+Potential requirements:
+
+- theme
+- colors
+- video overlay
+- intro/outro
+- logo
+- sponsor assets
+- music preference where applicable
+- background/environment requirements
+- brand activation assets
+
+## VOGUE
+
+Potential requirements:
+
+- event theme
+- colors
+- branding
+- display messaging
+- logo
+- environment/background
+- client assets
+
+## AUDIO GUESTBOOK
+
+Potential requirements:
+
+- greeting/script
+- event information
+- phone placement instructions
+- signage
+- branding
+- special instructions
+
+If an event includes multiple experiences, combine requirements intelligently.
+
+Do NOT make clients complete the same question multiple times.
+
+Shared information such as:
+
+- event theme
+- colors
+- logos
+- venue
+- primary contact
+
+should be collected once.
+
+Experience-specific information should appear only where relevant.
+
+---
+
+# 33. EVENT READINESS INTEGRATION
+
+Event Planning and Creative Approval must integrate with the existing Event Readiness system.
+
+Potential readiness components:
+
+- Booking confirmed
+- Contract signed
+- Deposit paid
+- Event details complete
+- Style/theme complete
+- Backdrop selected
+- Client assets received
+- Creative produced
+- Creative approved
+- Final payment
+- Staff assigned
+- Equipment assigned
+- Run sheet generated
+- Event checklist ready
+
+Requirements should vary by event/experience where appropriate.
+
+Example:
+
+**EVENT READINESS — 82%**
+
+✓ Contract
+
+✓ Deposit
+
+✓ Event details
+
+✓ Backdrop
+
+✓ Client assets
+
+✓ Staff
+
+✓ Equipment
+
+⚠ Creative approval
+
+⚠ Final payment
+
+Critical missing requirements should appear:
+
+- on Event Detail
+- on Dashboard attention items
+- in Operations where appropriate
+
+Do not inflate readiness by counting irrelevant requirements.
+
+---
+
+# 34. EVENT TIMELINE / ACTIVITY
+
+Create or improve the event timeline.
+
+The operator should be able to understand the event's history without checking multiple modules.
+
+Examples:
+
+Booking confirmed
+
+Planning invitation sent
+
+Client opened planning page
+
+Planning started
+
+Backdrop selected
+
+Assets uploaded
+
+Planning submitted
+
+Creative task created
+
+Proof V1 uploaded
+
+Proof sent
+
+Client requested changes
+
+Proof V2 uploaded
+
+Creative approved
+
+Deposit paid
+
+Final balance paid
+
+Staff assigned
+
+Equipment assigned
+
+Run sheet generated
+
+Event completed
+
+Gallery delivered
+
+Review requested
+
+Use existing activity/audit architecture where possible.
+
+Do not create duplicate activity systems.
+
+---
+
+# 35. COMMUNICATIONS INTEGRATION
+
+All relevant Event Planning and Creative communications should appear in the existing communication history.
+
+Examples:
+
+- Planning invitation
+- Planning reminder
+- Planning submission confirmation
+- Internal submission notification
+- Design proof email
+- Revision notification
+- Change request
+- Approval confirmation
+- Payment reminder
+- Event reminder
+- Gallery delivery
+- Review request
+
+Where available, display:
+
+- channel
+- recipient
+- template
+- sent time
+- delivery status
+- failure status
+- retry status
+
+Do not create a separate Event Planning inbox.
+
+Use the existing communications system.
+
+---
+
+# 36. EVENT PLANNING AUTOMATIONS
+
+Integrate Event Planning into the existing automation engine.
+
+Potential triggers:
+
+BOOKING_CONFIRMED
+
+PLANNING_INVITATION_SENT
+
+PLANNING_STARTED
+
+PLANNING_NOT_STARTED
+
+PLANNING_INCOMPLETE
+
+PLANNING_SUBMITTED
+
+CREATIVE_STARTED
+
+PROOF_READY
+
+PROOF_SENT
+
+CHANGES_REQUESTED
+
+CREATIVE_APPROVED
+
+EVENT_APPROACHING
+
+EVENT_COMPLETED
+
+GALLERY_DELIVERED
+
+Potential actions:
+
+- send email
+- send SMS where consent exists
+- create task
+- notify internal user
+- schedule reminder
+- update status
+
+Automations must remain idempotent where necessary.
+
+Do not send repeated customer messages because a worker retries.
+
+---
+
+# 37. PLANNING DEADLINES
+
+Add configurable planning deadlines.
+
+Examples:
+
+Event planning due:
+
+X days before event
+
+Creative approval due:
+
+X days before event
+
+Final payment due:
+
+X days before event
+
+Allow sensible defaults in Settings.
+
+Event-specific overrides should be possible where appropriate.
+
+Dashboard alerts should escalate as deadlines approach.
+
+Example:
+
+**Planning due in 3 days**
+
+**Creative approval overdue**
+
+**Final payment due tomorrow**
+
+Do not automatically cancel bookings because a planning deadline is missed.
+
+---
+
+# 38. PROPOSAL → BOOKING → PLANNING HANDOFF
+
+Make this transition seamless.
+
+Expected lifecycle:
+
+PROPOSAL ACCEPTED
+
+↓
+
+CONTRACT
+
+↓
+
+DEPOSIT
+
+↓
+
+BOOKING CONFIRMED
+
+↓
+
+EVENT PLANNING CREATED
+
+↓
+
+PLANNING INVITATION SENT
+
+No manual recreation of client/event/package information.
+
+Existing data should flow forward.
+
+The system should know:
+
+- client
+- event
+- experience
+- package
+- add-ons
+- price
+- venue
+- date
+- booking status
+
+before Event Planning begins.
+
+---
+
+# 39. CONTRACTS & E-SIGNATURE
+
+Complete or strengthen production-quality contract functionality.
+
+Support:
+
+- contract templates
+- event variables
+- client variables
+- experience variables
+- package variables
+- pricing
+- payment terms
+- cancellation terms
+- event-specific clauses
+
+Client should be able to:
+
+VIEW
+
+REVIEW
+
+SIGN
+
+DOWNLOAD
+
+Store:
+
+- signer
+- signature
+- timestamp
+- contract version
+- final signed document
+- relevant request metadata where appropriate
+
+Audit important contract actions.
+
+Signed contract content must not silently change afterward.
+
+Any amendment should be explicit.
+
+---
+
+# 40. ONLINE BOOKING
+
+Continue BoothBook-parity work around true online booking.
+
+Target flow:
+
+CHECK DATE
+
+↓
+
+SELECT EXPERIENCE
+
+↓
+
+SELECT PACKAGE
+
+↓
+
+SELECT ADD-ONS
+
+↓
+
+EVENT DETAILS
+
+↓
+
+AVAILABILITY
+
+↓
+
+CUSTOMER DETAILS
+
+↓
+
+CONTRACT
+
+↓
+
+DEPOSIT
+
+↓
+
+BOOKED
+
+↓
+
+EVENT PLANNING
+
+Reuse existing:
+
+- packages
+- experiences
+- availability
+- equipment
+- invoices
+- payments
+- clients
+- events
+
+Do not create duplicate booking entities unnecessarily.
+
+---
+
+# 41. AVAILABILITY & TEMPORARY HOLDS
+
+Strengthen existing availability logic.
+
+Consider:
+
+- event start/end
+- setup
+- breakdown
+- travel/buffer
+- experience availability
+- booth/equipment quantity
+- backdrop availability
+- maintenance
+- existing reservations
+- booking holds
+
+During online checkout, support a temporary hold where appropriate.
+
+Example:
+
+15-minute booking hold.
+
+Hold should automatically expire if checkout is abandoned.
+
+Expired holds must release inventory.
+
+Do not permanently reserve inventory before booking requirements are satisfied.
+
+---
+
+# 42. TRAVEL FEES
+
+If not already sufficiently implemented, support:
+
+- free travel radius
+- per-mile fee
+- fixed travel fee
+- manual override
+- venue-specific override
+- custom travel fee
+
+Display travel charges clearly before payment.
+
+Use a provider abstraction for distance calculation.
+
+Do not hardcode business logic tightly to one maps provider.
+
+---
+
+# 43. PAYMENT HARDENING
+
+Resolve all known payment-state issues.
+
+## DEPOSIT UNPAID
+
+Show:
+
+**PAY DEPOSIT**
+
+## DEPOSIT PAID
+
+Do NOT continue showing Pay Deposit.
+
+Show:
+
+**PAY REMAINING BALANCE**
+
+or permitted partial-payment options.
+
+## FULLY PAID
+
+Do NOT display payment controls.
+
+Show:
+
+**PAID**
+
+Payment confirmation
+
+Receipt
+
+Thank-you message
+
+After successful Stripe payment:
+
+1. Confirm payment server-side.
+2. Webhook remains authoritative.
+3. Update payment.
+4. Update invoice.
+5. Update event financial status.
+6. Update booking status where appropriate.
+7. Send client receipt.
+8. Send internal notification.
+9. Display correct customer confirmation state.
+
+Maintain:
+
+- idempotency
+- duplicate prevention
+- overpayment guard
+- reconciliation
+- refunds
+- audit history
+
+A browser redirect alone must never be the authoritative source of payment success.
+
+---
+
+# 44. PAYMENT SCHEDULES
+
+Support:
+
+- deposit
+- remaining balance
+- multiple installments
+- custom schedules
+- due dates
+- reminders
+- manual payment
+- Stripe
+- PayPal where currently supported
+
+Store:
+
+- amount
+- due date
+- provider
+- provider reference
+- paid date
+- status
+- refund information
+
+Payment schedules should be visible in:
+
+- Event Detail
+- Invoice
+- Client Portal
+
+---
+
+# 45. DASHBOARD — ACTION FIRST
+
+Maintain the approved redesigned visual direction.
+
+Do NOT redesign the dashboard to look like BoothBook.
+
+Improve its operational usefulness.
+
+Top section:
+
+# HERE'S WHAT NEEDS YOUR ATTENTION
+
+Examples:
+
+**Planning form incomplete**
+
+Johnson Wedding
+
+Due in 2 days
+
+`Send Reminder`
+
+**Creative approval pending**
+
+Smith Corporate Event
+
+`View Design`
+
+**Final payment overdue**
+
+Williams Birthday
+
+$680 outstanding
+
+`Collect Payment`
+
+**No attendant assigned**
+
+Davis Wedding
+
+`Assign Staff`
+
+**Backdrop conflict**
+
+Two events requesting Champagne Glow
+
+`Resolve Conflict`
+
+Other possible attention items:
+
+- proposal unopened
+- contract unsigned
+- equipment missing
+- run sheet missing
+- gallery overdue
+- review request not sent
+
+Each item should link directly to its resolution.
+
+---
+
+# 46. APPEARANCE & DISPLAY SETTINGS
+
+Add:
+
+**Settings → Appearance & Display**
+
+Place alongside existing settings such as:
+
+- Business Profile
+- Branding
+- Documents & Payments
+- Operations
+- Website
+- Notifications
+- Advanced
+
+These settings affect Admin only.
+
+They must NOT change:
+
+- public website branding
+- proposal branding
+- invoice branding
+- email branding
+- client portal branding
+
+## ADMIN BACKGROUND
+
+Allow:
+
+- approved presets
+- custom background color
+
+The left navigation remains black unless existing design architecture requires otherwise.
+
+Ensure content surfaces remain readable.
+
+## CHART & GRAPH COLORS
+
+Allow coordinated chart palettes.
+
+Provide a live preview.
+
+Do not permit combinations that make charts unreadable.
+
+## VIEW
+
+Support:
+
+DAY
+
+NIGHT
+
+AUTO
+
+DAY:
+
+Light surfaces with dark readable text.
+
+NIGHT:
+
+Dark surfaces with readable light text.
+
+AUTO:
+
+Follow device preference.
+
+## RESTORE DEFAULTS
+
+Restore the approved LOLA Admin appearance.
+
+## STORAGE
+
+Save Appearance & Display settings as individual user preferences.
+
+Different staff members can therefore choose different Admin appearances.
+
+Important semantic colors such as:
+
+- error
+- warning
+- success
+- pending
+
+must retain clear meaning regardless of appearance settings.
+
+---
+
+# 47. STAFF & FIELD OPERATIONS
+
+Preserve and polish existing field functionality.
+
+Mobile event-day flow:
+
+MY EVENTS
+
+↓
+
+EVENT DETAILS
+
+↓
+
+NAVIGATION
+
+↓
+
+CHECK IN
+
+↓
+
+EQUIPMENT SCAN
+
+↓
+
+SETUP CHECKLIST
+
+↓
+
+READY
+
+↓
+
+EVENT
+
+↓
+
+INCIDENT REPORT IF NEEDED
+
+↓
+
+BREAKDOWN
+
+↓
+
+EQUIPMENT RETURN
+
+↓
+
+COMPLETE
+
+Optimize for phones.
+
+Use:
+
+- large tap targets
+- minimal typing
+- fast loading
+- clear status
+- offline resilience where already implemented
+
+Staff should only see information appropriate to their role.
+
+---
+
+# 48. EQUIPMENT & BACKDROP OPERATIONS
+
+Maintain:
+
+- equipment inventory
+- assignments
+- overlap detection
+- QR labels
+- checkout
+- return
+- maintenance
+- incident/damage history
+
+Suggested equipment statuses:
+
+AVAILABLE
+
+RESERVED
+
+CHECKED_OUT
+
+MAINTENANCE
+
+DAMAGED
+
+RETIRED
+
+Physical backdrops should behave similarly where inventory constraints apply.
+
+A backdrop selected by a client should become operationally visible for the event.
+
+Do not make the operations team search the planning questionnaire to discover which backdrop is required.
+
+---
+
+# 49. CAMPAIGNS & POST-EVENT GROWTH
+
+Continue improving the Campaign module.
+
+Keep it simpler than enterprise marketing software.
+
+Support:
+
+- campaign name
+- audience
+- HTML email
+- text email
+- templates
+- preview
+- test send
+- schedule
+- send
+- performance
+- contact upload
+- segmentation
+
+Useful segments:
+
+- past wedding clients
+- corporate clients
+- brand activation clients
+- leads not booked
+- past clients
+- upcoming events
+- completed events
+- clients by experience
+- clients by event type
+- clients by source
+- clients by date range
+
+Post-event lifecycle:
+
+EVENT COMPLETE
+
+↓
+
+GALLERY DELIVERED
+
+↓
+
+THANK YOU
+
+↓
+
+REVIEW REQUEST
+
+↓
+
+REFERRAL REQUEST
+
+↓
+
+CAMPAIGN ELIGIBILITY
+
+↓
+
+ANNIVERSARY / REBOOKING
+
+Track these actions.
+
+---
+
+# 50. WEBSITE & PUBLIC API INTEGRATION
+
+Preserve the existing external-website architecture.
+
+Admin CMS remains the source of truth for:
+
+- hero
+- experiences
+- packages
+- gallery
+- testimonials
+- FAQ
+- event types
+- media
+- SEO
+- site settings
+
+Do NOT rebuild the marketing website inside Admin.
+
+Maintain secure public APIs.
+
+The public website should be capable of:
+
+- displaying experiences
+- displaying packages
+- submitting inquiry
+- checking availability where implemented
+- starting booking
+- entering appropriate customer workflows
+
+Never expose private Admin APIs to the public site.
+
+---
+
+# 51. REPORTING
+
+Strengthen owner-focused reporting.
+
+Core metrics:
+
+- revenue
+- payments collected
+- outstanding balances
+- bookings
+- average booking value
+- lead volume
+- conversion
+- lead source
+- revenue by experience
+- revenue by package
+- revenue by event type
+- revenue by source
+- upcoming revenue
+- lost opportunities
+- staff utilization
+- equipment utilization
+- backdrop utilization
+- campaign performance
+
+Ranges:
+
+TODAY
+
+THIS WEEK
+
+MONTH TO DATE
+
+YEAR TO DATE
+
+CUSTOM RANGE
+
+Where useful, allow drill-down to the underlying records.
+
+---
+
+# 52. INTEGRATIONS
+
+Do not rebuild mature third-party products unnecessarily.
+
+Strengthen integration boundaries for existing/future providers such as:
+
+- Stripe
+- PayPal
+- Google Calendar
+- Google Workspace
+- Microsoft 365
+- QuickBooks
+- Twilio
+- Google Analytics
+- Meta
+- TikTok
+- Mailchimp
+- Zapier / Make
+- Snappic
+- TouchPix
+- DSLRBooth
+
+Do not block this sprint waiting for every possible integration.
+
+If an integration is not currently practical:
+
+1. create/maintain a clean integration boundary where appropriate
+2. document it
+3. add it to the future integration roadmap
+
+LOLA remains the system of record for its core business workflow.
+
+---
+
+# 53. SECURITY & PRIVACY
+
+Review all new Event Planning functionality for security.
+
+Specifically test:
+
+## CLIENT TOKENS
+
+One client must not access another client's event.
+
+## FILES
+
+Private assets must require authorization.
+
+Do not expose storage paths unnecessarily.
+
+## ADMIN
+
+Respect RBAC.
+
+## CLIENT CHANGES
+
+Clients must not manipulate protected fields by altering API requests.
+
+## CREATIVE APPROVAL
+
+Only authorized client access should approve/reject creative.
+
+## PAYMENTS
+
+Never trust payment amount/status from client-side state.
+
+## UPLOADS
+
+Validate:
+
+- type
+- size
+- ownership
+- authorization
+- filename
+- storage path
+
+Protect against unsafe uploads.
+
+## AUDIT
+
+Important actions should record:
+
+- actor
+- action
+- entity
+- timestamp
+- useful metadata
+
+Do not log secrets.
+
+---
+
+# 54. TESTING & STAGING QUALIFICATION
+
+This section is mandatory.
+
+Do not declare the sprint complete because pages render.
+
+Test complete workflows.
+
+## A. BOOKING → PLANNING
+
+Test:
+
+1. Booking confirmed.
+2. Planning record created once.
+3. Invitation sent.
+4. Client opens link.
+5. Client saves progress.
+6. Client returns later.
+7. Client completes planning.
+8. Admin receives submission.
+9. Event readiness updates.
+
+## B. BACKDROP
+
+Test:
+
+1. Client selects available backdrop.
+2. Selection appears in Admin.
+3. Physical inventory reserves correctly.
+4. Second conflicting event cannot reserve unavailable backdrop.
+5. Client can upload own backdrop.
+6. Custom request works.
+7. Archived backdrop remains visible historically.
+
+## C. CLIENT ASSETS
+
+Test:
+
+1. Upload valid file.
+2. Reject invalid/oversized file.
+3. File remains private.
+4. Correct event sees file.
+5. Different client cannot access it.
+
+## D. CREATIVE APPROVAL
+
+Test:
+
+1. Admin uploads V1.
+2. Client receives notification.
+3. Client requests changes.
+4. Admin uploads V2.
+5. V1 remains in history.
+6. Client approves V2.
+7. Approval stored.
+8. V2 becomes production version.
+9. Readiness updates.
+
+## E. PAYMENTS
+
+Test:
+
+1. Deposit payment.
+2. Deposit button disappears.
+3. Remaining balance correct.
+4. Stripe webhook updates invoice.
+5. Customer receives receipt.
+6. Admin receives notification.
+7. Duplicate webhook does not duplicate payment.
+8. Full payment marks invoice paid.
+9. Paid invoice shows no payment controls.
+10. Refund behaves correctly.
+
+## F. AVAILABILITY
+
+Test:
+
+- equipment conflict
+- backdrop conflict
+- setup/breakdown overlap
+- temporary hold
+- expired hold
+- concurrent checkout where practical
+
+## G. AUTOMATIONS
+
+Test:
+
+- invitation
+- reminder
+- submission
+- proof ready
+- change requested
+- approval
+- event reminder
+- post-event follow-up
+
+Verify retries do not cause duplicate customer messages.
+
+## H. MOBILE
+
+Test customer planning on common mobile widths.
+
+Test:
+
+- navigation
+- color picker
+- backdrop browser
+- file upload
+- review
+- approval
+
+Test field operations on mobile.
+
+## I. APPEARANCE
+
+Test:
+
+- Day
+- Night
+- Auto
+- custom background
+- chart palette
+- restore defaults
+- user-specific persistence
+- contrast/accessibility
+
+## J. PERMISSIONS
+
+Test roles against:
+
+- events
+- financials
+- files
+- creative
+- settings
+- campaigns
+- staff
+- equipment
+
+---
+
+# 55. FINAL DOCUMENTATION & DEFINITION OF DONE
+
+Update/create documentation covering:
+
+`docs/LOLA_BOOTHBOOK_PARITY_AUDIT.md`
+
+`docs/LOLA_EVENT_PLANNING_WORKFLOW.md`
+
+`docs/LOLA_CREATIVE_APPROVAL_WORKFLOW.md`
+
+`docs/LOLA_BACKDROP_MANAGEMENT.md`
+
+`docs/LOLA_CLIENT_PORTAL.md`
+
+`docs/LOLA_STAGING_QUALIFICATION.md`
+
+Update deployment/runbook documentation where necessary.
+
+---
+
+## FINAL AUDIT
+
+At the end of implementation, return to:
+
+`LOLA_BOOTHBOOK_PARITY_AUDIT.md`

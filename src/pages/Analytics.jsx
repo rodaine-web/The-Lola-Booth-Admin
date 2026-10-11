@@ -1,61 +1,45 @@
-import { PageHeader, TabNavigation } from "../components/WorkspaceUI.jsx";
-import { GALLERY_ENABLED } from "../utils/features.js";
-import {useAuth} from "../context/AuthContext.jsx";
-import AsyncState from "../components/AsyncState.jsx";
-import { formatDisplay, formatMoney } from "../utils/display.js";
-import { useEffect, useState } from "react";
-import { Line, LineChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api } from "../api/client.js";
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { CalendarDays, BarChart3, Users, Target, FileText, Mail, MousePointerClick, Globe2 } from 'lucide-react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import AsyncState from '../components/AsyncState.jsx';
+import StatusBadge from '../components/StatusBadge.jsx';
+import { InsightPanel, Ring, Bars, Funnel, EmptyInsight } from '../components/workspace/InsightPanels.jsx';
+import { GALLERY_ENABLED } from '../utils/features.js';
+import { businessToday, formatDateOnly, formatMoney, formatCount } from '../utils/display.js';
+import '../styles/record-workspace.css';
 
-export default function Analytics() {
-  const {can}=useAuth();const [galleryActivity,setGalleryActivity]=useState(null);
-  useEffect(()=>{if(GALLERY_ENABLED&&can("read:events"))api.get("/gallery-admin/analytics").then(r=>setGalleryActivity(r.data)).catch(()=>setGalleryActivity(null));},[]);
-  const [report,setReport]=useState("Overview");
-  const [data, setData] = useState(null);
-  const [error,setError]=useState(""),[range,setRange]=useState("mtd"),[revision,setRevision]=useState(0);
-
-  useEffect(() => {
-    setError(""); api.get(`/analytics?range=${range}`).then(setData).catch(e=>setError(e.message));
-  }, [range,revision]);
-
-  if(error)return <main className="page analytics-workspace"><AsyncState error={error} noun="analytics" onRetry={()=>setRevision(r=>r+1)}/></main>;
-  if (!data) return <main className="page analytics-redesign"><div className="empty-state">Loading analytics...</div></main>;
-
-  return (
-    <main className="page analytics-redesign">
-      <PageHeader eyebrow="Insights" title="Reports & Analytics" description="Understand revenue, demand, and lead performance over time." />
-      <div className="analytics-range">{[["today","Today"],["week","This Week"],["mtd","Month to Date"],["ytd","Year to Date"]].map(([key,label])=><button key={key} className={range===key?"active":""} onClick={()=>setRange(key)}>{label}</button>)}</div><p className="note-text">Revenue and average booking value share the Dashboard definitions and selected period. Outstanding is the current unpaid balance.</p>
-      <TabNavigation items={["Overview","Revenue","Events","Leads"]} value={report} onChange={setReport} label="Analytics reports"/>
-      <section className="kpi-grid compact">
-        {Object.entries(data.summary).map(([key, value]) => (
-          <article className="kpi" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{formatDisplay(value,key)}</strong></article>
-        ))}
-      </section>
-      {galleryActivity&&<section className="panel"><h2>Private gallery activity</h2><p className="note-text">Last 30 days · aggregate activity without guest identities</p><div className="gallery-summary">{galleryActivity.map(row=><article key={row.action}><span>{row.action.replaceAll("_"," ")}</span><strong>{row.count}</strong></article>)}</div></section>}
-      <section className="chart-grid">
-        {["Overview","Revenue"].includes(report)&&<Chart title="Revenue by Month" data={data.revenueByMonth} x="month" y="revenue" />}
-        {["Overview","Events"].includes(report)&&<Chart title="Bookings by Package" data={data.bookingsByPackage} x="name" y="bookings" />}
-        {["Overview","Events"].includes(report)&&<Chart title="Bookings by Experience" data={data.bookingsByExperience} x="name" y="bookings" />}
-        {["Overview","Leads"].includes(report)&&<Chart title="Lead Source Performance" data={data.leadSourcePerformance} x="source" y="leads" />}
-      </section>
-    </main>
-  );
+const reportNames=['Overview','Sales & Financial','Marketing & Campaigns'];
+const rangeNames=[['today','Today'],['week','This Week'],['mtd','Month to Date'],['ytd','Year to Date']];
+const number=value=>Number(value)||0;
+export default function Analytics(){
+ const {can}=useAuth(),readDashboard=can('read:dashboard'),readSales=can('read:sales'),readEvents=can('read:events');
+ const [report,setReport]=useState('Overview'),[range,setRange]=useState('ytd'),[data,setData]=useState(null),[dashboard,setDashboard]=useState(null),[campaigns,setCampaigns]=useState(null),[gallery,setGallery]=useState(null),[error,setError]=useState(''),[campaignError,setCampaignError]=useState(''),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[revenueMode,setRevenueMode]=useState('booked_revenue');
+ useEffect(()=>{let active=true;setLoading(true);setError('');Promise.all([api.get(`/analytics?range=${range}`),readDashboard?api.get(`/dashboard?range=${range}`).catch(()=>null):Promise.resolve(null)]).then(([analytics,overview])=>{if(active){setData(analytics);setDashboard(overview);}}).catch(reason=>active&&setError(reason.message)).finally(()=>active&&setLoading(false));return()=>{active=false;};},[range,revision,readDashboard]);
+ useEffect(()=>{let active=true;if(readSales)api.get('/campaigns').then(result=>active&&setCampaigns(Array.isArray(result)?result:result.data||[])).catch(reason=>active&&setCampaignError(reason.message));return()=>{active=false;};},[readSales,revision]);
+ useEffect(()=>{let active=true;if(GALLERY_ENABLED&&readEvents)api.get('/gallery-admin/analytics').then(result=>active&&setGallery(result.data)).catch(()=>{});return()=>{active=false;};},[readEvents]);
+ const metrics=useMemo(()=>Object.fromEntries((dashboard?.groups||[]).flatMap(group=>group.metrics).map(metric=>[metric.key,metric])),[dashboard]);
+ const value=(key,fallback)=>metrics[key]?.value??fallback;
+ const sources=(dashboard?.leadSources||data?.leadSourcePerformance||[]).map(row=>({name:row.source,value:number(row.leads)}));
+ const performers=dashboard?.topPerformers;
+ const events=(performers?.eventTypes||[]).map(row=>({name:row.name,value:number(row.bookings)}));
+ const packages=performers?.packages||data?.bookingsByPackage||[];
+ const collected=value('collected_revenue',data?.summary?.collected_revenue),outstanding=value('outstanding_balance',data?.summary?.outstanding_balance),deposits=value('deposits_collected',null);
+ const campaignSum=key=>(campaigns||[]).reduce((sum,campaign)=>sum+number(campaign[key]),0),tracked=campaignSum('tracked');
+ const attribution=(data?.campaignPerformance||[]).filter(row=>row.campaign!=='Unattributed');
+ const booked=attribution.reduce((sum,row)=>sum+number(row.bookings),0),interests=campaignSum('interested');
+ const overviewCards=[['booked_revenue','Revenue',data?.summary?.booked_revenue,BarChart3,'money'],['bookings_won','Events Booked',data?.summary?.bookings,CalendarDays],['new_leads','Leads',data?.summary?.leads,Users],['conversion_rate','Conversion Rate',null,Target,'percent'],['outstanding_balance','Outstanding Invoices',outstanding,FileText,'money'],['average_booking_value','Average Booking Value',data?.summary?.average_booking_value,BarChart3,'money']];
+ const marketingCards=[['new_website_leads','Website Inquiries',null,Globe2],['emails_sent','Email Sends',campaignSum('sent'),Mail],['open_rate','Open Rate',tracked?campaignSum('opened')/tracked*100:null,Mail,'percent'],['click_rate','Click Rate',tracked?campaignSum('clicked')/tracked*100:null,MousePointerClick,'percent'],['campaign_bookings','Booked from Campaigns',booked,CalendarDays],['campaign_conversion','Campaign Conversion',null,BarChart3,'percent']];
+ const dates=data?.range||dashboard?.sqlRange;
+ return <main className="page reports-reference record-module"><header className="reports-heading"><h1>Reports & Analytics</h1><p>{report==='Overview'?'Turning moments into meaningful data.':report==='Sales & Financial'?'Financial clarity. A brighter tomorrow.':'More visibility. More celebrations.'}</p></header><nav className="reports-tabs" aria-label="Analytics reports">{reportNames.map(name=><button key={name} aria-pressed={report===name} className={report===name?'active':''} onClick={()=>setReport(name)}>{name}</button>)}</nav><div className="reports-period">{rangeNames.map(([key,label])=><button key={key} className={range===key?'active':''} aria-pressed={range===key} onClick={()=>setRange(key)}>{label}</button>)}<span><CalendarDays size={14}/>{dates?`${formatDateOnly(String(dates.start).slice(0,10))} – ${formatDateOnly(new Date(new Date(dates.end).getTime()-86400000).toISOString().slice(0,10))}`:formatDateOnly(businessToday())}</span>{loading&&data&&<small role="status">Updating…</small>}</div>{error&&<AsyncState error={error} noun="reports" onRetry={()=>setRevision(current=>current+1)}/>}<AsyncState loading={loading&&!data} noun="reports"/>{data&&<>
+ {report!=='Sales & Financial'&&<section className="reports-metrics">{(report==='Overview'?overviewCards:marketingCards).map(([key,label,fallback,Icon,format])=><article key={key}><Icon size={20}/><strong>{formatValue(value(key,fallback),format)}</strong><span>{label}</span>{metrics[key]?.comparison?.percent!=null&&<small className={metrics[key].comparison.direction==='down'?'trend-down':'trend-up'}>{metrics[key].comparison.direction==='down'?'↓':'↑'} {Math.abs(metrics[key].comparison.percent).toFixed(1)}% <em>vs. previous period</em></small>}</article>)}</section>}
+ {report==='Overview'&&<><Trend title="Revenue Trend" rows={dashboard?.trends||data.revenueByMonth?.map(row=>({bucket:row.month,booked_revenue:row.revenue}))||[]} mode={revenueMode} setMode={setRevenueMode} total={value(revenueMode,data.summary?.[revenueMode])}/><div className="reports-two-columns"><InsightPanel title="Bookings by Event Type"><Ring data={events} label="events"/></InsightPanel><InsightPanel title="Lead Source Breakdown"><Bars data={sources} percent/></InsightPanel></div><InsightPanel title="Recent Performance" link="/events/events"><CompactTable columns={['Date','Activity','Type','Status']} rows={(dashboard?.recentActivity||[]).slice(0,5).map(row=>({id:row.id,cells:[formatDateOnly(String(row.created_at).slice(0,10)),row.summary,row.entity_type,row.action?.replaceAll('_',' ')]}))}/></InsightPanel>{gallery?.length>0&&<details className="reports-gallery"><summary>Private gallery activity · last 30 days</summary><Bars data={gallery.map(row=>({name:row.action.replaceAll('_',' '),value:number(row.count)}))}/></details>}</>}
+ {report==='Sales & Financial'&&<><InsightPanel title="Proposal to Invoice Funnel" note="Stages record activity in the selected period; they are not a single inquiry cohort."><Funnel values={(dashboard?.funnel?.stages||[]).filter(row=>row.key!=='qualified').map(row=>({name:row.label,value:row.count}))}/>{!dashboard?.funnel&&<EmptyInsight>Funnel data is unavailable for this account.</EmptyInsight>}</InsightPanel><div className="reports-two-columns"><InsightPanel title="Payments Received vs Outstanding"><Ring data={[{name:'Received',value:number(collected)},{name:'Outstanding',value:number(outstanding)}]} centre={formatMoney(number(collected)+number(outstanding))} label="received + outstanding" money/></InsightPanel><InsightPanel title="Deposit vs Final Payment"><Ring data={deposits==null?[]:[{name:'Deposits',value:number(deposits)},{name:'Other payments',value:Math.max(0,number(collected)-number(deposits))}]} centre={formatMoney(collected)} label="received" money/></InsightPanel></div><Trend title="Monthly Revenue" rows={dashboard?.trends||data.revenueByMonth?.map(row=>({bucket:row.month,booked_revenue:row.revenue}))||[]} mode={revenueMode} setMode={setRevenueMode} total={value(revenueMode,data.summary?.[revenueMode])} bars/><div className="reports-two-columns"><InsightPanel title="Top Packages & Experiences Sold"><ol className="reports-ranking">{[...packages,...(performers?.experiences||[])].sort((a,b)=>number(b.bookings)-number(a.bookings)).slice(0,5).map((row,index)=><li key={`${row.name}-${index}`}><b>{index+1}</b><span>{row.name}</span><small>{row.bookings} bookings</small></li>)}</ol>{!packages.length&&<EmptyInsight/>}</InsightPanel><InsightPanel title="Best Performing Event Types"><CompactTable columns={['Event Type','Bookings','Revenue']} rows={(performers?.eventTypes||[]).map((row,index)=>({id:index,cells:[row.name,row.bookings,formatMoney(row.revenue)]}))}/></InsightPanel></div></>}
+ {report==='Marketing & Campaigns'&&<>{campaignError&&<p role="alert">{campaignError}</p>}<div className="reports-two-columns"><InsightPanel title="Leads by Source"><Ring data={sources} label="leads"/></InsightPanel><InsightPanel title="Email Campaign Performance"><div className="reports-engagement">{[['Open Rate',tracked?campaignSum('opened')/tracked*100:null],['Click Rate',tracked?campaignSum('clicked')/tracked*100:null],['Unsubscribe Rate',null]].map(([label,rate])=><div key={label}><span>{label}<strong>{formatValue(rate,'percent')}</strong></span><i><b style={{width:`${Math.min(100,rate||0)}%`}}/></i></div>)}</div></InsightPanel></div><InsightPanel title="Campaign Bookings" note="Attributed bookings across recorded campaign activity."><div className="reports-chart-total"><strong>{booked}</strong><span>Events Booked</span></div><Bars data={attribution.map(row=>({name:row.campaign,value:number(row.bookings)}))} vertical/></InsightPanel><InsightPanel title="Top Performing Campaigns" link="/communications/campaigns"><CompactTable columns={['Campaign','Channel','Sends','Open Rate','Click Rate','Interested']} rows={[...(campaigns||[])].sort((a,b)=>number(b.interested)-number(a.interested)||number(b.sent)-number(a.sent)).slice(0,5).map(row=>({id:row.id,href:'/communications/campaigns/'+row.id,cells:[row.name,'Email',row.sent,formatValue(row.tracked?number(row.opened)/number(row.tracked)*100:null,'percent'),formatValue(row.tracked?number(row.clicked)/number(row.tracked)*100:null,'percent'),row.interested]}))}/></InsightPanel></>}
+ <p className="reports-scope">Financial and dashboard metrics follow the selected period; outstanding balance is current. Campaign engagement covers sending history. Opens are estimates. “—” means no verified data. No comparison is displayed without a previous-period value.</p></>}</main>;
 }
-
-function Chart({ title, data, x, y }) {
-  const Graph = y === "revenue" ? LineChart : BarChart;
-  return (
-    <section className="panel chart-panel">
-      <h2>{title}</h2>
-      <ResponsiveContainer width="100%" height={260}>
-        <Graph data={data}>
-          <CartesianGrid stroke="#eee8df" />
-          <XAxis dataKey={x} tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip formatter={value=>y==='revenue'?formatMoney(value):value}/>
-          {y === "revenue" ? <Line type="monotone" dataKey={y} stroke="#8072ef" strokeWidth={2} dot={{r:3,fill:"#fff",strokeWidth:2}}/> : <Bar dataKey={y} fill="#B89B6B" radius={[3, 3, 0, 0]} />}
-        </Graph>
-      </ResponsiveContainer>
-    </section>
-  );
-}
+function formatValue(value,format){if(value==null)return '—';return format==='money'?formatMoney(value):format==='percent'?`${number(value).toFixed(1)}%`:formatCount(value);}
+function Trend({title,rows,mode,setMode,total,bars=false}){const Graph=bars?BarChart:AreaChart;return <InsightPanel title={title}><div className="reports-chart-toolbar"><div className="reports-chart-total"><strong>{formatMoney(total)}</strong><span>{mode==='collected_revenue'?'Collected':'Booked'} Revenue</span></div><select aria-label={`${title} metric`} value={mode} onChange={event=>setMode(event.target.value)}><option value="booked_revenue">Booked Revenue</option><option value="collected_revenue">Collected Revenue</option></select></div>{rows.length?<ResponsiveContainer width="100%" height={205}><Graph data={rows}><defs><linearGradient id={bars?'barGold':'areaGold'} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--chart-0, #b69a64)" stopOpacity={.55}/><stop offset="100%" stopColor="var(--chart-2, #e7dbc3)" stopOpacity={.12}/></linearGradient></defs><CartesianGrid stroke="#eee8de" vertical={false}/><XAxis dataKey="bucket" tickFormatter={label=>String(label).slice(5)} tick={{fontSize:11}} axisLine={false} tickLine={false}/><YAxis tickFormatter={value=>value>=1000?'$'+value/1000+'K':'$'+value} width={45} tick={{fontSize:10}} axisLine={false} tickLine={false}/><Tooltip formatter={value=>formatMoney(value)}/>{bars?<Bar dataKey={mode} fill="url(#barGold)" maxBarSize={40}/>:<Area dataKey={mode} type="monotone" stroke="var(--chart-0, #a17d35)" strokeWidth={2} fill="url(#areaGold)" dot={{r:3,fill:'var(--chart-1, #cbb17c)'}}/>}</Graph></ResponsiveContainer>:<EmptyInsight>No revenue recorded in this period.</EmptyInsight>}</InsightPanel>;}
+function CompactTable({columns,rows}){return rows.length?<div className="reports-table-wrap"><table><thead><tr>{columns.map(column=><th key={column}>{column}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.id}>{row.cells.map((cell,index)=><td key={index}>{index===0&&row.href?<Link to={row.href}>{cell}</Link>:cell??'—'}</td>)}</tr>)}</tbody></table></div>:<EmptyInsight/>;}

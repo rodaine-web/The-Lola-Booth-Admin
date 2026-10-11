@@ -63,7 +63,7 @@ test('contract delivery and workspace access enforce sales permissions before re
  const original=process.env.APP_ENV;process.env.APP_ENV='staging';
  const id='5f91bf0a-701f-4712-a2ca-19c1ebd71c05';
  try{
-  for(const [method,url] of [['GET',`/contracts/${id}/pdf`],['POST',`/contracts/${id}/access`],['POST',`/contracts/${id}/send`],['POST',`/proposals/${id}/workspace`],['POST',`/proposals/${id}/workspace/revoke`]]){
+  for(const [method,url] of [['GET','/contracts'],['POST',`/events/${id}/confirm-booking`],['GET',`/contracts/${id}/pdf`],['POST',`/contracts/${id}/access`],['POST',`/contracts/${id}/send`],['POST',`/proposals/${id}/workspace`],['POST',`/proposals/${id}/workspace/revoke`]]){
    const error=await new Promise(resolve=>contractsRouter.handle({method,url,headers:{},user:{permissions:[]}}, {set(){}},resolve));
    assert.equal(error.statusCode,403,`${method} ${url} must reject unprivileged users`);
   }
@@ -73,4 +73,23 @@ test('contract delivery and workspace access enforce sales permissions before re
 test('agreements remain available after an accepted proposal becomes an invoice',()=>{
  for(const status of ['ACCEPTED','CONVERTED']) assert.equal(proposalAllowsAgreement(status),true);
  for(const status of ['DRAFT','READY','SENT','VIEWED','DECLINED','EXPIRED','ARCHIVED',undefined]) assert.equal(proposalAllowsAgreement(status),false);
+});
+
+test('branded canonical agreement retains every section and keeps all text within printable bounds',async()=>{
+ const {renderContractPdf}=await import('../server/src/services/contract-pdf.js');
+ const termsModule=await import('../shared/booking-agreement-terms.js');
+ const terms=Object.entries(termsModule).find(([key])=>key.includes('TERMS'))[1];
+ const row={title:'Photo Booth Services Agreement',revision:1,status:'SIGNED',terms,snapshot:{proposal_number:'QA-PRINT',client_name:'QA Client',total:599,items:[]},document_hash:'b'.repeat(64),signed_at:'2026-10-10T04:14:45Z',signer_name:'QA Client',signer_email:'qa@example.test',consent_text:CONTRACT_CONSENT};
+ row.issued_at=new Date('2026-10-09T23:00:00Z');
+ const original=JSON.stringify(row);const bytes=await renderContractPdf(row);assert.equal(JSON.stringify(row),original,'Rendering must never modify signed content');
+ const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');const task=getDocument({data:new Uint8Array(bytes),useSystemFonts:true});const pdf=await task.promise;
+ let text='';
+ for(let pageNumber=1;pageNumber<=pdf.numPages;pageNumber++){
+  const page=await pdf.getPage(pageNumber),items=(await page.getTextContent()).items;
+  const pageText=items.map(item=>item.str).join(' ');text+=pageText+' ';
+  assert.ok(pageText.includes(`Page ${pageNumber} of ${pdf.numPages}`));
+  for(const item of items.filter(item=>item.str.trim())){assert.ok(item.transform[4]>=47&&item.transform[4]+item.width<=566,`Text clipped on page ${pageNumber}: ${item.str}`);assert.ok(item.transform[5]>=34,`Text below footer on page ${pageNumber}`);}
+ }
+ for(const heading of terms.match(/^\d+\. [^\n]+/gm).filter(value=>!/[.!?]$/.test(value)))assert.ok(text.includes(heading),heading);
+ assert.ok(text.includes('Issued October 9, 2026'));assert.ok(!text.includes('Invalid Date'));assert.ok(text.includes('$599.00'));assert.ok(text.includes(row.document_hash));assert.ok(pdf.numPages<20,'No footer-generated blank pages');await task.destroy();
 });

@@ -1,0 +1,306 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import crypto from 'node:crypto';
+import pg from 'pg';
+
+test('disposable PostgreSQL: concurrent acceptance and invoice conversion preserve one accepted price', {skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL}, async()=>{
+  const target=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);
+  assert.ok(['localhost','127.0.0.1'].includes(target.hostname),'Only disposable local PostgreSQL is permitted');
+  assert.ok(target.pathname.startsWith('/lola_phase1_qa_'),'Use a dedicated Phase 1 QA database');
+  const schema='lifecycle_'+crypto.randomBytes(8).toString('hex');
+  const bootstrap=new pg.Pool({connectionString:target.toString()});
+  let pool;
+  try {
+    await bootstrap.query(`CREATE SCHEMA ${schema}`);
+    target.searchParams.set('options',`-c search_path=${schema},public`);
+    process.env.DATABASE_URL=target.toString();process.env.NODE_ENV='test';delete process.env.APP_ENV;
+    process.env.BOOKING_INVOICE_HANDOFF_ENABLED='true';process.env.BOOKING_AGREEMENT_HANDOFF_ENABLED='true';
+    const db=await import('../server/src/db/pool.js');pool=db.pool;
+    const {query,transaction}=db;
+    const directory=new URL('../server/migrations/',import.meta.url);
+    for(const filename of (await fs.readdir(directory)).filter(x=>x.endsWith('.sql')).sort())
+      await transaction(async()=>query(await fs.readFile(new URL(filename,directory),'utf8')));
+    await query("INSERT INTO business_settings(business_name) VALUES('Disposable QA')");
+    const contact=(await query("INSERT INTO clients(name,email) VALUES('Lifecycle QA','qa@example.invalid') RETURNING id")).rows[0];
+    const event=(await query("INSERT INTO events(client_id,event_name,event_type,event_date,start_time,end_time,status) VALUES($1,'Lifecycle QA','Wedding','2030-11-10','18:00','23:00','PENDING_DEPOSIT') RETURNING id",[contact.id])).rows[0];
+    const lead=(await query("INSERT INTO leads(first_name,last_name,email,event_type,status) VALUES('Lifecycle','QA','qa@example.invalid','Wedding','PROPOSAL_SENT') RETURNING id")).rows[0];
+    const agreed={total:1000,pricing_snapshot:{total:1000,deposit_amount:300,tax_rate:0},line_items_snapshot:[{description:'Accepted experience',quantity:1,unit_price:1000}],content:{}};
+    const proposal=(await query(`INSERT INTO proposals(client_id,proposal_number,status,total,pricing_snapshot,line_items_snapshot,content,secure_token,event_id)
+      VALUES($1,'QA-P1','SENT',1000,$2,$3,$4,$5,$6) RETURNING *`,[contact.id,agreed.pricing_snapshot,JSON.stringify(agreed.line_items_snapshot),agreed.content,crypto.randomBytes(24).toString('hex'),event.id])).rows[0];
+    await query('UPDATE proposals SET lead_id=$2 WHERE id=$1',[proposal.id,lead.id]);
+    const version=(await query('INSERT INTO proposal_versions(proposal_id,version_number,snapshot) VALUES($1,1,$2) RETURNING id',[proposal.id,{...proposal,...agreed}])).rows[0];
+    const {acceptProposal}=await import('../server/src/services/proposal-acceptance-service.js');
+    const {createInvoice}=await import('../server/src/services/invoice-service.js');
+    const req={user:{},headers:{},ip:'127.0.0.1'};
+    const accepted=await Promise.all(Array.from({length:12},()=>acceptProposal(proposal.id,'QA Client',req)));
+    assert.equal(accepted.filter(x=>!x.duplicate).length,1);
+    assert.equal((await query("SELECT count(*)::int n FROM automation_jobs WHERE job_type='BOOKING_SEND_ACCEPTED_INVOICE' AND related_entity_id=$1",[proposal.id])).rows[0].n,1);
+    assert.equal((await query('SELECT accepted_version_id FROM proposals WHERE id=$1',[proposal.id])).rows[0].accepted_version_id,version.id);
+    // Simulate later mutable pricing corruption: conversion must still use the accepted version.
+    await query("UPDATE proposals SET total=2000,pricing_snapshot=$2,line_items_snapshot=$3 WHERE id=$1",[proposal.id,{total:2000,deposit_amount:600,tax_rate:0},JSON.stringify([{description:'Changed live price',quantity:1,unit_price:2000}])]);
+    const converted=await Promise.all(Array.from({length:12},()=>createInvoice({...req,body:{proposal_id:proposal.id,depositOnly:true}})));
+    assert.equal(new Set(converted.map(x=>x.id)).size,1);
+    assert.equal(Number(converted[0].total),1000);
+    assert.equal(Number(converted[0].pricing_snapshot.amount_due_now),300);
+    assert.equal((await query('SELECT count(*)::int n FROM invoices WHERE proposal_id=$1',[proposal.id])).rows[0].n,1);
+    assert.equal((await query('SELECT count(*)::int n FROM invoice_items WHERE invoice_id=$1',[converted[0].id])).rows[0].n,1);
+    assert.equal((await acceptProposal(proposal.id,'QA Client',req)).duplicate,true);
+    const {reconcileInvoice,applyBookingConfirmationPolicy}=await import('../server/src/services/payment-reconciliation-service.js');
+    await query("UPDATE invoices SET status='SENT' WHERE id=$1",[converted[0].id]);
+    const payment=(await query(`INSERT INTO payments(invoice_id,event_id,client_id,amount,payment_method,payment_date,status)
+      VALUES($1,$2,$3,300,'CARD',current_date,'PENDING') RETURNING id`,[converted[0].id,event.id,contact.id])).rows[0];
+    const jobCount=async()=>Number((await query("SELECT count(*)::int n FROM automation_jobs WHERE job_type='BOOKING_SEND_PAID_AGREEMENT' AND related_entity_id=$1",[proposal.id])).rows[0].n);
+    await reconcileInvoice(converted[0].id);
+    assert.equal(await jobCount(),0,'Pending payment cannot trigger an agreement');
+    assert.equal((await query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'PROPOSAL_SENT');
+    await query("UPDATE payments SET status='SUCCEEDED',amount=299.99 WHERE id=$1",[payment.id]);
+    await reconcileInvoice(converted[0].id);
+    assert.equal(await jobCount(),0,'Payment below thirty percent cannot trigger an agreement');
+    const paidLead=(await query('SELECT * FROM leads WHERE id=$1',[lead.id])).rows[0];
+    assert.equal(paidLead.status,'WON','Any posted positive payment classifies the lead as a client');
+    assert.equal(paidLead.converted_client_id,contact.id,'Reuse the existing billed client');
+    assert.equal((await query('SELECT status FROM events WHERE id=$1',[event.id])).rows[0].status,'PENDING_DEPOSIT','Client classification does not confirm the booking');
+    await query('UPDATE payments SET amount=300 WHERE id=$1',[payment.id]);
+    await Promise.all(Array.from({length:8},()=>reconcileInvoice(converted[0].id)));
+    assert.equal(await jobCount(),1,'Repeated verified payment reconciliation queues one agreement');
+    assert.equal(await applyBookingConfirmationPolicy(event.id),null,'Payment alone cannot confirm a managed booking');
+    const {createContract}=await import('../server/src/services/contract-service.js');
+    const contract=await createContract(proposal.id,{title:'QA immutable agreement',terms:'QA agreement terms for the accepted service'},req);
+    assert.equal(Number(contract.snapshot.total),1000,'Agreement retains the accepted price, not changed live proposal pricing');
+    assert.equal(contract.snapshot.accepted_version_id,version.id);
+    assert.equal(await applyBookingConfirmationPolicy(event.id),null,'Draft agreement cannot confirm a managed booking');
+    const {updateContract}=await import('../server/src/services/contract-service.js');
+    const {BOOKING_AGREEMENT_TITLE,BOOKING_AGREEMENT_TERMS}=await import('../shared/booking-agreement-terms.js');
+    const {deliverPaidAgreement}=await import('../server/src/services/booking-agreement-handoff-service.js');
+    const job=(await query("SELECT * FROM automation_jobs WHERE job_type='BOOKING_SEND_PAID_AGREEMENT' AND related_entity_id=$1",[proposal.id])).rows[0];
+    await assert.rejects(deliverPaidAgreement(job),{code:'AGREEMENT_TERMS_REVIEW'},'A different manual draft requires review instead of being silently overwritten');
+    await updateContract(contract.id,{title:BOOKING_AGREEMENT_TITLE,terms:BOOKING_AGREEMENT_TERMS},req);
+    process.env.INTEGRATION_SECRET_KEY='qa-disposable-only-secret-value-at-least-32-characters';
+    let sends=0;
+    const sendEmail=async message=>{
+      sends++;
+      assert.equal(message.to,'qa@example.invalid');
+      assert.equal((await pool.query('SELECT status FROM contracts WHERE id=$1',[contract.id])).rows[0].status,'ISSUED');
+      assert.equal((await pool.query('SELECT count(*)::int n FROM contract_deliveries WHERE contract_id=$1',[contract.id])).rows[0].n,1,'Delivery claim persists before the external send');
+      return {status:'SENT',deliveredExternally:true,provider:'QA',providerMessageId:'qa-only'};
+    };
+    assert.equal((await deliverPaidAgreement(job,{sendEmail})).status,'SENT_TO_PROVIDER');
+    assert.equal((await deliverPaidAgreement(job,{sendEmail})).status,'SENT_TO_PROVIDER');
+    assert.equal(sends,1,'Agreement retry cannot deliver twice');
+    assert.equal((await query('SELECT count(*)::int n FROM contracts WHERE proposal_id=$1',[proposal.id])).rows[0].n,1,'Agreement retry cannot generate a duplicate contract');
+    assert.equal(await applyBookingConfirmationPolicy(event.id),null,'An issued but unsigned agreement cannot confirm booking');
+    await assert.rejects(query("UPDATE events SET status='CONFIRMED' WHERE id=$1",[event.id]),error=>error.code==='23514','Manual Admin writes cannot bypass a managed agreement');
+    const {publicContract}=await import('../server/src/services/contract-service.js');
+    const issuedForDeadline=(await query('SELECT * FROM contracts WHERE id=$1',[contract.id])).rows[0];
+    assert.ok(new Date(issuedForDeadline.signing_due_at)>new Date(issuedForDeadline.issued_at));
+    await query("UPDATE contracts SET signing_due_at=date_trunc('milliseconds',now()-interval '4 days')+interval '123 microseconds',signing_grace_until=now()+interval '3 days' WHERE id=$1",[contract.id]);
+    process.env.BOOKING_LIFECYCLE_REMINDERS_ENABLED='true';
+    const {queueBookingLifecycleReminders}=await import('../server/src/services/booking-lifecycle-reminders.js');
+    assert.equal((await queueBookingLifecycleReminders()).queued,1);
+    assert.equal((await queueBookingLifecycleReminders()).queued,0,'Repeated worker ticks cannot duplicate signing reminders');
+    const {dispatchDecision:validReminderDispatch}=await import('../server/src/services/communication-dispatch-policy.js');
+    const validReminder=(await query("SELECT * FROM communications WHERE trigger_key='BOOKING_SIGNATURE_REMINDER' LIMIT 1")).rows[0];
+    assert.equal(await transaction(client=>validReminderDispatch(client,validReminder)),'SEND','PostgreSQL microsecond precision must not cancel the current JavaScript reminder deadline');
+    process.env.BOOKING_WORKSPACE_HANDOFF_ENABLED='true';
+    const {signContract}=await import('../server/src/services/contract-service.js');
+    const {decryptSecretJson}=await import('../server/src/services/integration-secrets.js');
+    const signingToken=decryptSecretJson((await query('SELECT token_ciphertext FROM contract_access_credentials WHERE contract_id=$1',[contract.id])).rows[0].token_ciphertext).token;
+    const {extendSigningDeadline}=await import('../server/src/services/contract-service.js');
+    await query("UPDATE contracts SET signing_grace_until=now()-interval '1 second' WHERE id=$1",[contract.id]);
+    const hash=(await query('SELECT document_hash FROM contracts WHERE id=$1',[contract.id])).rows[0].document_hash;
+    await assert.rejects(signContract(signingToken,{name:'QA Client',email:'qa@example.invalid',consent:true,documentHash:hash},req),{code:'CONTRACT_SIGNING_REVIEW'},'Signing after escalation requires a manager extension');
+    await assert.rejects(extendSigningDeadline(contract.id,{dueAt:new Date(Date.now()+86400000).toISOString(),reason:'QA extension authorized for testing'},req),{code:'FORBIDDEN'});
+    const manager=(await query("INSERT INTO users(name,email,password_hash) VALUES('QA Manager','qa-manager@example.invalid','not-a-login') RETURNING id")).rows[0];
+    await extendSigningDeadline(contract.id,{dueAt:new Date(Date.now()+86400000).toISOString(),reason:'QA extension authorized for testing'},{...req,user:{id:manager.id,roles:['OWNER']}});
+    const {dispatchDecision:deadlineDispatchDecision}=await import('../server/src/services/communication-dispatch-policy.js');
+    const obsoleteReminder=(await query("SELECT * FROM communications WHERE trigger_key='BOOKING_SIGNATURE_REMINDER' LIMIT 1")).rows[0];
+    assert.equal(await transaction(client=>deadlineDispatchDecision(client,obsoleteReminder)),'CANCELLED','A revised deadline cancels the old reminder');
+    const issued=(await query('SELECT * FROM contracts WHERE id=$1',[contract.id])).rows[0];
+    assert.equal(Object.hasOwn(await publicContract(signingToken),'signing_grace_until'),false,'Internal grace must not appear in the signing interface');
+    const signed=await Promise.all(Array.from({length:8},()=>signContract(signingToken,{name:'QA Client',email:'qa@example.invalid',consent:true,documentHash:issued.document_hash,signatureMethod:'DRAWN',signatureStrokes:[[[.1,.2],[.3,.4],[.7,.3]]]},req)));
+    assert.ok(signed.every(row=>row.status==='SIGNED'));
+    assert.ok(signed.every(row=>row.booking_confirmation.status==='CONFIRMED'));
+    assert.equal((await query("SELECT count(*)::int n FROM tasks WHERE lifecycle_key=$1",['booking-equipment:'+event.id])).rows[0].n,1,'Missing equipment creates one assignment task despite concurrent signing');
+    const {searchContracts}=await import('../server/src/services/contract-service.js');
+    const index=await searchContracts({clientId:contact.id,status:'SIGNED',search:'QA-P1'});
+    assert.equal(index.total,1);assert.equal(index.rows[0].id,contract.id);
+    assert.doesNotMatch(JSON.stringify(index),/token_hash|signature_strokes|signer_ip|terms/);
+    assert.equal((await searchContracts({clientId:crypto.randomUUID()})).total,0);
+    assert.ok(signed.every(row=>row.signature_method==='DRAWN'&&row.signature_hash));
+    const {contractPdf}=await import('../server/src/services/contract-service.js');assert.equal((await contractPdf(signed[0])).subarray(0,5).toString(),'%PDF-','Signed PDF renders the validated drawn signature');
+    assert.equal((await query("SELECT status FROM tasks WHERE lifecycle_key=$1",['agreement-sign:'+contract.id])).rows[0].status,'DONE','Signing closes the Admin To-do');
+    assert.equal((await query('SELECT booking_confirmation_missing($1) AS missing',[event.id])).rows[0].missing.length,0,'Equipment assignment does not block confirmation');
+    assert.equal((await query("SELECT count(*)::int n FROM notifications WHERE entity_id=$1 AND category='EQUIPMENT'",[event.id])).rows[0].n,1,'Confirmation creates one Admin equipment notification');
+    const asset=(await query("INSERT INTO equipment(name,category,status) VALUES('Signing QA booth','Photo Booth','AVAILABLE') RETURNING id")).rows[0];
+    await query('INSERT INTO equipment_assignments(event_id,equipment_id) VALUES($1,$2)',[event.id,asset.id]);
+    const replay=await signContract(signingToken,{name:'QA Client',email:'qa@example.invalid',consent:true,documentHash:issued.document_hash,signatureMethod:'DRAWN',signatureStrokes:[[[.1,.2],[.3,.4],[.7,.3]]]},req);
+    assert.equal(replay.booking_confirmation.status,'CONFIRMED','Signing directly confirms a fully qualified booking without waiting for email delivery');
+    assert.equal((await query("SELECT status FROM tasks WHERE lifecycle_key=$1",['booking-equipment:'+event.id])).rows[0].status,'DONE');
+    const {dispatchDecision}=await import('../server/src/services/communication-dispatch-policy.js');
+    const reminder=(await query("SELECT * FROM communications WHERE trigger_key='BOOKING_SIGNATURE_REMINDER' LIMIT 1")).rows[0];
+    assert.equal(await transaction(client=>dispatchDecision(client,reminder)),'CANCELLED','Signing stops queued reminders at dispatch');
+    assert.equal((await query("SELECT count(*)::int n FROM automation_jobs WHERE job_type='BOOKING_SEND_SIGNED_WORKSPACE' AND related_entity_id=$1",[proposal.id])).rows[0].n,1,'Signature replay queues one secure invitation');
+    const secure=await import('../server/src/services/client-session-service.js');
+    const invitation=await secure.prepareClientInvitation(proposal.id,contract.id);
+    assert.equal((await secure.prepareClientInvitation(proposal.id,contract.id)).id,invitation.id,'Automatic invitation preparation is idempotent');
+    let workspaceSends=0;
+    const sendWorkspace=async message=>{
+      workspaceSends++;
+      assert.match(message.body,/client\/access#[a-f0-9]{64}/);
+      assert.doesNotMatch(message.body,/client\/[a-f0-9]{64}/);
+      assert.equal((await pool.query('SELECT status FROM communications c JOIN client_workspace_invitations i ON i.communication_id=c.id WHERE i.id=$1',[invitation.id])).rows[0].status,'PROCESSING','Invitation delivery claim commits before network dispatch');
+      return {status:'SENT',provider:'QA',deliveredExternally:true,providerMessageId:'qa-workspace'};
+    };
+    await secure.deliverClientInvitation(invitation.id,{send:sendWorkspace});
+    assert.equal((await secure.deliverClientInvitation(invitation.id,{send:sendWorkspace})).duplicate,true);
+    assert.equal(workspaceSends,1);
+    const savedInvitation=(await query('SELECT * FROM client_workspace_invitations WHERE id=$1',[invitation.id])).rows[0];
+    const invitationToken=decryptSecretJson(savedInvitation.token_ciphertext).token;
+    assert.ok(new Date(savedInvitation.expires_at)-new Date(savedInvitation.created_at)<=15*60000+1000);
+    const consumes=await Promise.allSettled(Array.from({length:12},()=>secure.consumeClientInvitation(invitationToken)));
+    assert.equal(consumes.filter(row=>row.status==='fulfilled').length,1,'Only one competing request consumes the invitation');
+    const authenticated=consumes.find(row=>row.status==='fulfilled').value;
+    const {env}=await import('../server/src/config/env.js');
+    const clientReq={headers:{cookie:secure.clientCookieName()+'='+authenticated.token,origin:new URL(env.clientOrigin).origin,'x-client-csrf':authenticated.csrfToken}};
+    const session=await secure.authenticateClient(clientReq,{mutation:true,fresh:true});
+    await assert.rejects(secure.authenticateClient({headers:{...clientReq.headers,origin:'https://attacker.invalid'}},{mutation:true}),{code:'CLIENT_ORIGIN_REJECTED'});
+    await assert.rejects(secure.authenticateClient({headers:{...clientReq.headers,'x-client-csrf':'a'.repeat(64)}},{mutation:true}),{code:'CLIENT_CSRF_REJECTED'});
+    const {sessionWorkspace,clientEventGrant,sessionProposalPdf}=await import('../server/src/services/client-session-workspace-service.js');
+    const workspace=await sessionWorkspace(session,event.id);
+    assert.equal(workspace.event.id,event.id);
+    assert.match(await (await import('../server/src/services/client-session-workspace-service.js')).sessionPlanningToken(session,event.id),/^[a-f0-9]{64}$/,'Confirmed signed booking unlocks secure workspace planning');
+    assert.ok(workspace.agreements.some(row=>row.id===contract.id));
+    const sessionProposal=await sessionProposalPdf(session,event.id);assert.equal(sessionProposal.subarray(0,4).toString(),'%PDF');
+    await assert.rejects(sessionProposalPdf({...session,client_id:crypto.randomUUID()},event.id),{code:'NOT_FOUND'});
+    await assert.rejects(sessionProposalPdf(session,crypto.randomUUID()),{code:'NOT_FOUND'});
+    assert.doesNotMatch(JSON.stringify(workspace),/secure_token|token_ciphertext|token_hash|signer_ip|signer_user_agent/);
+    await assert.rejects(clientEventGrant({...session,client_id:crypto.randomUUID()},event.id),{code:'NOT_FOUND'},'Another client cannot read this event');
+    await query("UPDATE client_workspace_sessions SET verified_at=now()-interval '16 minutes' WHERE id=$1",[session.id]);
+    await assert.rejects(secure.authenticateClient(clientReq,{fresh:true}),{code:'CLIENT_STEP_UP_REQUIRED'});
+    await query("UPDATE client_workspace_sessions SET last_seen_at=now()-interval '31 minutes' WHERE id=$1",[session.id]);
+    await assert.rejects(secure.authenticateClient(clientReq),{code:'CLIENT_SESSION_EXPIRED'});
+    const expiring=await secure.prepareClientInvitation(proposal.id,contract.id,{automatic:false});
+    const expiringToken=decryptSecretJson((await query('SELECT token_ciphertext FROM client_workspace_invitations WHERE id=$1',[expiring.id])).rows[0].token_ciphertext).token;
+    await query("UPDATE client_workspace_invitations SET expires_at=now()-interval '1 second' WHERE id=$1",[expiring.id]);
+    await assert.rejects(secure.consumeClientInvitation(expiringToken),{code:'CLIENT_ACCESS_UNAVAILABLE'});
+    const uncertain=await secure.prepareClientInvitation(proposal.id,contract.id,{automatic:false});
+    let uncertainSends=0;
+    const uncertainSend=async()=>{uncertainSends++;throw Object.assign(new Error('Provider timeout'),{code:'ETIMEDOUT'});};
+    await assert.rejects(secure.deliverClientInvitation(uncertain.id,{send:uncertainSend}),{code:'DELIVERY_OUTCOME_UNKNOWN'});
+    await assert.rejects(secure.deliverClientInvitation(uncertain.id,{send:uncertainSend}),{code:'DELIVERY_OUTCOME_UNKNOWN'});
+    assert.equal(uncertainSends,1,'An uncertain provider outcome cannot resend automatically');
+    const revocable=await secure.prepareClientInvitation(proposal.id,contract.id,{automatic:false});
+    const revokeToken=decryptSecretJson((await query('SELECT token_ciphertext FROM client_workspace_invitations WHERE id=$1',[revocable.id])).rows[0].token_ciphertext).token;
+    const revokeAccess=await secure.consumeClientInvitation(revokeToken);
+    await secure.revokeSecureWorkspace(proposal.id,req);
+    await assert.rejects(secure.authenticateClient({headers:{cookie:secure.clientCookieName()+'='+revokeAccess.token}}),{code:'CLIENT_SESSION_EXPIRED'},'Revocation invalidates existing sessions');
+    assert.equal(await secure.prepareClientInvitation(proposal.id,contract.id),null,'Retries cannot restore a revoked workspace');
+    await query("UPDATE payments SET status='REFUNDED',refunded_amount=300 WHERE id=$1",[payment.id]);
+    await reconcileInvoice(converted[0].id);
+    assert.equal((await deliverPaidAgreement(job,{sendEmail})).cancelled,true,'Refunded payment invalidates the agreement handoff');
+    assert.equal(sends,1);
+    await query("UPDATE invoices SET status='REFUNDED' WHERE id=$1",[converted[0].id]);
+    const other=await createInvoice({...req,body:{client_id:contact.id,event_id:event.id,items:[{description:'Other event charge',quantity:1,unit_price:50}]}});
+    await query("UPDATE invoices SET status='PAID',amount_paid=50,amount_outstanding=0,balance_due=0 WHERE id=$1",[other.id]);
+    assert.equal(await applyBookingConfirmationPolicy(event.id),null,'Another paid invoice cannot bypass a refunded managed booking');
+
+    // Actual PostgreSQL locks must prevent replay and competing over-refunds.
+    const refundLedger=await import('../server/src/services/refund-ledger-service.js');
+    const manual=(await query("INSERT INTO payments(client_id,event_id,amount,currency,payment_method,payment_date,provider,status) VALUES($1,$2,100,'USD','CASH',current_date,'MANUAL','SUCCEEDED') RETURNING *",[contact.id,event.id])).rows[0];
+    const refundRequest={paymentId:manual.id,amount:25,reason:'QA refund',key:crypto.randomUUID()};
+    const replayed=await Promise.all(Array.from({length:8},()=>refundLedger.claimRefund(refundRequest)));
+    assert.equal(replayed.filter(x=>x.created).length,1);
+    assert.equal(Number((await query('SELECT refunded_amount FROM payments WHERE id=$1',[manual.id])).rows[0].refunded_amount),25,'Manual refund replay only changes the ledger once');
+    await assert.rejects(refundLedger.claimRefund({...refundRequest,amount:30}),{code:'REFUND_REQUEST_CONFLICT'});
+    const competing=await Promise.allSettled(Array.from({length:8},()=>refundLedger.claimRefund({...refundRequest,amount:50,key:crypto.randomUUID()})));
+    assert.equal(competing.filter(x=>x.status==='fulfilled').length,1,'Competing refunds cannot overdraw the payment');
+    const stripePayment=(await query("INSERT INTO payments(client_id,event_id,amount,currency,payment_method,payment_date,provider,provider_payment_id,status) VALUES($1,$2,100,'USD','CARD',current_date,'STRIPE','pi_QARefund','SUCCEEDED') RETURNING *",[contact.id,event.id])).rows[0];
+    const stripeClaim=await refundLedger.claimRefund({paymentId:stripePayment.id,amount:40,reason:'QA provider refund',key:crypto.randomUUID()});
+    await assert.rejects(refundLedger.claimRefund({paymentId:stripePayment.id,amount:70,reason:'Competing QA',key:crypto.randomUUID()}),{code:'INVALID_REFUND_AMOUNT'},'Uncertain requests reserve funds');
+    const providerRefund={id:'re_QAOne',payment_intent:'pi_QARefund',currency:'usd',amount:4000,status:'pending',metadata:{lola_refund_id:stripeClaim.refund.id}};
+    await refundLedger.settleStripeRefund(providerRefund);
+    assert.equal(Number((await query('SELECT refunded_amount FROM payments WHERE id=$1',[stripePayment.id])).rows[0].refunded_amount),0,'Pending refunds do not reduce posted payment');
+    await Promise.all(Array.from({length:8},()=>refundLedger.settleStripeRefund({...providerRefund,status:'succeeded'})));
+    await refundLedger.settleStripeRefund({id:'re_QATwo',payment_intent:'pi_QARefund',currency:'usd',amount:2000,status:'succeeded'});
+    assert.equal(Number((await query('SELECT refunded_amount FROM payments WHERE id=$1',[stripePayment.id])).rows[0].refunded_amount),60,'Separate partial refunds store individual amounts, not cumulative charge totals');
+    await refundLedger.settleStripeRefund({...providerRefund,status:'failed'});
+    assert.equal(Number((await query('SELECT refunded_amount FROM payments WHERE id=$1',[stripePayment.id])).rows[0].refunded_amount),20,'Canonical failed refund restores its posted amount');
+
+    // Campaigns must use the same accepted commercial version and invoice journey.
+    const campaign=(await query("INSERT INTO campaigns(name) VALUES('QA Wedding Planner') RETURNING id")).rows[0];
+    await query("INSERT INTO experiences(name,slug,active) VALUES('The LOLA Glam','qa-glam',true)");
+    const offer=(await (await import('../server/src/services/campaign-offers.js')).campaignOffers(campaign.id)).offers.find(o=>o.key==='GLAM');
+    assert.ok(offer,'A priced campaign offer is resolved from the real catalog');
+    const recipient=(await query("INSERT INTO campaign_recipients(campaign_id,email,first_name) VALUES($1,'campaign-qa@example.invalid','Campaign QA') RETURNING id",[campaign.id])).rows[0];
+    const interest=(await query("INSERT INTO campaign_interests(campaign_id,campaign_recipient_id,package,event_date,event_time,offer_snapshot) VALUES($1,$2,'GLAM','2030-12-10','18:00',$3) RETURNING id",[campaign.id,recipient.id,offer])).rows[0];
+    const campaignSales=await import('../server/src/services/campaign-sales-service.js');
+    await assert.rejects(campaignSales.campaignDepositInvoice(campaign.id,interest.id,{},req),{code:'CAMPAIGN_ACCEPTANCE_REQUIRED'});
+    const offers=await Promise.all(Array.from({length:8},()=>campaignSales.campaignCommercialProposal(campaign.id,interest.id,req)));
+    assert.equal(new Set(offers.map(x=>x.proposal.id)).size,1,'Concurrent campaign preparation creates one commercial proposal');
+    const commercial=offers[0].proposal;
+    assert.equal(commercial.status,'DRAFT','Interest is not customer contractual acceptance');
+    await assert.rejects(campaignSales.campaignDepositInvoice(campaign.id,interest.id,{},req),{code:'CAMPAIGN_ACCEPTANCE_REQUIRED'});
+    await query("UPDATE proposals SET status='SENT' WHERE id=$1",[commercial.id]);
+    await acceptProposal(commercial.id,'Campaign QA',req);
+    const campaignInvoice=(await campaignSales.campaignDepositInvoice(campaign.id,interest.id,{},req)).invoice;
+    assert.equal(campaignInvoice.campaign_interest_id,interest.id);
+    assert.equal(campaignInvoice.proposal_id,commercial.id);
+    assert.ok(campaignInvoice.pricing_snapshot.accepted_version_id);
+    assert.equal(Number(campaignInvoice.total),Number(commercial.total));
+    await assert.rejects(campaignSales.campaignDepositInvoice(campaign.id,interest.id,{send:true},req),{code:'CAMPAIGN_HANDOFF_REQUIRED'});
+    await assert.rejects(query("UPDATE events SET status='CONFIRMED' WHERE id=$1",[commercial.event_id]),error=>error.code==='23514');
+
+    // Exercise the persisted planning review through the actual event summary query.
+    const {getEventOperations}=await import('../server/src/services/event-operations-service.js');
+    await query(`INSERT INTO event_planning(event_id,client_id,status,submitted_at,details_review_status)
+      VALUES($1,$2,'SUBMITTED',now(),'APPROVED') ON CONFLICT(event_id) DO UPDATE SET status='SUBMITTED',submitted_at=now(),details_review_status='APPROVED'`,[event.id,contact.id]);
+    const planningReadiness=async()=>{
+      const summary=await getEventOperations(event.id,{roles:['OWNER']});
+      return summary.readiness.items.find(item=>item.label==='Event planning approved by LOLA').status;
+    };
+    assert.equal(await planningReadiness(),'COMPLETE','Persisted Admin approval counts toward readiness');
+    await query("UPDATE event_planning SET details_review_status='CHANGES_REQUESTED' WHERE event_id=$1",[event.id]);
+    assert.equal(await planningReadiness(),'INCOMPLETE','Requested corrections invalidate planning readiness');
+    await query("UPDATE event_planning SET details_review_status='APPROVED',change_requests=$2 WHERE event_id=$1",[event.id,{venue:'Confirm venue'}]);
+    assert.equal(await planningReadiness(),'INCOMPLETE','Outstanding corrections cannot be masked by approval');
+    await query("UPDATE event_planning SET change_requests='{}',submitted_at=NULL WHERE event_id=$1",[event.id]);
+    assert.equal(await planningReadiness(),'INCOMPLETE','Approval without a client submission is incomplete');
+
+    const {queuePlanningReminders}=await import('../server/src/services/planning-reminder-service.js');
+    const {encryptSecretJson}=await import('../server/src/services/integration-secrets.js');
+    const scopeKeys=['APP_ENV','PLANNING_REMINDERS_ENABLED','STAGING_AUTOMATIONS_ENABLED','STAGING_EMAIL_ENABLED','STAGING_AUTOMATIONS_SINCE','STAGING_EMAIL_ALLOWLIST'];
+    const savedScope=Object.fromEntries(scopeKeys.map(key=>[key,process.env[key]]));
+    try{
+      Object.assign(process.env,{APP_ENV:'staging',PLANNING_REMINDERS_ENABLED:'true',STAGING_AUTOMATIONS_ENABLED:'true',STAGING_EMAIL_ENABLED:'true',STAGING_EMAIL_ALLOWLIST:contact.email||'qa@example.invalid',STAGING_AUTOMATIONS_SINCE:new Date(Date.now()-5*86400000).toISOString()});
+      const outside=(await query("INSERT INTO clients(name,email) VALUES('Outside scope','outside@example.invalid') RETURNING id")).rows[0];
+      const eligible=[];
+      for(const [clientId,age] of [[contact.id,6],[outside.id,4],[contact.id,4]]){
+        const record=(await query("INSERT INTO events(client_id,event_name,event_type,event_date,status) VALUES($1,'Reminder QA','Wedding','2030-11-10','CONFIRMED') RETURNING id",[clientId])).rows[0];
+        await query(`INSERT INTO event_planning(event_id,client_id,token_hash,token_ciphertext,expires_at,invited_at,planning_due_at)
+          VALUES($1,$2,$3,$4,now()+interval '1 month',now()-$5*interval '1 day',current_date-1)`,[record.id,clientId,crypto.randomBytes(32).toString('hex'),encryptSecretJson({token:'qa-planning-token'}),age]);
+        await query(`INSERT INTO creative_approvals(event_id,client_id,approval_type,status,expires_at,requested_at)
+          VALUES($1,$2,'DESIGN','PENDING_APPROVAL',now()+interval '1 month',now()-$3*interval '1 day')`,[record.id,clientId,age]);
+        if(clientId===contact.id&&age===4)eligible.push(record.id);
+      }
+      process.env.STAGING_AUTOMATIONS_ENABLED='false';
+      assert.deepEqual(await queuePlanningReminders(),{queued:0,paused:true});
+      process.env.STAGING_AUTOMATIONS_ENABLED='true';
+      assert.equal((await queuePlanningReminders()).queued,2,'Only fresh, approved-recipient planning and creative requests qualify');
+      const reminders=(await query("SELECT event_id,recipient FROM communications WHERE trigger_key='PLANNING_RECURRING_REMINDER'")).rows;
+      assert.equal(reminders.length,2);
+      assert.ok(reminders.every(row=>eligible.includes(row.event_id)&&row.recipient==='qa@example.invalid'));
+      assert.equal((await queuePlanningReminders()).queued,0,'Repeated worker ticks do not duplicate reminders');
+      await query('UPDATE event_planning SET submitted_at=now() WHERE event_id=$1',[eligible[0]]);
+      await query("UPDATE creative_approvals SET status='APPROVED' WHERE event_id=$1",[eligible[0]]);
+      assert.equal((await queuePlanningReminders()).queued,0,'Completed planning and approvals stop reminders');
+    }finally{
+      for(const [key,value] of Object.entries(savedScope))if(value===undefined)delete process.env[key];else process.env[key]=value;
+    }
+
+
+  } finally {
+    if(pool)await pool.end();
+    await bootstrap.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await bootstrap.end();
+  }
+});

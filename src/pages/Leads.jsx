@@ -1,3 +1,6 @@
+import { recordCell } from '../components/workspace/RecordCells.jsx';
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 import EventTypeSelect from "../components/EventTypeSelect.jsx";
 import { useDialogFocus } from "../utils/use-dialog-focus.js";
 import { formatDateOnly } from "../utils/display.js";
@@ -5,7 +8,6 @@ import { Plus, Search, SlidersHorizontal, Table2, Columns3 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
-import DataTable from "../components/DataTable.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 
 const statuses=["","NEW","CONTACTED","QUALIFIED","PROPOSAL_DRAFT","PROPOSAL_SENT","FOLLOW_UP","WON","LOST"];
@@ -22,7 +24,7 @@ export default function Leads(){
   const [leads,setLeads]=useState([]);
   const [search,setSearch]=useState("");
   const [error,setError]=useState("");
-  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [filtersOpen,setFiltersOpen]=useState(true);
   useDialogFocus(creating,()=>setCreating(false));
 
   const source=urlParams.get("source")||urlParams.get("source_group")||"";
@@ -78,7 +80,7 @@ export default function Leads(){
 
   const columns=useMemo(()=>["name","email","phone","event_type","status","created_at"],[]);
 
-  return <main className="page lola-list-page">
+  return <main className="page lola-list-page record-module">
     <section className="page-heading lola-page-heading">
       <div><p className="eyebrow">Sales</p><h1>Leads</h1><p className="lede">Capture. Track. Convert.</p></div>
       <div className="button-row">
@@ -87,11 +89,9 @@ export default function Leads(){
       </div>
     </section>
 
-    <section className="lola-status-tabs">
-      {statuses.slice(0,7).map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
-    </section>
+    <RecordMetrics module="Leads" rows={leads}/>
 
-    <section className="lola-list-toolbar">
+    <div className="record-filter-bar"><section className="lola-list-toolbar">
       <div className="lola-list-search"><Search size={16}/><input aria-label="Search leads" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search leads by name, email, phone..."/></div>
       <div className="lola-view-toggle"><button aria-label="Table view" className={view==="table"?"active":""} onClick={()=>setView("table")}><Table2 size={15}/></button><button aria-label="Board view" className={view==="kanban"?"active":""} onClick={()=>setView("kanban")}><Columns3 size={15}/></button></div>
     </section>
@@ -100,14 +100,14 @@ export default function Leads(){
       <label>Source<select value={source} onChange={e=>setFilter("source",e.target.value)}>{[...new Set([...sources,source])].map(item=><option key={item||"all"} value={item}>{item||"All sources"}</option>)}</select></label>
       <label>Campaign<input value={campaign} onChange={e=>setFilter("campaign",e.target.value)} placeholder="Campaign"/></label>
       <button onClick={()=>{setFilter("source","");setFilter("campaign","");}}>Clear filters</button>
-    </section>}
+    </section>}<label>Status<select value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item?item.replaceAll("_"," "):"All statuses"}</option>)}</select></label></div>
 
     {error&&<div className="toast error">{error}</div>}
 
-    {view==="table"
-      ? <DataTable rows={leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")}))} columns={columns} columnLabels={{event_type:"Event Type",created_at:"Created"}} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
+    <RecordWorkspace module="Leads" rows={leads}>    {view==="table"
+      ? <RecordTable renderCell={recordCell} title="Leads" rows={leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")}))} columns={["name","event_type","lead_source","status","event_date","updated_at"]} columnLabels={{lead_source:"Source",updated_at:"Last Activity"}} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
       : <LeadBoard leads={leads}/>
-    }
+    }</RecordWorkspace>
 
     {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="New lead">
       <form className="modal lola-create-modal" onSubmit={createLead}>
@@ -120,7 +120,7 @@ export default function Leads(){
           <label>Phone *<input required type="tel" value={draft.phone||""} onChange={e=>setDraft({...draft,phone:e.target.value})}/></label>
           <label>Event date *<input required type="date" value={draft.event_date||""} onChange={e=>setDraft({...draft,event_date:e.target.value})}/></label>
           <label>Event type *<select required value={draft.event_type||""} onChange={e=>setDraft({...draft,event_type:e.target.value})}><option value="">Select event type</option>{eventTypes.map(type=><option key={type}>{type}</option>)}</select></label>
-          {draft.event_type==="Other"&&<label>Describe event type<input required value={draft.custom_event_type||""} onChange={e=>setDraft({...draft,custom_event_type:e.target.value})}/></label>}
+          {draft.event_type==="Other"&&<label>Describe event type <span className="required-mark" aria-hidden="true">*</span><input aria-label="Describe event type" required value={draft.custom_event_type||""} onChange={e=>setDraft({...draft,custom_event_type:e.target.value})}/></label>}
           <label>Guests<input type="number" min="1" value={draft.guest_count||""} onChange={e=>setDraft({...draft,guest_count:e.target.value})}/></label>
           <label>Venue<input value={draft.venue_name||""} onChange={e=>setDraft({...draft,venue_name:e.target.value})}/></label>
           <label className="wide">Notes<textarea value={draft.message||""} onChange={e=>setDraft({...draft,message:e.target.value})} placeholder="What did the client tell us?"/></label>

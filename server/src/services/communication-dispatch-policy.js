@@ -4,6 +4,84 @@ import { grantUsable } from './gallery-policy.js';
 
 // Recheck after claiming work. A provider request already in flight cannot be recalled.
 export async function dispatchDecision(client, message) {
+  if (message.trigger_key === 'BOOKING_SEND_WEBSITE_PROPOSAL') {
+    if (process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED !== 'true') return 'CANCELLED';
+    const allowed = await client.query(`SELECT 1 FROM proposals p JOIN leads l ON l.id=p.lead_id JOIN events e ON e.id=p.event_id
+      WHERE p.id=$1 AND l.id=$2 AND p.deleted_at IS NULL AND l.deleted_at IS NULL AND e.deleted_at IS NULL AND NOT event_payment_review(e.id)
+      AND p.status IN ('DRAFT','SENT','VIEWED') AND l.status NOT IN ('LOST','WON','ARCHIVED') AND e.status<>'CANCELLED'
+      AND p.content=$5::jsonb AND p.pricing_snapshot=$6::jsonb AND p.line_items_snapshot=$7::jsonb
+      AND lower(l.email)=lower($3) AND p.content->>'website_submission_fingerprint'=l.source_details->'bookingInquiry'->>'submissionFingerprint'
+      AND $4='website-proposal:'||l.id::text||':'||(p.content->>'website_submission_fingerprint')`, [message.proposal_id,message.lead_id,message.recipient,message.idempotency_key,JSON.stringify(message.merge_data?.website_quote_snapshot?.content ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.pricing_snapshot ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.line_items_snapshot ?? null)]);
+    if (!allowed.rowCount) return 'CANCELLED';
+  }
+  if (message.trigger_key === 'BOOKING_SEND_ACCEPTED_INVOICE') {
+    if (process.env.BOOKING_INVOICE_HANDOFF_ENABLED !== 'true') return 'CANCELLED';
+    const [prefix, proposalId, versionId] = String(message.idempotency_key || '').split(':');
+    if (prefix !== 'booking-invoice' || !proposalId || !versionId) return 'CANCELLED';
+    const allowed = await client.query(`SELECT 1 FROM invoices i JOIN proposals p ON p.id=i.proposal_id
+      JOIN clients c ON c.id=i.client_id LEFT JOIN events e ON e.id=i.event_id
+      WHERE i.id=$1 AND p.id=$2 AND p.accepted_version_id::text=$3
+      AND i.deleted_at IS NULL AND p.deleted_at IS NULL AND c.deleted_at IS NULL
+      AND lower(c.email)=lower($4) AND p.status IN ('ACCEPTED','CONVERTED')
+      AND i.status NOT IN ('PAID','VOID','REFUNDED')
+      AND i.amount_paid < COALESCE((i.pricing_snapshot->>'amount_due_now')::numeric,0)
+      AND (i.event_id IS NULL OR (e.id IS NOT NULL AND e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND e.status<>'CANCELLED'))`,
+    [message.invoice_id, proposalId, versionId, message.recipient]);
+    if (!allowed.rowCount) return 'CANCELLED';
+  }
+
+  if(['BOOKING_SIGNATURE_REMINDER','BOOKING_BALANCE_REMINDER'].includes(message.trigger_key)){
+    if(process.env.BOOKING_LIFECYCLE_REMINDERS_ENABLED!=='true')return 'CANCELLED';
+    const keyParts=String(message.idempotency_key||'').split(':');
+    const contractId=keyParts[2],deadline=keyParts.slice(3,-1).join(':');
+    const allowed=message.trigger_key==='BOOKING_SIGNATURE_REMINDER'?await client.query(`SELECT 1 FROM contracts k JOIN proposals p ON p.id=k.proposal_id
+      JOIN clients c ON c.id=p.client_id LEFT JOIN events e ON e.id=p.event_id
+      WHERE k.id=$1 AND date_trunc('milliseconds',k.signing_due_at)=$3::timestamptz AND k.status='ISSUED' AND k.signing_grace_until>now() AND k.expires_at>now() AND p.deleted_at IS NULL AND c.deleted_at IS NULL
+       AND lower(c.email)=lower($2) AND k.snapshot->>'accepted_version_id'=p.accepted_version_id::text
+       AND (e.id IS NULL OR (e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND e.status<>'CANCELLED'))
+       AND EXISTS(SELECT 1 FROM invoices i WHERE i.proposal_id=p.id AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID','REFUNDED')
+        AND i.total>0 AND i.amount_paid>=COALESCE((SELECT x.minimum_before_agreement FROM booking_payment_exceptions x WHERE x.event_id=i.event_id AND x.revoked_at IS NULL),ceil(i.total*100*.3)/100))`,[contractId,message.recipient,deadline]):await client.query(`SELECT 1 FROM invoices i JOIN clients c ON c.id=i.client_id JOIN events e ON e.id=i.event_id
+      WHERE i.id=$1 AND i.due_date=$3::date AND i.deleted_at IS NULL AND c.deleted_at IS NULL AND e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND e.status<>'CANCELLED'
+       AND lower(c.email)=lower($2) AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED') AND i.amount_outstanding>0`,[message.invoice_id,message.recipient,deadline]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+  if(message.trigger_key==='PLANNING_CORRECTIONS'){
+    const parts=String(message.idempotency_key||'').split(':');
+    if(parts[0]!=='planning-correction'||!parts[1])return 'CANCELLED';
+    const allowed=await client.query(`SELECT 1 FROM event_planning p JOIN events e ON e.id=p.event_id JOIN clients c ON c.id=p.client_id
+     WHERE p.id=$1 AND p.event_id=$2 AND p.client_id=$3 AND p.details_review_status='CHANGES_REQUESTED' AND p.reviewed_at=$4::timestamptz
+      AND e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND c.deleted_at IS NULL AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS') AND lower(c.email)=lower($5)`,[parts[1],message.event_id,message.client_id,parts.slice(2).join(':'),message.recipient]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+  if(message.trigger_key==='PLANNING_RECURRING_REMINDER'){
+    if(process.env.PLANNING_REMINDERS_ENABLED!=='true')return 'CANCELLED';
+    const allowed=await client.query(`SELECT 1 FROM planning_reminder_ledger l JOIN events e ON e.id=l.event_id
+      JOIN clients c ON c.id=e.client_id WHERE l.communication_id=$1 AND e.id=$2 AND c.id=$3
+      AND e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND c.deleted_at IS NULL AND e.status IN ('CONFIRMED','PREPARING','READY') AND e.event_date>=current_date
+      AND ((l.kind='PLANNING' AND EXISTS(SELECT 1 FROM event_planning p WHERE p.id=l.entity_id AND p.event_id=e.id AND p.client_id=c.id
+        AND p.token_hash=l.grant_version AND p.revoked_at IS NULL AND p.expires_at>now() AND p.submitted_at IS NULL))
+       OR (l.kind='CREATIVE' AND EXISTS(SELECT 1 FROM creative_approvals a WHERE a.id=l.entity_id AND a.event_id=e.id AND a.client_id=c.id
+        AND a.version::text=l.grant_version AND a.deleted_at IS NULL AND a.expires_at>now() AND a.status IN ('PENDING_APPROVAL','VIEWED'))))`,[message.id,message.event_id,message.client_id]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+  if (message.trigger_key === 'PLANNING_INVITATION') {
+    const [prefix,planningId,tokenHash]=String(message.idempotency_key||'').split(':');
+    if(prefix!=='planning-invitation'||!planningId||!tokenHash)return 'CANCELLED';
+    const allowed=await client.query(`SELECT 1 FROM event_planning p JOIN events e ON e.id=p.event_id
+      JOIN clients c ON c.id=p.client_id AND c.id=e.client_id
+      WHERE p.id=$1 AND p.token_hash=$2 AND p.invitation_communication_id=$3
+      AND p.revoked_at IS NULL AND p.expires_at>now() AND e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND c.deleted_at IS NULL
+      AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS')`,[planningId,tokenHash,message.id]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+  if (message.trigger_key === 'APPROVAL_REQUESTED') {
+    const allowed=await client.query(`SELECT 1 FROM creative_approvals a JOIN events e ON e.id=a.event_id
+      JOIN clients c ON c.id=a.client_id AND c.id=e.client_id
+      WHERE a.communication_id=$1 AND a.deleted_at IS NULL AND a.status IN ('PENDING_APPROVAL','VIEWED')
+      AND a.expires_at>now() AND e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND c.deleted_at IS NULL
+      AND e.status NOT IN ('CANCELLED','COMPLETED')`,[message.id]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
   if (message.trigger_key === 'GALLERY_DELIVERY' && message.idempotency_key?.startsWith('gallery-delivery:')) {
     const keyId = message.idempotency_key.split(':')[1];
     const grant = (await client.query(`SELECT k.*,a.status AS album_status,a.expires_at AS album_expires_at,

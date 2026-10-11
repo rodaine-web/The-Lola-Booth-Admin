@@ -1,3 +1,7 @@
+import {processWebsiteProposalHandoffs} from './services/website-proposal-handoff-service.js';
+import {queueBookingLifecycleReminders} from './services/booking-lifecycle-reminders.js';
+import { processBookingInvoiceHandoffs } from './services/booking-invoice-handoff-service.js';
+import {queueDueExternalMaintenance} from './services/external-integration-jobs.js';
 import {processCampaignJobs} from "./services/campaign-service.js";
 import {processFormOwnerNotifications} from "./services/form-owner-notifications.js";
 import {assertDatabaseIdentity} from './config/database-identity.js';
@@ -8,6 +12,8 @@ import {processIntegrationJobs,queueDueReminders} from "./services/integration-j
 import { logger } from "./config/logger.js";
 import { pool } from "./db/pool.js";
 import { processDueJobs } from "./services/automation-service.js";
+import {queuePlanningReminders} from './services/planning-reminder-service.js';
+import {expireBookingHolds} from './services/booking-hold-service.js';
 import { recordWorkerHeartbeat, recordWorkerProcessingResult } from "./services/system-health-service.js";
 
 const databaseSystemId = await assertDatabaseIdentity(pool);
@@ -26,11 +32,18 @@ async function tick() {
     }
     const campaigns=await processCampaignJobs({limit:25});
     if(campaigns.processed.length)await recordWorkerProcessingResult("automation-worker",{success:campaigns.processed.every(item=>item.status==='SENT_TO_PROVIDER'),processed:campaigns.processed.length,campaignsOnly:true});
-    if(stagingJobsPaused()){const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:result.processed.every(item=>item.status!=='FAILED'),processed:result.processed.length,qualificationOnly:true});return;}
+    if(stagingJobsPaused()){if(isStaging()&&process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:result.processed.every(item=>item.status!=='FAILED'),processed:result.processed.length,qualificationOnly:true});return;}
+    const websiteProposals = await processWebsiteProposalHandoffs();
+    if (websiteProposals.processed.length) logger.info({processed:websiteProposals.processed}, 'Website proposal handoffs processed');
+    const invoiceHandoffs = await processBookingInvoiceHandoffs();
+    if (invoiceHandoffs.processed.length) logger.info({processed:invoiceHandoffs.processed}, 'Booking invoice handoffs processed');
     if(!isStaging())await recoverPublicInquiryAcknowledgments();
     await queueDueReminders();
+    await expireBookingHolds();
+    await queuePlanningReminders();
+    await queueBookingLifecycleReminders();
     const result = await processDueJobs({ limit: 25 });
-    if(!isStaging())await processIntegrationJobs({limit:25});
+    if(!isStaging()){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25});}else if(process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}
     await recordWorkerProcessingResult("automation-worker", { success: result.processed.every(item=>item.status!=="FAILED"&& !item.error), processed: result.processed.length });
     if (result.processed.length) logger.info({ processed: result.processed.length }, "automation jobs processed");
   } catch (error) {

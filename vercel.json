@@ -104,6 +104,26 @@
       "destination": "/staging-site/about.html"
     },
     {
+      "source": "/booking.css",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/booking.css"
+    },
+    {
+      "source": "/booking.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/booking.js"
+    },
+    {
       "source": "/app.js",
       "has": [
         {

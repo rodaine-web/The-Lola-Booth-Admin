@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import os from "node:os";
+import path from "node:path";
 const enabled = process.env.GALLERY_TEST_DATABASE_URL;
 test(
   "private gallery database authorization and lifecycle",
@@ -17,7 +19,7 @@ test(
     process.env.NODE_ENV = "test";
     process.env.JWT_SECRET = "synthetic-gallery-database-test-secret-32chars";
     process.env.GALLERY_STORAGE_PROVIDER = "local";
-    process.env.GALLERY_LOCAL_ROOT = "/private/tmp/lola-gallery-test-media";
+    process.env.GALLERY_LOCAL_ROOT = path.join(os.tmpdir(), "lola-gallery-test-media");
     const { query, pool } = await import("../server/src/db/pool.js");
     const g = await import("../server/src/services/private-gallery-service.js");
     const id = crypto.randomUUID();

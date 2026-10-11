@@ -16,7 +16,8 @@ export default function InvoiceDetail() {
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [payment, setPayment] = useState({ amount: "", payment_method: "CASH", reference_number: "", payment_date: new Date().toISOString().slice(0, 10), notes: "" });
+  const [payment, setPayment] = useState(() => { const now = new Date(); const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; return { amount: "", payment_method: "CASH", reference_number: "", payment_date: localDate, notes: "" }; });
+  const [paymentBusy, setPaymentBusy] = useState(false);
 
   useEffect(() => { load(); }, [id]);
 
@@ -40,16 +41,25 @@ export default function InvoiceDetail() {
     }
   }
 
-  async function recordPayment() {
-    await action(() => api.post("/payments", {
-      ...payment,
-      amount: payment.amount,
-      invoice_id: invoice.id,
-      client_id: invoice.client_id,
-      event_id: invoice.event_id,
-      idempotency_key: `manual-${invoice.id}-${payment.amount}-${payment.payment_date}-${payment.reference_number}`
-    }), "Manual payment recorded.");
-    setPayment((current) => ({ ...current, amount: "", reference_number: "", notes: "" }));
+  async function recordPayment(event) {
+    event.preventDefault();
+    if (paymentBusy) return;
+    setPaymentBusy(true);
+    setError(""); setNotice("");
+    try {
+      await api.post("/payments", {
+        ...payment,
+        amount: payment.amount,
+        invoice_id: invoice.id,
+        client_id: invoice.client_id,
+        event_id: invoice.event_id,
+        idempotency_key: `manual-${invoice.id}-${payment.amount}-${payment.payment_date}-${payment.reference_number}`
+      });
+      setNotice("Manual payment recorded.");
+      setPayment((current) => ({ ...current, amount: "", reference_number: "", notes: "" }));
+      await load();
+    } catch (err) { setError(err.message); }
+    finally { setPaymentBusy(false); }
   }
 
   if (error && !invoice) return <main className="page record-detail-redesign"><AsyncState error={error} noun="invoice" onRetry={()=>{setError("");load();}}/></main>;
@@ -92,16 +102,17 @@ export default function InvoiceDetail() {
         <DataTable rows={invoice.items} columns={["description", "quantity", "unit_price", "tax_rate", "discount", "line_total"]} empty="No invoice items." />
       </section>
       <DocumentPreview path={`/invoices/${id}/pdf`} title="Invoice preview" />
-      <section className="panel">
+      {canEdit && <section className="panel">
         <h2>Record Manual Payment</h2>
-        <div className="inline-form">
-          <input type="number" min="0.01" step="0.01" max={invoice.amount_outstanding || invoice.balance_due} value={payment.amount} onChange={(event) => setPayment((current) => ({ ...current, amount: event.target.value }))} placeholder="Amount" />
-          <select value={payment.payment_method} onChange={(event) => setPayment((current) => ({ ...current, payment_method: event.target.value }))}>{["CASH", "CHECK", "BANK_TRANSFER", "ZELLE", "EXTERNAL_CARD", "OTHER"].map((item) => <option key={item}>{item}</option>)}</select>
-          <input type="date" value={payment.payment_date} onChange={(event) => setPayment((current) => ({ ...current, payment_date: event.target.value }))} />
-          <input value={payment.reference_number} onChange={(event) => setPayment((current) => ({ ...current, reference_number: event.target.value }))} placeholder="Reference" />
-          <button className="primary-action" disabled={!payment.amount} onClick={recordPayment}><Plus size={16} />Record</button>
-        </div>
-      </section>
+        <p>Fields marked * are required. Record payments already received outside the online payment page.</p>
+        <form onSubmit={recordPayment} className="form-grid">
+          <label>Amount *<input required disabled={paymentBusy} type="number" min="0.01" step="0.01" max={invoice.amount_outstanding ?? invoice.balance_due ?? 0} value={payment.amount} onChange={(event) => setPayment((current) => ({ ...current, amount: event.target.value }))} /></label>
+          <label>Payment method *<select required disabled={paymentBusy} value={payment.payment_method} onChange={(event) => setPayment((current) => ({ ...current, payment_method: event.target.value }))}>{["CASH", "CHECK", "BANK_TRANSFER", "ZELLE", "EXTERNAL_CARD", "OTHER"].map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label>Payment date *<input required disabled={paymentBusy} type="date" value={payment.payment_date} onChange={(event) => setPayment((current) => ({ ...current, payment_date: event.target.value }))} /></label>
+          <label>Reference (optional)<input disabled={paymentBusy} value={payment.reference_number} onChange={(event) => setPayment((current) => ({ ...current, reference_number: event.target.value }))} /></label>
+          <button className="primary-action" disabled={paymentBusy || Number(invoice.amount_outstanding ?? invoice.balance_due ?? 0) <= 0}><Plus size={16} />{paymentBusy ? 'Recording…' : 'Record payment'}</button>
+        </form>
+      </section>}
       <section className="panel">
         <h2>Payment History</h2>
         <DataTable rows={invoice.payments} columns={["payment_date", "provider", "payment_method", "amount", "refunded_amount", "status", "reference_number"]} getRowHref={(row) => `/finance/payments/${row.id}`} empty="No payments recorded." />

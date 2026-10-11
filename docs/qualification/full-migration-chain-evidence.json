@@ -1,0 +1,7 @@
+{
+  "scope": "disposable restore only",
+  "migration_count": 53,
+  "schema": "parity_chain_final_oct7",
+  "status": "PASS",
+  "exit": 0
+}

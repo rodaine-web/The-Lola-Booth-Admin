@@ -59,7 +59,7 @@ test("Payment confirmation communication binding matches SQL placeholders", () =
   const start = paymentService.indexOf("async function sendRecordedPaymentEmail");
   const end = paymentService.indexOf("async function recordProviderPaymentFailure", start);
   const slice = paymentService.slice(start, end);
-  assert.match(slice, /VALUES\(\$1,\$2,\$3,'EMAIL','EMAIL','OUTBOUND',\$4,\$5,\$5,\$6,\$7,\$8,'PROCESSING','SEND_NOW',\$9,\$10\)/);
+  assert.match(slice, /VALUES\(\$1,\$2,\$3,'EMAIL','EMAIL','OUTBOUND',\$4,\$5,\$5,\$6,\$7,\$8,'DRAFT','SEND_NOW',\$9,\$10\)/);
   assert.match(slice, /\[payment\.client_id,payment\.event_id,invoice\.id,to,subject,body\.slice\(0,500\),body,html,idempotencyKey,triggerKey\]/);
 });
 
@@ -78,6 +78,7 @@ test("Stripe test sprint handles success, failure, and refund webhooks without d
 });
 
 test("Admin CSP remains narrow and does not whitelist unused Google or Stripe browser resources", () => {
+  assert.match(csp, /connect-src 'self' https:\/\/api\.thelolabooth\.com/);
   assert.match(csp, /connect-src 'self' https:\/\/(?:stagingapi|api)\.thelolabooth\.com;/);
   const apiOrigins = [...new Set(csp.match(/https:\/\/(?:stagingapi|api)\.thelolabooth\.com/g))];
   assert.equal(apiOrigins.length, 1, 'Each release must authorize exactly one environment API');

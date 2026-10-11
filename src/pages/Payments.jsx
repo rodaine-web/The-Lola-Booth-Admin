@@ -1,8 +1,10 @@
+import { recordCell } from '../components/workspace/RecordCells.jsx';
+import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
+import RecordTable from "../components/workspace/RecordTable.jsx";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
-import DataTable from "../components/DataTable.jsx";
 
 const statuses=["","SUCCEEDED","PROCESSING","FAILED","PARTIALLY_REFUNDED","REFUNDED"];
 const providers=["","STRIPE","PAYPAL","MANUAL"];
@@ -12,7 +14,7 @@ export default function Payments(){
   const [rows,setRows]=useState([]);
   const [search,setSearch]=useState("");
   const [error,setError]=useState("");
-  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [filtersOpen,setFiltersOpen]=useState(true);
   const provider=urlParams.get("provider")||"";
   const status=urlParams.get("status")||"";
 
@@ -31,17 +33,15 @@ export default function Payments(){
     }catch(err){setError(err.message);}
   }
 
-  return <main className="page lola-list-page">
+  return <main className="page lola-list-page record-module">
     <section className="page-heading lola-page-heading">
       <div><p className="eyebrow">Finance</p><h1>Payments</h1><p className="lede">All payments in one place.</p></div>
       <button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>
     </section>
 
-    <section className="lola-status-tabs">
-      {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setFilter("status",item)}>{item?item.toLowerCase().replaceAll("_"," "):"All"}</button>)}
-    </section>
+    <RecordMetrics module="Payments" rows={rows}/>
 
-    <section className="lola-list-toolbar">
+    <div className="record-filter-bar"><section className="lola-list-toolbar">
       <div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search payments by invoice, client or reference..."/></div>
     </section>
 
@@ -49,9 +49,9 @@ export default function Payments(){
       <label>Provider<select value={provider} onChange={e=>setFilter("provider",e.target.value)}>{providers.map(item=><option key={item||"all"} value={item}>{item||"All providers"}</option>)}</select></label>
       <label>From<input type="date" value={urlParams.get("from")||""} onChange={e=>setFilter("from",e.target.value)}/></label>
       <label>To<input type="date" value={urlParams.get("to")||""} onChange={e=>setFilter("to",e.target.value)}/></label>
-    </section>}
+    </section>}<label>Status<select value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item?item.replaceAll("_"," "):"All statuses"}</option>)}</select></label></div>
 
     {error&&<div className="toast error">{error}</div>}
-    <DataTable rows={rows} columns={["payment_date","client_name","invoice_number","provider","payment_method","amount","refunded_amount","status","reference_number"]} getRowHref={row=>"/finance/payments/"+row.id} empty="No payments found."/>
+    <RecordWorkspace module="Payments" rows={rows}>    <RecordTable renderCell={recordCell} title="Payments" rows={rows} columns={["reference_number","client_name","event_name","provider","payment_method","amount","payment_date","invoice_number","status"]} getRowHref={row=>"/finance/payments/"+row.id} empty="No payments found."/></RecordWorkspace>
   </main>;
 }

@@ -1,3 +1,8 @@
+import {queueWebsiteProposal} from '../services/website-proposal-handoff-service.js';
+import {clientSessionRouter} from './client-session.js';
+import { acceptProposal } from '../services/proposal-acceptance-service.js';
+import {PostgresPublicRateLimitStore} from '../middleware/postgres-rate-limit-store.js';
+import {preparePublicBooking,publicBookingCatalog} from '../services/public-booking-service.js';
 import {publicContractsRouter,publicWorkspaceRouter} from './contracts.js';
 import {campaignPublicRouter} from "./campaigns.js";
 import {inquirySchema,publicFormKind} from "../services/public-form-schema.js";
@@ -11,7 +16,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { recordActivity } from "../services/activity-service.js";
 import { createNotification } from "../services/notification-service.js";
-import { query } from "../db/pool.js";
+import { query, transaction } from "../db/pool.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { AppError } from "../utils/errors.js";
 import { validate } from "../utils/validation.js";
@@ -25,7 +30,7 @@ import { getInvoice } from "../services/invoice-service.js";
 import { createPaymentSession, publicPaymentOptions } from "../services/payment-service.js";
 import { applyBookingConfirmationPolicy } from "../services/payment-reconciliation-service.js";
 import { getProposal, proposalPdfBuffer, proposalPreviewHtml, userDocumentFilename } from "../services/proposal-service.js";
-import { publicCreativeApproval, respondToCreativeApproval } from "../services/creative-approval-service.js";
+import { publicCreativeApproval, publicCreativeProof, respondToCreativeApproval } from "../services/creative-approval-service.js";
 import { getStorageProvider } from "../services/storage-service.js";
 import { publicDelivery } from "../services/field-operations-service.js";
 import {
@@ -34,16 +39,21 @@ import {
   publicSitePayload
 } from "../services/website-cms-service.js";
 
+import { publicPlanningRouter } from "./event-planning.js";
 export const publicRouter = Router();
 publicRouter.use('/staging',(_req,_res,next)=>isStaging()?next():next(new AppError('Staging routes are unavailable in this environment.',404,'NOT_FOUND')));
 
 publicRouter.use(rateLimit({
   windowMs: env.rateLimitWindowMs,
-  limit: 20,
+  limit: Math.max(1, Math.min(10000, Number(process.env.PUBLIC_WRITE_RATE_LIMIT_MAX)||20)),
+  store: new PostgresPublicRateLimitStore(),
+  message:{error:{code:"RATE_LIMITED",message:"We’re receiving too many requests right now. Please wait a little and try again."}},
   skip: req => ["GET", "HEAD", "OPTIONS"].includes(req.method),
   standardHeaders: true,
   legacyHeaders: false
 }));
+publicRouter.use('/client',clientSessionRouter);
+publicRouter.use("/planning",publicPlanningRouter);
 publicRouter.use('/contracts', publicContractsRouter);
 publicRouter.use('/workspaces', publicWorkspaceRouter);
 
@@ -51,7 +61,11 @@ publicRouter.use('/workspaces', publicWorkspaceRouter);
 
 publicRouter.use(campaignPublicRouter);
 
+publicRouter.get("/booking-catalog",asyncHandler(async (_req,res)=>{res.set("Cache-Control","no-store").json(await publicBookingCatalog());}));
+
 publicRouter.post("/inquiries", (req, _res, next) => {
+  if(!req.body || typeof req.body!=="object" || Array.isArray(req.body))return next(new AppError("Submit a JSON inquiry object.",400,"INVALID_REQUEST"));
+  if(Buffer.byteLength(JSON.stringify(req.body))>65536)return next(new AppError("This request is too large.",413,"REQUEST_TOO_LARGE"));
   const origin = req.headers.origin;
   if (origin && !env.publicInquiryAllowedOrigins.includes(origin)) {
     return next(new AppError("Inquiry submissions are not allowed from this origin.", 403, "CORS_REJECTED"));
@@ -61,14 +75,19 @@ publicRouter.post("/inquiries", (req, _res, next) => {
 }, validate(inquirySchema), asyncHandler(async (req, res) => {
   const payload = {...req.body, referrer_url: req.body.referrer_url || req.headers.referer || null};
   if (isStaging()) {
-    payload.marketing_email_opt_in = false;
+    if(!payload.selections)payload.marketing_email_opt_in = false;
     for (const [field,type] of [['preferredExperienceId','experiences'],['preferredPackageId','packages']]) if (payload[field]) {
       const record = (await query("SELECT payload FROM website_channel_records WHERE id=$1 AND channel='STAGING' AND cms_type=$2 AND status='PUBLISHED'", [payload[field],type])).rows[0];
       if (!record?.payload.source_catalog_id) throw new AppError('Choose an available staging catalog item.',422,'STAGING_SELECTION_INVALID');
       payload[field] = record.payload.source_catalog_id;
     }
   }
-  const result = await ingestProviderLead({provider: "WEBSITE", payload, testMode: isStaging(), skipAutomations: isStaging() || publicFormKind(payload)==="CONTACT"});
+  const result = await transaction(async()=>{
+    const validated=await preparePublicBooking(payload);
+    const ingested = await ingestProviderLead({provider: "WEBSITE", payload:validated, testMode: isStaging(), skipAutomations: isStaging() || publicFormKind(payload)==="CONTACT"});
+    if (ingested.action === "CREATED_LEAD") await queueWebsiteProposal(ingested.lead.id);
+    return ingested;
+  });
 
   await sendPublicInquiryEmails({
     lead: result.lead,
@@ -171,17 +190,23 @@ publicRouter.get("/delivery/:token", asyncHandler(async (req, res) => {
 }));
 
 publicRouter.get("/approvals/:token", asyncHandler(async (req, res) => {
-  res.json(await publicCreativeApproval(req.params.token));
+  res.set({"Cache-Control":"private, no-store","Referrer-Policy":"no-referrer"}).json(await publicCreativeApproval(req.params.token));
+}));
+
+publicRouter.get("/approvals/:token/proof", asyncHandler(async (req,res) => {
+  const file = await publicCreativeProof(req.params.token);
+  res.set({"Cache-Control":"private, no-store","Referrer-Policy":"no-referrer","Content-Security-Policy":"sandbox"}).type(file.mime_type).attachment(file.filename).send(await getStorageProvider().get(file.storage_key));
 }));
 
 publicRouter.post("/approvals/:token/respond", asyncHandler(async (req, res) => {
   const body = z.object({
     action: z.enum(["approve", "request_changes"]),
-    name: z.string().trim().min(2).max(160).optional(),
-    email: z.string().trim().email().max(160).optional(),
+    version: z.number().int().positive(),
+    name: z.string().trim().min(2).max(160),
+    email: z.string().trim().email().max(160),
     notes: z.string().trim().max(3000).optional()
   }).parse(req.body);
-  res.json(await respondToCreativeApproval(req.params.token, body));
+  res.json(await respondToCreativeApproval(req.params.token, body, req));
 }));
 
 publicRouter.get("/proposals/:token", asyncHandler(async (req, res) => {
@@ -208,19 +233,14 @@ publicRouter.get("/proposals/:token/pdf", asyncHandler(async (req, res) => {
 publicRouter.post("/proposals/:token/accept", asyncHandler(async (req, res) => {
   const body = z.object({ acceptedByName: z.string().trim().min(2).max(160) }).parse(req.body);
   const proposal = await getProposal(req.params.token, { publicView: true });
-  if (proposal.status === "ACCEPTED") return res.json({ proposal });
-  if (!["SENT", "VIEWED"].includes(proposal.status)) throw new AppError("This proposal is not available for acceptance.", 409, "PROPOSAL_NOT_ACCEPTABLE");
-  const version = await query("SELECT id FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC LIMIT 1", [proposal.id]);
-  const updated = await query(
-    `UPDATE proposals SET status='ACCEPTED', accepted_at=now(), accepted_by_name=$1, accepted_ip=$2, accepted_user_agent=$3, accepted_version_id=$4, updated_at=now()
-     WHERE id=$5 AND status IN ('SENT','VIEWED') AND (valid_through IS NULL OR valid_through >= current_date) RETURNING *`,
-    [body.acceptedByName, req.ip, req.headers["user-agent"] || null, version.rows[0]?.id || null, proposal.id]
-  );
-  if (!updated.rows[0]) throw new AppError("This proposal has already been updated. Refresh to see its current status.",409,"PROPOSAL_STATE_CHANGED");
-  await recordActivity({ entityType: "proposal", entityId: proposal.id, action: "proposal_accepted", summary: `Proposal ${proposal.proposal_number} accepted by ${body.acceptedByName}` });
+  const accepted = await acceptProposal(proposal.id, body.acceptedByName, req);
+  const automatic = accepted.invoiceQueued;
+  const nextStep = automatic ? { action: "INVOICE_QUEUED", label: "Your invoice will be emailed to you" }
+    : { action: "CREATE_DEPOSIT_INVOICE", label: "Create and send deposit invoice" };
+  if (accepted.duplicate) return res.json({ proposal: accepted.proposal, nextStep });
   if (proposal.event_id) await applyBookingConfirmationPolicy(proposal.event_id);
-  await createNotification({ roleTarget: "OWNER_ADMIN", category: "SALES", severity: "HIGH", title: `Proposal ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted ${proposal.proposal_number}. Next step: create and send the deposit invoice.`, entityType: "proposal", entityId: proposal.id, actionUrl: `/sales/proposals/${proposal.id}`, metadata: { nextStep: "CREATE_DEPOSIT_INVOICE", acceptedBy: body.acceptedByName }, email: { enabled: true, subject: `LOLA: ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted the proposal. Create and send the deposit invoice from the Admin portal.` } }).catch(error => req.log?.warn({ code:error.code }, "Proposal acceptance notification failed"));
-  res.json({ proposal: updated.rows[0], nextStep: { action: "CREATE_DEPOSIT_INVOICE", label: "Create and send deposit invoice" } });
+  await createNotification({ roleTarget: "OWNER_ADMIN", category: "SALES", severity: "HIGH", title: `Proposal ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted ${proposal.proposal_number}. ${automatic ? "The invoice handoff is queued." : "Next step: create and send the deposit invoice."}`, entityType: "proposal", entityId: proposal.id, actionUrl: `/sales/proposals/${proposal.id}`, metadata: { nextStep: nextStep.action, acceptedBy: body.acceptedByName }, email: { enabled: true, subject: `LOLA: ${proposal.proposal_number} accepted`, body: `${proposal.client_name || "Client"} accepted the proposal. ${automatic ? "The invoice handoff is queued for delivery." : "Create and send the deposit invoice from the Admin portal."}` } }).catch(error => req.log?.warn({ code:error.code }, "Proposal acceptance notification failed"));
+  res.json({ proposal: accepted.proposal, nextStep });
 }));
 
 publicRouter.post("/proposals/:token/decline", asyncHandler(async (req, res) => {

@@ -29,6 +29,7 @@ export function clearTokens() {
 async function request(path, options = {}, retry = true, responseType = "json") {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),

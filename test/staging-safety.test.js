@@ -15,6 +15,15 @@ test('staging email defaults paused and allowlist covers cc/bcc and bulk limits'
  assert.equal(stagingEmailPolicy(message,{}),message);
 });
 test('staging keeps automatic jobs paused and version output safe',()=>{assert.equal(stagingJobsPaused({APP_ENV:'staging',STAGING_AUTOMATIONS_ENABLED:'true'}),true);assert.deepEqual(buildInfo({APP_ENV:'staging',RAILWAY_GIT_COMMIT_SHA:'abc',JWT_SECRET:'hidden'}),{environment:'staging',revision:'abc'});});
+test('owner-enabled staging open recipients retain labels, pause and fresh cutoff',()=>{
+ const config={APP_ENV:'staging',STAGING_EMAIL_ENABLED:'true',STAGING_EMAIL_ALLOW_ANY_RECIPIENT:'true',STAGING_AUTOMATIONS_ENABLED:'true',STAGING_AUTOMATIONS_SINCE:'2026-10-10T03:40:08Z'};
+ const message={to:'tester@example.test',cc:['one@example.test','two@example.test'],subject:'Proposal'};
+ assert.equal(stagingEmailPolicy(message,config).subject,'[LOLA STAGING QA] Proposal');
+ assert.deepEqual(stagingAutomationScope(config),{since:'2026-10-10T03:40:08.000Z',recipients:[]});
+ assert.equal(stagingJobsPaused({...config,STAGING_AUTOMATIONS_SINCE:''}),true);
+ assert.throws(()=>stagingEmailPolicy(message,{...config,STAGING_EMAIL_ENABLED:'false'}),e=>e.code==='STAGING_EMAIL_PAUSED');
+ assert.throws(()=>stagingEmailPolicy(message,{...config,APP_ENV:'production'}),e=>e.code==='PRODUCTION_EMAIL_PAUSED');
+});
 test('staging marketing never calls transport even if an enable flag is supplied',async()=>{let called=false;assert.equal((await dispatchMarketing({provider:'GA4'},{config:{APP_ENV:'staging',GA4_ENABLED:'true'},transport:()=>{called=true;}})).result,'DISABLED');assert.equal(called,false);});
 test('error logging redacts configured secrets and payment tokens',()=>{const result=safeError(new Error('failed sensitive-password sk_live_ABC whsec_DEF'),{JWT_SECRET:'sensitive-password'});assert.ok(!JSON.stringify(result).includes('sensitive-password'));assert.ok(!JSON.stringify(result).includes('sk_live_ABC'));assert.equal(result.stack,undefined);});
 

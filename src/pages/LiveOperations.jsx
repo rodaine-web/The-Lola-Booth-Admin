@@ -1,3 +1,4 @@
+import "../styles/record-workspace.css";
 import StatusBadge from "../components/StatusBadge.jsx";
 import AsyncState from "../components/AsyncState.jsx";
 import { AlertTriangle, CheckCircle2, Clock, RefreshCw, Users } from "lucide-react";
@@ -16,6 +17,7 @@ const columns = [
 ];
 
 export default function LiveOperations() {
+  const [tab,setTab]=useState("All Events");
   const [dashboard, setDashboard] = useState(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -47,11 +49,11 @@ export default function LiveOperations() {
   }, [dashboard]);
 
   return (
-    <main className="page live-operations-redesign">
+    <main className="page live-operations-redesign record-module">
       <div className="page-heading">
         <div>
           <p className="eyebrow">Operations</p>
-          <h1>Live Board</h1>
+          <h1>Live Operations</h1><p className="lede">Monitor event readiness, team status and equipment in real time.</p>
         </div>
         <button className="primary-action" onClick={load} disabled={refreshing}><RefreshCw size={16} />Refresh</button>
       </div>
@@ -61,15 +63,8 @@ export default function LiveOperations() {
         <span>{dashboard?.timeZone || "America/Chicago"}</span>
         <span>Updates every 30 seconds</span>
       </div>
-      <section className="live-board">
-        {grouped.map((column) => (
-          <div className="live-column" key={column.label}>
-            <h2>{column.label} <span>{column.events.length}</span></h2>
-            {column.events.length === 0 && <div className="mini-empty">No events</div>}
-            {column.events.map((event) => <LiveCard event={event} key={event.id} />)}
-          </div>
-        ))}
-      </section>
+      <div className="lola-status-tabs">{['All Events','Live','Upcoming','Completed'].map(value=><button key={value} className={tab===value?'active':''} onClick={()=>setTab(value)}>{value}</button>)}</div>
+      <section className="live-reference-list">{grouped.filter(column=>tab==='All Events'||(tab==='Live'?['LIVE','ON SITE','SETTING UP','BREAKDOWN','EN ROUTE'].includes(column.label):tab==='Completed'?column.label==='COMPLETE':column.label==='UPCOMING')).flatMap(column=>column.events.map(event=><article className="record-panel" key={event.id}><StatusBadge status={event.operational_status||event.status}/><LiveCard event={event}/></article>))}{dashboard&&!grouped.some(column=>column.events.length)&&<div className="empty-state"><h2>No events today</h2><p>Your event readiness and team assignments will appear here.</p></div>}</section>
     </main>
   );
 }

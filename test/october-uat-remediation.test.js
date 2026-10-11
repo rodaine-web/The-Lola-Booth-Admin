@@ -203,7 +203,7 @@ test("October UAT: payment notifications are immediate, recorded, idempotent, an
   assert.match(payment, /sendRecordedPaymentEmail/);
   assert.match(payment, /payment-confirmation:/);
   assert.match(payment, /payment-owner-notification:/);
-  assert.match(payment, /SENT_TO_PROVIDER/);
+  assert.match(payment, /await sendCommunication\(communication.id\)/, "Payment notifications use the shared committed delivery claim");
   assert.match(payment, /Customer payment confirmation email failed after payment posting/);
   assert.match(payment, /Owner payment notification email failed after payment posting/);
 });

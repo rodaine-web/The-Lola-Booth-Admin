@@ -1,0 +1,37 @@
+[
+  {
+    "migration": "046_external_integrations_hub.sql",
+    "status": "PASS",
+    "exit": 0
+  },
+  {
+    "migration": "048_creative_approval_safety.sql",
+    "status": "PASS",
+    "exit": 0
+  },
+  {
+    "migration": "049_admin_appearance_preferences.sql",
+    "status": "PASS",
+    "exit": 0
+  },
+  {
+    "migration": "050_event_planning_backdrops.sql",
+    "status": "PASS",
+    "exit": 0
+  },
+  {
+    "migration": "051_booking_holds.sql",
+    "status": "PASS",
+    "exit": 0
+  },
+  {
+    "migration": "052_planning_reminder_ledger.sql",
+    "status": "PASS",
+    "exit": 0
+  },
+  {
+    "migration": "053_backdrop_quotes.sql",
+    "status": "PASS",
+    "exit": 0
+  }
+]
