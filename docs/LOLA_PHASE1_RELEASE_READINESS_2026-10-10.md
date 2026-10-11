@@ -123,3 +123,14 @@ Owner explicitly authorized production deployment and then requested closing the
 - Hosted disposable PostgreSQL regression deployment `40a2d7dd-424c-4519-9f68-e068f130e073`: one integration test passed, zero failed/skipped. Actual migrations and signed webhook handler ran; Stripe responses were simulated, not live or real Sandbox delivery. An initial runner failed before tests due to SQL_ASCII initialization; corrected UTF-8 initialization passed. Full local available suite: 643 tests, 630 passed, zero failed, 13 conditional database skips. Deployment/full CI and real failure recovery remain separate checks.
 
 Remaining: live Stripe account/webhook/key verification after owner connects Stripe; populated private-storage recovery proof and backup retention; full campaign customer journey; chargeback integrity; remaining mobile/permissions/inbox checks; coordinated production flags, fresh queue audit and rollback. Automatic website proposal configuration remains deferred by the owner. **Production remains NO-GO.**
+
+
+## Daily independent Azure database backups — October 10, 2026
+
+The owner approved the lower-cost Blob Storage option. Daily cron `0 8 * * *` is configured on the isolated production backup helper, with 30-day retention of complete job-owned encrypted snapshot triplets. The Azure PostgreSQL server was not created. No Azure subscription/plan upgrade was purchased.
+
+Actual production backup qualification passed in deployment `8b89ccfe-b3b3-4251-a1ed-a7051ee459ba`: a 3,270,097-byte dump was restored locally, encrypted and uploaded to the existing private production Azure container, downloaded, authenticated/decrypted and restored again. Row counts matched all 115 public tables. Anonymous access returned Azure `409 PublicAccessNotPermitted`. No source database writes, schema migrations or production application rollout occurred.
+
+Daily-mode deployment `7af34a66-a8df-4e29-aed4-55335c4a5e2e` installed the UTC schedule and cleared the temporary verification private key. It is a scheduled deployment, not evidence that tomorrow's cron has run. Recovery private key remains separately on the owner's computer, permissions 0600 and Git-excluded; secure an independent owner-controlled copy. Failure alerts and the qualification-success notice were accepted by Microsoft Graph; inbox receipt has not been independently verified. Runtime failure alerts cannot detect a scheduler/container that never starts; external freshness monitoring remains desirable. Azure trial expiry is still a subscription-retention dependency.
+
+Scripts, restore instructions and full evidence are in `ops/backups/README.md`. This closes the independent uploaded-and-restored database backup check. It does not close live Stripe, campaign, permission/mobile, delivery or other remaining Phase 1 gates; the release remains NO-GO until the scoped mandatory gates pass.

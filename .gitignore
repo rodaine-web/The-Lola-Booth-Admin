@@ -19,3 +19,6 @@ audit-output/
 
 # Temporary proposal scenario render and review files.
 work/qa-scenarios/
+
+# Private offline backup recovery keys; never publish.
+work/backup-recovery/
