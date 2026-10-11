@@ -104,6 +104,8 @@ export async function submitPlanning(token,req){return transaction(async()=>{
 export async function selectPlanningBackdrop(token,input,req){return transaction(async()=>{
  const row=await tokenRecord(token);if(row.details_review_status==='APPROVED'||['APPROVED','COMPLETE'].includes(row.status))throw new AppError('Contact LOLA to change an approved backdrop.',409,'PLANNING_LOCKED');
  if(!['COLLECTION','OWN','CUSTOM'].includes(input.path))throw new AppError('Choose a backdrop option.',422,'BACKDROP_INVALID');
+ const changed=row.backdrop_path!==input.path||(row.backdrop_id||null)!==(input.path==='COLLECTION'?input.backdrop_id:null);
+ if(changed&&(await query("SELECT 1 FROM backdrop_quotes WHERE event_id=$1 AND status='ACCEPTED' AND invoice_id IS NOT NULL FOR SHARE",[row.event_id])).rowCount)throw new AppError('Contact LOLA to resolve the invoiced backdrop work before changing your selection.',409,'QUOTE_INVOICE_LOCKED');
  let backdrop=null;
  if(input.path==='COLLECTION'){
   backdrop=(await query("SELECT * FROM backdrops WHERE id=$1 FOR UPDATE",[input.backdrop_id])).rows[0];if(!backdrop||backdrop.status!=='ACTIVE')throw new AppError('This backdrop is unavailable.',409,'BACKDROP_UNAVAILABLE');
@@ -173,7 +175,6 @@ export async function reviewPlanning(eventId,input,req){
    if(backdrop?.status!=='ACTIVE')throw new AppError('This collection backdrop is unavailable.',409,'BACKDROP_UNAVAILABLE');
    if(backdrop.premium&&Number(backdrop.upgrade_price)>0)await (await import('./backdrop-quote-service.js')).assertBackdropPayment(eventId,row.client_id);
   }
-  if(input.backdrop_review_status==='CONFIRMED'&&row.backdrop_path==='CUSTOM')await (await import('./backdrop-quote-service.js')).assertBackdropPayment(eventId,row.client_id);
   const reviewInput={...input,...(input.status?{reviewed_at:new Date().toISOString(),reviewed_by:req.user.id,details_review_status:input.status}:{}),...(input.status==='APPROVED'?{change_requests:{}}:{})};
   const fields=Object.keys(reviewInput).filter(key=>key!=='price_confirmed'),values=fields.map(key=>reviewInput[key]);
   if(!fields.length)throw new AppError('Choose a review status or deadline.',422,'REVIEW_REQUIRED');

@@ -55,8 +55,15 @@ export async function acceptBackdropQuote(token,quoteId,name,req){
 export async function linkBackdropInvoice(eventId,invoiceId,req){
  if(!await userCanAccessEvent(req.user,eventId))throw new AppError('Event unavailable.',403,'FORBIDDEN');
  return transaction(async()=>{
-  const quote=(await query("SELECT * FROM backdrop_quotes WHERE event_id=$1 AND status='ACCEPTED' FOR UPDATE",[eventId])).rows[0];
-  if(!quote)throw new AppError('Client acceptance is required before invoice linkage.',409,'QUOTE_ACCEPTANCE_REQUIRED');
+  // Match selection's lock order so invoice linkage cannot race a scope change.
+  await query('SELECT id FROM event_planning WHERE event_id=$1 FOR UPDATE',[eventId]);
+  const quote=(await query(`SELECT q.* FROM backdrop_quotes q
+   JOIN event_planning p ON p.event_id=q.event_id AND p.client_id=q.client_id
+    AND p.backdrop_path=q.backdrop_path AND p.backdrop_id IS NOT DISTINCT FROM q.backdrop_id
+   JOIN events e ON e.id=q.event_id AND e.client_id=q.client_id
+   WHERE q.event_id=$1 AND q.status='ACCEPTED' AND e.deleted_at IS NULL
+    AND e.status NOT IN ('CANCELLED','COMPLETED') FOR UPDATE OF q FOR SHARE OF e`,[eventId])).rows[0];
+  if(!quote)throw new AppError('Client acceptance for the current backdrop selection is required before invoice linkage.',409,'QUOTE_ACCEPTANCE_REQUIRED');
   if(quote.invoice_id&&quote.invoice_id!==invoiceId)throw new AppError('The quote already has an invoice.',409,'QUOTE_INVOICE_LOCKED');
   const invoice=(await query("SELECT * FROM invoices WHERE id=$1 AND event_id=$2 AND client_id=$3 AND deleted_at IS NULL AND status NOT IN ('VOID','REFUNDED') FOR SHARE",[invoiceId,eventId,quote.client_id])).rows[0];
   if(!invoice||Number(invoice.total)!==Number(quote.total))throw new AppError('Link a dedicated invoice for this client, event and exact quote total.',422,'QUOTE_INVOICE_MISMATCH');
@@ -68,9 +75,16 @@ export async function linkBackdropInvoice(eventId,invoiceId,req){
 export async function voidBackdropQuote(eventId,quoteId,req){
  if(!await userCanAccessEvent(req.user,eventId))throw new AppError('Event unavailable.',403,'FORBIDDEN');
  return transaction(async()=>{
+  await query('SELECT id FROM event_planning WHERE event_id=$1 FOR UPDATE',[eventId]);
   const quote=(await query('SELECT * FROM backdrop_quotes WHERE id=$1 AND event_id=$2 FOR UPDATE',[quoteId,eventId])).rows[0];
   if(!quote)throw new AppError('Quote unavailable.',404,'NOT_FOUND');
-  if(quote.invoice_id)throw new AppError('Resolve the linked invoice and any payment before replacing this quote.',409,'QUOTE_INVOICE_LOCKED');
+  if(quote.invoice_id){
+   const invoice=(await query(`SELECT i.status,COALESCE((SELECT sum(p.amount-COALESCE(p.refunded_amount,0))
+    FROM payments p WHERE p.invoice_id=i.id AND p.deleted_at IS NULL
+    AND p.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')),0) AS paid
+    FROM invoices i WHERE i.id=$1 FOR UPDATE OF i`,[quote.invoice_id])).rows[0];
+   if(!invoice||!['VOID','REFUNDED'].includes(invoice.status)||Number(invoice.paid)!==0)throw new AppError('Resolve the linked invoice and any payment before replacing this quote.',409,'QUOTE_INVOICE_LOCKED');
+  }
   if(quote.status!=='VOID'){
    await query("UPDATE backdrop_quotes SET status='VOID',updated_at=now() WHERE id=$1",[quoteId]);
    await writeAudit({req,action:'backdrop_quote_voided',entity:'event',entityId:eventId,after:{quoteId}});
