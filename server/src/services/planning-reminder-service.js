@@ -17,7 +17,7 @@ export async function queuePlanningReminders(){
    FROM event_planning p JOIN events e ON e.id=p.event_id JOIN clients c ON c.id=p.client_id AND c.id=e.client_id
    WHERE p.submitted_at IS NULL AND p.invited_at IS NOT NULL AND p.revoked_at IS NULL AND p.expires_at>now()
     AND p.token_hash IS NOT NULL AND p.token_ciphertext IS NOT NULL AND e.deleted_at IS NULL AND c.deleted_at IS NULL
-    AND e.status IN ('CONFIRMED','PREPARING','READY') AND e.event_date>=current_date
+    AND e.status IN ('CONFIRMED','PREPARING','READY') AND e.event_date>=current_date AND NOT event_payment_review(e.id)
     AND current_date>=COALESCE(p.planning_due_at,p.invited_at::date+3)
     AND ($1::timestamptz IS NULL OR (p.invited_at>=$1 AND (cardinality($2::text[])=0 OR lower(c.email)=ANY($2::text[]))))
    ORDER BY p.planning_due_at LIMIT 25 FOR UPDATE OF p SKIP LOCKED`,[scope?.since||null,scope?.recipients||[]])).rows;
@@ -26,7 +26,7 @@ export async function queuePlanningReminders(){
    FROM creative_approvals a JOIN events e ON e.id=a.event_id JOIN clients c ON c.id=a.client_id AND c.id=e.client_id
    WHERE a.deleted_at IS NULL AND a.status IN ('PENDING_APPROVAL','VIEWED') AND a.expires_at>now() AND a.public_token IS NOT NULL
     AND current_date>=a.requested_at::date+3 AND e.deleted_at IS NULL AND c.deleted_at IS NULL
-    AND e.status IN ('CONFIRMED','PREPARING','READY') AND e.event_date>=current_date
+    AND e.status IN ('CONFIRMED','PREPARING','READY') AND e.event_date>=current_date AND NOT event_payment_review(e.id)
     AND ($1::timestamptz IS NULL OR (a.requested_at>=$1 AND (cardinality($2::text[])=0 OR lower(c.email)=ANY($2::text[]))))
    ORDER BY a.requested_at LIMIT 25 FOR UPDATE OF a SKIP LOCKED`,[scope?.since||null,scope?.recipients||[]])).rows;
   let queued=0;

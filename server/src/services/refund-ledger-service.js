@@ -18,6 +18,7 @@ export async function claimRefund({paymentId,amount,reason,notes,reference,actor
       if(prior.payment_id!==paymentId||cents(prior.amount)!==cents(amount)||prior.reason!==reason.trim())throw new AppError('This refund request key was already used for different details.',409,'REFUND_REQUEST_CONFLICT');
       return {payment,refund:prior,created:false};
     }
+    if((await client.query('SELECT invoice_payment_review($1) AS held',[payment.invoice_id])).rows[0]?.held)throw new AppError('Review the dispute in Stripe before issuing another refund.',409,'PAYMENT_DISPUTE_REVIEW');
     if(!['MANUAL','STRIPE'].includes(payment.provider))throw new AppError('This provider has not been qualified for refunds.',409,'PROVIDER_REFUND_NOT_CONFIGURED');
     if(!['SUCCEEDED','PARTIALLY_REFUNDED'].includes(payment.status))throw new AppError('Only posted payments can be refunded.',409,'PAYMENT_NOT_REFUNDABLE');
     const reserved=Number((await client.query("SELECT COALESCE(sum(amount),0) n FROM refunds WHERE payment_id=$1 AND status IN ('PENDING','PROCESSING')",[paymentId])).rows[0].n);

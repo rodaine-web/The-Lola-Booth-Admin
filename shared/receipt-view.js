@@ -26,7 +26,7 @@ export function receiptView(invoice, payment, payments = []) {
       .reduce(
         (n, p) =>
           n +
-          Math.round((Number(p.amount) - Number(p.refunded_amount || 0)) * 100),
+          Math.round(Math.max(0, Number(p.amount) - Number(p.refunded_amount || 0) - Number(p.disputed_amount || 0)) * 100),
         0,
       ) / 100;
   return {
@@ -52,11 +52,13 @@ export function receiptView(invoice, payment, payments = []) {
     previouslyPaid: amount(previous),
     thisPayment: amount(payment.amount),
     refunded,
-    netPayment: amount(Number(payment.amount) - refunded),
+    disputed: amount(payment.disputed_amount),
+    netPayment: amount(Math.max(0, Number(payment.amount) - refunded - Number(payment.disputed_amount || 0))),
     refundDate: payment.refund_date || null,
     totalPaid: paid,
     balanceDue: balance,
     status:
+      Number(payment.disputed_amount || 0) > 0 ? "DISPUTED" :
       refunded > 0
         ? refunded >= Number(payment.amount)
           ? "REFUNDED"

@@ -194,6 +194,7 @@ export async function reviewPlanning(eventId,input,req){
 
 export async function assertPlanningPrerequisites(eventId){
  const event=await eventRecord(eventId);
+ if((await query('SELECT event_payment_review($1) AS held',[eventId])).rows[0]?.held)throw new AppError('A payment dispute requires Admin review before continuing planning.',409,'PAYMENT_DISPUTE_REVIEW');
  if(!confirmed.includes(event.status))throw new AppError('Planning opens after booking confirmation.',409,'BOOKING_NOT_CONFIRMED');
  if((await query('SELECT booking_journey_managed($1) AS managed',[eventId])).rows[0]?.managed){
   const missing=(await query('SELECT booking_confirmation_missing($1) AS missing',[eventId])).rows[0]?.missing||[];

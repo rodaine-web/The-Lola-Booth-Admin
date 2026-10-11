@@ -15,7 +15,7 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
     const invoice = await client.query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [invoiceId]);
     if (!invoice.rows[0]) return null;
     const payments = await client.query(
-      "SELECT COALESCE(sum(amount - refunded_amount),0)::numeric AS net_paid FROM payments WHERE invoice_id=$1 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL",
+      "SELECT COALESCE(sum(payment_net_received(payments)),0)::numeric AS net_paid FROM payments WHERE invoice_id=$1 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL",
       [invoiceId]
     );
     const refunded = await client.query(
@@ -24,7 +24,8 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
     );
     const paid = money(payments.rows[0].net_paid);
     const refundedAmount = money(refunded.rows[0].refunded);
-    const fullyRefunded = refundedAmount > 0 && paid === 0;
+    const reviewRequired=(await client.query('SELECT invoice_payment_review($1) AS held',[invoiceId])).rows[0]?.held===true;
+    const fullyRefunded = refundedAmount > 0 && paid === 0 && !reviewRequired;
     const outstanding = fullyRefunded ? 0 : money(Math.max(0, Number(invoice.rows[0].total || 0) - paid));
     const previousStatus = invoice.rows[0].status;
     let status = previousStatus;

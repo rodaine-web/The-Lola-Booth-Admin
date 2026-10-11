@@ -79,7 +79,7 @@ export async function voidBackdropQuote(eventId,quoteId,req){
   const quote=(await query('SELECT * FROM backdrop_quotes WHERE id=$1 AND event_id=$2 FOR UPDATE',[quoteId,eventId])).rows[0];
   if(!quote)throw new AppError('Quote unavailable.',404,'NOT_FOUND');
   if(quote.invoice_id){
-   const invoice=(await query(`SELECT i.status,COALESCE((SELECT sum(p.amount-COALESCE(p.refunded_amount,0))
+   const invoice=(await query(`SELECT i.status,COALESCE((SELECT sum(payment_net_received(p))
     FROM payments p WHERE p.invoice_id=i.id AND p.deleted_at IS NULL
     AND p.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED')),0) AS paid
     FROM invoices i WHERE i.id=$1 FOR UPDATE OF i`,[quote.invoice_id])).rows[0];
@@ -94,8 +94,9 @@ export async function voidBackdropQuote(eventId,quoteId,req){
  });
 }
 export async function assertBackdropPayment(eventId,clientId){
+ if((await query('SELECT event_payment_review($1) AS held',[eventId])).rows[0]?.held)throw new AppError('Resolve the payment dispute before authorizing custom work.',409,'PAYMENT_DISPUTE_REVIEW');
  const quote=(await query(`SELECT q.required_payment,i.total,i.status,i.client_id,i.event_id,
-   COALESCE((SELECT sum(p.amount-COALESCE(p.refunded_amount,0)) FROM payments p WHERE p.invoice_id=i.id AND p.deleted_at IS NULL AND p.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')),0) AS paid
+   COALESCE((SELECT sum(payment_net_received(p)) FROM payments p WHERE p.invoice_id=i.id AND p.deleted_at IS NULL AND p.status IN ('SUCCEEDED','PARTIALLY_REFUNDED')),0) AS paid
   FROM backdrop_quotes q JOIN invoices i ON i.id=q.invoice_id AND i.deleted_at IS NULL
    JOIN event_planning plan ON plan.event_id=q.event_id AND plan.backdrop_path=q.backdrop_path AND plan.backdrop_id IS NOT DISTINCT FROM q.backdrop_id
   WHERE q.event_id=$1 AND q.client_id=$2 AND q.status='ACCEPTED' AND i.client_id=$2 AND i.event_id=$1

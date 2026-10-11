@@ -1,3 +1,4 @@
+import {reconcileStripeDispute} from './payment-dispute-service.js';
 import {claimRefund,settleStripeRefund,markRefundRejected} from './refund-ledger-service.js';
 import {stripeConfiguration,assertStripeEventMode,verifyStripeAccount,verifyStripeEventAccount} from './stripe-configuration.js';
 import { secureDocumentUrl } from "../../../shared/document-access.js";
@@ -39,7 +40,8 @@ export async function publicPaymentOptions(invoice) {
   const settings = await query("SELECT stripe_enabled, paypal_enabled, offline_payment_instructions, currency FROM business_settings LIMIT 1");
   const s = settings.rows[0] || {};
   const status = providerStatus();
-  const payable = isInvoicePayable(invoice);
+  const reviewRequired=(await query('SELECT invoice_payment_review($1) OR event_payment_review($2) AS held',[invoice.id,invoice.event_id||null])).rows[0]?.held===true;
+  const payable = isInvoicePayable(invoice) && !reviewRequired;
   if (process.env.APP_ENV === "staging") {
     logger.info({
       invoiceId: invoice.id,
@@ -67,6 +69,7 @@ export async function publicPaymentOptions(invoice) {
   const amountDue = depositAvailable ? money(depositRemaining) : balance;
   return {
     payable,
+    reviewRequired,
     amountDue,
     fullAmount: balance,
     minimumAmount: depositAvailable ? amountDue : Math.min(1, balance),
@@ -88,6 +91,7 @@ export async function publicPaymentOptions(invoice) {
 export async function createPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey, workspaceEventId }) {
   const invoice = await loadInvoiceByToken(token);
   if (!isInvoicePayable(invoice)) throw new AppError("This invoice is not payable.", 409, "INVOICE_NOT_PAYABLE");
+  if((await query('SELECT invoice_payment_review($1) OR event_payment_review($2) AS held',[invoice.id,invoice.event_id||null])).rows[0]?.held)throw new AppError('A payment dispute requires Admin review before another payment.',409,'PAYMENT_DISPUTE_REVIEW');
   await assertCheckoutHold(invoice.event_id);
   const normalizedProvider = String(provider || "").toUpperCase();
   if (!["STRIPE", "PAYPAL"].includes(normalizedProvider)) throw new AppError("Unsupported payment provider.", 400, "UNSUPPORTED_PROVIDER");
@@ -119,6 +123,7 @@ export async function createPaymentSession({ token, provider, amountChoice = "DE
 
 export async function recordManualPayment(req) {
   const invoice = req.body.invoice_id ? await lockableInvoice(req.body.invoice_id) : null;
+  if((await query('SELECT event_payment_review($1) OR invoice_payment_review($2) AS held',[invoice?.event_id||req.body.event_id||null,invoice?.id||null])).rows[0]?.held)throw new AppError('Resolve the payment dispute before recording another payment.',409,'PAYMENT_DISPUTE_REVIEW');
   const amount = money(req.body.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new AppError("Payment amount must be greater than zero.", 422, "INVALID_PAYMENT_AMOUNT");
@@ -246,6 +251,10 @@ export async function handleStripeWebhook(rawBody, signature) {
   assertStripeEventMode(receivedEvent);
   const event=await verifyStripeEventAccount(receivedEvent);
   return persistWebhookEvent("STRIPE", event.id, event.type, event, async () => {
+    if(['charge.dispute.created','charge.dispute.updated','charge.dispute.closed','charge.dispute.funds_withdrawn','charge.dispute.funds_reinstated'].includes(event.type)){
+      await reconcileStripeDispute(event.data?.object?.id,event.livemode);
+      return;
+    }
     if (["checkout.session.completed", "checkout.session.async_payment_succeeded", "payment_intent.succeeded"].includes(event.type)) {
       const object = event.data?.object || {};
       if (event.type.startsWith("checkout.") && object.payment_status !== "paid") return;

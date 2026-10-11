@@ -4,7 +4,8 @@ import {verifyStripeAccount, stripeConfiguration} from '../services/stripe-confi
 // Read-only. No Checkout, charges, refunds, endpoint creation or flag changes.
 const requiredEvents = ['checkout.session.completed', 'checkout.session.async_payment_succeeded',
   'checkout.session.async_payment_failed', 'checkout.session.expired', 'payment_intent.succeeded',
-  'payment_intent.payment_failed', 'refund.created', 'refund.updated', 'refund.failed', 'charge.refunded'];
+  'payment_intent.payment_failed', 'refund.created', 'refund.updated', 'refund.failed', 'charge.refunded', 'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed',
+  'charge.dispute.funds_withdrawn', 'charge.dispute.funds_reinstated'];
 try {
   if (process.env.APP_ENV !== 'production') throw new Error('Run against the production service environment only.');
   const configuration = stripeConfiguration(process.env);
