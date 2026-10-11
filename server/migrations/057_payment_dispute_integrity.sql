@@ -1,5 +1,8 @@
 -- Additive ledger; never rewrites the original payment or creates a refund.
 ALTER TABLE payments ADD COLUMN disputed_amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (disputed_amount>=0 AND disputed_amount<=amount);
+-- SELECT * views retain their original columns until explicitly refreshed.
+CREATE OR REPLACE VIEW reporting_payments AS SELECT * FROM payments
+ WHERE deleted_at IS NULL AND data_classification IN ('BUSINESS','UNREVIEWED');
 CREATE TABLE payment_disputes (
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), payment_id UUID NOT NULL REFERENCES payments(id),
  provider_dispute_id TEXT NOT NULL UNIQUE, provider_charge_id TEXT NOT NULL,

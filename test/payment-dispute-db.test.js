@@ -24,12 +24,14 @@ test('disposable PostgreSQL: canonical dispute replay, inquiry, withdrawal, reve
    eventMap.set(id,structuredClone(currentEvent));const raw=Buffer.from(JSON.stringify(currentEvent));const t=Math.floor(Date.now()/1000);const signature=`t=${t},v1=${crypto.createHmac('sha256','whsec_disposable').update(t+'.'+raw).digest('hex')}`;return handleStripeWebhook(raw,signature);
   }
   const state=async()=>(await db.query('SELECT status,amount_paid,balance_due FROM invoices WHERE id=$1',[i.id])).rows[0];
+  const {reportingQuery}=await import('../server/src/services/reporting-query.js');
+  const reportingNet=async()=>Number((await reportingQuery('SELECT GREATEST(0,p.amount-p.refunded_amount-p.disputed_amount) AS net FROM payments p WHERE p.id=$1',[p.id])).rows[0].net);
   await deliver('charge.dispute.created');assert.equal(Number((await state()).amount_paid),100,'Inquiry does not withdraw funds');
   assert.equal((await db.query('SELECT invoice_payment_review($1) held',[i.id])).rows[0].held,true);
   assert.equal((await publicPaymentOptions({...await state(),id:i.id,total:100})).payable,false);
   canonical={...canonical,status:'needs_response',balance_transactions:[{id:'txn_debit',amount:-10000,currency:'usd',fee:1500}]};
   const eventId='evt_replay';await deliver('charge.dispute.funds_withdrawn',eventId);
-  assert.equal(Number((await state()).amount_paid),0);assert.equal(Number((await state()).balance_due),100);
+  assert.equal(Number((await state()).amount_paid),0);assert.equal(Number((await state()).balance_due),100);assert.equal(await reportingNet(),0,'Reporting includes the newly added dispute column');
   assert.equal((await deliver('charge.dispute.funds_withdrawn',eventId)).duplicate,true);
   await Promise.all(Array.from({length:6},()=>deliver()));
   assert.equal((await db.query('SELECT count(*)::int n FROM payment_disputes')).rows[0].n,1);
@@ -42,7 +44,7 @@ test('disposable PostgreSQL: canonical dispute replay, inquiry, withdrawal, reve
   assert.equal(await dispatchDecision(db,{trigger_key:'BOOKING_BALANCE_REMINDER',invoice_id:i.id,event_id:e.id,recipient:'qa@example.invalid',idempotency_key:'booking-reminder:BALANCE:'+i.id+':'+new Date().toISOString().slice(0,10)+':1'}),'CANCELLED');
   canonical={...canonical,status:'won',balance_transactions:[...canonical.balance_transactions,{id:'txn_credit',amount:10000,currency:'usd',fee:0}]};
   await deliver('charge.dispute.funds_reinstated');await deliver('charge.dispute.created'); // stale notification refetches current won record
-  assert.equal(Number((await state()).amount_paid),100);assert.equal((await state()).status,'PAID');assert.equal((await db.query('SELECT invoice_payment_review($1) held',[i.id])).rows[0].held,false);
+  assert.equal(Number((await state()).amount_paid),100);assert.equal((await state()).status,'PAID');assert.equal(await reportingNet(),100,'Reinstated funds return to reporting');assert.equal((await db.query('SELECT invoice_payment_review($1) held',[i.id])).rows[0].held,false);
   assert.equal((await db.query("SELECT status FROM tasks WHERE lifecycle_key='payment-dispute:du_qa'")).rows[0].status,'DONE');
   canonical={...canonical,currency:'eur'};await assert.rejects(deliver(),{code:'DISPUTE_LEDGER_INVALID'});assert.equal(Number((await state()).amount_paid),100,'Mismatch rolls back');
   assert.equal((await db.query('SELECT status FROM events WHERE id=$1',[e.id])).rows[0].status,'CONFIRMED','Do not erase booking or agreement history');

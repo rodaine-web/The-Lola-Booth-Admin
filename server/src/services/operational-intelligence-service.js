@@ -135,7 +135,7 @@ async function dashboardMetrics([start, end]) {
       (SELECT count(*)::int FROM proposals WHERE accepted_at >= $1 AND accepted_at < $2 AND deleted_at IS NULL) AS proposals_accepted,
       (SELECT count(*)::int FROM leads WHERE updated_at >= $1 AND updated_at < $2 AND status='WON' AND deleted_at IS NULL) AS bookings_won,
       (SELECT COALESCE(sum(total),0)::numeric FROM bookings WHERE created_at >= $1 AND created_at < $2 AND deleted_at IS NULL) AS booked_revenue,
-      (SELECT COALESCE(sum(payment_net_received(payments)),0)::numeric FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL) AS collected_revenue,
+      (SELECT COALESCE(sum(GREATEST(0,amount-refunded_amount-disputed_amount)),0)::numeric FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL) AS collected_revenue,
       (SELECT COALESCE(sum(refunded_amount),0)::numeric FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND deleted_at IS NULL) AS refunds,
       (SELECT COALESCE(sum(LEAST(COALESCE(amount_paid,0),COALESCE(deposit_required,0))),0)::numeric
          FROM bookings
@@ -258,7 +258,7 @@ async function revenueTrend([start, end], range) {
        SELECT to_char(date_trunc('${bucket}', created_at AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')), '${format}') AS bucket, total AS booked_revenue, 0::numeric AS collected_revenue
        FROM bookings WHERE created_at >= $1 AND created_at < $2 AND deleted_at IS NULL
        UNION ALL
-       SELECT to_char(date_trunc('${bucket}', COALESCE(paid_at, payment_date::timestamptz, created_at) AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')), '${format}') AS bucket, 0::numeric AS booked_revenue, payment_net_received(payments) AS collected_revenue
+       SELECT to_char(date_trunc('${bucket}', COALESCE(paid_at, payment_date::timestamptz, created_at) AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago')), '${format}') AS bucket, 0::numeric AS booked_revenue, GREATEST(0,amount-refunded_amount-disputed_amount) AS collected_revenue
        FROM payments WHERE COALESCE(paid_at, payment_date::timestamptz, created_at) >= $1 AND COALESCE(paid_at, payment_date::timestamptz, created_at) < $2 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL
      ) trend GROUP BY bucket ORDER BY bucket`,
     [start, end]
