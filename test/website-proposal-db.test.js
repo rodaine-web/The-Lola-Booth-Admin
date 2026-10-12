@@ -40,6 +40,12 @@ test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and
   await Promise.all(Array.from({length:8},()=>approve(custom.id)));
   assert.equal((await query('SELECT count(*)::int n FROM tasks WHERE lead_id=$1 AND title=$2',[custom.id,'Schedule discovery call'])).rows[0].n,1);
   assert.equal((await query('SELECT count(*)::int n FROM automation_jobs WHERE related_entity_id=$1',[custom.id])).rows[0].n,0);
+  const exp360=(await query("INSERT INTO experiences(name,slug,active,show_on_website,website_status) VALUES('The LOLA 360','360',true,true,'PUBLISHED') RETURNING id")).rows[0];
+  const custom360=(await query("INSERT INTO packages(name,experience_id,starting_price,active,show_on_website,website_status,pricing_mode) VALUES('Custom',$1,0,true,true,'PUBLISHED','CUSTOM') RETURNING id",[exp360.id])).rows[0];
+  const mixed=await newLead({selections:[{experienceId:exp.id,packageId:pkg.id},{experienceId:exp360.id,packageId:custom360.id}]});
+  await approve(mixed.id);
+  assert.equal((await query("SELECT count(*)::int n FROM tasks WHERE lead_id=$1 AND title='Schedule discovery call'",[mixed.id])).rows[0].n,1,'Secondary Custom selection triggers discovery call');
+  assert.equal((await query('SELECT count(*)::int n FROM automation_jobs WHERE related_entity_id=$1',[mixed.id])).rows[0].n,0);
   const edited=await newLead();await approve(edited.id);
   await query("UPDATE leads SET event_start_time='19:00' WHERE id=$1",[edited.id]);
   assert.equal(hasCurrentAvailability((await query('SELECT * FROM leads WHERE id=$1',[edited.id])).rows[0]),false);
