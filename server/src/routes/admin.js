@@ -1,3 +1,5 @@
+import {crmContactsRouter} from './crm-contacts.js';
+import {createAdminLead} from '../services/admin-lead-create.js';
 import {eventFilesRouter} from './event-files.js';
 import {managesEventFiles} from '../../../shared/event-files.js';
 import {eventFileSummary,listEventFiles} from '../services/event-files-service.js';
@@ -181,6 +183,7 @@ import { appearanceRouter } from "./appearance.js";
 export const adminRouter = Router();
 
 adminRouter.use(authenticate);
+adminRouter.use(crmContactsRouter);
 adminRouter.use(appearanceRouter);
 adminRouter.use(adminPlanningRouter);
 adminRouter.use(eventFilesRouter);
@@ -679,30 +682,7 @@ const leadSchema = z.object({
 }).passthrough();
 
 adminRouter.post("/leads", requirePermission("write:sales"), validate(leadSchema), asyncHandler(async (req, res) => {
-  if (!req.query.continueAnyway) {
-    const duplicate = await query(
-      `SELECT id, first_name, last_name, email, phone
-       FROM leads
-       WHERE deleted_at IS NULL AND (lower(email)=lower($1) OR regexp_replace(phone, '\\D', '', 'g') = regexp_replace($2, '\\D', '', 'g'))
-       LIMIT 1`,
-      [req.body.email, req.body.phone]
-    );
-    if (duplicate.rows[0]) {
-      const matchReason = req.body.email && String(duplicate.rows[0].email || "").toLowerCase() === String(req.body.email).toLowerCase()
-        ? "EMAIL_MATCH"
-        : "PHONE_MATCH";
-      throw new AppError("Possible duplicate lead found.", 409, "POSSIBLE_DUPLICATE", { duplicate: { ...duplicate.rows[0], match_reason: matchReason } });
-    }
-  }
-  const fields = Object.keys(req.body);
-  const values = Object.values(req.body);
-  const inserted = await query(
-    `INSERT INTO leads (${fields.join(",")}) VALUES (${fields.map((_, index) => `$${index + 1}`).join(",")}) RETURNING *`,
-    values
-  );
-  await recordActivity({ actorUserId: req.user.id, entityType: "lead", entityId: inserted.rows[0].id, action: "lead_created", summary: "Lead created manually" });
-  await writeAudit({ req, action: "lead_created", entity: "lead", entityId: inserted.rows[0].id, after: inserted.rows[0] });
-  res.status(201).json(inserted.rows[0]);
+  res.status(201).json(await createAdminLead(req.body,req,{continueAnyway:Boolean(req.query.continueAnyway)}));
 }));
 
 adminRouter.get('/leads/:id/availability',requirePermission('read:sales'),requirePermission('read:events'),asyncHandler(async(req,res)=>res.json(await previewLeadAvailability(z.string().uuid().parse(req.params.id)))));

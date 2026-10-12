@@ -32,6 +32,10 @@ const navGroups = [{
     to: '/sales/clients',
     permission: 'read:sales'
   }, {
+    label: 'Contacts',
+    to: '/sales/contacts',
+    permission: 'read:contacts'
+  }, {
     label: 'Events',
     to: '/events/events',
     permission: 'read:events'
@@ -303,7 +307,7 @@ export default function Layout() {
   const visibleCreate = createItems.filter(item => can(item.permission));
   function openResult(item) {
     setQuery("");
-    if (item.type === "lead") navigate(`/sales/leads/${item.id}`);else if (item.type === "event") navigate(`/events/events/${item.id}`);else if (item.type === "client") navigate(`/sales/clients/${item.id}`);else if (item.type === "proposal") navigate(`/sales/proposals/${item.id}`);else if (item.type === "invoice") navigate(`/finance/invoices/${item.id}`);else navigate("/");
+    if (item.type === "contact") navigate(`/sales/contacts/${item.id}`);else if (item.type === "lead") navigate(`/sales/leads/${item.id}`);else if (item.type === "event") navigate(`/events/events/${item.id}`);else if (item.type === "client") navigate(`/sales/clients/${item.id}`);else if (item.type === "proposal") navigate(`/sales/proposals/${item.id}`);else if (item.type === "invoice") navigate(`/finance/invoices/${item.id}`);else navigate("/");
   }
   return <AppearanceProvider><div className="lola-app-shell">
       <a className="lola-skip-link" href="#workspace-content">Skip to content</a>

@@ -1,3 +1,4 @@
+import {contactCan,contactManager} from './crm-contacts-service.js';
 import {campaignOffers,campaignEmailContent} from './campaign-offers.js';
 import {linkCampaignInterest} from './campaign-lead-service.js';
 import { randomBytes, createHash } from 'node:crypto';
@@ -143,12 +144,15 @@ export async function listCampaigns(filters = {}) {
     }
   };
 }
-export async function campaignContacts() {
-  return (await query(`SELECT id,'lead' kind,first_name,last_name,email,phone,company,lead_source source,marketing_email_opt_in,'{}'::jsonb communication_preferences,'{}'::text[] tags FROM leads WHERE deleted_at IS NULL UNION ALL SELECT id,'client',split_part(name,' ',1),CASE WHEN position(' ' in name)>0 THEN substring(name from position(' ' in name)+1) ELSE '' END,email,phone,company,referral_source,marketing_email_opt_in,communication_preferences,tags FROM clients WHERE deleted_at IS NULL ORDER BY first_name`)).rows;
+export async function campaignContacts(user=null) {
+  const legacy=(await query(`SELECT id,'lead' kind,first_name,last_name,email,phone,company,lead_source source,marketing_email_opt_in,'{}'::jsonb communication_preferences,'{}'::text[] tags FROM leads WHERE deleted_at IS NULL UNION ALL SELECT id,'client',split_part(name,' ',1),CASE WHEN position(' ' in name)>0 THEN substring(name from position(' ' in name)+1) ELSE '' END,email,phone,company,referral_source,marketing_email_opt_in,communication_preferences,tags FROM clients WHERE deleted_at IS NULL ORDER BY first_name`)).rows;
+  if(user&&!contactCan(user,'read:contacts'))return legacy;
+  const crm=(await query(`SELECT id,'contact' kind,first_name,last_name,email,phone,company,source,tags,marketing_consent='OPTED_IN' AND consented_at IS NOT NULL AND consent_source<>'' AND marketing_opted_out_at IS NULL AS marketing_email_opt_in,'{}'::jsonb communication_preferences FROM crm_contacts WHERE deleted_at IS NULL AND archived_at IS NULL AND status='ACTIVE' AND ($1::boolean OR owner_id=$2) ORDER BY display_name`,[!user||contactManager(user),user?.id||null])).rows;
+  return [...legacy,...crm];
 }
-export async function resolveCampaignAudience(audience = {}) {
-  const contacts = await campaignContacts(),
-    suppressions = (await query('SELECT email FROM campaign_suppressions')).rows;
+export async function resolveCampaignAudience(audience = {}, user=null) {
+  const contacts = await campaignContacts(user),
+    suppressions = (await query("SELECT email FROM campaign_suppressions UNION SELECT email_normalized FROM crm_contacts WHERE marketing_consent='OPTED_OUT' OR marketing_opted_out_at IS NOT NULL OR archived_at IS NOT NULL OR deleted_at IS NOT NULL OR status='INACTIVE'")).rows;
   const filtered = contacts.filter(c => (audience.ids?.includes(c.id) || audience.companies?.includes(c.company) || audience.tags?.some(t => c.tags?.includes(t))) && (!audience.source || c.source === audience.source));
   return eligibleAudience([...filtered, ...(audience.manual || []).map(c => ({
     ...c,
@@ -233,7 +237,7 @@ export async function queueCampaign(id, req, {
     approvedEmailSender(c.sender_email);
     if (!c.content_json.mailing_address.trim()) throw new AppError('Add your business mailing address before sending marketing email.', 422, 'MAILING_ADDRESS_REQUIRED');
     const emailCampaign = await campaignEmailContent(c);
-    const audience = await resolveCampaignAudience(c.audience_json);
+    const audience = await resolveCampaignAudience(c.audience_json,req.user);
     if (!audience.count) throw new AppError('Choose at least one consented recipient.', 422, 'EMPTY_AUDIENCE');
     if(emailCampaign!==c)await query('UPDATE campaigns SET content_json=$2 WHERE id=$1',[id,JSON.stringify(emailCampaign.content_json)]);
     for (const r of audience.recipients) {
@@ -241,7 +245,7 @@ export async function queueCampaign(id, req, {
         rendered = renderCampaignEmail(emailCampaign, r, {
           token
         });
-      const recipient = (await query(`INSERT INTO campaign_recipients(campaign_id,lead_id,client_id,email,first_name,last_name,company,token_hash,phone,token_expires_at,status,queued_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '1 year','QUEUED',now()) ON CONFLICT(campaign_id,email) DO NOTHING RETURNING *`, [id, r.kind === 'lead' ? r.id : null, r.kind === 'client' ? r.id : null, r.email, r.first_name, r.last_name, r.company, hashCampaignToken(token), r.phone || null])).rows[0];
+      const recipient = (await query(`INSERT INTO campaign_recipients(campaign_id,lead_id,client_id,email,first_name,last_name,company,token_hash,phone,contact_id,token_expires_at,status,queued_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+interval '1 year','QUEUED',now()) ON CONFLICT(campaign_id,email) DO NOTHING RETURNING *`, [id, r.kind === 'lead' ? r.id : null, r.kind === 'client' ? r.id : null, r.email, r.first_name, r.last_name, r.company, hashCampaignToken(token), r.phone || null,r.kind==='contact'?r.id:null])).rows[0];
       if (!recipient) continue;
       const tracked = await prepareCampaignTracking(rendered, recipient.id);
       const m = await createCommunicationDraft({
@@ -255,6 +259,7 @@ export async function queueCampaign(id, req, {
       }, req.user);
       await query('UPDATE communications SET campaign_recipient_id=$2,reply_to=$3,idempotency_key=$4,sender_name=$5,sender_email=$6 WHERE id=$1', [m.id, recipient.id, c.reply_to, 'campaign:' + recipient.id, c.sender_name,c.sender_email||'']);
       await query('UPDATE campaign_recipients SET communication_id=$2 WHERE id=$1', [recipient.id, m.id]);
+      if(recipient.contact_id)await query('UPDATE communications SET contact_id=$2 WHERE id=$1',[m.id,recipient.contact_id]);
     }
     const updated = (await query("UPDATE campaigns SET status=$2,scheduled_at=$3,updated_at=now() WHERE id=$1 RETURNING *", [id, scheduled_at ? 'SCHEDULED' : 'SENDING', scheduled_at])).rows[0];
     await audit(req, updated, scheduled_at ? 'campaign_scheduled' : 'campaign_send_initiated');
@@ -426,9 +431,9 @@ export async function processCampaignJobs({
     const r = await transaction(async () => {
       const row = (await query("SELECT r.* FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.status='QUEUED' AND c.deleted_at IS NULL AND c.status='SENDING' ORDER BY r.queued_at LIMIT 1 FOR UPDATE OF r,c SKIP LOCKED")).rows[0];
       if (!row) return null;
-      const suppressed = (await query('SELECT 1 FROM campaign_suppressions WHERE email=$1', [row.email])).rowCount;
-      const contact=row.lead_id?(await query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL',[row.lead_id])).rows[0]:row.client_id?(await query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL',[row.client_id])).rows[0]:null;
-      if (suppressed || (row.lead_id || row.client_id) && (!contact || !eligibleAudience([contact]).count)) {
+      const suppressed = (await query("SELECT 1 FROM campaign_suppressions WHERE lower(email)=lower($1) UNION ALL SELECT 1 FROM crm_contacts WHERE email_normalized=lower($1) AND (marketing_consent='OPTED_OUT' OR archived_at IS NOT NULL OR deleted_at IS NOT NULL OR status<>'ACTIVE') LIMIT 1", [row.email])).rowCount;
+      const contact=row.contact_id?(await query("SELECT *,marketing_consent='OPTED_IN' AND consented_at IS NOT NULL AND consent_source<>'' AND archived_at IS NULL AND status='ACTIVE' AND marketing_opted_out_at IS NULL AS marketing_email_opt_in FROM crm_contacts WHERE id=$1 AND deleted_at IS NULL",[row.contact_id])).rows[0]:row.lead_id?(await query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL',[row.lead_id])).rows[0]:row.client_id?(await query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL',[row.client_id])).rows[0]:null;
+      if (suppressed || (row.contact_id || row.lead_id || row.client_id) && (!contact || !eligibleAudience([contact]).count)) {
         await query("UPDATE campaign_recipients SET status='EXCLUDED' WHERE id=$1", [row.id]);
         return {
           excluded: true,

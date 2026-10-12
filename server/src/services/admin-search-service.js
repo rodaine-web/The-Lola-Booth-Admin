@@ -11,5 +11,6 @@ export async function searchAdmin(user, input) {
     ['read:finance',"SELECT 'invoice' AS type, id, invoice_number AS title, status AS subtitle FROM invoices WHERE deleted_at IS NULL AND invoice_number ILIKE $1 LIMIT 8"]
   ];
   const results = await Promise.all(searches.filter(([permission])=>can(permission)).map(([,sql])=>query(sql,[term])));
+  if(can('read:contacts'))results.push(await query("SELECT 'contact' AS type,id,display_name AS title,email AS subtitle FROM crm_contacts WHERE deleted_at IS NULL AND ($2::boolean OR owner_id=$3) AND (display_name ILIKE $1 OR email ILIKE $1 OR company ILIKE $1) LIMIT 8",[term,can('manage:contacts'),user.id]));
   return results.flatMap(result=>result.rows);
 }

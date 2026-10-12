@@ -7,7 +7,7 @@ const array = value => value == null ? [] : Array.isArray(value) ? value : [valu
 const parser=new XMLParser({ignoreAttributes:false,attributeNamePrefix:'@_',parseTagValue:false,processEntities:true,removeNSPrefix:true});
 function xml(bytes){const text=Buffer.from(bytes).toString('utf8');if(/<!DOCTYPE|<!ENTITY/i.test(text))throw new Error('XML entities are unsupported.');return parser.parse(text);}
 function text(value){if(value==null)return '';if(typeof value!=='object')return String(value);return array(value.r).map(r=>text(r.t)).join('') || text(value.t || value['#text']);}
-function csvRows(text){
+export function csvRows(text){
  const rows=[];let row=[],cell='',quoted=false;
  for(let i=0;i<text.length;i++){
   const c=text[i];
@@ -17,20 +17,25 @@ function csvRows(text){
  }
  if(quoted)throw new Error('Unclosed CSV quote.');if(cell||row.length){row.push(cell);rows.push(row);}return rows;
 }
-function excelRows(bytes){
+export function excelRows(bytes,preferredSheet="Contacts"){
  let expanded=0,count=0;
  const files=unzipSync(bytes,{filter: entry=>{
   if(++count>200)throw new Error('Workbook has too many files.');
-  const needed=/^xl\/(sharedStrings.xml|workbook.xml|_rels\/workbook.xml.rels|worksheets\/sheet\d+\.xml)$/.test(entry.name);
+  const needed=/^xl\/(styles.xml|sharedStrings.xml|workbook.xml|_rels\/workbook.xml.rels|worksheets\/sheet\d+\.xml)$/.test(entry.name);
   if(needed){expanded+=entry.originalSize;if(entry.originalSize>4*1024*1024||expanded>8*1024*1024)throw new Error('Workbook is too large.');}return needed;
  }});
  const wb=xml(files['xl/workbook.xml']);const sheets=array(wb.workbook?.sheets?.sheet);
- const selected=sheets.find(s=>s['@_name']==='Contacts') || sheets[0];
+ const selected=sheets.find(s=>s['@_name']===preferredSheet) || sheets.find(s=>s['@_name']===preferredSheet+' Import') || sheets[0];
  const rels=array(xml(files['xl/_rels/workbook.xml.rels'])?.Relationships?.Relationship);
  const target=rels.find(r=>r['@_Id']===(selected?.['@_r:id']||selected?.['@_id']))?.['@_Target'];
  const path=target?.startsWith('/xl/')?target.slice(1):target?.startsWith('worksheets/')?'xl/'+target:null;
  if(!path||!files[path])throw new Error('Workbook needs a Contacts worksheet.');
  const strings=files['xl/sharedStrings.xml']?array(xml(files['xl/sharedStrings.xml']).sst?.si).map(text):[];
+ const styles=files['xl/styles.xml']?xml(files['xl/styles.xml']).styleSheet:{};const formats=new Map(array(styles?.numFmts?.numFmt).map(f=>[Number(f['@_numFmtId']),f['@_formatCode']]));const cellStyles=array(styles?.cellXfs?.xf);
+ const date1904=['1','true'].includes(String(wb.workbook?.workbookPr?.['@_date1904']||''));
+ function typedCell(c,value){if(c['@_t']==='d'){const date=new Date(value);if(Number.isNaN(date.getTime()))throw new Error('Invalid Excel date.');return date.toISOString().slice(0,10);}const id=Number(cellStyles[Number(c['@_s']||0)]?.['@_numFmtId']),format=formats.get(id)||'',dateStyle=id>=14&&id<=17||id===22||/y.*m|m.*d|d.*m/i.test(format),timeStyle=id>=18&&id<=21||/h.*m/i.test(format);if(!['s','inlineStr','str','b'].includes(c['@_t'])&&value!==''&&(dateStyle||timeStyle)){
+ const serial=Number(value);if(!Number.isFinite(serial)||serial<0||serial>2958465)throw new Error('Invalid Excel date.');const d=new Date((serial-(date1904?24107:25569))*86400000);return dateStyle?d.toISOString().slice(0,10):d.toISOString().slice(11,16);}return value;}
+
  const sheet=xml(files[path]);const out=[];
  for(const row of array(sheet.worksheet?.sheetData?.row)){
   const cells=[];
@@ -39,7 +44,7 @@ function excelRows(bytes){
    const letters=ref.match(/^[A-Z]+/)[0];let col=0;for(const x of letters)col=col*26+x.charCodeAt(0)-64;col--;
    if(col>30)continue;
    if(c.f!=null)throw new Error('Remove formulas from contact cells before importing.');
-   cells[col]=c['@_t']==='s'?strings[Number(c.v)] || '':c['@_t']==='inlineStr'?text(c.is):text(c.v);
+   cells[col]=typedCell(c,c['@_t']==='s'?strings[Number(c.v)] || '':c['@_t']==='inlineStr'?text(c.is):text(c.v));
   }
   const rowNumber=Number(row['@_r']||out.length+1);
   if(!Number.isInteger(rowNumber)||rowNumber<1)throw new Error('Unsupported row address.');
@@ -67,4 +72,12 @@ export function importCampaignContacts(input){
   if(seen.has(email)){duplicates++;seen.get(email).marketing_email_opt_in &&= c.marketing_email_opt_in;return;}seen.set(email,c);recipients.push(c);
  });
  return {recipients,errors,duplicates,total:recipients.length,withoutConsent:recipients.filter(r=>!r.marketing_email_opt_in).length};
+}
+
+export function readCrmSpreadsheet({filename,data},kind='CONTACTS'){
+ if(typeof data!=='string'||data.length>Math.ceil(maxBytes/3)*4||data.length%4||/[^A-Za-z0-9+/=]/.test(data))throw new AppError('Upload .xlsx or .csv up to 2 MB.',422,'INVALID_CONTACT_FILE');
+ const bytes=Buffer.from(data,'base64');if(bytes.toString('base64')!==data||!bytes.length||bytes.length>maxBytes)throw new AppError('Choose a valid file up to 2 MB.',422,'INVALID_CONTACT_FILE');
+ let rows;try{rows=/\.xlsx$/i.test(filename)?excelRows(bytes,kind==='LEADS'?'Leads':'Contacts'):/\.csv$/i.test(filename)?csvRows(bytes.toString('utf8').replace(/^\uFEFF/,'')):null;if(!rows)throw new Error('Only .xlsx and .csv are supported.');}catch(e){throw new AppError(e.message,422,'INVALID_CONTACT_FILE');}
+ const headers=(rows[0]||[]).map(v=>String(v||'').trim());if(!headers.length||headers.length>31||rows.length>1001)throw new AppError('Use up to 1,000 data rows and 31 columns.',422,'INVALID_CONTACT_FILE');
+ return {headers,rows:rows.slice(1).map((cells,i)=>({number:i+2,cells:headers.map((_,j)=>String(cells?.[j]||''))})).filter(r=>r.cells.some(Boolean)),sheet:kind==='LEADS'?'Leads Import':'Contacts Import'};
 }
