@@ -28,7 +28,7 @@ export function leadEventInput(lead) {
 export async function availabilityCalendar(lead) {
   if (!lead.event_date) return {events: [], revision: 'no-date'};
   // Same events/bookings/holds used by the booking calendar. Adjacent days expose overnight commitments.
-  const events = (await query(`SELECT e.id,e.event_name,e.event_date,e.start_time,e.end_time,e.setup_time,e.breakdown_time,e.status,e.updated_at,
+  const events = (await query(`SELECT e.id,e.event_name,e.event_date,e.start_time,e.end_time,e.setup_time,e.breakdown_time,e.venue_name,e.venue_address,e.city,e.state,e.status,e.updated_at,
     EXISTS(SELECT 1 FROM booking_holds h WHERE h.event_id=e.id AND h.status='ACTIVE' AND h.expires_at>clock_timestamp()) AS active_hold,
     COALESCE((SELECT jsonb_agg(jsonb_build_object('id',b.id,'paymentStatus',b.payment_status,'updated_at',b.updated_at) ORDER BY b.id) FROM bookings b WHERE b.event_id=e.id),'[]') AS bookings
     FROM events e WHERE e.deleted_at IS NULL AND e.status<>'CANCELLED'
