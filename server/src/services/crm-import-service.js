@@ -54,7 +54,7 @@ export async function crmImportActor(id){const u=(await query("SELECT u.id,u.act
 export async function processCrmImport(job){
  const batch=(await query('SELECT * FROM crm_import_batches WHERE id=$1 FOR UPDATE',[job.entity_id])).rows[0];if(!batch||['CANCELLED','COMPLETED','PARTIAL'].includes(batch.state))return {mode:'EXTERNAL',result:'IDEMPOTENT_REPLAY'};
  const user=await crmImportActor(batch.created_by);if(!user?.active||!contactCan(user,'import:contacts')||!contactCan(user,'write:contacts')||batch.kind==='LEADS'&&!contactCan(user,'write:sales')){await query("UPDATE crm_import_batches SET state='FAILED',updated_at=now() WHERE id=$1",[batch.id]);return {mode:'EXTERNAL',result:'DISABLED'};}
- const req={user,headers:{},ip:'worker'},results=[...batch.results];let offset=batch.cursor_position;const end=Math.min(offset+100,batch.rows_json.length);await query("UPDATE crm_import_batches SET state='PROCESSING' WHERE id=$1",[batch.id]);
+ const req={user,headers:{},ip:null},results=[...batch.results];let offset=batch.cursor_position;const end=Math.min(offset+100,batch.rows_json.length);await query("UPDATE crm_import_batches SET state='PROCESSING' WHERE id=$1",[batch.id]);
  for(;offset<end;offset++){
  const row=batch.rows_json[offset];if(row.status!=='VALID'||!batch.options.selectedRows.includes(row.number)){results.push({number:row.number,status:'SKIPPED',message:row.message||'Not selected or invalid.'});continue;}
  await query('SAVEPOINT crm_import_row');try{
