@@ -95,6 +95,7 @@ export async function providerRequest(url, {
     const e = new AppError(status === 401 ? 'The provider authorization expired. Reconnect this account.' : status === 403 ? 'The provider denied this operation. Review its permissions.' : status === 429 ? 'The provider rate limit was reached. The worker will retry.' : 'The provider rejected the request.', 502, status === 401 ? 'PROVIDER_AUTH_EXPIRED' : status === 403 ? 'PROVIDER_PERMISSION_DENIED' : status === 429 ? 'PROVIDER_RATE_LIMIT' : status === 404 ? 'PROVIDER_NOT_FOUND' : 'PROVIDER_REJECTED');
     e.retryable = status === 429 || status >= 500;
     e.providerStatus = status;
+    e.retryAfterSeconds=Math.min(3600,Math.max(0,Number(response.headers.get('retry-after'))||0));
     throw e;
   }
   return data;

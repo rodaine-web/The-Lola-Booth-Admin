@@ -2,6 +2,7 @@ import "../styles/record-workspace.css";
 import {useEffect,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {api} from '../api/client.js';
+import OutlookContacts from "../components/OutlookContacts.jsx";
 import AsyncState from '../components/AsyncState.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import {formatTimestamp} from '../utils/display.js';
@@ -19,7 +20,7 @@ export default function Integrations(){
 </div>
 {["PENDING_VERIFICATION","PENDING_APPROVAL","TEST_READY"].includes(card.status)&&<p className="note-text">Configuration is not the same as verified provider connectivity. Complete the provider-specific verification before treating this integration as live.</p>}
 {card.provider==="LINKEDIN"&&card.status==="PENDING_APPROVAL"&&<p className="note-text">LinkedIn Lead Sync requires LinkedIn API approval. Setup has been initiated, but external delivery is not verified yet.</p>}
-<details><summary>Configuration guidance</summary><p>Credentials belong in the server environment, never in this browser.</p>{card.config.fields.length>0&&<ul>{card.config.fields.map(key=><li key={key}>{key}</li>)}</ul>}<Link to="/system/settings#integrations">Open integration preferences</Link></details></details></article>)}</div></section>)}</AsyncState><InboundHistory/></main>;
+<details><summary>Configuration guidance</summary><p>Credentials belong in the server environment, never in this browser.</p>{card.config.fields.length>0&&<ul>{card.config.fields.map(key=><li key={key}>{key}</li>)}</ul>}<Link to="/system/settings#integrations">Open integration preferences</Link></details></details></article>)}</div></section>)}</AsyncState><OutlookContacts/><InboundHistory/></main>;
 }
 
 function InboundHistory(){

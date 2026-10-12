@@ -17,6 +17,8 @@ const Users = lazy(() => import("./pages/Users.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Leads = lazy(() => import("./pages/Leads.jsx"));
 const LeadDetail = lazy(() => import("./pages/LeadDetail.jsx"));
+const Contacts = lazy(() => import("./pages/Contacts.jsx"));
+const ContactDetail = lazy(() => import("./pages/ContactDetail.jsx"));
 const Clients = lazy(() => import("./pages/Clients.jsx"));
 const Events = lazy(() => import("./pages/Events.jsx"));
 const EventDetail = lazy(() => import("./pages/EventDetail.jsx"));
@@ -102,6 +104,8 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="sales/leads" element={<Leads />} />
         <Route path="sales/leads/:id" element={<LeadDetail />} />
+        <Route path="sales/contacts" element={<Contacts />} />
+        <Route path="sales/contacts/:id" element={<ContactDetail />} />
         <Route path="sales/clients" element={<Clients />} />
         <Route path="sales/clients/:id" element={<ClientDetail />} />
         <Route path="sales/agreements" element={<Agreements />} />

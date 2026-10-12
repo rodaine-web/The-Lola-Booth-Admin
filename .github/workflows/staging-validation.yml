@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main-staging
+      - main-prod
   push:
     branches:
       - main-staging
@@ -50,6 +51,11 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Contacts database persistence and mailbox discovery
+        env:
+          CRM_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test
+        run: node --test test/crm-contacts-db.test.js
 
       - name: Version 1.1 database lifecycle
         env:
