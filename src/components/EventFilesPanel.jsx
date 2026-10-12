@@ -30,7 +30,7 @@ export default function EventFilesPanel({eventId}){
   <p>Upload event documents and reference images. Files are available only to authorized team members.</p>
   {error&&<p role="alert" className="toast error">{error}</p>}{notice&&<p role="status" className="toast">{notice}</p>}
   {can('write:events')&&managesEventFiles(user)&&<form onSubmit={upload} className="event-files-form">
-   <label>File <span aria-hidden="true">*</span><input ref={input} type="file" required accept="application/pdf,image/png,image/jpeg" disabled={busy} onChange={e=>chooseFile(e.target.files?.[0]||null)}/><small>PDF, PNG or JPEG · maximum 8 MB</small></label>
+   <label>File <span aria-hidden="true">*</span><input ref={input} aria-label="File" type="file" required accept="application/pdf,image/png,image/jpeg" disabled={busy} onChange={e=>chooseFile(e.target.files?.[0]||null)}/><small>PDF, PNG or JPEG · maximum 8 MB</small></label>
    <label>Category <span aria-hidden="true">*</span><select value={category} disabled={busy} onChange={e=>{setCategory(e.target.value);requestId.current=crypto.randomUUID();}}>{EVENT_FILE_CATEGORIES.map(value=><option key={value} value={value}>{value.replaceAll('_',' ').toLowerCase()}</option>)}</select></label>
    <label>Team access <span aria-hidden="true">*</span><select value={visibility} disabled={busy} onChange={e=>{setVisibility(e.target.value);requestId.current=crypto.randomUUID();}}><option value="INTERNAL">Internal — Admin only</option><option value="PRIVATE">Private — assigned event team</option></select></label>
    <button className="primary-action" type="submit" disabled={busy||!file}>{busy?'Uploading…':'Upload File'}</button>
