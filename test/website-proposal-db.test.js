@@ -62,7 +62,7 @@ test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and
   // Existing customer lookup requires explicit authenticated staff identity review.
   assert.ok(returningPreview.existingClient);
   await assert.rejects(confirmLeadAvailability(returning.id,{confirmed:true,fingerprint:returningPreview.fingerprint,calendarRevision:returningPreview.calendar.revision},user),e=>e.code==='RETURNING_CLIENT_REVIEW');
-  await query("INSERT INTO automation_jobs(job_type,related_entity_type,related_entity_id,payload,status,last_error) VALUES('BOOKING_SEND_WEBSITE_PROPOSAL','lead',$1,$2,'FAILED',$3)",[returning.id,{approvalFingerprint:returningPreview.fingerprint,fingerprint:returning.source_details.bookingInquiry.submissionFingerprint,booking:returning.source_details.bookingInquiry},'duplicate key value violates unique constraint idx_clients_email_active']);
+  await query("INSERT INTO automation_jobs(job_type,related_entity_type,related_entity_id,payload,status,last_error,scheduled_for) VALUES('BOOKING_SEND_WEBSITE_PROPOSAL','lead',$1,$2,'FAILED',$3,now())",[returning.id,{approvalFingerprint:returningPreview.fingerprint,fingerprint:returning.source_details.bookingInquiry.submissionFingerprint,booking:returning.source_details.bookingInquiry},'duplicate key value violates unique constraint idx_clients_email_active']);
   const linked=await confirmLeadAvailability(returning.id,{confirmed:true,fingerprint:returningPreview.fingerprint,calendarRevision:returningPreview.calendar.revision,clientId:returningPreview.existingClient.id},user);
   assert.equal(linked.confirmed,true);
   assert.equal((await processWebsiteProposalHandoffs()).processed[0].status,'COMPLETED');
