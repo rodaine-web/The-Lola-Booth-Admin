@@ -1,3 +1,4 @@
+import {previewLeadAvailability,confirmLeadAvailability} from '../services/lead-availability-service.js';
 import {disconnect as disconnectExternal,retryExternalInbound} from '../services/external-connections-service.js';
 import {externalIntegrationsRouter} from './external-integrations.js';
 import {contractsRouter} from './contracts.js';
@@ -697,6 +698,14 @@ adminRouter.post("/leads", requirePermission("write:sales"), validate(leadSchema
   await recordActivity({ actorUserId: req.user.id, entityType: "lead", entityId: inserted.rows[0].id, action: "lead_created", summary: "Lead created manually" });
   await writeAudit({ req, action: "lead_created", entity: "lead", entityId: inserted.rows[0].id, after: inserted.rows[0] });
   res.status(201).json(inserted.rows[0]);
+}));
+
+adminRouter.get('/leads/:id/availability',requirePermission('read:sales'),requirePermission('read:events'),asyncHandler(async(req,res)=>res.json(await previewLeadAvailability(z.string().uuid().parse(req.params.id)))));
+adminRouter.post('/leads/:id/availability',requirePermission('write:sales'),requirePermission('read:events'),asyncHandler(async(req,res)=>{
+ const result=await confirmLeadAvailability(z.string().uuid().parse(req.params.id),z.object({confirmed:z.boolean(),fingerprint:z.string().optional(),calendarRevision:z.string().optional(),clientId:z.string().uuid().optional()}).parse(req.body),req.user);
+ await recordActivity({actorUserId:req.user.id,entityType:'lead',entityId:req.params.id,action:'lead_availability_reviewed',summary:result.confirmed?'Staff confirmed availability':'Staff cleared availability approval'});
+ await writeAudit({req,action:'lead_availability_reviewed',entity:'lead',entityId:req.params.id,after:result});
+ res.json(result);
 }));
 
 adminRouter.get("/leads/:id", requirePermission("read:sales"), asyncHandler(async (req, res) => {
