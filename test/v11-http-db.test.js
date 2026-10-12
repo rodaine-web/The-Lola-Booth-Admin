@@ -126,6 +126,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal((await api(`/campaigns/${productionDraft.id}`,{method:'DELETE'})).status,404);
   assert.equal((await api(`/campaigns/${productionDraft.id}`)).data.can_delete,false);
   delete process.env.APP_ENV;
+  if(process.env.CRM_BROWSER_TEST==='true'){const {verifyContactsBrowser}=await import('./support/crm-contacts-browser.js');await verifyContactsBrowser({api,origin,ownerToken});}
   if(process.env.V11_BROWSER_TEST==='true'){
    const {verifyClientBrowser}=await import('./support/v11-client-browser.js');
    await verifyClientBrowser({api,origin,proposalId:proposal.id,workspaceToken,ownerToken,campaignSales,availabilityLeadId:availabilityLead.id});
