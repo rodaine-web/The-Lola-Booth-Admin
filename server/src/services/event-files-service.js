@@ -61,7 +61,11 @@ export async function uploadEventFile(eventId,input,req,{storage=getStorageProvi
   });
   return result;
  }catch(error){
-  if(stored)try{await storage.delete(stored.storageKey);}catch{logger.error({eventId},'Uncommitted private event file requires storage cleanup');}
+  if(stored)try{
+   // A lost COMMIT response is uncertain: preserve an object referenced by committed metadata.
+   const committed=await query('SELECT 1 FROM files WHERE event_id=$1 AND upload_request_id=$2 AND storage_key=$3',[eventId,input.requestId,stored.storageKey]);
+   if(!committed.rowCount)await storage.delete(stored.storageKey);
+  }catch{logger.error({eventId},'Private event file commit or cleanup requires operator review');}
   throw error;
  }
 }

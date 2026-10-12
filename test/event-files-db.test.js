@@ -58,6 +58,15 @@ test('V1.2 private Event Files: real API, storage, concurrency, permissions and 
  await assert.rejects(files.uploadEventFile(event.id,{...input,requestId:crypto.randomUUID()},req,{storage:{put:async()=>{throw new Error('Provider unavailable');}}}));assert.equal((await query('SELECT count(*)::int n FROM files')).rows[0].n,before);
  await query(`CREATE FUNCTION reject_test_file() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.filename='reject.png' THEN RAISE EXCEPTION 'Simulated metadata persistence failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_test_file BEFORE INSERT ON files FOR EACH ROW EXECUTE FUNCTION reject_test_file();`);
  const deleted=[];await assert.rejects(files.uploadEventFile(event.id,{...input,filename:'reject.png',requestId:crypto.randomUUID()},req,{storage:{put:async()=>({storageProvider:'LOCAL',storageKey:'only-new-object'}),delete:async key=>deleted.push(key)}}));assert.deepEqual(deleted,['only-new-object']);assert.equal((await query('SELECT count(*)::int n FROM files')).rows[0].n,before);
+ // Simulate a lost COMMIT acknowledgement after the database actually committed.
+ const originalConnect=pool.connect;pool.connect=async function(){pool.connect=originalConnect;const client=await originalConnect.call(pool),originalQuery=client.query,originalRelease=client.release;
+ client.query=async function(sql,...args){const result=await originalQuery.call(client,sql,...args);if(sql==='COMMIT')throw new Error('Lost COMMIT acknowledgement');return result;};
+ client.release=function(...args){client.query=originalQuery;client.release=originalRelease;return originalRelease.apply(client,args);};return client;};
+ const uncertain={...input,requestId:crypto.randomUUID(),filename:'uncertain-commit.png'},cleanup=[];
+ await assert.rejects(files.uploadEventFile(event.id,uncertain,req,{storage:{put:async()=>({storageProvider:'LOCAL',storageKey:'uncertain-but-committed'}),delete:async key=>cleanup.push(key)}}));
+ assert.deepEqual(cleanup,[],'Never remove bytes referenced by a committed upload');
+ assert.equal((await query('SELECT count(*)::int n FROM files WHERE upload_request_id=$1',[uncertain.requestId])).rows[0].n,1);
+ const recovered=await files.uploadEventFile(event.id,uncertain,req,{storage:{put:async()=>{throw new Error('Committed retry must not write again');}}});assert.equal(recovered.replayed,true);
  await assert.rejects(files.downloadEventFile(event.id,file.id,req,{storage:{get:async()=>Buffer.from('corrupt')}}),e=>e.code==='EVENT_FILE_INTEGRITY');
  if(process.env.V12_BROWSER_TEST==='true'){const {verifyEventFilesBrowser}=await import('./support/event-files-browser.js');await verifyEventFilesBrowser({origin,eventId:event.id,ownerToken:tokens.owner,png});}
  await query('UPDATE events SET deleted_at=now() WHERE id=$1',[event.id]);assert.equal((await api(`/events/${event.id}/files/${file.id}/download`)).status,404);
