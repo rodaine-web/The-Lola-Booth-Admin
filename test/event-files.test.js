@@ -9,7 +9,7 @@ import {LocalStorageProvider} from '../server/src/services/storage-service.js';
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII=','base64');
 test('event files reject unsupported extensions, traversal, corrupt MIME and oversized payloads',()=>{
  assert.equal(eventFileName('Venue plan.PDF','application/pdf'),'Venue plan.PDF');
- for(const name of ['../plan.pdf','folder/plan.pdf','C:\\plan.pdf','plan\n.pdf','plan.html'])assert.equal(eventFileName(name,'application/pdf'),null);
+ for(const name of ['../plan.pdf','plan..pdf','folder/plan.pdf','C:\\plan.pdf','plan\n.pdf','plan.html'])assert.equal(eventFileName(name,'application/pdf'),null);
  const valid={filename:'reference.png',mimeType:'image/png',data:png.toString('base64')};assert.equal(decodeEventFile(valid).buffer.equals(png),true);
  for(const patch of [{filename:'reference.pdf'},{mimeType:'image/jpeg'},{data:'malformed!=='},{data:Buffer.from('not a PNG').toString('base64')},{data:Buffer.alloc(EVENT_FILE_MAX_BYTES+1).toString('base64')}])assert.throws(()=>decodeEventFile({...valid,...patch}),e=>e.code==='EVENT_FILE_INVALID');
 });

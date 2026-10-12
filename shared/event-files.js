@@ -3,7 +3,7 @@ export const EVENT_FILE_MIME_TYPES = ['application/pdf','image/png','image/jpeg'
 export const EVENT_FILE_CATEGORIES = ['DESIGN','VENUE','CLIENT_UPLOAD','INTERNAL','OTHER','CONTRACT','PROPOSAL','INVOICE'];
 export function eventFileName(filename,mimeType){
  const name=String(filename || '').trim();
- if(!name || name.length>160 || /[\x00-\x1f\x7f/\\]/.test(name) || name==='.' || name==='..')return null;
+ if(!name || name.includes('..') || name.length>160 || /[\x00-\x1f\x7f/\\]/.test(name) || name==='.' || name==='..')return null;
  const extension=name.split('.').at(-1).toLowerCase();
  if(!({'application/pdf':['pdf'],'image/png':['png'],'image/jpeg':['jpg','jpeg']}[mimeType] || []).includes(extension))return null;
  return name;
