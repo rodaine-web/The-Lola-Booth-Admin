@@ -8,6 +8,7 @@ on:
     branches:
       - main-staging
       - codex/phase1-production-release-20261011
+      - codex/v1.1-lead-availability-20261012
   workflow_dispatch:
 
 permissions:

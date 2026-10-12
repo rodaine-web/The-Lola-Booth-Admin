@@ -13,8 +13,8 @@ const statusOptions = ["", "INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "RE
 export default function Calendar({ embedded = false }) {
   const Container = embedded ? "section" : "main";
   const [advancedFilters,setAdvancedFilters]=useState(true);
-  const [view, setView] = useState("month");
-  const [date, setDate] = useState(businessToday());
+  const [view, setView] = useState(()=>["day","week","month"].includes(new URLSearchParams(window.location.search).get("view"))?new URLSearchParams(window.location.search).get("view"):"month");
+  const [date, setDate] = useState(()=>{const value=new URLSearchParams(window.location.search).get("date");return /^\d{4}-\d{2}-\d{2}$/.test(value||"")?value:businessToday();});
   const [filters, setFilters] = useState({ status: "", eventType: "", venue: "", city: "", experienceId: "", packageId: "", staffId: "", equipmentId: "" });
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState("");

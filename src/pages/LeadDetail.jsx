@@ -1,3 +1,4 @@
+import LeadAvailability from '../components/LeadAvailability.jsx';
 import { useAuth } from "../context/AuthContext.jsx";
 import { RecordIdentity, JourneyStrip, DashboardCard, NextBookingAction, RecordActivity, RequestedItems, RecordEditDialog, useRecordJourney } from "../components/RecordDashboard.jsx";
 import { TabNavigation, MetricCard as Metric, DetailSection as Panel } from "../components/WorkspaceUI.jsx";
@@ -161,7 +162,8 @@ export default function LeadDetail() {
 
       <div className="record-lead-layout">
         <aside className="record-column">
-          <NextBookingAction journey={journey} proposalHref={`/sales/proposals/new?leadId=${lead.id}`} onTasks={()=>setTab('Tasks')}/>
+          {can('read:events') && !lead.proposals?.length ? <LeadAvailability lead={lead} canReview={can('write:sales')} onUpdated={loadLead} onTasks={()=>setTab('Tasks')}/> : <NextBookingAction journey={journey} proposalHref={`/sales/proposals/new?leadId=${lead.id}`} onTasks={()=>setTab('Tasks')}/>}
+          {can('read:events') && lead.proposals?.length > 0 && <LeadAvailability lead={lead} canReview={can('write:sales')} onUpdated={loadLead} onTasks={()=>setTab('Tasks')}/>}
           <DashboardCard title="Lead Information" action={<button className="record-text-action" disabled={!can("write:sales")} onClick={()=>setEditing(true)}>Edit</button>}><Field label="Name" value={fullName}/><Field label="Email" value={lead.email}/><Field label="Phone" value={lead.phone}/><Field label="Source" value={friendlySource(lead)}/><Field label="Received" value={formatDateTime(lead.received_at || lead.created_at)}/><Field label="Assigned To" value={lead.assigned_user_name || (lead.assigned_user_id ? "Assigned · see assignment details" : "Unassigned")}/><Field label="Tags" value={lead.tags?.join(', ')}/></DashboardCard>
           <DashboardCard title="Internal Notes"><textarea value={note} onChange={e=>setNote(e.target.value)} aria-label="Internal note" placeholder="Add an internal note about this lead…"/><button onClick={addNote} disabled={!note.trim()}>Add Note</button></DashboardCard>
         </aside>

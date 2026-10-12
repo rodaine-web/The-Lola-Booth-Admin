@@ -10,8 +10,8 @@ export async function dispatchDecision(client, message) {
       WHERE p.id=$1 AND l.id=$2 AND p.deleted_at IS NULL AND l.deleted_at IS NULL AND e.deleted_at IS NULL AND NOT event_payment_review(e.id)
       AND p.status IN ('DRAFT','SENT','VIEWED') AND l.status NOT IN ('LOST','WON','ARCHIVED') AND e.status<>'CANCELLED'
       AND p.content=$5::jsonb AND p.pricing_snapshot=$6::jsonb AND p.line_items_snapshot=$7::jsonb
-      AND lower(l.email)=lower($3) AND p.content->>'website_submission_fingerprint'=l.source_details->'bookingInquiry'->>'submissionFingerprint'
-      AND $4='website-proposal:'||l.id::text||':'||(p.content->>'website_submission_fingerprint')`, [message.proposal_id,message.lead_id,message.recipient,message.idempotency_key,JSON.stringify(message.merge_data?.website_quote_snapshot?.content ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.pricing_snapshot ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.line_items_snapshot ?? null)]);
+      AND lower(l.email)=lower($3) AND l.availability_confirmed_at IS NOT NULL AND l.availability_fingerprint=$8 AND p.content->>'website_submission_fingerprint'=COALESCE(l.source_details->'bookingInquiry'->>'submissionFingerprint',l.availability_fingerprint)
+      AND $4='website-proposal:'||l.id::text||':'||(p.content->>'website_submission_fingerprint')`, [message.proposal_id,message.lead_id,message.recipient,message.idempotency_key,JSON.stringify(message.merge_data?.website_quote_snapshot?.content ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.pricing_snapshot ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.line_items_snapshot ?? null),message.merge_data?.availability_fingerprint || null]);
     if (!allowed.rowCount) return 'CANCELLED';
   }
   if (message.trigger_key === 'BOOKING_SEND_ACCEPTED_INVOICE') {
