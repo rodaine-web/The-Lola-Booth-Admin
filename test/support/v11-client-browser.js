@@ -53,6 +53,9 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
    await availabilityBox.waitFor();assert.equal(await availabilityBox.isChecked(),false);
    await availabilityBox.check();await page.getByText(/Confirmed by QA Owner/).waitFor();
    await page.reload();await page.getByText(/Confirmed by QA Owner/).waitFor();assert.equal(await availabilityBox.isChecked(),true);
+   await availabilityBox.uncheck();await page.getByText('Confirm availability to generate and send the standard proposal.',{exact:true}).waitFor();
+   await availabilityBox.waitFor();assert.equal(await availabilityBox.isChecked(),false,'Clearing approval keeps the card usable');
+   await availabilityBox.check();await page.getByText(/Confirmed by QA Owner/).waitFor();
    await page.screenshot({path:fileURLToPath(new URL('availability-desktop.png',evidence)),fullPage:true});
    await api(`/leads/${availabilityLeadId}`,{method:'PATCH',body:{event_start_time:'19:00'}});
    await page.reload();await availabilityBox.waitFor();assert.equal(await availabilityBox.isChecked(),false,'Changed time revokes approval');

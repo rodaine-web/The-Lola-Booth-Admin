@@ -57,7 +57,7 @@ export async function confirmLeadAvailability(id, {fingerprint,calendarRevision,
     if (['LOST','WON','ARCHIVED'].includes(lead.status)) throw new AppError('This lead is closed.',409,'LEAD_CLOSED');
     if (!confirmed) {
       await client.query('UPDATE leads SET availability_confirmed_at=NULL,availability_confirmed_by=NULL,availability_fingerprint=NULL,updated_at=now() WHERE id=$1',[id]);
-      return {confirmed:false};
+      return previewLeadAvailability(id);
     }
     if (!lead.event_date || !lead.event_start_time || !lead.event_end_time) throw new AppError('Event date, start time and end time are required before confirming availability.',422,'EVENT_DETAILS_REQUIRED');
     const current=leadRequestFingerprint(lead), calendar=await availabilityCalendar(lead);
