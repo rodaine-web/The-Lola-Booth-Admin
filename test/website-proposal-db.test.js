@@ -50,7 +50,7 @@ test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and
   const changedCalendar=await newLead();const oldCalendar=await previewLeadAvailability(changedCalendar.id);
   await query("UPDATE events SET venue_name='Calendar changed' WHERE id=$1",[proposals[0].event_id]);
   await assert.rejects(confirmLeadAvailability(changedCalendar.id,{confirmed:true,fingerprint:oldCalendar.fingerprint,calendarRevision:oldCalendar.calendar.revision},user),e=>e.code==='AVAILABILITY_CHANGED');
-  const manual=(await query("INSERT INTO leads(first_name,last_name,email,lead_source,event_date,event_start_time,event_end_time,venue_address,preferred_package_id,preferred_experience_id) VALUES('Manual','QA','manual@example.invalid','REFERRAL','2030-12-03','18:00','22:00','QA venue',$1,$2) RETURNING *",[pkg.id,exp.id])).rows[0];
+  const manual=(await query("INSERT INTO leads(first_name,last_name,email,lead_source,event_type,event_date,event_start_time,event_end_time,venue_address,preferred_package_id,preferred_experience_id) VALUES('Manual','QA','manual@example.invalid','REFERRAL','Wedding','2030-12-03','18:00','22:00','QA venue',$1,$2) RETURNING *",[pkg.id,exp.id])).rows[0];
   await approve(manual.id);assert.equal((await processWebsiteProposalHandoffs()).processed[0].status,'COMPLETED','Manual channel follows same approval');
   const changed=await newLead();await approve(changed.id);await query('UPDATE packages SET starting_price=899 WHERE id=$1',[pkg.id]);assert.equal((await processWebsiteProposalHandoffs()).processed[0].status,'FAILED');
   assert.equal((await query('SELECT count(*)::int n FROM proposals WHERE lead_id=$1',[changed.id])).rows[0].n,0);

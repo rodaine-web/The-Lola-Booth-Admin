@@ -33,7 +33,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
    const response=await fetch(`${origin}/api${path}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});
    return {status:response.status,data:await response.json()};
   }
-  const availabilityLead=(await pool.query("INSERT INTO leads(first_name,last_name,email,event_date,event_start_time,event_end_time,venue_address) VALUES('Availability','QA','availability@example.invalid','2030-12-03','18:00','22:00','QA venue') RETURNING id")).rows[0];
+  const availabilityLead=(await pool.query("INSERT INTO leads(first_name,last_name,email,event_type,event_date,event_start_time,event_end_time,venue_address) VALUES('Availability','QA','availability@example.invalid','Wedding','2030-12-03','18:00','22:00','QA venue') RETURNING id")).rows[0];
   assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{token:viewerToken})).status,403);
   assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{method:'POST',body:{confirmed:true},token:viewerToken})).status,403);
   assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{method:'POST',body:{confirmed:true}})).status,409);
