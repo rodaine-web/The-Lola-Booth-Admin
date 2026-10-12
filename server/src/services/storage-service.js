@@ -22,6 +22,11 @@ export class LocalStorageProvider {
     return fs.readFile(path.join(this.root, storageKey));
   }
 
+  async delete(storageKey) {
+    if (typeof storageKey !== "string" || storageKey.includes("..") || path.isAbsolute(storageKey) || storageKey.includes("\\")) throw new Error("Invalid local storage key.");
+    await fs.rm(path.join(this.root, storageKey), {force:true});
+  }
+
   async putAt({ buffer, storageKey }) {
     if (!/^website-import\/[a-f0-9]{64}\/[a-zA-Z0-9_.-]+$/.test(storageKey)) throw new Error("Invalid content-addressed media key.");
     const target = path.join(this.root, storageKey);
@@ -61,6 +66,10 @@ export class AzureDocumentStorageProvider {
     }
     return { storageProvider: "AZURE", storageKey: "azure/" + key };
   }
+  delete(key) {
+    if (!key.startsWith("azure/")) throw new Error("Invalid Azure document key.");
+    return this.blob.delete(key.slice(6));
+  }
   get(key) {
     if (!key.startsWith("azure/")) throw new Error("Invalid Azure document key.");
     return this.blob.get(key.slice(6));
@@ -73,10 +82,12 @@ export function getStorageProvider() {
     const azure = new AzureDocumentStorageProvider();
     // Old records retain their local keys; enabling Azure changes new writes only.
     return { put: (value) => azure.put(value), putAt: (value) => azure.putAt(value),
-      get: (key) => key.startsWith("azure/") ? azure.get(key) : local.get(key) };
+      get: (key) => key.startsWith("azure/") ? azure.get(key) : local.get(key),
+      delete: (key) => key.startsWith("azure/") ? azure.delete(key) : local.delete(key) };
   }
   if (env.storageProvider === "s3") return new S3CompatibleStorageProvider();
   if (env.storageProvider !== "local") throw new Error("Unsupported storage provider.");
   return { put: (value) => local.put(value), putAt: (value) => local.putAt(value),
-    get: (key) => key.startsWith("azure/") ? new AzureDocumentStorageProvider().get(key) : local.get(key) };
+    get: (key) => key.startsWith("azure/") ? new AzureDocumentStorageProvider().get(key) : local.get(key),
+    delete: (key) => key.startsWith("azure/") ? new AzureDocumentStorageProvider().delete(key) : local.delete(key) };
 }
