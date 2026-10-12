@@ -50,12 +50,15 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended('crm-contact:'||identity,600060));
  IF TG_TABLE_NAME='clients' THEN person:=NEW.name;first:=split_part(NEW.name,' ',1);last:=substr(NEW.name,length(first)+2);kind:='CLIENT';
  ELSE first:=NEW.first_name;last:=NEW.last_name;person:=btrim(first||' '||last);kind:='PROSPECT';END IF;
- IF NEW.contact_id IS NOT NULL THEN RETURN NEW;END IF;
+ IF NEW.contact_id IS NOT NULL THEN
+ IF kind='CLIENT' THEN UPDATE crm_contacts SET contact_type='CLIENT',updated_at=now() WHERE id=NEW.contact_id AND contact_type='PROSPECT';END IF;
+ RETURN NEW;END IF;
  SELECT id INTO contact FROM crm_contacts WHERE deleted_at IS NULL AND (email_normalized=identity OR lower(btrim(secondary_email))=identity) LIMIT 1;
  IF contact IS NULL THEN
   INSERT INTO crm_contacts(first_name,last_name,display_name,email,phone,company,contact_type,source)
    VALUES(COALESCE(first,''),COALESCE(last,''),COALESCE(NULLIF(person,''),NEW.email),NEW.email,COALESCE(NEW.phone,''),COALESCE(NEW.company,''),kind,'EXISTING_CRM') RETURNING id INTO contact;
  ELSIF kind='CLIENT' THEN UPDATE crm_contacts SET contact_type='CLIENT',updated_at=now() WHERE id=contact AND contact_type='PROSPECT';END IF;
+ IF TG_TABLE_NAME='leads' THEN UPDATE crm_contacts SET owner_id=COALESCE(owner_id,NEW.assigned_user_id) WHERE id=contact;END IF;
  NEW.contact_id:=contact;RETURN NEW;
 END $$;
 CREATE TRIGGER clients_contact_identity BEFORE INSERT OR UPDATE OF email ON clients FOR EACH ROW EXECUTE FUNCTION link_crm_contact();

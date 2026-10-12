@@ -60,6 +60,8 @@ export default function Communications() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [communicationTab,communicationSearch,communicationSort,communicationPage]);
 
+  useEffect(()=>{const id=new URLSearchParams(location.search).get("communication_id");if(id)openCommunication({id});},[location.search]);
+
   async function load() {
     setLoading(true);
     setRequestId("");
