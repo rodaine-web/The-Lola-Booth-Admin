@@ -6,6 +6,7 @@ import {formatDateOnly,formatTimestamp} from '../utils/display.js';
 
 export default function LeadAvailability({lead,canReview,onUpdated,onTasks}) {
  const [preview,setPreview]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[pendingChecked,setPendingChecked]=useState(false),[clientVerified,setClientVerified]=useState(false);
+ useEffect(()=>{setClientVerified(false);},[lead.id,lead.email,preview?.existingClient?.id]);
  async function refresh(){setError('');try{setPreview(await api.get(`/leads/${lead.id}/availability`));}catch(e){setError(e.message);}}
  useEffect(()=>{let active=true;setPreview(null);api.get(`/leads/${lead.id}/availability`).then(value=>{if(active)setPreview(value);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[lead.id,lead.updated_at]);
  async function confirm(confirmed){setPendingChecked(confirmed);setBusy(true);setError('');try{const result=await api.post(`/leads/${lead.id}/availability`,{confirmed,fingerprint:preview.fingerprint,calendarRevision:preview.calendar.revision,...(clientVerified&&preview.existingClient?{clientId:preview.existingClient.id}:{})});setPreview(current=>({...current,...result}));await onUpdated();}catch(e){setError(e.message);await refresh();setError(e.message);}finally{setBusy(false);}}
