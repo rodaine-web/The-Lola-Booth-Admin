@@ -25,7 +25,9 @@ export async function verifyEventFilesBrowser({origin,eventId,ownerToken,png}){
  const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Download browser-proof.png',exact:true}).click();const download=await downloadPromise;assert.deepEqual(await fs.readFile(await download.path()),png);
  await page.screenshot({path:fileURLToPath(new URL('event-files-desktop.png',evidence)),fullPage:true});
  await page.reload();await page.getByRole('button',{name:'Files',exact:true}).click();await page.getByRole('button',{name:'Download browser-proof.png',exact:true}).waitFor();
- await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Private Event Files fits mobile');
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:fileURLToPath(new URL('event-files-mobile.png',evidence)),fullPage:true});
+ const mobile=await page.evaluate(()=>({width:window.innerWidth,scroll:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.right>window.innerWidth+1}).map(e=>({tag:e.tagName,class:e.className,right:Math.round(e.getBoundingClientRect().right),width:Math.round(e.getBoundingClientRect().width)})).slice(0,12)}));assert.ok(mobile.scroll<=mobile.width,'Private Event Files fits mobile: '+JSON.stringify(mobile));
  await page.screenshot({path:fileURLToPath(new URL('event-files-mobile.png',evidence)),fullPage:true});
  assert.deepEqual(errors,[],'No browser runtime errors');
  }finally{env.clientOrigin=previousOrigin;if(browser)await browser.close();await vite.close();}
