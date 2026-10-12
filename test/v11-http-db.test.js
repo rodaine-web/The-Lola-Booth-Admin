@@ -33,6 +33,14 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
    const response=await fetch(`${origin}/api${path}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});
    return {status:response.status,data:await response.json()};
   }
+  const availabilityLead=(await pool.query("INSERT INTO leads(first_name,last_name,email,event_date,event_start_time,event_end_time,venue_address) VALUES('Availability','QA','availability@example.invalid','2030-12-03','18:00','22:00','QA venue') RETURNING id")).rows[0];
+  assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{token:viewerToken})).status,403);
+  assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{method:'POST',body:{confirmed:true},token:viewerToken})).status,403);
+  assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{method:'POST',body:{confirmed:true}})).status,409);
+  const availabilityPreview=await api(`/leads/${availabilityLead.id}/availability`);assert.equal(availabilityPreview.status,200);
+  const approval=await api(`/leads/${availabilityLead.id}/availability`,{method:'POST',body:{confirmed:true,fingerprint:availabilityPreview.data.fingerprint,calendarRevision:availabilityPreview.data.calendar.revision}});
+  assert.equal(approval.status,200);assert.equal(approval.data.confirmed,true);
+  assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{method:'POST',body:{confirmed:false}})).status,200);
   const draft=await api(`/proposals/${proposal.id}/contracts`,{method:'POST',body:{title:'HTTP demo agreement',terms:'Approved demo terms for isolated API verification only.'}});assert.equal(draft.status,201);
   const id=draft.data.id;
   assert.equal((await api(`/contracts/${id}/send`,{method:'POST',token:viewerToken})).status,403);
@@ -120,7 +128,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   delete process.env.APP_ENV;
   if(process.env.V11_BROWSER_TEST==='true'){
    const {verifyClientBrowser}=await import('./support/v11-client-browser.js');
-   await verifyClientBrowser({api,origin,proposalId:proposal.id,workspaceToken,ownerToken,campaignSales});
+   await verifyClientBrowser({api,origin,proposalId:proposal.id,workspaceToken,ownerToken,campaignSales,availabilityLeadId:availabilityLead.id});
   }
   const convertedDraft=await api(`/proposals/${proposal.id}/contracts`,{method:'POST',body:{title:'Converted proposal agreement',terms:'Nonbinding disposable QA terms. No booking or payment commitment.'}});
   assert.equal(convertedDraft.status,201);

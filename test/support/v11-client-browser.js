@@ -8,7 +8,7 @@ import {env} from '../../server/src/config/env.js';
 
 // Runs only with the disposable database API fixture. No hosted credentials or
 // external email/payment adapters are used by this browser qualification.
-export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,ownerToken,campaignSales}){
+export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,ownerToken,campaignSales,availabilityLeadId}){
  const root=fileURLToPath(new URL('../../',import.meta.url));
  const vite=await createServer({configFile:false,root,plugins:[react()],define:{__BUILD_REVISION__:JSON.stringify('v11-browser-qualification')},server:{host:'127.0.0.1',port:0,proxy:{'/api':origin}}});
  let browser;const previousOrigin=env.clientOrigin;
@@ -47,6 +47,18 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
   assert.equal(await page.getByRole('heading',{name:'Agreement',exact:true}).count(),0,'Revoked workspace clears customer records');
   if(campaignSales){
    await page.addInitScript(token=>{if(window===window.top)localStorage.setItem('lola_access_token',token);},ownerToken);
+   await page.setViewportSize({width:1440,height:1000});
+   await page.goto(`${base}/sales/leads/${availabilityLeadId}`);
+   const availabilityBox=page.getByRole('checkbox',{name:'Availability checked and confirmed',exact:true});
+   await availabilityBox.waitFor();assert.equal(await availabilityBox.isChecked(),false);
+   await availabilityBox.check();await page.getByText(/Confirmed by QA Owner/).waitFor();
+   await page.reload();await page.getByText(/Confirmed by QA Owner/).waitFor();assert.equal(await availabilityBox.isChecked(),true);
+   await page.screenshot({path:fileURLToPath(new URL('availability-desktop.png',evidence)),fullPage:true});
+   await api(`/leads/${availabilityLeadId}`,{method:'PATCH',body:{event_start_time:'19:00'}});
+   await page.reload();await availabilityBox.waitFor();assert.equal(await availabilityBox.isChecked(),false,'Changed time revokes approval');
+   await page.setViewportSize({width:390,height:844});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Availability control fits mobile');
+   await page.screenshot({path:fileURLToPath(new URL('availability-mobile.png',evidence)),fullPage:true});
    await page.setViewportSize({width:1440,height:1000});
    await page.goto(`${base}/sales/agreements`);
    await page.getByRole('heading',{name:'Agreements',exact:true}).waitFor();
