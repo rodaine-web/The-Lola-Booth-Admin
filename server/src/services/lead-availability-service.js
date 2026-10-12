@@ -30,7 +30,7 @@ export async function availabilityCalendar(lead) {
   // Same events/bookings/holds used by the booking calendar. Adjacent days expose overnight commitments.
   const events = (await query(`SELECT e.id,e.event_name,e.event_date,e.start_time,e.end_time,e.setup_time,e.breakdown_time,e.status,e.updated_at,
     EXISTS(SELECT 1 FROM booking_holds h WHERE h.event_id=e.id AND h.status='ACTIVE' AND h.expires_at>clock_timestamp()) AS active_hold,
-    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',b.id,'status',b.status,'updated_at',b.updated_at) ORDER BY b.id) FROM bookings b WHERE b.event_id=e.id),'[]') AS bookings
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',b.id,'paymentStatus',b.payment_status,'updated_at',b.updated_at) ORDER BY b.id) FROM bookings b WHERE b.event_id=e.id),'[]') AS bookings
     FROM events e WHERE e.deleted_at IS NULL AND e.status<>'CANCELLED'
     AND e.event_date BETWEEN $1::date-1 AND $1::date+1 AND e.id IS DISTINCT FROM $2::uuid
     ORDER BY e.event_date,e.start_time,e.id`, [lead.event_date, lead.converted_event_id || null])).rows;
