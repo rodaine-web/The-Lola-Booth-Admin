@@ -23,7 +23,7 @@ test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and
   async function newLead(overrides={}){const payload=await preparePublicBooking({firstName:'Website',lastName:'QA',email:'qa@example.invalid',phone:'3125550000',eventType:'Wedding',eventName:'QA only',eventDate:'2030-12-01',eventStartTime:'18:00',eventEndTime:'22:00',venueAddress:'QA venue',city:'Chicago',state:'IL',submissionId:crypto.randomUUID(),selections:[{experienceId:exp.id,packageId:pkg.id}],addons:[],...overrides});return (await ingestProviderLead({provider:'WEBSITE',payload,skipAutomations:true})).lead;}
   const {previewLeadAvailability,confirmLeadAvailability,hasCurrentAvailability}=await import('../server/src/services/lead-availability-service.js');
   const user=(await query("INSERT INTO users(name,email,password_hash) VALUES('QA availability staff','staff@example.invalid','not-a-login') RETURNING *")).rows[0];
-  async function approve(id){const preview=await previewLeadAvailability(id);return confirmLeadAvailability(id,{confirmed:true,fingerprint:preview.fingerprint,calendarRevision:preview.calendar.revision},user);}
+  async function approve(id){const preview=await previewLeadAvailability(id);return confirmLeadAvailability(id,{confirmed:true,fingerprint:preview.fingerprint,calendarRevision:preview.calendar.revision,...(preview.existingClient?{clientId:preview.existingClient.id}:{})},user);}
   const lead=await newLead();
   await queueWebsiteProposal(lead.id);
   assert.equal((await query('SELECT count(*)::int n FROM automation_jobs WHERE related_entity_id=$1',[lead.id])).rows[0].n,0,'Arrival cannot send a proposal');
@@ -52,6 +52,13 @@ test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and
   await assert.rejects(confirmLeadAvailability(changedCalendar.id,{confirmed:true,fingerprint:oldCalendar.fingerprint,calendarRevision:oldCalendar.calendar.revision},user),e=>e.code==='AVAILABILITY_CHANGED');
   const manual=(await query("INSERT INTO leads(first_name,last_name,email,lead_source,event_type,event_date,event_start_time,event_end_time,venue_address,preferred_package_id,preferred_experience_id) VALUES('Manual','QA','manual@example.invalid','REFERRAL','Wedding','2030-12-03','18:00','22:00','QA venue',$1,$2) RETURNING *",[pkg.id,exp.id])).rows[0];
   await approve(manual.id);assert.equal((await processWebsiteProposalHandoffs()).processed[0].status,'COMPLETED','Manual channel follows same approval');
+  const returning=await newLead();const returningPreview=await previewLeadAvailability(returning.id);
+  // Existing customer lookup requires explicit authenticated staff identity review.
+  assert.ok(returningPreview.existingClient);
+  await assert.rejects(confirmLeadAvailability(returning.id,{confirmed:true,fingerprint:returningPreview.fingerprint,calendarRevision:returningPreview.calendar.revision},user),e=>e.code==='RETURNING_CLIENT_REVIEW');
+  const linked=await confirmLeadAvailability(returning.id,{confirmed:true,fingerprint:returningPreview.fingerprint,calendarRevision:returningPreview.calendar.revision,clientId:returningPreview.existingClient.id},user);
+  assert.equal(linked.confirmed,true);
+  assert.equal((await processWebsiteProposalHandoffs()).processed[0].status,'COMPLETED');
   const changed=await newLead();await approve(changed.id);await query('UPDATE packages SET starting_price=899 WHERE id=$1',[pkg.id]);assert.equal((await processWebsiteProposalHandoffs()).processed[0].status,'FAILED');
   assert.equal((await query('SELECT count(*)::int n FROM proposals WHERE lead_id=$1',[changed.id])).rows[0].n,0);
   const paused=await newLead();await approve(paused.id);process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED='false';assert.equal((await processWebsiteProposalHandoffs()).processed.length,0);
