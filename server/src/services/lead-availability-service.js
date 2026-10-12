@@ -62,20 +62,25 @@ export async function confirmLeadAvailability(id, {fingerprint,calendarRevision,
     if (!lead.event_date || !lead.event_start_time || !lead.event_end_time) throw new AppError('Event date, start time and end time are required before confirming availability.',422,'EVENT_DETAILS_REQUIRED');
     const current=leadRequestFingerprint(lead), calendar=await availabilityCalendar(lead);
     if (fingerprint!==current || calendarRevision!==calendar.revision) throw new AppError('The request or booking calendar changed. Refresh and review availability again.',409,'AVAILABILITY_CHANGED');
+    let reviewedExistingClient=false;
     if (!lead.converted_client_id && lead.email) {
       const existing=(await client.query("SELECT id FROM clients WHERE lower(email)=lower($1) AND deleted_at IS NULL FOR SHARE",[lead.email])).rows[0];
       if (existing && existing.id !== clientId) throw new AppError('Verify the matching existing client before approving this returning-client request.',409,'RETURNING_CLIENT_REVIEW');
       if (existing) {
         await client.query('UPDATE leads SET converted_client_id=$2 WHERE id=$1',[id,existing.id]);
+        reviewedExistingClient=true;
+
+      }
+    }
+    if (!hasCurrentAvailability(lead)) await client.query('UPDATE leads SET availability_confirmed_at=now(),availability_confirmed_by=$2,availability_fingerprint=$3,updated_at=now() WHERE id=$1',[id,user.id,current]);
+    if (reviewedExistingClient) {
         // This particular failure rolled back before a proposal/message existed. Never retry uncertain delivery.
         await client.query(`UPDATE automation_jobs SET status='PENDING',attempt_count=0,scheduled_for=now(),last_error=NULL,updated_at=now()
           WHERE related_entity_id=$1 AND job_type='BOOKING_SEND_WEBSITE_PROPOSAL' AND status='FAILED'
           AND last_error LIKE '%idx_clients_email_active%'
           AND NOT EXISTS(SELECT 1 FROM proposals WHERE lead_id=$1 AND deleted_at IS NULL)
           AND NOT EXISTS(SELECT 1 FROM communications WHERE lead_id=$1 AND trigger_key='BOOKING_SEND_WEBSITE_PROPOSAL')`,[id]);
-      }
     }
-    if (!hasCurrentAvailability(lead)) await client.query('UPDATE leads SET availability_confirmed_at=now(),availability_confirmed_by=$2,availability_fingerprint=$3,updated_at=now() WHERE id=$1',[id,user.id,current]);
     // Queue insertion is in the same transaction as approval, and serialized on the lead.
     const {queueWebsiteProposal}=await import('./website-proposal-handoff-service.js');
     await queueWebsiteProposal(id);
