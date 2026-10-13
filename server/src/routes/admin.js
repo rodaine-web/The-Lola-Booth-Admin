@@ -937,6 +937,7 @@ adminRouter.post("/leads/:id/convert", requirePermission("write:sales"), asyncHa
 }));
 
 const clientSchema = z.object({
+  provisional: z.literal(true).optional(),
   first_name: z.string().optional().nullable(),
   last_name: z.string().optional().nullable(),
   name: z.string().optional(),
@@ -973,8 +974,8 @@ adminRouter.post("/clients", requirePermission("write:sales"), validate(clientSc
       throw new AppError("Possible duplicate client found.", 409, "POSSIBLE_DUPLICATE", { duplicate: { ...duplicate.rows[0], match_reason: matchReason } });
     }
   }
-  const body = { ...req.body, name, billing_address: [req.body.address, req.body.city, req.body.state, req.body.zip].filter(Boolean).join(", ") || null };
-  const allowed = ["name", "first_name", "last_name", "email", "phone", "company", "preferred_contact_method", "address", "city", "state", "zip", "notes", "tags", "client_type", "referral_source", "billing_address"];
+  const body = { ...req.body, name, sales_qualified:req.body.provisional!==true, billing_address: [req.body.address, req.body.city, req.body.state, req.body.zip].filter(Boolean).join(", ") || null };
+  const allowed = ["name", "first_name", "last_name", "email", "phone", "company", "preferred_contact_method", "address", "city", "state", "zip", "notes", "tags", "client_type", "referral_source", "billing_address", "sales_qualified"];
   const fields = Object.keys(cleanPatch(body, allowed));
   const values = fields.map((field) => body[field]);
   const inserted = await query(`INSERT INTO clients (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values);
