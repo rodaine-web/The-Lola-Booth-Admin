@@ -46,14 +46,14 @@ test('Contacts migration, permissions, import persistence, consent and mailbox d
  // Exercise durable provider failure handling, not merely the request wrapper.
  process.env.CRM_OUTLOOK_DISCOVERY_ENABLED='true';process.env.CRM_CONTACT_IMPORTS_ENABLED='true';
  const {processIntegrationJobs}=await import('../server/src/services/integration-jobs-service.js');
- await query("UPDATE integration_jobs SET status='SUCCEEDED' WHERE provider IN ('CRM_CONTACTS','CRM_OUTLOOK')");
+ await query("UPDATE integration_jobs SET status='SUCCEEDED' WHERE status IN ('QUEUED','PROCESSING')");
  const failing=await outlook.queueDiscovery({sources:'SENT',from:'2026-10-01'},req);
  const limitedFetcher=async()=>new Response('{}',{status:429,headers:{'retry-after':'300','content-type':'application/json'}});
- await processIntegrationJobs({limit:1,dispatch:job=>outlook.processOutlookPage(job,{fetcher:limitedFetcher})});
- let failedJob=(await query('SELECT *,extract(epoch FROM available_at-now())::int delay FROM integration_jobs WHERE entity_id=$1',[failing.id])).rows[0];assert.equal(failedJob.status,'QUEUED');assert.ok(failedJob.delay>=299);assert.equal(failedJob.last_error,'PROVIDER_RATE_LIMIT');
+ await processIntegrationJobs({limit:1,externalOnly:true,dispatch:job=>outlook.processOutlookPage(job,{fetcher:limitedFetcher})});
+ let failedJob=(await query('SELECT *,extract(epoch FROM available_at-now())::int delay FROM integration_jobs WHERE entity_id=$1',[failing.id])).rows[0];assert.equal(failedJob.status,'QUEUED');assert.ok(failedJob.delay>=299,JSON.stringify({status:failedJob.status,delay:failedJob.delay,last_error:failedJob.last_error}));assert.equal(failedJob.last_error,'PROVIDER_RATE_LIMIT');
  await query('UPDATE integration_jobs SET available_at=now() WHERE id=$1',[failedJob.id]);
  const revokedFetcher=async()=>new Response(JSON.stringify({error:{code:'InvalidAuthenticationToken',message:'provider-private-data'}}),{status:401,headers:{'content-type':'application/json'}});
- await processIntegrationJobs({limit:1,dispatch:job=>outlook.processOutlookPage(job,{fetcher:revokedFetcher})});
+ await processIntegrationJobs({limit:1,externalOnly:true,dispatch:job=>outlook.processOutlookPage(job,{fetcher:revokedFetcher})});
  failedJob=(await query('SELECT * FROM integration_jobs WHERE id=$1',[failedJob.id])).rows[0];assert.equal(failedJob.status,'FAILED');assert.equal(failedJob.last_error,'PROVIDER_AUTH_EXPIRED');assert.equal((await outlook.outlookStatus()).status,'NEEDS_REAUTHORIZATION');assert.equal((await outlook.discoveryView(failing.id,req.user)).state,'FAILED');
  await query("UPDATE integration_connections SET status='CONNECTED' WHERE id=$1",[conn.id]);
  await query("UPDATE integration_connections SET access_token_expires_at=now()-interval '1 minute' WHERE id=$1",[conn.id]);
