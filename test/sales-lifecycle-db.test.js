@@ -14,7 +14,7 @@ test('sales lifecycle: lost verdict, expiry, task stop, client promotion and pai
   const dir=new URL('../server/migrations/',import.meta.url);
   for(const file of (await fs.readdir(dir)).filter(f=>f.endsWith('.sql')).sort())await db.query(await fs.readFile(new URL(file,dir),'utf8'));
   const row=async(sql,args=[])=>(await db.query(sql,args)).rows[0];
-  const lead=await row("INSERT INTO leads(first_name,last_name,email,status) VALUES('Lost','QA','lost@qa.invalid','PROPOSAL_SENT') RETURNING *");
+  const lead=await row("INSERT INTO leads(first_name,last_name,email,phone,event_date,event_type,status) VALUES('Lost','QA','lost@qa.invalid','5550000199','2030-10-15','Corporate','PROPOSAL_SENT') RETURNING *");
   const client=await row("INSERT INTO clients(name,email,referral_source,sales_qualified) VALUES('Lost QA','lost@qa.invalid','Website request',false) RETURNING *");
   assert.equal((await row('SELECT contact_type FROM crm_contacts WHERE id=$1',[client.contact_id])).contact_type,'PROSPECT');
   const event=await row("INSERT INTO events(client_id,event_name,event_date,event_type,status) VALUES($1,'Lost QA','2030-10-15','Corporate','PENDING_DEPOSIT') RETURNING *",[client.id]);
