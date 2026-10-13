@@ -14,7 +14,7 @@ test('global search never queries departments outside the current user permissio
  assert.equal((await searchAdmin({permissions:['read:finance']},'QA')).length,1);
  assert.ok(calls[0].includes('FROM invoices'));
  calls.length=0;
- assert.equal((await searchAdmin({permissions:['*']},'QA')).length,4);
+ assert.equal((await searchAdmin({permissions:['*']},'QA')).length,5);
 });
 test('read-only settings permission cannot authorize settings mutations',()=>{
  let error;

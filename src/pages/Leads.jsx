@@ -8,6 +8,9 @@ import { Plus, Search, SlidersHorizontal, Table2, Columns3 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
+import {useAuth} from "../context/AuthContext.jsx";
+import CrmImportWizard,{CrmImportHistory} from "../components/CrmImportWizard.jsx";
+import "../styles/crm-contacts.css";
 import StatusBadge from "../components/StatusBadge.jsx";
 
 const statuses=["","NEW","CONTACTED","QUALIFIED","PROPOSAL_DRAFT","PROPOSAL_SENT","FOLLOW_UP","WON","LOST"];
@@ -15,6 +18,8 @@ const sources=["","WEBSITE","META","FACEBOOK","INSTAGRAM","TIKTOK","LINKEDIN","R
 const eventTypes=["Wedding","Birthday","Private Party","Brand Activation","Corporate Event","Other"];
 
 export default function Leads(){
+  const {can}=useAuth();
+  const [importView,setImportView]=useState("");
   const [urlParams,setUrlParams]=useSearchParams();
   const [creating,setCreating]=useState(urlParams.get("create")==="true");
   const [saving,setSaving]=useState(false);
@@ -85,7 +90,7 @@ export default function Leads(){
       <div><p className="eyebrow">Sales</p><h1>Leads</h1><p className="lede">Capture. Track. Convert.</p></div>
       <div className="button-row">
         <button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>
-        <button className="primary-action" onClick={()=>{setDraft({event_type:"",status:"NEW"});setCreating(true);setError("");}}><Plus size={15}/>New Lead</button>
+        <>{can('import:contacts')&&can('write:sales')&&<><button onClick={()=>setImportView('upload')}>Upload Leads</button><button onClick={()=>api.download('/crm/imports/template/leads','LOLA-leads-import-template.xlsx').catch(e=>setError(e.message))}>Download Leads Template</button><button onClick={()=>setImportView('history')}>Import History</button></>}</><button className="primary-action" onClick={()=>{setDraft({event_type:"",status:"NEW"});setCreating(true);setError("");}}><Plus size={15}/>New Lead</button>
       </div>
     </section>
 
@@ -109,6 +114,8 @@ export default function Leads(){
       : <LeadBoard leads={leads}/>
     }</RecordWorkspace>
 
+    {importView==='upload'&&<CrmImportWizard kind="LEADS" onClose={()=>setImportView('')} onDone={()=>setRevision(v=>v+1)}/>}
+    {importView==='history'&&<CrmImportHistory kind="LEADS" onClose={()=>setImportView('')}/>}
     {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="New lead">
       <form className="modal lola-create-modal" onSubmit={createLead}>
         <div className="modal-heading"><div><p className="eyebrow">New Lead</p><h2>Add a sales opportunity</h2></div><button type="button" onClick={()=>setCreating(false)}>Close</button></div>

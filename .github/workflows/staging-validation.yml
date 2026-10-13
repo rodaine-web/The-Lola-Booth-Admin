@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main-staging
+      - main-prod
   push:
     branches:
       - main-staging
@@ -51,6 +52,11 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Contacts database persistence and mailbox discovery
+        env:
+          CRM_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test
+        run: node --test test/crm-contacts-db.test.js
+
       - name: Version 1.1 database lifecycle
         env:
           V11_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test
@@ -58,6 +64,7 @@ jobs:
 
       - name: Full Phase 1 disposable database regressions
         env:
+          CRM_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_ci_qa
           PGPASSWORD: lola_test
           BOOKING_LIFECYCLE_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_ci_qa
           BOOTHBOOK_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_ci_qa
@@ -77,6 +84,12 @@ jobs:
       - name: Install browser for customer journey
         run: npx playwright install --with-deps chromium
 
+      - name: Contacts desktop and mobile browser qualification
+        env:
+          V11_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test
+          CRM_BROWSER_TEST: "true"
+        run: node --test test/v11-http-db.test.js
+
       - name: Version 1.1 browser journey
         env:
           V11_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test
@@ -88,5 +101,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: v11-browser-evidence
-          path: artifacts/v11-browser/
+          path: |
+            artifacts/v11-browser/
+            artifacts/crm-contacts-browser/
           if-no-files-found: ignore
