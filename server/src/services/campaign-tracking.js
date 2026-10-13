@@ -36,13 +36,21 @@ export async function prepareCampaignTracking(rendered,recipientId) {
 export function automatedTrackingRequest({method='GET',userAgent='',purpose=''}={}) {
  return method!=='GET'||/bot|crawler|spider|scanner|safelinks|proofpoint|mimecast|barracuda|headless|preview|curl|wget/i.test(userAgent)||/prefetch|preview/i.test(purpose);
 }
+export function trackingClassification(kind,request={}) {
+ if(automatedTrackingRequest(request))return 'AUTOMATION';
+ if(kind==='OPEN')return 'ESTIMATED_OPEN';
+ return request.fetchMode==='navigate' && request.fetchUser==='?1' ? 'LIKELY_HUMAN' : 'UNVERIFIED';
+}
 export async function recordCampaignTracking(token,kind,request={}) {
  if(!/^[A-Za-z0-9_-]{43}$/.test(token)||!['OPEN','CLICK'].includes(kind))throw new AppError('This campaign link is unavailable.',404,'NOT_FOUND');
  return transaction(async()=>{
   const link=(await query(`SELECT t.*,r.campaign_id,r.sent_at,r.unsubscribed_at,c.status,c.deleted_at FROM campaign_tracking_links t JOIN campaign_recipients r ON r.id=t.recipient_id JOIN campaigns c ON c.id=r.campaign_id WHERE t.token_hash=$1 AND t.kind=$2 AND t.expires_at>now()`,[trackingHash(token),kind])).rows[0];
   if(!link||link.deleted_at)throw new AppError('This campaign link is unavailable.',404,'NOT_FOUND');
   if(kind==='CLICK'&&!trackableDestination(link.destination))throw new AppError('This campaign link is unavailable.',404,'NOT_FOUND');
-  if(link.sent_at&&!link.unsubscribed_at&&link.status!=='CANCELLED'&&!automatedTrackingRequest(request)){
+  if(link.sent_at&&!link.unsubscribed_at&&!['CANCELLED','ARCHIVED'].includes(link.status)){
+   const classification=trackingClassification(kind,request);
+   await query('INSERT INTO campaign_tracking_observations(campaign_id,recipient_id,link_id,kind,classification,method,user_agent,purpose,fetch_mode,fetch_user) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[link.campaign_id,link.recipient_id,link.id,kind,classification,String(request.method||'GET').slice(0,16),String(request.userAgent||'').slice(0,512),String(request.purpose||'').slice(0,128),String(request.fetchMode||'').slice(0,32),String(request.fetchUser||'').slice(0,16)]);
+   if(classification==='AUTOMATION')return link.destination;
    const field=kind==='OPEN'?'opened_at':'clicked_at';
    const updated=await query(`UPDATE campaign_recipients SET ${field}=now() WHERE id=$1 AND ${field} IS NULL RETURNING id`,[link.recipient_id]);
    if(updated.rowCount)await query('INSERT INTO campaign_events(campaign_id,recipient_id,event_type,event_key,metadata) VALUES($1,$2,$3,$4,$5) ON CONFLICT(event_key) DO NOTHING',[link.campaign_id,link.recipient_id,kind==='OPEN'?'estimated_open':'tracked_click','tracking:'+link.recipient_id+':'+kind,{source:'campaign_tracking',estimated:kind==='OPEN'}]);

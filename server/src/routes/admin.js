@@ -338,6 +338,8 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       const pageSize = filters.pageSize || filters.page_size;
       const offset = (page - 1) * pageSize;
       const where = ["deleted_at IS NULL"];
+      if (table === "clients") where.push("sales_qualified=true");
+      if (["events","bookings"].includes(table)) where.push("sales_closed_at IS NULL");
       const params = [];
       if(filters.data_scope==="business" && ["leads","clients","events","bookings","proposals","invoices","payments","tasks"].includes(table))where.push("data_classification IN ('BUSINESS','UNREVIEWED')");
       if (filters.status) {
@@ -1344,7 +1346,7 @@ for (const [resource,table,permission] of [["users","users","read:tasks"],["staf
 }
 
 adminRouter.get("/pickers/clients", requirePermission("read:sales"), asyncHandler(async (req, res) => {
-  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, email AS subtitle FROM clients WHERE deleted_at IS NULL AND (name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) ORDER BY name LIMIT 25");
+  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, email AS subtitle FROM clients WHERE deleted_at IS NULL AND sales_qualified AND (name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) ORDER BY name LIMIT 25");
   res.json({ data: rows });
 }));
 
@@ -1354,7 +1356,7 @@ adminRouter.get("/pickers/leads", requirePermission("read:sales"), asyncHandler(
 }));
 
 adminRouter.get("/pickers/events", requirePermission("read:events"), asyncHandler(async (req, res) => {
-  const rows = await pickerRows(req.query.q, "SELECT e.id, e.event_name AS label, c.name || COALESCE(' · ' || e.event_date::text, '') AS subtitle, e.client_id FROM events e LEFT JOIN clients c ON c.id=e.client_id WHERE e.deleted_at IS NULL AND (e.event_name ILIKE $1 OR e.event_type ILIKE $1 OR e.venue_name ILIKE $1 OR c.name ILIKE $1) ORDER BY e.event_date DESC NULLS LAST LIMIT 25");
+  const rows = await pickerRows(req.query.q, "SELECT e.id, e.event_name AS label, c.name || COALESCE(' · ' || e.event_date::text, '') AS subtitle, e.client_id FROM events e LEFT JOIN clients c ON c.id=e.client_id WHERE e.deleted_at IS NULL AND e.sales_closed_at IS NULL AND (e.event_name ILIKE $1 OR e.event_type ILIKE $1 OR e.venue_name ILIKE $1 OR c.name ILIKE $1) ORDER BY e.event_date DESC NULLS LAST LIMIT 25");
   res.json({ data: rows });
 }));
 
@@ -2613,6 +2615,7 @@ const taskSchema = z.object({
   lead_id: uuid.optional().nullable(),
   client_id: uuid.optional().nullable(),
   event_id: uuid.optional().nullable(),
+  proposal_id: uuid.optional().nullable(),
   status: z.enum(taskStatuses).default("OPEN"),
   priority: z.enum(taskPriorities).default("NORMAL")
 }).strict();
@@ -2631,7 +2634,7 @@ adminRouter.post("/tasks", requirePermission("write:tasks"), validate(taskSchema
 adminRouter.patch("/tasks/:id", requirePermission("write:tasks"), validate(taskSchema.partial()), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM tasks WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Task");
-  const updated = await updateById({ table: "tasks", id: req.params.id, body: req.body, allowed: ["title", "description", "due_date", "assigned_user_id", "lead_id", "client_id", "event_id", "status", "priority"] });
+  const updated = await updateById({ table: "tasks", id: req.params.id, body: req.body, allowed: ["title", "description", "due_date", "assigned_user_id", "lead_id", "client_id", "event_id", "proposal_id", "status", "priority"] });
   await recordActivity({ actorUserId: req.user.id, entityType: updated.event_id ? "event" : updated.lead_id ? "lead" : "task", entityId: updated.event_id || updated.lead_id || updated.id, action: updated.status === "DONE" ? "task_completed" : "task_edited", summary: updated.status === "DONE" ? `Task completed: ${updated.title}` : `Task edited: ${updated.title}` });
   await writeAudit({ req, action: updated.status === "DONE" ? "task_completed" : "task_edited", entity: "task", entityId: req.params.id, before: before.rows[0], after: updated });
   res.json(updated);

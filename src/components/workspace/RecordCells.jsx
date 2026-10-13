@@ -7,6 +7,7 @@ export function recordCell(row,column){
  if(['owner_name','assigned_to_name','account_manager'].includes(column))return <OwnerCell name={row[column]}/>;
  if(column==='client_name')return <PersonCell name={row.client_name} detail={row.client_email}/>;
  if(column==='related_to')return <PersonCell name={row.client_name||row.event_name||'Internal'} detail={row.client_name?row.event_name:null}/>;
+ if(column==='notes')return row.closure_reason||row.description||'—';
  if(column==='priority')return <span className={`record-priority priority-${String(row.priority||'').toLowerCase()}`}>{formatDisplay(row.priority,'priority')}</span>;
  return undefined;
 }

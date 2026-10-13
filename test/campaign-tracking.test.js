@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {composeTracking,trackingHash,trackingOrigin,recordCampaignTracking,automatedTrackingRequest} from '../server/src/services/campaign-tracking.js';
+import {composeTracking,trackingHash,trackingOrigin,recordCampaignTracking,automatedTrackingRequest,trackingClassification} from '../server/src/services/campaign-tracking.js';
 import {pool} from '../server/src/db/pool.js';
 const token='a'.repeat(43);
 test('tracked email preserves content and styles, wraps links, excludes unsubscribe and hashes credentials',()=>{
@@ -35,3 +35,5 @@ test('unknown/malformed token cannot choose a redirect destination',async t=>{
  t.mock.method(pool,'connect',async()=>({query:async()=>({rows:[],rowCount:0}),release(){}}));
  await assert.rejects(recordCampaignTracking(token,'CLICK'),e=>e.code==='NOT_FOUND');
 });
+
+test("scanner and missing navigation evidence are not called human clicks",()=>{assert.equal(trackingClassification("CLICK",{userAgent:"Mozilla/5.0"}),"UNVERIFIED");assert.equal(trackingClassification("CLICK",{fetchMode:"navigate",fetchUser:"?1"}),"LIKELY_HUMAN");assert.equal(trackingClassification("CLICK",{fetchMode:"navigate",fetchUser:"?1",purpose:"prefetch"}),"AUTOMATION");assert.equal(trackingClassification("OPEN",{}),"ESTIMATED_OPEN");});
