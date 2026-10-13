@@ -208,7 +208,7 @@ async function eventRows(whereSql, params, limit) {
      LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL
      LEFT JOIN (SELECT event_id, count(*) AS staff_count FROM staff_assignments WHERE released_at IS NULL GROUP BY event_id) sa ON sa.event_id=e.id
      LEFT JOIN (SELECT event_id, count(*) AS equipment_count FROM equipment_assignments WHERE released_at IS NULL GROUP BY event_id) ea ON ea.event_id=e.id
-     WHERE e.deleted_at IS NULL AND ${whereSql}
+     WHERE e.deleted_at IS NULL AND e.sales_closed_at IS NULL AND ${whereSql}
      ORDER BY e.event_date, COALESCE(e.start_time, '00:00'::time) LIMIT ${Number(limit)}`,
     params
   );
@@ -222,8 +222,8 @@ async function attentionItems([start, end]) {
     eventRows("e.event_date >= current_date AND e.event_date < current_date + interval '14 days' AND NOT EXISTS (SELECT 1 FROM equipment_assignments ea WHERE ea.event_id=e.id AND ea.released_at IS NULL)", [], 6),
     query("SELECT id, invoice_number, client_id, due_date, COALESCE(amount_outstanding,balance_due) AS amount_due, status FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID' AND due_date < current_date AND COALESCE(amount_outstanding,balance_due) > 0 ORDER BY due_date LIMIT 6"),
     query("SELECT id, provider, amount, status, created_at FROM payments WHERE deleted_at IS NULL AND status='FAILED' ORDER BY created_at DESC LIMIT 6"),
-    query("SELECT id, first_name, last_name, event_date, status, follow_up_date FROM leads WHERE deleted_at IS NULL AND (status='NEW' OR follow_up_date <= current_date OR status='QUALIFIED') ORDER BY follow_up_date NULLS FIRST, created_at LIMIT 8"),
-    query("SELECT id, proposal_number, client_id, status, sent_at, valid_through FROM proposals WHERE deleted_at IS NULL AND status IN ('SENT','VIEWED') OR (deleted_at IS NULL AND valid_through <= current_date + interval '3 days' AND status NOT IN ('ACCEPTED','DECLINED','ARCHIVED')) ORDER BY valid_through NULLS LAST LIMIT 8"),
+    query("SELECT id, first_name, last_name, event_date, status, follow_up_date FROM leads WHERE deleted_at IS NULL AND status NOT IN ('LOST','WON','ARCHIVED') AND (status='NEW' OR follow_up_date <= current_date OR status='QUALIFIED') ORDER BY follow_up_date NULLS FIRST, created_at LIMIT 8"),
+    query("SELECT id, proposal_number, client_id, status, sent_at, valid_through FROM proposals WHERE deleted_at IS NULL AND status IN ('SENT','VIEWED') OR (deleted_at IS NULL AND valid_through <= current_date + interval '3 days' AND status NOT IN ('ACCEPTED','CONVERTED','DECLINED','EXPIRED','ARCHIVED')) ORDER BY valid_through NULLS LAST LIMIT 8"),
     query("SELECT id, event_name, event_date, operational_status FROM events WHERE deleted_at IS NULL AND event_date=current_date AND operational_status IN ('PREPARING','EN_ROUTE','ON_SITE','SETTING_UP','BREAKDOWN','ISSUE_REPORTED') ORDER BY start_time LIMIT 8"),
     query("SELECT id, event_id, severity, type, description FROM event_incidents WHERE deleted_at IS NULL AND status IN ('OPEN','IN_REVIEW') AND severity IN ('HIGH','CRITICAL') ORDER BY occurred_at DESC LIMIT 8"),
     query(`SELECT e.id,e.event_name,p.planning_due_at,p.creative_due_at,p.submitted_at,p.planning_due_at<=current_date AS planning_overdue,p.creative_due_at<=current_date AS creative_overdue,
