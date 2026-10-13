@@ -967,9 +967,10 @@ async function recoverStaleProcessingJobs(client) {
 
 async function automationStopConditionMet(client, job) {
   const cancelStatuses = job.action_config?.cancel_statuses || [];
+  if(job.related_entity_type==='lead' && (await client.query("SELECT 1 FROM leads WHERE id=$1 AND status='LOST'",[job.related_entity_id])).rowCount)return true;
   if (job.related_entity_type === "proposal") {
-    const row = (await client.query("SELECT status FROM proposals WHERE id=$1", [job.related_entity_id])).rows[0];
-    return ["ACCEPTED", "DECLINED", "EXPIRED", "CANCELLED", ...cancelStatuses].includes(row?.status);
+    const row = (await client.query("SELECT status,valid_through<(now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date AS expired FROM proposals WHERE id=$1", [job.related_entity_id])).rows[0];
+    return ["ACCEPTED", "CONVERTED", "DECLINED", "EXPIRED", "ARCHIVED", "CANCELLED", ...cancelStatuses].includes(row?.status) || row?.expired;
   }
   if (job.related_entity_type === "invoice") {
     const row = (await client.query("SELECT status, balance_due, amount_outstanding FROM invoices WHERE id=$1", [job.related_entity_id])).rows[0];

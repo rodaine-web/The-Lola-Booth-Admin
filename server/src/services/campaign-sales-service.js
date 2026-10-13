@@ -22,7 +22,7 @@ export async function campaignCommercialProposal(campaignId,interestId,req){
   const lead=(await query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[linked.lead_id])).rows[0];
   let customer=lead.converted_client_id?(await query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL',[lead.converted_client_id])).rows[0]:null;
   if(!customer)customer=(await query('SELECT * FROM clients WHERE lower(email)=lower($1) AND deleted_at IS NULL ORDER BY created_at LIMIT 1',[lead.email])).rows[0];
-  if(!customer)customer=(await query("INSERT INTO clients(name,email,phone,company,client_type,referral_source) VALUES($1,$2,$3,$4,'CORPORATE','Campaign') RETURNING *",[[lead.first_name,lead.last_name].filter(Boolean).join(' '),lead.email,lead.phone,lead.company])).rows[0];
+  if(!customer)customer=(await query("INSERT INTO clients(name,email,phone,company,client_type,referral_source,sales_qualified) VALUES($1,$2,$3,$4,'CORPORATE','Campaign',false) RETURNING *",[[lead.first_name,lead.last_name].filter(Boolean).join(' '),lead.email,lead.phone,lead.company])).rows[0];
   let event=lead.converted_event_id?(await query('SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[lead.converted_event_id])).rows[0]:null;
   if(event&&(event.client_id!==customer.id||['CANCELLED','COMPLETED','CONFIRMED','PREPARING','READY','IN_PROGRESS'].includes(event.status)))throw new AppError('Review the existing event before adding this commercial offer.',409,'CAMPAIGN_EVENT_REVIEW');
   if(!event)event=(await query(`INSERT INTO events(client_id,event_name,event_type,event_date,start_time,venue_name,status,experience_id,package_id,client_notes)

@@ -51,7 +51,7 @@ campaignPublicRouter.get('/campaigns/unsubscribe/:token', asyncHandler(async (re
 }));
 campaignPublicRouter.post('/campaigns/unsubscribe/:token', asyncHandler(async (req, res) => res.json(await unsubscribeCampaign(req.params.token))));
 
-const trackingRequest=req=>({method:req.method,userAgent:req.get('user-agent')||'',purpose:[req.get('purpose'),req.get('sec-purpose'),req.get('x-purpose')].filter(Boolean).join(' ')});
+const trackingRequest=req=>({fetchMode:req.get('sec-fetch-mode')||'',fetchUser:req.get('sec-fetch-user')||'',method:req.method,userAgent:req.get('user-agent')||'',purpose:[req.get('purpose'),req.get('sec-purpose'),req.get('x-purpose')].filter(Boolean).join(' ')});
 function trackingHeaders(res){res.set({'Cache-Control':'no-store, max-age=0','Pragma':'no-cache','X-Robots-Tag':'noindex, nofollow','Referrer-Policy':'no-referrer','Cross-Origin-Resource-Policy':'cross-origin'});}
 campaignPublicRouter.get('/campaigns/track/open/:token',asyncHandler(async(req,res)=>{
  trackingHeaders(res);

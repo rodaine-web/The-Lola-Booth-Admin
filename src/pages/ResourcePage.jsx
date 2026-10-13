@@ -72,9 +72,8 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     try {
       const source = endpoint === "/events" ? await api.get(`${endpoint}/${row.id}`) : row;
       setForm({
-        ...Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(source[name]) : type === "lines" ? (source[name] || []).join("\n") : source[name] ?? ""])),
-        package_ids: source.package_ids || [],
-        experience_ids: source.experience_ids || []
+        ...Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(source[name]) : type === "lines" ? (source[name] || []).join("\n") : type === "date" ? String(source[name] || "").slice(0,10) : source[name] ?? ""])),
+        ...(endpoint === "/events" ? {package_ids: source.package_ids || [], experience_ids: source.experience_ids || []} : {})
       });
       setEditing({ mode: "edit", id: row.id });
     } catch (err) {

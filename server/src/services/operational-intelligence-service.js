@@ -60,7 +60,7 @@ export async function getOperationalCalendar({ view = "month", date, filters = {
   const ranges = calendarRanges(anchor, settings.timezone, settings.business_week_start);
   const selected = ranges[view] || ranges.month;
   const params = [selected.startDate, selected.endDate];
-  const where = ["e.deleted_at IS NULL", "e.event_date BETWEEN $1::date AND $2::date"];
+  const where = ["e.deleted_at IS NULL", "e.sales_closed_at IS NULL", "e.event_date BETWEEN $1::date AND $2::date"];
   addFilter(where, params, "e.status", filters.status);
   addFilter(where, params, "e.experience_id", filters.experienceId);
   addFilter(where, params, "e.package_id", filters.packageId);
@@ -146,14 +146,14 @@ async function dashboardMetrics([start, end]) {
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID') AS outstanding_balance,
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID' AND due_date >= current_date AND due_date < current_date + interval '7 days') AS due_this_week,
       (SELECT COALESCE(sum(COALESCE(amount_outstanding,balance_due)),0)::numeric FROM invoices WHERE deleted_at IS NULL AND status <> 'VOID' AND due_date < current_date AND COALESCE(amount_outstanding,balance_due) > 0) AS overdue_balance,
-      (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND deleted_at IS NULL) AS events_scheduled,
-      (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND status='COMPLETED' AND deleted_at IS NULL) AS events_completed,
-      (SELECT count(*)::int FROM events WHERE event_date >= current_date AND event_date < $2::date AND status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS') AND deleted_at IS NULL) AS upcoming_events,
-      (SELECT count(*)::int FROM events WHERE event_date >= $1::date AND event_date < $2::date AND status='CANCELLED' AND deleted_at IS NULL) AS cancelled_events,
+      (SELECT count(*)::int FROM events WHERE sales_closed_at IS NULL AND event_date >= $1::date AND event_date < $2::date AND deleted_at IS NULL) AS events_scheduled,
+      (SELECT count(*)::int FROM events WHERE sales_closed_at IS NULL AND event_date >= $1::date AND event_date < $2::date AND status='COMPLETED' AND deleted_at IS NULL) AS events_completed,
+      (SELECT count(*)::int FROM events WHERE sales_closed_at IS NULL AND event_date >= current_date AND event_date < $2::date AND status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS') AND deleted_at IS NULL) AS upcoming_events,
+      (SELECT count(*)::int FROM events WHERE sales_closed_at IS NULL AND event_date >= $1::date AND event_date < $2::date AND status='CANCELLED' AND deleted_at IS NULL) AS cancelled_events,
       (SELECT count(*)::int FROM tasks WHERE due_date >= $1::date AND due_date < $2::date AND status <> 'DONE' AND deleted_at IS NULL) AS tasks_due,
       (SELECT count(*)::int FROM tasks WHERE due_date < current_date AND status <> 'DONE' AND deleted_at IS NULL) AS overdue_tasks,
-      (SELECT count(*)::int FROM events e WHERE e.event_date >= current_date AND e.event_date < current_date + interval '30 days' AND e.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM staff_assignments sa WHERE sa.event_id=e.id AND sa.released_at IS NULL)) AS events_missing_staff,
-      (SELECT count(*)::int FROM events e WHERE e.event_date >= current_date AND e.event_date < current_date + interval '30 days' AND e.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM equipment_assignments ea WHERE ea.event_id=e.id AND ea.released_at IS NULL)) AS events_missing_equipment,
+      (SELECT count(*)::int FROM events e WHERE e.event_date >= current_date AND e.event_date < current_date + interval '30 days' AND e.deleted_at IS NULL AND e.sales_closed_at IS NULL AND NOT EXISTS (SELECT 1 FROM staff_assignments sa WHERE sa.event_id=e.id AND sa.released_at IS NULL)) AS events_missing_staff,
+      (SELECT count(*)::int FROM events e WHERE e.event_date >= current_date AND e.event_date < current_date + interval '30 days' AND e.deleted_at IS NULL AND e.sales_closed_at IS NULL AND NOT EXISTS (SELECT 1 FROM equipment_assignments ea WHERE ea.event_id=e.id AND ea.released_at IS NULL)) AS events_missing_equipment,
       (SELECT count(*)::int FROM notifications WHERE read_at IS NULL AND dismissed_at IS NULL AND severity='CRITICAL' AND category IN ('EVENTS','STAFF','EQUIPMENT','INCIDENTS')) AS unread_critical_operational_alerts,
       (SELECT count(*)::int FROM staff_assignments sa JOIN events e ON e.id=sa.event_id WHERE sa.acknowledgement_status='DECLINED' AND sa.released_at IS NULL AND e.deleted_at IS NULL AND e.event_date >= current_date - interval '1 day') AS staff_declines,
       (SELECT count(*)::int FROM event_incidents WHERE deleted_at IS NULL AND status IN ('OPEN','IN_REVIEW') AND severity='CRITICAL') AS critical_incidents,
