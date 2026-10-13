@@ -30,10 +30,10 @@ export async function verifyContactsBrowser({api,origin,ownerToken}){
  const template=await page.request.get(origin+'/api/crm/imports/template/leads',{headers:{Authorization:'Bearer '+ownerToken}});assert.equal(template.status(),200);assert.equal((await template.body()).subarray(0,2).toString(),'PK');const history=await api('/crm/imports?kind=CONTACTS');assert.ok(history.data.data.some(b=>b.state==='COMPLETED'));
  // Real task create/edit API persistence catches unsupported shared-editor fields.
  await page.goto(base+'/operations/tasks');await page.getByRole('button',{name:'New Task',exact:true}).click();
- await page.getByLabel('Title',{exact:true}).fill('Lifecycle task browser QA');await page.getByLabel('Due date',{exact:true}).fill('2031-06-19');
+ await page.getByRole('dialog').getByLabel('Title',{exact:true}).fill('Lifecycle task browser QA');await page.getByRole('dialog').getByLabel('Due date',{exact:true}).fill('2031-06-19');
  await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
  await page.getByLabel('Actions for Lifecycle task browser QA',{exact:true}).click();await page.getByRole('button',{name:'Edit',exact:true}).click();
- assert.equal(await page.getByLabel('Due date',{exact:true}).inputValue(),'2031-06-19');await page.getByLabel('Status',{exact:true}).selectOption('DONE');await page.getByLabel('Description',{exact:true}).fill('Updated from the real task editor');
+ assert.equal(await page.getByRole('dialog').getByLabel('Due date',{exact:true}).inputValue(),'2031-06-19');await page.getByRole('dialog').getByLabel('Status',{exact:true}).selectOption('DONE');await page.getByRole('dialog').getByLabel('Description',{exact:true}).fill('Updated from the real task editor');
  await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
  const savedTask=(await pool.query("SELECT * FROM tasks WHERE title='Lifecycle task browser QA'")).rows[0];assert.equal(savedTask.status,'DONE');assert.equal(savedTask.description,'Updated from the real task editor');
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:fileURLToPath(new URL('tasks-mobile.png',evidence)),fullPage:true});
