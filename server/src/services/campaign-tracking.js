@@ -49,7 +49,7 @@ export async function recordCampaignTracking(token,kind,request={}) {
   if(kind==='CLICK'&&!trackableDestination(link.destination))throw new AppError('This campaign link is unavailable.',404,'NOT_FOUND');
   if(link.sent_at&&!link.unsubscribed_at&&!['CANCELLED','ARCHIVED'].includes(link.status)){
    const classification=trackingClassification(kind,request);
-   await query('INSERT INTO campaign_tracking_observations(campaign_id,recipient_id,link_id,kind,classification,method,user_agent,purpose,fetch_mode,fetch_user) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[link.campaign_id,link.recipient_id,link.id,kind,classification,String(request.method||'GET').slice(0,16),String(request.userAgent||'').slice(0,512),String(request.purpose||'').slice(0,128),String(request.fetchMode||'').slice(0,32),String(request.fetchUser||'').slice(0,16)]);
+   await query('INSERT INTO campaign_tracking_observations(campaign_id,recipient_id,link_hash,kind,classification,method,user_agent,purpose,fetch_mode,fetch_user) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[link.campaign_id,link.recipient_id,link.token_hash,kind,classification,String(request.method||'GET').slice(0,16),String(request.userAgent||'').slice(0,512),String(request.purpose||'').slice(0,128),String(request.fetchMode||'').slice(0,32),String(request.fetchUser||'').slice(0,16)]);
    if(classification==='AUTOMATION')return link.destination;
    const field=kind==='OPEN'?'opened_at':'clicked_at';
    const updated=await query(`UPDATE campaign_recipients SET ${field}=now() WHERE id=$1 AND ${field} IS NULL RETURNING id`,[link.recipient_id]);

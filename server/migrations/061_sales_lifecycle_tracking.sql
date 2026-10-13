@@ -144,7 +144,7 @@ SELECT reconcile_sales_lifecycle();
 
 CREATE TABLE campaign_tracking_observations (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),campaign_id uuid NOT NULL REFERENCES campaigns(id),
- recipient_id uuid NOT NULL REFERENCES campaign_recipients(id),link_id uuid NOT NULL REFERENCES campaign_tracking_links(id),
+ recipient_id uuid NOT NULL REFERENCES campaign_recipients(id),link_hash text NOT NULL REFERENCES campaign_tracking_links(token_hash),
  kind text NOT NULL CHECK(kind IN ('OPEN','CLICK')),classification text NOT NULL CHECK(classification IN ('AUTOMATION','ESTIMATED_OPEN','LIKELY_HUMAN','UNVERIFIED')),
  method text NOT NULL,user_agent text NOT NULL,purpose text NOT NULL,fetch_mode text NOT NULL,fetch_user text NOT NULL,
  observed_at timestamptz NOT NULL DEFAULT now()
