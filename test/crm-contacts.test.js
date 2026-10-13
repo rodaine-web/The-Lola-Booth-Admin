@@ -39,6 +39,8 @@ test('shared mailbox discovery uses least privilege and safe fixed mailbox pagin
  for(const email of ['info@thelolabooth.com','lola@thelolabooth.com','staff@thelolabooth.com','noreply@example.com','bad'])assert.equal(recipientAllowed(email,p),false);
  assert.equal(recipientAllowed('customer@example.com',p),true);
  for(const mailbox of ['info%40thelolabooth.com','info@thelolabooth.com'])assert.ok(validateGraphCursor('https://graph.microsoft.com/v1.0/users/'+mailbox+'/mailFolders/sentitems/messages/delta?$skiptoken=opaque'));
+ assert.ok(validateGraphCursor("https://graph.microsoft.com/v1.0/users/info@thelolabooth.com/mailFolders('sentitems')/messages/delta?$deltatoken=opaque"));
+ assert.throws(()=>validateGraphCursor("https://graph.microsoft.com/v1.0/users/info@thelolabooth.com/mailFolders('inbox')/messages/delta"));
  for(const url of ['https://evil.example/v1.0/users/info@thelolabooth.com/contacts/delta','https://graph.microsoft.com/v1.0/users/other@example.com/contacts/delta','https://graph.microsoft.com/v1.0/users/info@thelolabooth.com/messages','https://graph.microsoft.com/v1.0/users/info@thelolabooth.com/../other@example.com/contacts/delta'])assert.throws(()=>validateGraphCursor(url));
  assert.notEqual(checkpointHash('SENT',p),checkpointHash('SENT',{...p,to:'2026-10-12'}));
  assert.notEqual(checkpointHash('SENT',p),checkpointHash('SENT',{...p,includeBcc:true}));
