@@ -987,7 +987,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
   const client = await query("SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!client.rows[0]) throw notFound("Client");
   const [events, proposals, invoices, payments, tasks, files, communications, activity, summary] = await Promise.all([
-    query("SELECT * FROM events WHERE client_id=$1 AND deleted_at IS NULL ORDER BY event_date DESC", [req.params.id]),
+    query("SELECT * FROM events WHERE client_id=$1 AND deleted_at IS NULL AND sales_closed_at IS NULL ORDER BY event_date DESC", [req.params.id]),
     query("SELECT * FROM proposals WHERE client_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
     query("SELECT * FROM invoices WHERE client_id=$1 AND deleted_at IS NULL ORDER BY due_date DESC", [req.params.id]),
     query("SELECT * FROM payments WHERE client_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC", [req.params.id]),
@@ -996,7 +996,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
     query("SELECT * FROM communications WHERE client_id=$1 AND deleted_at IS NULL ORDER BY occurred_at DESC", [req.params.id]),
     query("SELECT * FROM activities WHERE entity_type='client' AND entity_id=$1 ORDER BY created_at DESC", [req.params.id]),
     query(`SELECT count(e.id)::int AS total_events, COALESCE(sum(b.total),0)::text AS lifetime_value, COALESCE(sum(b.balance_due),0)::text AS outstanding_balance
-      FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
+      FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL AND e.sales_closed_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
   ]);
   res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), communications: communications.rows, activity: activity.rows });
 }));

@@ -78,6 +78,10 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   // Full tracked campaign journey, isolated DB and development mail only.
   const {campaignContent}=await import('../shared/campaign-content.js');
   assert.equal((await api('/campaigns/senders')).data.find(s=>s.email==='lola@thelolabooth.com').name,'Lola Masha');
+  const prospective=await api('/clients',{method:'POST',body:{name:'Manual Wizard Prospect QA',email:'manual-prospect@qa.invalid',provisional:true}});assert.equal(prospective.status,201);assert.equal(prospective.data.sales_qualified,false);
+  assert.equal((await pool.query('SELECT contact_type FROM crm_contacts WHERE id=$1',[prospective.data.contact_id])).rows[0].contact_type,'PROSPECT');
+  assert.ok(!(await api('/clients?search=manual-prospect@qa.invalid')).data.data.some(c=>c.id===prospective.data.id));
+  assert.equal((await api('/clients',{method:'POST',body:{name:'Denied prospect',provisional:true},token:viewerToken})).status,403);
   const tracked=await api('/campaigns',{method:'POST',body:{name:'Tracked alias demo',sender_email:'lola@thelolabooth.com',sender_name:'Lola Masha',content_json:campaignContent({format:'TEXT',text_body:'Your special event offer',mailing_address:'Synthetic QA address'}),audience_json:{manual:[{email:'tracking@example.com',first_name:'Demo',marketing_email_opt_in:true}]}}});
   assert.equal(tracked.status,200);
   const trackedId=tracked.data.id;
