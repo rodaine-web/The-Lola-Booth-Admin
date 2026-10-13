@@ -128,7 +128,7 @@ export async function getCampaign(id, {
   };
 }
 export async function listCampaigns(filters = {}) {
-  const rows = (await query(`SELECT c.*,u.name creator_name,count(r.id)::int recipients,count(r.sent_at)::int sent,count(r.interested_at)::int interested,count(r.failed_at)::int failed,count(r.id) FILTER (WHERE r.tracking_enabled AND r.sent_at IS NOT NULL)::int tracked,count(r.opened_at)::int opened,count(r.clicked_at)::int clicked,(SELECT count(DISTINCT o.recipient_id)::int FROM campaign_tracking_observations o WHERE o.campaign_id=c.id AND o.classification='LIKELY_HUMAN') AS likely_human_clicks,(SELECT count(DISTINCT o.recipient_id)::int FROM campaign_tracking_observations o WHERE o.campaign_id=c.id AND o.classification='AUTOMATION' AND o.kind='CLICK') AS suspected_scanner_clicks FROM campaigns c LEFT JOIN users u ON u.id=c.created_by LEFT JOIN campaign_recipients r ON r.campaign_id=c.id WHERE c.deleted_at IS NULL AND ($1<>'' OR c.status<>'ARCHIVED') AND ($1='' OR c.status=$1) AND ($2='' OR c.type=$2) AND ($3='' OR c.name ILIKE '%'||$3||'%' OR EXISTS(SELECT 1 FROM campaign_recipients s WHERE s.campaign_id=c.id AND (s.email ILIKE '%'||$3||'%' OR s.company ILIKE '%'||$3||'%'))) AND ($4='' OR c.created_by::text=$4) AND ($5='' OR c.created_at::date>=NULLIF($5,'')::date) AND ($6='' OR c.created_at::date<=NULLIF($6,'')::date) AND ($7='' OR EXISTS(SELECT 1 FROM campaign_recipients a WHERE a.campaign_id=c.id AND a.company ILIKE '%'||$7||'%') OR c.audience_json::text ILIKE '%'||$7||'%') GROUP BY c.id,u.name ORDER BY c.updated_at DESC`, [filters.status || '', filters.type || '', filters.search || '',filters.owner||'',filters.from||'',filters.to||'',filters.audience||''])).rows;
+  const rows = (await query(`SELECT c.*,u.name creator_name,count(r.id)::int recipients,count(r.sent_at)::int sent,count(r.interested_at)::int interested,count(r.failed_at)::int failed,count(r.id) FILTER (WHERE r.tracking_enabled AND r.sent_at IS NOT NULL)::int tracked,count(r.opened_at)::int opened,count(r.clicked_at)::int clicked,(SELECT count(DISTINCT o.recipient_id)::int FROM campaign_tracking_observations o WHERE o.campaign_id=c.id AND o.classification='LIKELY_HUMAN') AS likely_human_clicks,(SELECT count(DISTINCT o.recipient_id)::int FROM campaign_tracking_observations o WHERE o.campaign_id=c.id AND o.classification='AUTOMATION' AND o.kind='CLICK') AS suspected_scanner_clicks,EXISTS(SELECT 1 FROM campaign_tracking_observations o WHERE o.campaign_id=c.id) AS has_tracking_evidence FROM campaigns c LEFT JOIN users u ON u.id=c.created_by LEFT JOIN campaign_recipients r ON r.campaign_id=c.id WHERE c.deleted_at IS NULL AND ($1<>'' OR c.status<>'ARCHIVED') AND ($1='' OR c.status=$1) AND ($2='' OR c.type=$2) AND ($3='' OR c.name ILIKE '%'||$3||'%' OR EXISTS(SELECT 1 FROM campaign_recipients s WHERE s.campaign_id=c.id AND (s.email ILIKE '%'||$3||'%' OR s.company ILIKE '%'||$3||'%'))) AND ($4='' OR c.created_by::text=$4) AND ($5='' OR c.created_at::date>=NULLIF($5,'')::date) AND ($6='' OR c.created_at::date<=NULLIF($6,'')::date) AND ($7='' OR EXISTS(SELECT 1 FROM campaign_recipients a WHERE a.campaign_id=c.id AND a.company ILIKE '%'||$7||'%') OR c.audience_json::text ILIKE '%'||$7||'%') GROUP BY c.id,u.name ORDER BY c.updated_at DESC`, [filters.status || '', filters.type || '', filters.search || '',filters.owner||'',filters.from||'',filters.to||'',filters.audience||''])).rows;
   return {
     data: rows.map(c => ({
       ...c,
@@ -136,7 +136,7 @@ export async function listCampaigns(filters = {}) {
       delivered: null,
       opened: c.tracked ? c.opened : null,
       tracked_link_visits: c.tracked ? c.clicked : null,
-      clicked: c.tracked ? c.likely_human_clicks : null
+      clicked: c.tracked && c.has_tracking_evidence ? c.likely_human_clicks : null
     })),
     tracking: {
       delivered: false,
@@ -207,7 +207,7 @@ export async function duplicateCampaign(id, req) {
 export async function campaignDetail(id) {
   const c = await getCampaign(id);
   const [recipients, interests, events] = await Promise.all([query('SELECT r.*,m.failure_message,m.failure_code FROM campaign_recipients r LEFT JOIN communications m ON m.id=r.communication_id WHERE campaign_id=$1 ORDER BY r.company,r.first_name', [id]), query(`SELECT i.*,r.first_name,r.last_name,r.email,r.company,r.lead_id,r.client_id,inv.id invoice_id,inv.status invoice_status,l.status lead_status,l.assigned_user_id owner FROM campaign_interests i JOIN campaign_recipients r ON r.id=i.campaign_recipient_id LEFT JOIN leads l ON l.id=r.lead_id LEFT JOIN invoices inv ON inv.campaign_interest_id=i.id AND inv.deleted_at IS NULL WHERE i.campaign_id=$1 ORDER BY submitted_at DESC`, [id]), query('SELECT * FROM campaign_events WHERE campaign_id=$1 ORDER BY created_at DESC LIMIT 300', [id])]);
-  const tracking=(await query(`SELECT count(DISTINCT recipient_id) FILTER(WHERE classification='LIKELY_HUMAN')::int likely_human_clicks,count(DISTINCT recipient_id) FILTER(WHERE classification='AUTOMATION' AND kind='CLICK')::int suspected_scanner_clicks,count(DISTINCT recipient_id) FILTER(WHERE classification='UNVERIFIED' AND kind='CLICK')::int unverified_clicks FROM campaign_tracking_observations WHERE campaign_id=$1`,[id])).rows[0];
+  const tracking=(await query(`SELECT count(*)::int observations,count(DISTINCT recipient_id) FILTER(WHERE classification='LIKELY_HUMAN')::int likely_human_clicks,count(DISTINCT recipient_id) FILTER(WHERE classification='AUTOMATION' AND kind='CLICK')::int suspected_scanner_clicks,count(DISTINCT recipient_id) FILTER(WHERE classification='UNVERIFIED' AND kind='CLICK')::int unverified_clicks,count(DISTINCT recipient_id) FILTER(WHERE classification='LIKELY_HUMAN' AND kind='CLICK' AND link_hash IN(SELECT token_hash FROM campaign_tracking_links WHERE destination ~ '^https?://[^/]+/(campaigns/)?interest/'))::int offer_page_clicks FROM campaign_tracking_observations WHERE campaign_id=$1`,[id])).rows[0];
   return {
     ...c,
     can_delete: c.can_delete && recipients.rowCount === 0,
@@ -222,12 +222,13 @@ export async function campaignDetail(id) {
       delivered: null,
       opened: recipients.rows.some(r=>r.tracking_enabled) ? recipients.rows.filter(r=>r.opened_at).length : null,
       tracked_link_visits: recipients.rows.some(r=>r.tracking_enabled) ? recipients.rows.filter(r=>r.clicked_at).length : null,
-      likely_human_clicks: tracking.likely_human_clicks,
-      suspected_scanner_clicks: tracking.suspected_scanner_clicks,
-      unverified_clicks: tracking.unverified_clicks,
+      likely_human_clicks: tracking.observations ? tracking.likely_human_clicks : null,
+      offer_page_clicks_estimated: tracking.observations ? tracking.offer_page_clicks : null,
+      suspected_scanner_clicks: tracking.observations ? tracking.suspected_scanner_clicks : null,
+      unverified_clicks: tracking.observations ? tracking.unverified_clicks : null,
       interest_rate: recipients.rows.some(r=>r.sent_at) ? Math.round(100*recipients.rows.filter(r=>r.interested_at).length/recipients.rows.filter(r=>r.sent_at).length)+'%' : null
     },
-    provider_note: 'Sent means Microsoft accepted the email; confirmed delivery is unavailable. Opens are estimated image loads and may reflect privacy proxies. Tracked link visits include historical unverified requests and all email links, not just the offer. Likely human clicks require a browser navigation signal, which can be missing or spoofed; they are not proof of a person. Suspected scanner visits are shown separately. New request evidence is retained; historical counts cannot be accurately reclassified. Tracking applies only to emails queued with tracking enabled.'
+    provider_note: 'Sent means Microsoft accepted the email; confirmed delivery is unavailable. Opens are estimated image loads and may reflect privacy proxies. Tracked link visits include historical unverified requests and all email links, not just the offer. Likely human clicks require a browser navigation signal, which can be missing or spoofed; they are not proof of a person. Suspected scanner visits are shown separately. New request evidence is retained; likely human and offer-page click estimates cover new evidence only. Historical counts cannot be accurately reclassified, so unavailable does not mean zero engagement. Tracking applies only to emails queued with tracking enabled.'
   };
 }
 export async function queueCampaign(id, req, {

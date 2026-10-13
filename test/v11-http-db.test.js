@@ -107,6 +107,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM campaign_events WHERE campaign_id=$1 AND event_type IN ('estimated_open','tracked_click')",[trackedId])).rows[0].n,2);
   await new Promise((resolve,reject)=>{httpGet(origin+clickPath,{headers:{'user-agent':'Mozilla/5.0','sec-fetch-mode':'navigate','sec-fetch-user':'?1'}},res=>{assert.equal(res.statusCode,302);res.resume();res.on('end',resolve);}).on('error',reject);});
   assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.likely_human_clicks,1);
+  assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.offer_page_clicks_estimated,1);
   assert.equal((await pool.query('SELECT count(*)::int n FROM campaign_tracking_observations WHERE campaign_id=$1',[trackedId])).rows[0].n,7,'Every valid request keeps classification evidence, including scanner and repeated requests');
   const invalidSender=await api('/campaigns',{method:'POST',body:{name:'Invalid sender',sender_email:'outsider@example.com'}});assert.equal(invalidSender.status,422);
   const unsubscribe=message.rendered_html.match(/https:[^" ]+\/unsubscribe\/([A-Za-z0-9_-]{43})/)[1];

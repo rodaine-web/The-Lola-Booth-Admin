@@ -44,7 +44,7 @@ export async function saveContact(input,req,id=null,{importing=false,batchId=nul
  for(const email of emails)await query('SELECT pg_advisory_xact_lock(hashtextextended($1,600060))',['crm-contact:'+email]);
  const duplicate=(await query("SELECT id FROM crm_contacts WHERE deleted_at IS NULL AND id IS DISTINCT FROM $1::uuid AND (email_normalized=ANY($2::text[]) OR lower(btrim(secondary_email))=ANY($2::text[])) LIMIT 1",[id,emails])).rows[0];
  if(duplicate)throw new AppError('This email already belongs to a contact. Review the existing record instead.',409,'CONTACT_DUPLICATE',contactManager(req.user)?{id:duplicate.id}:undefined);
- if(before&&((await query('SELECT 1 FROM clients WHERE contact_id=$1 AND deleted_at IS NULL AND sales_qualified LIMIT 1',[id])).rowCount))data.contact_type='CLIENT';
+ if(before){const linked=(await query('SELECT sales_qualified FROM clients WHERE contact_id=$1 AND deleted_at IS NULL',[id])).rows;if(linked.some(row=>row.sales_qualified))data.contact_type='CLIENT';else if(linked.length&&data.contact_type==='CLIENT')data.contact_type='PROSPECT';}
  if(importing&&before?.marketing_consent==='OPTED_OUT')data={...data,marketing_consent:'OPTED_OUT',consent_source:before.consent_source,consented_at:before.consented_at};
  let companyId=null;if(data.company){const company=(await query("INSERT INTO crm_companies(name,normalized_name) VALUES($1,lower(btrim($1))) ON CONFLICT(normalized_name) DO UPDATE SET normalized_name=EXCLUDED.normalized_name RETURNING id",[data.company])).rows[0];companyId=company.id;}
  const fields=Object.keys(data),values=Object.values(data);fields.push('company_id');values.push(companyId);
