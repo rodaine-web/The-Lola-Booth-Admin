@@ -1,3 +1,66 @@
+# V1.1 / Phase 1 release readiness — production activation, 11 October 2026
+
+**Decision: GO for the scoped Phase 1 booking launch. Deployed and activated with owner authorization.** This is not a declaration of full BoothBook parity or a claim that every possible production journey is perfect.
+
+Application release: `3d9db81f5543ac0d55acb032fb7a910d55303360` on `main-prod`. Production API and worker are pinned to this release. Production database migrations 046–057 were applied in order; the ledger contains 57 migrations. Latest verification: 11 October 2026, 21:54 UTC.
+
+## Activated customer journey
+
+Website inquiry → Admin review and initial proposal → accepted commercial record → automatic invoice → reconciled minimum payment → receipt and agreement → signed agreement and guarded booking confirmation → secure Client Workspace invitation → planning submission, correction/Admin approval and creative approval.
+
+The minimum is a 30% **booking retainer fee**, subject to the approved near-event/full-payment and recorded exception rules. Equipment assignment does not gate confirmation; Admin receives an assignment task. Campaign acceptance uses the commercial-record/invoice/agreement journey rather than bypassing confirmation.
+
+Initial website proposals remain **Admin-reviewed**. Automatic published-price proposal sending is disabled because service-area/travel rules were deferred by the owner. Live Stripe payments, invoice/agreement/workspace handoffs, planning and lifecycle reminders, campaign workers and the client workflow are enabled. Historical queue checks preceded activation; no historical acceptance backfill was performed.
+
+## Qualification and evidence
+
+| Requirement | Status | Evidence and limit |
+|---|---|---|
+| Normal and campaign booking lifecycle | COMPLETE for staging qualification | Actual Sandbox payments, receipt persistence, signed QA agreements, automatic confirmation without equipment, single-use workspace invitations and customer journeys. No real service obligation created. |
+| Payment replay/refunds and failed-payment recovery | COMPLETE for staging qualification | Actual Sandbox journeys and persisted ledger/receipt checks. Financial production E2E has not been run. |
+| Stripe dispute handling and replay | COMPLETE for Sandbox qualification | Actual Sandbox dispute withdrawal reduced paid balance and raised review; reinstatement restored balance and completed the Admin task. Actual provider resend returned HTTP 200 duplicate/IGNORED. No LIVE dispute or charge was created. |
+| Permissions and access controls | COMPLETE for tested scope | 136 staging HTTP checks; wrong/no-grant denial, staff-assignment restriction, revoked sessions and prior expiry/single-use/wrong-event/customer checks. QA actor and access fixtures deactivated. |
+| Reusable/preloaded email templates | COMPLETE for staging qualification | Microsoft accepted both fresh rendered template messages; owner confirmed both arrived in at least one authorized inbox. This does not independently prove delivery to every recipient/provider. Duplicate suppression verified. |
+| Mobile planning, documents, creative and custom quote | COMPLETE for tested staging journeys | Authenticated mobile planning and document/payment checks; custom work blocked until acceptance/payment; Admin approval and per-experience creative approval persisted. |
+| Production database backup/restore | COMPLETE for tested database backup | Actual daily encrypted private Azure backup on 11 October; readback and isolated PostgreSQL restore passed; 115 tables. Anonymous access denied. |
+| Production migrations/queue activation | COMPLETE | Ordered 046–057 deployment succeeded. No pending historical automation/communications, campaign dispatch or reminder population at preflight. Ten backdrop seeds remain inactive with zero stock. |
+| Production frontend/API/worker | COMPLETE | Production frontend READY; API health reports production and the release SHA; correct production CSP. API deployment 5d867e60-8a03-49bd-b7de-d8d8503819ed and worker f4a469ab-d700-423e-8147-a64aac35fdee SUCCESS. Final worker heartbeat HEALTHY, jobsPaused=false, no processing error. |
+| Production inquiry persistence/email dispatch | COMPLETE for smoke check | Clearly marked QA-only website inquiry saved once as lead 56d1a914-592d-4ba7-8767-13cf9caf6b6f. Acknowledgment and owner notice both SENT_TO_PROVIDER via Microsoft. No proposal/invoice/event created. Production inbox receipt of these two smoke messages has not been independently confirmed. |
+| Live Stripe configuration/signed transport | COMPLETE for activation check | Correct live account and enabled endpoint; actual signed nonfinancial LIVE event evt_1UPUTBC7UOE45wwkzAv0ewHR processed with HTTP 200. Temporary customer.created subscription removed; 15 payment/refund/dispute subscriptions remain. This verifies transport, not a live customer payment. |
+| First real paid production booking | PARTIAL — monitor at launch | Production is enabled; full paid/signature customer E2E was qualified in Sandbox, not executed with live funds or a real production agreement. Check the first real booking through invoice, payment, receipt, agreement, confirmation and workspace delivery. |
+| Full BoothBook parity/photo delivery | PARTIAL — outside this release | Galleries, event-day files/operations, customer changes, broader growth/integrations and BI remain Phase 2. Do not present the full photo-delivery journey as qualified by this release. |
+
+## Automated validation
+
+Exact release candidate CI 38176372288 / job 114579516003 passed. Ordinary available suite: 649 tests, 634 passed, 15 skipped. Separate disposable Phase 1 database suite: 666 passed, zero failed/skipped. Separate V1.1 database checks and browser smoke passed. Frontend production build passed. Conditional provider/database suites skipped in the ordinary suite are not claimed as passing through that result.
+
+PR 17 supplied the safe paused-live-key startup change; PR 18 merged the qualified production release. Temporary validation PR 19 was closed without merging production CSP into staging.
+
+## Remaining launch follow-ups and external dependencies
+
+- Monitor the first real live payment and the complete resulting customer lifecycle. Escalate missing receipts, agreement/workspace delivery or incorrect balances immediately.
+- Database daily backup has run successfully. The file-backup schedule is configured; its first unattended run is still pending. Independent owner custody of the recovery key remains to be confirmed; the key is not published in this report.
+- Review the Azure trial expiry on 30 October and ensure storage/billing continuity.
+- V1.1 follow-up: the public website is now deployed at commit `7b9618f6cbb8e45495ee4c4c500d49fd6c8250e6` (production deployment `dpl_GpzruwsVQE1NAr3aGpknurnUMw5e`, READY). The approved four-experience page, equipment photos and illustrative add-ons are live. Production catalog load, independent Glam/360 Essential selection, Extra Hour quantity 2 and a clearly marked QA-only submission passed in the actual production browser. All four equipment images loaded. Mobile 390px and desktop 1280px checks found no horizontal overflow. The QA inquiry reported success; no payment/contract was performed in this follow-up. Initial proposals still require Admin review.
+- The Admin V1.1 frontend release metadata was deployed in commit `d23a3d0ed0a9dd0aabd4d28bff13088ce33b012c` (deployment `dpl_8LfnTKY6gES9TwMtKwCsDDVJvWyT`, READY). Its application/backend remains the qualified Phase 1 code; no further migrations or worker activation changes were introduced. Website VERSION and package/lockfile agree on 1.1.0; 13 available website tests passed.
+- Supply usable backdrop assets and actual stock before activating the ten seeds. Own artwork and accepted/paid quoted custom requests remain available.
+
+## GO/NO-GO operation and rollback
+
+GO applies to the scoped booking release described above, with an Admin-reviewed initial proposal and the recorded monitoring limits. It does not mean unrestricted parity or a completed real-money production E2E.
+
+Pause dispatch and treat launch as NO-GO if live account/webhook identity is wrong, payments fail reconciliation, duplicate financial documents/messages appear, unauthorized customer access succeeds, or the API/worker becomes unhealthy.
+
+For containment, pause production automation and invoice/agreement/workspace/campaign/reminder dispatch; disable new live checkout if necessary. Coordinate webhook changes with payment reconciliation rather than discarding incoming payments. Preserve generated invoices, posted payments, receipts and signed agreements. Do not blindly roll back the application to a pre-057 build or reverse financial records. A database restore is a last-resort operation requiring an explicit data-loss assessment.
+
+Temporary qualification-service credential references were cleared and its next start command made inert. Production API/worker credentials remain intact.
+
+---
+
+## Historical checkpoints — superseded by the 11 October production activation
+
+The material below records earlier staging and NO-GO checkpoints. Those dated conclusions are historical; the current decision and limits are above.
+
 # Phase 1 release readiness — 10 October 2026
 
 **Production: NO-GO. Staging: available for owner testing.** Latest qualified application revision `08e5ec4c52b858cc5f4e571f6ae267374a32de81`; migration ledger through 056. This report supersedes earlier checkpoint statements about Railway connectivity, equipment-gated confirmation, paused reminders and unqualified payment replay/refunds. Production was not changed.

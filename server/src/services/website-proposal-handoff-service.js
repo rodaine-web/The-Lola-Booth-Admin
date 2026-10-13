@@ -1,3 +1,4 @@
+import { hasCurrentAvailability, leadBookingRequest, leadEventInput } from './lead-availability-service.js';
 import { isDeepStrictEqual } from 'node:util';
 import { query, transaction } from '../db/pool.js';
 import { AppError } from '../utils/errors.js';
@@ -9,15 +10,12 @@ import { createCommunicationDraft, sendCommunication, brandedEmailHtml, renderCo
 export const WEBSITE_PROPOSAL_JOB = 'BOOKING_SEND_WEBSITE_PROPOSAL';
 export const websiteProposalEnabled = () => process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED === 'true';
 
-// Automatic quotes are limited to explicitly approved fixed-price service areas.
-// Custom pricing/travel and changed catalogues require a human commercial review.
+// Staff availability approval authorizes standard published prices; custom amounts still require review.
 export function automaticWebsiteQuoteDecision(booking, input, config = process.env) {
   if (!booking?.selections?.length) return 'Choose experiences and packages';
   if (!input?.eventDate || !input.eventStartTime || !input.eventEndTime || !input.venueAddress) return 'Complete event date, times and venue address';
-  const cities = String(config.BOOKING_AUTO_QUOTE_CITIES || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
-  if (!cities.includes(String(input.city || '').trim().toLowerCase())) return 'Review venue and travel pricing';
   if (booking.selections.some(x => x.pricingMode !== 'FIXED' || !Number.isFinite(x.startingPrice) || x.startingPrice <= 0)) return 'Review custom package pricing';
-  if (booking.addons.some(x => x.pricingType === 'CUSTOM' || !Number.isFinite(x.unitPrice) || x.unitPrice < 0 || /custom|travel/i.test(x.name))) return 'Review custom add-on or travel pricing';
+  if ((booking.addons || []).some(x => x.pricingType === 'CUSTOM' || !Number.isFinite(x.unitPrice) || x.unitPrice < 0)) return 'Review custom add-on or travel pricing';
   if (input.eventEndTime <= input.eventStartTime) return 'Review overnight event hours';
   return null;
 }
@@ -26,10 +24,17 @@ export async function queueWebsiteProposal(leadId) {
   if (!websiteProposalEnabled()) return;
   return transaction(async client => {
     const lead = (await client.query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [leadId])).rows[0];
-    if (!lead || lead.lead_source !== 'WEBSITE' || lead.source_subtype !== 'BOOKING') return;
-    if ((await client.query('SELECT 1 FROM automation_jobs WHERE job_type=$1 AND related_entity_id=$2', [WEBSITE_PROPOSAL_JOB, leadId])).rowCount) return;
+    if (!hasCurrentAvailability(lead)) return;
+    const booking = await leadBookingRequest(lead);
+    const review = automaticWebsiteQuoteDecision(booking, leadEventInput(lead));
+    if (review) {
+      if (booking.selections.some(x=>x.pricingMode==='CUSTOM')) return;
+      await client.query(`INSERT INTO tasks(lifecycle_key,title,description,lead_id,priority) VALUES($1,$2,$3,$4,'HIGH') ON CONFLICT(lifecycle_key) WHERE lifecycle_key IS NOT NULL DO NOTHING`, [`lead-quote-review:${lead.id}:${lead.availability_fingerprint}`, booking.selections.some(x=>x.pricingMode==='CUSTOM') ? 'Schedule discovery call' : 'Review proposal request', review, lead.id]);
+      return;
+    }
+    if ((await client.query("SELECT 1 FROM automation_jobs WHERE job_type=$1 AND related_entity_id=$2 AND payload->>'approvalFingerprint'=$3", [WEBSITE_PROPOSAL_JOB, leadId, lead.availability_fingerprint])).rowCount) return;
     await client.query(`INSERT INTO automation_jobs(job_type,related_entity_type,related_entity_id,payload,scheduled_for)
-      VALUES($1,'lead',$2,$3,now())`, [WEBSITE_PROPOSAL_JOB, leadId, { fingerprint: lead.source_details?.bookingInquiry?.submissionFingerprint }]);
+      VALUES($1,'lead',$2,$3,now())`, [WEBSITE_PROPOSAL_JOB, leadId, { fingerprint: booking.submissionFingerprint || lead.availability_fingerprint, approvalFingerprint: lead.availability_fingerprint, booking }]);
   });
 }
 
@@ -37,9 +42,10 @@ async function prepareWebsiteProposal(job) {
   return transaction(async client => {
     const lead = (await client.query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [job.related_entity_id])).rows[0];
     if (!lead || ['LOST', 'WON', 'ARCHIVED'].includes(lead.status)) return null;
-    const booking = lead.source_details?.bookingInquiry;
-    const input = lead.source_details;
-    if (booking?.submissionFingerprint !== job.payload.fingerprint) throw new AppError('The submitted request changed. Review it before sending.', 409, 'WEBSITE_QUOTE_CHANGED', { retryable: false });
+    if (!hasCurrentAvailability(lead, job.payload.approvalFingerprint)) return null;
+    const booking = job.payload.booking;
+    const input = leadEventInput(lead);
+    if (!booking) throw new AppError('The submitted request changed. Review it before sending.', 409, 'WEBSITE_QUOTE_CHANGED', { retryable: false });
     const review = automaticWebsiteQuoteDecision(booking, input);
     if (review) throw new AppError(review, 409, 'WEBSITE_QUOTE_REVIEW', { retryable: false });
     let proposal = (await client.query('SELECT * FROM proposals WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1', [lead.id])).rows[0];
@@ -82,7 +88,7 @@ async function prepareWebsiteProposal(job) {
       const body = rendered?.body || `Hi ${lead.first_name},\n\nYour LOLA proposal is ready. Review the services and pricing here:\n${url}\n\nYour date is not reserved by this proposal. Booking confirmation requires accepted terms, the required booking retainer fee payment, your signed agreement and availability checks.\n\nThe LOLA Booth`;
       message = await createCommunicationDraft({ lead_id: lead.id, client_id: expanded.client_id, event_id: expanded.event_id, proposal_id: expanded.id, recipient: lead.email,
         subject: rendered?.subject || `Your LOLA proposal ${expanded.proposal_number}`, body, html: brandedEmailHtml(body, { ctaLabel: 'View proposal', ctaUrl: url }), trigger_key: WEBSITE_PROPOSAL_JOB,
-        template_id: rendered?.template?.id, merge_data: {...merge, website_quote_snapshot: {content:expanded.content, pricing_snapshot:expanded.pricing_snapshot, line_items_snapshot:expanded.line_items_snapshot}} });
+        template_id: rendered?.template?.id, merge_data: {...merge, availability_fingerprint: job.payload.approvalFingerprint, website_quote_snapshot: {content:expanded.content, pricing_snapshot:expanded.pricing_snapshot, line_items_snapshot:expanded.line_items_snapshot}} });
       await client.query('UPDATE communications SET idempotency_key=$2 WHERE id=$1', [message.id, key]);
     }
     return { message, proposalId: proposal.id, leadId: lead.id };

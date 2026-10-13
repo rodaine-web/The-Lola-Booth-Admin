@@ -78,7 +78,11 @@ test("Stripe test sprint handles success, failure, and refund webhooks without d
 });
 
 test("Admin CSP remains narrow and does not whitelist unused Google or Stripe browser resources", () => {
-  assert.match(csp, /connect-src 'self' https:\/\/stagingapi\.thelolabooth\.com/);
+  // Staging uses its isolated API; production uses its isolated API.
+  assert.match(csp, /connect-src 'self' https:\/\/(?:stagingapi|api)\.thelolabooth\.com;/);
+  assert.match(csp, /connect-src 'self' https:\/\/(?:stagingapi|api)\.thelolabooth\.com;/);
+  const apiOrigins = [...new Set(csp.match(/https:\/\/(?:stagingapi|api)\.thelolabooth\.com/g))];
+  assert.equal(apiOrigins.length, 1, 'Each release must authorize exactly one environment API');
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(csp, /script-src 'self'/);
   assert.match(csp, /style-src 'self'/);

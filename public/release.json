@@ -1,0 +1,8 @@
+{
+  "version": "1.1.0",
+  "release": "V1.1",
+  "date": "2026-10-11",
+  "environment": "production",
+  "applicationRevision": "3d9db81f5543ac0d55acb032fb7a910d55303360",
+  "scope": "Phase 1 booking lifecycle; initial proposal Admin-reviewed"
+}

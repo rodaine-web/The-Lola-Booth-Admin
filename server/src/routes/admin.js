@@ -1,3 +1,9 @@
+import {crmContactsRouter} from './crm-contacts.js';
+import {createAdminLead} from '../services/admin-lead-create.js';
+import {eventFilesRouter} from './event-files.js';
+import {managesEventFiles} from '../../../shared/event-files.js';
+import {eventFileSummary,listEventFiles} from '../services/event-files-service.js';
+import {previewLeadAvailability,confirmLeadAvailability} from '../services/lead-availability-service.js';
 import {disconnect as disconnectExternal,retryExternalInbound} from '../services/external-connections-service.js';
 import {externalIntegrationsRouter} from './external-integrations.js';
 import {contractsRouter} from './contracts.js';
@@ -177,8 +183,10 @@ import { appearanceRouter } from "./appearance.js";
 export const adminRouter = Router();
 
 adminRouter.use(authenticate);
+adminRouter.use(crmContactsRouter);
 adminRouter.use(appearanceRouter);
 adminRouter.use(adminPlanningRouter);
+adminRouter.use(eventFilesRouter);
 adminRouter.use('/integrations',externalIntegrationsRouter);
 adminRouter.use(contractsRouter);
 adminRouter.use((req,_res,next)=>{
@@ -329,6 +337,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
     requirePermission(permission),
     validate(paginationSchema, "query"),
     asyncHandler(async (req, res) => {
+      if (table==='files'&&!managesEventFiles(req.user))throw new AppError('Open an assigned event to view its available files.',403,'FORBIDDEN');
       const filters = req.validatedQuery;
       const page = filters.page;
       const pageSize = filters.pageSize || filters.page_size;
@@ -336,7 +345,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       const where = ["deleted_at IS NULL"];
       const params = [];
       if(filters.data_scope==="business" && ["leads","clients","events","bookings","proposals","invoices","payments","tasks"].includes(table))where.push("data_classification IN ('BUSINESS','UNREVIEWED')");
-      if (filters.status) {
+      if (filters.status && table !== "files") {
         params.push(filters.status);
         where.push(`status = $${params.length}`);
       }
@@ -443,7 +452,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         params.push(`%${filters.search}%`);
         where.push(`(${searchable.map((field) => `${field} ILIKE $${params.length}`).join(" OR ")})`);
       }
-      const sortable = new Set(["created_at", "updated_at", "event_date", "due_date", "display_order", "name", "status"]);
+      const sortable = new Set(table === "files" ? ["created_at", "filename", "category"] : ["created_at", "updated_at", "event_date", "due_date", "display_order", "name", "status"]);
       const sortBy = sortable.has(filters.sort_by || filters.sort) ? (filters.sort_by || filters.sort) : "created_at";
       const direction = String(filters.sort_direction || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
       params.push(pageSize, offset);
@@ -452,7 +461,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         params
       );
       const count = await query(`SELECT count(*)::int AS count FROM ${table} WHERE ${where.join(" AND ")}`, params.slice(0, -2));
-      let data=rows.rows;
+      let data=table==='files'?rows.rows.map(eventFileSummary):rows.rows;
       if(table==='packages'&&data.length){const items=(await query("SELECT package_id,label FROM package_items WHERE package_id=ANY($1::uuid[]) ORDER BY display_order",[data.map(row=>row.id)])).rows;data=data.map(row=>({...row,items:items.filter(item=>item.package_id===row.id).map(item=>item.label)}));}
       if(table==='tasks'&&data.length){const ids=data.map(r=>r.id);data=(await query(`SELECT t.*,u.name AS owner_name,e.event_name,c.name AS client_name FROM tasks t LEFT JOIN users u ON u.id=t.assigned_user_id LEFT JOIN events e ON e.id=t.event_id LEFT JOIN clients c ON c.id=t.client_id WHERE t.id=ANY($1::uuid[]) ORDER BY array_position($1::uuid[],t.id)`,[ids])).rows;}
       res.json({ data, pagination: { page, pageSize, total: count.rows[0].count } });
@@ -673,30 +682,15 @@ const leadSchema = z.object({
 }).passthrough();
 
 adminRouter.post("/leads", requirePermission("write:sales"), validate(leadSchema), asyncHandler(async (req, res) => {
-  if (!req.query.continueAnyway) {
-    const duplicate = await query(
-      `SELECT id, first_name, last_name, email, phone
-       FROM leads
-       WHERE deleted_at IS NULL AND (lower(email)=lower($1) OR regexp_replace(phone, '\\D', '', 'g') = regexp_replace($2, '\\D', '', 'g'))
-       LIMIT 1`,
-      [req.body.email, req.body.phone]
-    );
-    if (duplicate.rows[0]) {
-      const matchReason = req.body.email && String(duplicate.rows[0].email || "").toLowerCase() === String(req.body.email).toLowerCase()
-        ? "EMAIL_MATCH"
-        : "PHONE_MATCH";
-      throw new AppError("Possible duplicate lead found.", 409, "POSSIBLE_DUPLICATE", { duplicate: { ...duplicate.rows[0], match_reason: matchReason } });
-    }
-  }
-  const fields = Object.keys(req.body);
-  const values = Object.values(req.body);
-  const inserted = await query(
-    `INSERT INTO leads (${fields.join(",")}) VALUES (${fields.map((_, index) => `$${index + 1}`).join(",")}) RETURNING *`,
-    values
-  );
-  await recordActivity({ actorUserId: req.user.id, entityType: "lead", entityId: inserted.rows[0].id, action: "lead_created", summary: "Lead created manually" });
-  await writeAudit({ req, action: "lead_created", entity: "lead", entityId: inserted.rows[0].id, after: inserted.rows[0] });
-  res.status(201).json(inserted.rows[0]);
+  res.status(201).json(await createAdminLead(req.body,req,{continueAnyway:Boolean(req.query.continueAnyway)}));
+}));
+
+adminRouter.get('/leads/:id/availability',requirePermission('read:sales'),requirePermission('read:events'),asyncHandler(async(req,res)=>res.json(await previewLeadAvailability(z.string().uuid().parse(req.params.id)))));
+adminRouter.post('/leads/:id/availability',requirePermission('write:sales'),requirePermission('read:events'),asyncHandler(async(req,res)=>{
+ const result=await confirmLeadAvailability(z.string().uuid().parse(req.params.id),z.object({confirmed:z.boolean(),fingerprint:z.string().optional(),calendarRevision:z.string().optional(),clientId:z.string().uuid().optional()}).parse(req.body),req.user);
+ await recordActivity({actorUserId:req.user.id,entityType:'lead',entityId:req.params.id,action:'lead_availability_reviewed',summary:result.confirmed?'Staff confirmed availability':'Staff cleared availability approval'});
+ await writeAudit({req,action:'lead_availability_reviewed',entity:'lead',entityId:req.params.id,after:result});
+ res.json(result);
 }));
 
 adminRouter.get("/leads/:id", requirePermission("read:sales"), asyncHandler(async (req, res) => {
@@ -1001,7 +995,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
     query(`SELECT count(e.id)::int AS total_events, COALESCE(sum(b.total),0)::text AS lifetime_value, COALESCE(sum(b.balance_due),0)::text AS outstanding_balance
       FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
   ]);
-  res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows, communications: communications.rows, activity: activity.rows });
+  res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), communications: communications.rows, activity: activity.rows });
 }));
 
 adminRouter.get("/clients/:id/duplicates", requirePermission("read:sales"), asyncHandler(async (req, res) => {
@@ -1216,7 +1210,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query(`SELECT sa.*, sp.name, sp.email, sp.phone FROM staff_assignments sa JOIN staff_profiles sp ON sp.id=sa.staff_profile_id WHERE sa.event_id=$1 AND sa.released_at IS NULL ORDER BY sa.created_at`, [req.params.id]),
     query(`SELECT ea.*, eq.name, eq.category, eq.status FROM equipment_assignments ea JOIN equipment eq ON eq.id=ea.equipment_id WHERE ea.event_id=$1 AND ea.released_at IS NULL ORDER BY ea.created_at`, [req.params.id]),
     query("SELECT * FROM tasks WHERE event_id=$1 AND deleted_at IS NULL ORDER BY due_date NULLS LAST", [req.params.id]),
-    query("SELECT * FROM files WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
+    listEventFiles(req.params.id,req.user).then(rows=>({rows})),
     query("SELECT * FROM payments WHERE event_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC", [req.params.id]),
     query("SELECT * FROM communications WHERE event_id=$1 AND deleted_at IS NULL ORDER BY occurred_at DESC", [req.params.id]),
     query("SELECT * FROM activities WHERE entity_type='event' AND entity_id=$1 ORDER BY created_at DESC", [req.params.id]),
@@ -1228,7 +1222,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query("SELECT ep.package_id AS id, p.name, p.starting_price, ep.display_order FROM event_packages ep JOIN packages p ON p.id=ep.package_id WHERE ep.event_id=$1 ORDER BY ep.display_order, p.name", [req.params.id]),
     query("SELECT ee.experience_id AS id, x.name, x.base_price, ee.display_order FROM event_experiences ee JOIN experiences x ON x.id=ee.experience_id WHERE ee.event_id=$1 ORDER BY ee.display_order, x.name", [req.params.id])
   ]);
-  res.json({ ...eventFinanceSummary(event.rows[0], invoices.rows), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
+  res.json({ ...eventFinanceSummary(event.rows[0], invoices.rows), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
 }));
 
 adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {
@@ -1878,7 +1872,7 @@ adminRouter.post("/equipment/qr-labels.pdf", requirePermission("equipment.overri
 
 adminRouter.get("/equipment", ...listRoute("equipment", ["name", "category", "serial_number", "asset_uid", "status"], "read:events"));
 adminRouter.get("/tasks", ...listRoute("tasks", ["title", "description"], "read:tasks"));
-adminRouter.get("/files", ...listRoute("files", ["filename", "category", "storage_provider"], "read:tasks"));
+adminRouter.get("/files", ...listRoute("files", ["filename", "category"], "read:events"));
 adminRouter.get("/galleries", ...listRoute("galleries", ["gallery_name", "gallery_url", "status"], "read:tasks"));
 adminRouter.get("/users", requirePermission("view:users"), asyncHandler(async (req, res) => {
   const rows = await query(

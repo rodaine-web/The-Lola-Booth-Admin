@@ -50,6 +50,7 @@ export function azureBlobStorage(config = process.env, purpose = "documents", de
       });
       return key;
     },
+    async delete(key) { valid(key); await check(); return container.getBlobClient(key).deleteIfExists({deleteSnapshots:"include"}); },
     async get(key) { valid(key); await check(); return container.getBlobClient(key).downloadToBuffer(); },
     async stream(key) { valid(key); await check(); return (await container.getBlobClient(key).download()).readableStreamBody; },
   };
