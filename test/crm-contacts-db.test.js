@@ -43,6 +43,23 @@ test('Contacts migration, permissions, import persistence, consent and mailbox d
  await outlook.processOutlookPage((await query('SELECT * FROM integration_jobs WHERE entity_id=$1',[contactDiscovery.id])).rows[0],{fetcher:contactFetcher});
  assert.equal((await outlook.discoveryView(contactDiscovery.id,req.user)).state,'COMPLETED');
  assert.equal((await outlook.discoveryView(contactDiscovery.id,req.user)).candidates[0].email,'saved@example.com');
+ // Exercise durable provider failure handling, not merely the request wrapper.
+ process.env.CRM_OUTLOOK_DISCOVERY_ENABLED='true';process.env.CRM_CONTACT_IMPORTS_ENABLED='true';
+ const {processIntegrationJobs}=await import('../server/src/services/integration-jobs-service.js');
+ await query("UPDATE integration_jobs SET status='SUCCEEDED' WHERE provider IN ('CRM_CONTACTS','CRM_OUTLOOK')");
+ const failing=await outlook.queueDiscovery({sources:'SENT',from:'2026-10-01'},req);
+ const limitedFetcher=async()=>new Response('{}',{status:429,headers:{'retry-after':'300','content-type':'application/json'}});
+ await processIntegrationJobs({limit:1,dispatch:job=>outlook.processOutlookPage(job,{fetcher:limitedFetcher})});
+ let failedJob=(await query('SELECT *,extract(epoch FROM available_at-now())::int delay FROM integration_jobs WHERE entity_id=$1',[failing.id])).rows[0];assert.equal(failedJob.status,'QUEUED');assert.ok(failedJob.delay>=299);assert.equal(failedJob.last_error,'PROVIDER_RATE_LIMIT');
+ await query('UPDATE integration_jobs SET available_at=now() WHERE id=$1',[failedJob.id]);
+ const revokedFetcher=async()=>new Response(JSON.stringify({error:{code:'InvalidAuthenticationToken',message:'provider-private-data'}}),{status:401,headers:{'content-type':'application/json'}});
+ await processIntegrationJobs({limit:1,dispatch:job=>outlook.processOutlookPage(job,{fetcher:revokedFetcher})});
+ failedJob=(await query('SELECT * FROM integration_jobs WHERE id=$1',[failedJob.id])).rows[0];assert.equal(failedJob.status,'FAILED');assert.equal(failedJob.last_error,'PROVIDER_AUTH_EXPIRED');assert.equal((await outlook.outlookStatus()).status,'NEEDS_REAUTHORIZATION');assert.equal((await outlook.discoveryView(failing.id,req.user)).state,'FAILED');
+ await query("UPDATE integration_connections SET status='CONNECTED' WHERE id=$1",[conn.id]);
+ await query("UPDATE integration_connections SET access_token_expires_at=now()-interval '1 minute' WHERE id=$1",[conn.id]);
+ assert.equal(await outlook.withOutlook((_row,tokens)=>tokens.access_token,{fetcher:async()=>new Response(JSON.stringify({access_token:'refreshed-qa-only',refresh_token:'renewed-qa-only',expires_in:3600}),{status:200,headers:{'content-type':'application/json'}})}),'refreshed-qa-only');
+ const permissionRevoked=await outlook.queueDiscovery({sources:'SENT',from:'2026-10-01'},req);await query('UPDATE users SET active=false WHERE id=$1',[owner.id]);
+ const cancelled=await outlook.processOutlookPage((await query('SELECT * FROM integration_jobs WHERE entity_id=$1',[permissionRevoked.id])).rows[0],{fetcher:()=>{throw Error('Revoked user must not call Graph');}});assert.equal(cancelled.result,'DISABLED');assert.equal((await outlook.discoveryView(permissionRevoked.id,req.user)).state,'CANCELLED');await query('UPDATE users SET active=true WHERE id=$1',[owner.id]);
  await outlook.disconnectOutlook(req);assert.equal((await outlook.outlookStatus()).status,'DISCONNECTED');assert.equal((await query('SELECT encrypted_credentials FROM integration_connections WHERE id=$1',[conn.id])).rows[0].encrypted_credentials,null);
  await query('DROP SCHEMA '+schema+' CASCADE');
  });}finally{await pool.end();}
