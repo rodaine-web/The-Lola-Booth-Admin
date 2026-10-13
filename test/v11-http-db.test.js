@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import {once} from 'node:events';
+import {get as httpGet} from 'node:http';
 import jwt from 'jsonwebtoken';
 
 test('V1.1 real API journey: agreement, workspace, development email, signing and revocation', {skip:!process.env.V11_TEST_DATABASE_URL},async()=>{
@@ -91,15 +92,18 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   await pool.query("UPDATE campaign_recipients SET status='SENT',sent_at=now() WHERE id=$1",[recipient.id]);
   const scanner=await fetch(origin+clickPath,{redirect:'manual',headers:{'user-agent':'Proofpoint scanner'}});assert.equal(scanner.status,302);
   await fetch(origin+openPath,{method:'HEAD'});
-  assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.clicked,0);
+  assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.likely_human_clicks,0);
   assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.opened,0);
   for(let visit=0;visit<2;visit++){
    const click=await fetch(origin+clickPath,{redirect:'manual',headers:{'user-agent':'Mozilla/5.0'}});assert.equal(click.status,302);assert.match(click.headers.get('location'),/\/interest\//);assert.equal(click.headers.get('referrer-policy'),'no-referrer');
    const open=await fetch(origin+openPath);assert.equal(open.status,200);assert.match(open.headers.get('content-type'),/gif/);assert.match(open.headers.get('cache-control'),/no-store/);
   }
   const metrics=(await api(`/campaigns/${trackedId}`)).data.metrics;
-  assert.equal(metrics.clicked,1);assert.equal(metrics.opened,1);assert.equal(metrics.delivered,null);
+  assert.equal(metrics.tracked_link_visits,1);assert.equal(metrics.likely_human_clicks,0);assert.equal(metrics.unverified_clicks,1);assert.equal(metrics.suspected_scanner_clicks,1);assert.equal(metrics.opened,1);assert.equal(metrics.delivered,null);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM campaign_events WHERE campaign_id=$1 AND event_type IN ('estimated_open','tracked_click')",[trackedId])).rows[0].n,2);
+  await new Promise((resolve,reject)=>{httpGet(origin+clickPath,{headers:{'user-agent':'Mozilla/5.0','sec-fetch-mode':'navigate','sec-fetch-user':'?1'}},res=>{assert.equal(res.statusCode,302);res.resume();res.on('end',resolve);}).on('error',reject);});
+  assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.likely_human_clicks,1);
+  assert.equal((await pool.query('SELECT count(*)::int n FROM campaign_tracking_observations WHERE campaign_id=$1',[trackedId])).rows[0].n,7,'Every valid request keeps classification evidence, including scanner and repeated requests');
   const invalidSender=await api('/campaigns',{method:'POST',body:{name:'Invalid sender',sender_email:'outsider@example.com'}});assert.equal(invalidSender.status,422);
   const unsubscribe=message.rendered_html.match(/https:[^" ]+\/unsubscribe\/([A-Za-z0-9_-]{43})/)[1];
   assert.equal((await api('/public/campaigns/unsubscribe/'+unsubscribe,{method:'POST',body:{},token:null})).status,200);

@@ -60,7 +60,7 @@ async function prepareWebsiteProposal(job) {
       if (!isDeepStrictEqual(current, { selections: booking.selections, addons: booking.addons })) throw new AppError('Catalogue or prices changed since submission. Review the quote.', 409, 'WEBSITE_CATALOG_CHANGED', { retryable: false });
       let customer = lead.converted_client_id ? (await client.query('SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL', [lead.converted_client_id])).rows[0] : null;
       // Do not attach an unauthenticated request to another customer's existing record by email alone.
-      if (!customer) customer = (await client.query('INSERT INTO clients(name,email,phone,referral_source) VALUES($1,$2,$3,$4) RETURNING *', [[lead.first_name, lead.last_name].join(' '), lead.email, lead.phone, 'Website request'])).rows[0];
+      if (!customer) customer = (await client.query('INSERT INTO clients(name,email,phone,referral_source,sales_qualified) VALUES($1,$2,$3,$4,false) RETURNING *', [[lead.first_name, lead.last_name].join(' '), lead.email, lead.phone, 'Website request'])).rows[0];
       let event = lead.converted_event_id ? (await client.query('SELECT * FROM events WHERE id=$1 FOR UPDATE', [lead.converted_event_id])).rows[0] : null;
       if (event && (event.client_id !== customer.id || !['DRAFT','PENDING_DEPOSIT'].includes(event.status) || event.deleted_at)) throw new AppError('Review the existing event linkage.', 409, 'WEBSITE_EVENT_REVIEW', { retryable: false });
       if (!event) event = (await client.query(`INSERT INTO events(client_id,event_name,event_type,event_date,start_time,end_time,venue_name,venue_address,city,state,guest_count,status,experience_id,package_id,client_notes)

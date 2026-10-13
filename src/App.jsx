@@ -198,7 +198,7 @@ const addonFields = [
 ];
 
 const taskFields = [
-  ["title", "Title", "text", { required: true }], ["description", "Description", "textarea"], ["due_date", "Due date", "date"], ["assigned_user_id", "Owner", "relationship", { resource: "users" }], ["lead_id", "Lead", "relationship", { resource: "leads" }], ["client_id", "Client", "relationship", { resource: "clients" }], ["event_id", "Event", "relationship", { resource: "events" }], ["status", "Status", "select", { options: ["OPEN","IN_PROGRESS","DONE","CANCELLED"] }], ["priority", "Priority", "select", { options: ["LOW","NORMAL","HIGH","URGENT"] }]
+  ["title", "Title", "text", { required: true }], ["description", "Description", "textarea"], ["due_date", "Due date", "date"], ["assigned_user_id", "Owner", "relationship", { resource: "users" }], ["lead_id", "Lead", "relationship", { resource: "leads" }], ["client_id", "Client", "relationship", { resource: "clients" }], ["event_id", "Event", "relationship", { resource: "events" }], ["proposal_id", "Proposal", "relationship", { resource: "proposals" }], ["status", "Status", "select", { options: ["OPEN","IN_PROGRESS","DONE","CANCELLED"] }], ["priority", "Priority", "select", { options: ["LOW","NORMAL","HIGH","URGENT"] }]
 ];
 
 const paymentFields = [
