@@ -57,6 +57,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     setInlineClientOpen(false);
     setInlineClient({first_name:"",last_name:"",email:"",phone:""});
     setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? false : ""])));
+    if (endpoint === "/tasks") setForm(current=>({...current,status:"OPEN",priority:"NORMAL"}));
     if (endpoint === "/experiences") setForm(current=>({...current,website_status:"DRAFT",active:true}));
     if (endpoint === "/packages") setForm(current => ({ ...current, pricing_mode: "STARTING", website_status: "DRAFT", currency: "USD", active: true }));
     if (endpoint === "/events") setForm(current=>({...current,package_ids:[],experience_ids:[]}));
@@ -218,6 +219,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
               <h2>{editing.mode === "edit" ? "Edit" : "New"} {title.replace(/s$/, "")}</h2>
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
+            {error && <p className="toast error" role="alert">{error}</p>}
             <p className="note-text">Fields marked * are required.</p>
             {endpoint==="/payments"&&<p>Select an invoice, or both a client and an event.</p>}
             <div className="form-grid">

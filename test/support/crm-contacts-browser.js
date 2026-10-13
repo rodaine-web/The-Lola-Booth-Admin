@@ -28,6 +28,15 @@ export async function verifyContactsBrowser({api,origin,ownerToken}){
  assert.equal((await api('/crm/outlook/connect',{method:'POST',body:{sources:'BOTH'},token:restrictedToken})).status,403);
  assert.equal((await page.request.get(origin+'/api/crm/imports/template/contacts',{headers:{Authorization:'Bearer '+restrictedToken}})).status(),403);
  const template=await page.request.get(origin+'/api/crm/imports/template/leads',{headers:{Authorization:'Bearer '+ownerToken}});assert.equal(template.status(),200);assert.equal((await template.body()).subarray(0,2).toString(),'PK');const history=await api('/crm/imports?kind=CONTACTS');assert.ok(history.data.data.some(b=>b.state==='COMPLETED'));
+ // Real task create/edit API persistence catches unsupported shared-editor fields.
+ await page.goto(base+'/operations/tasks');await page.getByRole('button',{name:'New Task',exact:true}).click();
+ await page.getByLabel('Title',{exact:true}).fill('Lifecycle task browser QA');await page.getByLabel('Due date',{exact:true}).fill('2031-06-19');
+ await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
+ await page.getByLabel('Actions for Lifecycle task browser QA',{exact:true}).click();await page.getByRole('button',{name:'Edit',exact:true}).click();
+ assert.equal(await page.getByLabel('Due date',{exact:true}).inputValue(),'2031-06-19');await page.getByLabel('Status',{exact:true}).selectOption('DONE');await page.getByLabel('Description',{exact:true}).fill('Updated from the real task editor');
+ await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
+ const savedTask=(await pool.query("SELECT * FROM tasks WHERE title='Lifecycle task browser QA'")).rows[0];assert.equal(savedTask.status,'DONE');assert.equal(savedTask.description,'Updated from the real task editor');
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:fileURLToPath(new URL('tasks-mobile.png',evidence)),fullPage:true});
  assert.deepEqual(errors,[]);await fs.writeFile(new URL('result.json',evidence),JSON.stringify({status:'passed',checks:['create contact','profile navigation','note persistence','desktop/mobile','CSV mapping and preview','background import persistence','real XLSX download','import history','HTTP permissions and other-owner denial','no browser errors']},null,2));
  }catch(error){if(page){console.error('CRM browser failure page:',await page.locator('body').innerText());await page.screenshot({path:fileURLToPath(new URL('failure.png',evidence)),fullPage:true});}throw error;}finally{env.clientOrigin=previousOrigin;if(browser)await browser.close();await vite.close();}
 }

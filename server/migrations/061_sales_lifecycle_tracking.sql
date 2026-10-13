@@ -45,6 +45,8 @@ CREATE FUNCTION sales_lead_protected(target uuid) RETURNS boolean LANGUAGE sql S
   WHERE (i.lead_id=target OR p.lead_id=target) AND i.amount_paid>0)
  OR EXISTS(SELECT 1 FROM contracts k JOIN proposals p ON p.id=k.proposal_id WHERE p.lead_id=target AND k.status='SIGNED')
  OR EXISTS(SELECT 1 FROM proposals p JOIN events e ON e.id=p.event_id WHERE p.lead_id=target AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS','COMPLETED'))
+ OR EXISTS(SELECT 1 FROM bookings b JOIN leads l ON l.id=target WHERE (b.lead_id=target OR b.event_id=l.converted_event_id) AND b.amount_paid>0)
+ OR EXISTS(SELECT 1 FROM events e JOIN leads l ON l.converted_event_id=e.id WHERE l.id=target AND e.status IN ('CONFIRMED','PREPARING','READY','IN_PROGRESS','COMPLETED'))
  OR EXISTS(SELECT 1 FROM payments pay LEFT JOIN invoices i ON i.id=pay.invoice_id LEFT JOIN proposals p ON p.id=i.proposal_id
   WHERE (p.lead_id=target OR i.lead_id=target) AND pay.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED'));
 $$;
@@ -74,7 +76,7 @@ BEGIN
   IF NOT EXISTS(SELECT 1 FROM proposals WHERE event_id=event_target AND lead_id IS DISTINCT FROM target AND deleted_at IS NULL AND status NOT IN ('DECLINED','EXPIRED','ARCHIVED'))
   AND NOT EXISTS(SELECT 1 FROM invoices WHERE event_id=event_target AND amount_paid>0) THEN
    UPDATE events SET status='CANCELLED',sales_closed_at=COALESCE(sales_closed_at,now()),updated_at=now()
-   WHERE id=event_target AND sales_closed_at IS NULL AND status IN ('DRAFT','INQUIRY','PENDING_DEPOSIT','CANCELLED');
+   WHERE id=event_target AND sales_closed_at IS NULL AND status IN ('DRAFT','INQUIRY','PENDING_CONTRACT','PENDING_DEPOSIT','CANCELLED');
    IF FOUND THEN
     UPDATE tasks SET status='CANCELLED',closure_reason='Lead marked Lost',closed_at=now(),updated_at=now() WHERE event_id=event_target AND deleted_at IS NULL AND status IN ('OPEN','IN_PROGRESS');
     UPDATE bookings SET sales_closed_at=COALESCE(sales_closed_at,now()),updated_at=now() WHERE event_id=event_target AND sales_closed_at IS NULL;
@@ -121,7 +123,7 @@ CREATE TRIGGER proposal_task_consistency AFTER UPDATE OF status ON proposals FOR
 CREATE FUNCTION prevent_obsolete_sales_task() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF NEW.status IN ('OPEN','IN_PROGRESS') THEN
-  IF EXISTS(SELECT 1 FROM leads WHERE id=NEW.lead_id AND status='LOST') OR EXISTS(SELECT 1 FROM proposals p JOIN leads l ON l.id=p.lead_id WHERE p.id=NEW.proposal_id AND l.status='LOST') THEN
+  IF EXISTS(SELECT 1 FROM events WHERE id=NEW.event_id AND sales_closed_at IS NOT NULL) OR EXISTS(SELECT 1 FROM leads WHERE id=NEW.lead_id AND status='LOST') OR EXISTS(SELECT 1 FROM proposals p JOIN leads l ON l.id=p.lead_id WHERE p.id=NEW.proposal_id AND l.status='LOST') THEN
    NEW.status:='CANCELLED';NEW.closure_reason:='Lead marked Lost';NEW.closed_at:=now();
   ELSIF EXISTS(SELECT 1 FROM proposals WHERE id=NEW.proposal_id AND (status IN ('DECLINED','EXPIRED','ARCHIVED') OR (status IN ('DRAFT','READY','SENT','VIEWED') AND valid_through<(now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date))) THEN
    NEW.status:='CANCELLED';NEW.closure_reason:='Proposal no longer awaiting acceptance';NEW.closed_at:=now();
