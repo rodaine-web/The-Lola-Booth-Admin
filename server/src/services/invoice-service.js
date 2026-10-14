@@ -93,9 +93,9 @@ export async function createInvoice(req) {
     created = true;
     for (const item of totals.items) {
       await client.query(
-        `INSERT INTO invoice_items (invoice_id, label, description, quantity, unit_price, taxable, tax_rate, discount, total, line_total)
-         VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$8)`,
-        [invoice.rows[0].id, item.description, item.quantity, item.unit_price, item.taxable, item.tax_rate, item.discount, item.line_total]
+        `INSERT INTO invoice_items (invoice_id, label, description, quantity, unit_price, taxable, tax_rate, discount, total, line_total,stripe_tax_code)
+         VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$8,$9)`,
+        [invoice.rows[0].id, item.description, item.quantity, item.unit_price, item.taxable, item.tax_rate, item.discount, item.line_total,item.stripe_tax_code||null]
       );
     }
     if (req.body.proposal_id) {
@@ -139,7 +139,7 @@ export async function updateDraftInvoice(req) {
     };
     const updated = await client.query(`UPDATE invoices SET client_id=$1,event_id=$2,due_date=$3,notes=$4,terms=$5,subtotal=$6,discount=$7,tax=$8,total=$9,balance_due=$9,amount_outstanding=$9,pricing_snapshot=$10,updated_at=now() WHERE id=$11 RETURNING *`, [...values,totals.subtotal,totals.discount,totals.tax,totals.total,JSON.stringify(pricingSnapshot),before.id]);
     await client.query("DELETE FROM invoice_items WHERE invoice_id=$1", [before.id]);
-    for (const item of totals.items) await client.query(`INSERT INTO invoice_items(invoice_id,label,description,quantity,unit_price,taxable,tax_rate,discount,total,line_total) VALUES($1,$2,$2,$3,$4,$5,$6,$7,$8,$8)`,[before.id,item.description,item.quantity,item.unit_price,item.taxable ?? true,item.tax_rate || 0,item.discount,item.line_total]);
+    for (const item of totals.items) await client.query(`INSERT INTO invoice_items(invoice_id,label,description,quantity,unit_price,taxable,tax_rate,discount,total,line_total,stripe_tax_code) VALUES($1,$2,$2,$3,$4,$5,$6,$7,$8,$8,$9)`,[before.id,item.description,item.quantity,item.unit_price,item.taxable ?? true,item.tax_rate || 0,item.discount,item.line_total,item.stripe_tax_code||null]);
     return {before,after:updated.rows[0]};
   });
   await writeAudit({req,action:"invoice_updated",entity:"invoice",entityId:req.params.id,...result});

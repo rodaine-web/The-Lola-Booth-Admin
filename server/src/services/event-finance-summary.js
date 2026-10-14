@@ -7,9 +7,10 @@ export function eventFinanceSummary(event, invoices = []) {
   if (!active.length) return event;
   const total = money(active.reduce((sum,i)=>sum+Number(i.total||0),0));
   const paid = money(active.reduce((sum,i)=>sum+Number(i.amount_paid||0),0));
+  const stripeTax=money(active.reduce((sum,i)=>sum+Number(i.stripe_tax_amount||0),0));
   const balance = money(active.reduce((sum,i)=>sum+Number(i.amount_outstanding??i.balance_due??0),0));
   const invoiceDeposit = money(active.reduce((sum,i)=>sum+(i.pricing_snapshot?.payment_mode==='DEPOSIT_REQUEST'?Number(i.pricing_snapshot.amount_due_now||0):0),0));
-  return {...event, booked_total:total, amount_paid:paid, balance_due:balance,
+  return {...event, booked_total:total, amount_paid:paid, balance_due:balance,stripe_tax_amount:stripeTax,total_including_collected_tax:money(total+stripeTax),total_received_including_tax:money(paid+stripeTax),
     deposit_required:invoiceDeposit || Number(event.deposit_required||0),
     payment_status:paid>0?(balance<=0?'PAID':'PARTIAL'):'UNPAID'};
 }
