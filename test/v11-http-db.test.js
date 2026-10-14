@@ -78,6 +78,10 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   // Full tracked campaign journey, isolated DB and development mail only.
   const {campaignContent}=await import('../shared/campaign-content.js');
   assert.equal((await api('/campaigns/senders')).data.find(s=>s.email==='lola@thelolabooth.com').name,'Lola Masha');
+  const prospective=await api('/clients',{method:'POST',body:{name:'Manual Wizard Prospect QA',email:'manual-prospect@qa.invalid',provisional:true}});assert.equal(prospective.status,201);assert.equal(prospective.data.sales_qualified,false);
+  assert.equal((await pool.query('SELECT contact_type FROM crm_contacts WHERE id=$1',[prospective.data.contact_id])).rows[0].contact_type,'PROSPECT');
+  assert.ok(!(await api('/clients?search=manual-prospect@qa.invalid')).data.data.some(c=>c.id===prospective.data.id));
+  assert.equal((await api('/clients',{method:'POST',body:{name:'Denied prospect',provisional:true},token:viewerToken})).status,403);
   const tracked=await api('/campaigns',{method:'POST',body:{name:'Tracked alias demo',sender_email:'lola@thelolabooth.com',sender_name:'Lola Masha',content_json:campaignContent({format:'TEXT',text_body:'Your special event offer',mailing_address:'Synthetic QA address'}),audience_json:{manual:[{email:'tracking@example.com',first_name:'Demo',marketing_email_opt_in:true}]}}});
   assert.equal(tracked.status,200);
   const trackedId=tracked.data.id;
@@ -103,6 +107,7 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM campaign_events WHERE campaign_id=$1 AND event_type IN ('estimated_open','tracked_click')",[trackedId])).rows[0].n,2);
   await new Promise((resolve,reject)=>{httpGet(origin+clickPath,{headers:{'user-agent':'Mozilla/5.0','sec-fetch-mode':'navigate','sec-fetch-user':'?1'}},res=>{assert.equal(res.statusCode,302);res.resume();res.on('end',resolve);}).on('error',reject);});
   assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.likely_human_clicks,1);
+  assert.equal((await api(`/campaigns/${trackedId}`)).data.metrics.offer_page_clicks_estimated,1);
   assert.equal((await pool.query('SELECT count(*)::int n FROM campaign_tracking_observations WHERE campaign_id=$1',[trackedId])).rows[0].n,7,'Every valid request keeps classification evidence, including scanner and repeated requests');
   const invalidSender=await api('/campaigns',{method:'POST',body:{name:'Invalid sender',sender_email:'outsider@example.com'}});assert.equal(invalidSender.status,422);
   const unsubscribe=message.rendered_html.match(/https:[^" ]+\/unsubscribe\/([A-Za-z0-9_-]{43})/)[1];

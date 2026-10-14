@@ -17,7 +17,7 @@ test('sales lifecycle: lost verdict, expiry, task stop, client promotion and pai
   const lead=await row("INSERT INTO leads(first_name,last_name,email,phone,event_date,event_type,status) VALUES('Lost','QA','lost@qa.invalid','5550000199','2030-10-15','Corporate','PROPOSAL_SENT') RETURNING *");
   const client=await row("INSERT INTO clients(name,email,referral_source,sales_qualified) VALUES('Lost QA','lost@qa.invalid','Website request',false) RETURNING *");
   assert.equal((await row('SELECT contact_type FROM crm_contacts WHERE id=$1',[client.contact_id])).contact_type,'PROSPECT');
-  const event=await row("INSERT INTO events(client_id,event_name,event_date,event_type,status) VALUES($1,'Lost QA','2030-10-15','Corporate','PENDING_DEPOSIT') RETURNING *",[client.id]);
+  const event=await row("INSERT INTO events(client_id,event_name,event_date,event_type,status) VALUES($1,'Lost QA','2030-10-15','Corporate','TENTATIVE') RETURNING *",[client.id]);
   await db.query('UPDATE leads SET converted_client_id=$2,converted_event_id=$3 WHERE id=$1',[lead.id,client.id,event.id]);
   const proposal=await row("INSERT INTO proposals(lead_id,client_id,event_id,proposal_number,status,secure_token,valid_through) VALUES($1,$2,$3,'LOST-QA','SENT','qa-only','2030-10-15') RETURNING *",[lead.id,client.id,event.id]);
   const task=await row("INSERT INTO tasks(title,lead_id,proposal_id,status) VALUES('Await acceptance',$1,$2,'IN_PROGRESS') RETURNING *",[lead.id,proposal.id]);
