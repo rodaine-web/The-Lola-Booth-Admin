@@ -24,7 +24,7 @@ async function access(eventId,user,lock=false){
 function visible(row,user){return !restricted(user) || (row.visibility!=='INTERNAL'&&!['CONTRACT','PROPOSAL','INVOICE','INTERNAL'].includes(row.category));}
 export async function listEventFiles(eventId,user){
  await access(eventId,user);
- const rows=(await query(`SELECT ${fields},storage_key,storage_provider,content_sha256 FROM files WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id`,[eventId])).rows;
+ const rows=(await query(`SELECT ${fields},client_id,storage_key,storage_provider,content_sha256 FROM files WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id`,[eventId])).rows;
  return rows.filter(row=>visible(row,user)).map(eventFileSummary);
 }
 export function decodeEventFile(input){

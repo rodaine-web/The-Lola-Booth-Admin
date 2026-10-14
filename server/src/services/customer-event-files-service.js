@@ -17,9 +17,9 @@ async function customerAccess(session,eventId){
 export async function shareEventFile(eventId,fileId,shared,req){
  if(!managesEventFiles(req.user)||!await userCanAccessEvent(req.user,eventId))throw new AppError('Only authorized Admin can share event files.',403,'FORBIDDEN');
  return transaction(async()=>{
-  const file=(await query('SELECT f.* FROM files f JOIN events e ON e.id=f.event_id WHERE f.id=$1 AND f.event_id=$2 AND f.deleted_at IS NULL AND e.deleted_at IS NULL FOR UPDATE OF f',[fileId,eventId])).rows[0];
+  const file=(await query('SELECT f.*,e.client_id AS event_client_id,e.status AS event_status,e.sales_closed_at AS event_closed_at FROM files f JOIN events e ON e.id=f.event_id WHERE f.id=$1 AND f.event_id=$2 AND f.deleted_at IS NULL AND e.deleted_at IS NULL FOR UPDATE OF f',[fileId,eventId])).rows[0];
   if(!file)throw notFound('File');
-  if(shared&&!customerShareableEventFile(file))throw new AppError('Only uploaded private design, venue, client or other files can be shared. Internal and financial documents stay private.',422,'CUSTOMER_FILE_NOT_SHAREABLE');
+  if(shared&&(!customerShareableEventFile(file)||file.client_id!==file.event_client_id||file.event_status==='CANCELLED'||file.event_closed_at))throw new AppError('Sharing requires a file linked to this event’s customer and an active event. Only uploaded private design, venue, client or other files can be shared; internal and financial documents stay private.',422,'CUSTOMER_FILE_NOT_SHAREABLE');
   if(Boolean(file.customer_shared_at)===shared)return {shared,fileId};
   await query('UPDATE files SET customer_shared_at=CASE WHEN $2 THEN now() ELSE NULL END,customer_shared_by=CASE WHEN $2 THEN $3::uuid ELSE NULL END WHERE id=$1',[fileId,shared,req.user.id]);
   await writeAudit({req,action:shared?'event_file_customer_shared':'event_file_customer_unshared',entity:'file',entityId:fileId,before:{shared:!shared},after:{event_id:eventId,shared}});

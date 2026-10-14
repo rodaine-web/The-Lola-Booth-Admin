@@ -84,6 +84,7 @@ test('V1.2 private Event Files: real API, storage, concurrency, permissions and 
  const customerCookie=redemption.headers.get('set-cookie').split(';')[0];
  async function customerApi(p,{cookie=customerCookie,raw=false}={}){const response=await fetch(origin+'/api/public/client'+p,{headers:{...(cookie?{Cookie:cookie}:{}),Origin:env.clientOrigin}});return {status:response.status,headers:response.headers,data:raw?Buffer.from(await response.arrayBuffer()):await response.json()};}
  const customerFile=(await api(`/events/${event.id}/files`,{method:'POST',body:{...input,requestId:crypto.randomUUID(),filename:'client-reference.png'}})).data.file;
+ assert.equal((await api(`/events/${event.id}/files/${file.id}/customer-access`,{method:'POST',body:{shared:true}})).status,422,'Do not share uploads made before a customer was linked');
  const baseFilePath=`/events/${event.id}/files/${customerFile.id}`;
  assert.equal((await customerApi(`/events/${event.id}/files`,{cookie:null})).status,401);
  assert.deepEqual((await customerApi(`/events/${event.id}/files`)).data.data,[],'No automatic sharing of existing files');
