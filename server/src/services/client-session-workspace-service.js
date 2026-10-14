@@ -27,7 +27,7 @@ export async function sessionWorkspace(session,eventId){
    WHERE p.id=$1`,[grant.proposal_id])).rows[0];
   const agreements=(await query("SELECT id,title,revision,status,signed_at,signer_name FROM contracts WHERE proposal_id=$1 AND status='SIGNED' ORDER BY revision DESC",[proposal.id])).rows;
   const invoices=(await query("SELECT id,invoice_number,status,total,amount_paid,amount_outstanding,balance_due,due_date FROM invoices WHERE (proposal_id=$1 OR EXISTS(SELECT 1 FROM backdrop_quotes q WHERE q.invoice_id=invoices.id AND q.event_id=$3 AND q.client_id=$2 AND q.status='ACCEPTED')) AND client_id=$2 AND event_id=$3 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID') ORDER BY created_at DESC",[proposal.id,session.client_id,eventId])).rows;
-  const receipts=(await query(`SELECT pay.id,pay.invoice_id,pay.amount,pay.refunded_amount,pay.status,pay.payment_date FROM payments pay
+  const receipts=(await query(`SELECT pay.id,pay.invoice_id,pay.amount,pay.tax_amount,pay.tax_details,pay.refunded_amount,pay.status,pay.payment_date FROM payments pay
    JOIN invoices i ON i.id=pay.invoice_id WHERE (i.proposal_id=$1 OR EXISTS(SELECT 1 FROM backdrop_quotes q WHERE q.invoice_id=i.id AND q.event_id=$3 AND q.client_id=$2 AND q.status='ACCEPTED')) AND i.client_id=$2 AND i.event_id=$3
     AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID') AND pay.deleted_at IS NULL
     AND pay.status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') ORDER BY pay.payment_date DESC`,[proposal.id,session.client_id,eventId])).rows;
@@ -37,8 +37,8 @@ export async function sessionWorkspace(session,eventId){
   return {creative:creative.map(row=>({id:row.id,type:row.approval_type,version:row.version,status:row.status})),client:proposal.client_name,event:{id:eventId,name:proposal.event_name,date:proposal.event_date,venue:proposal.venue_name,status:proposal.event_status,start:proposal.start_time,end:proposal.end_time,package:packageLabel||proposal.package_name||null},
    proposal:{number:proposal.proposal_number,status:proposal.status,total:proposal.total},
    agreements:agreements.map(row=>({id:row.id,title:row.title,revision:row.revision,status:row.status,signedAt:row.signed_at,signerName:row.signer_name})),
-   invoices:invoices.map(row=>({id:row.id,number:row.invoice_number,status:row.status,total:row.total,paid:row.amount_paid,balance:invoiceBalance(row),dueDate:row.due_date})),
-   receipts:receipts.map(row=>({id:row.id,invoiceId:row.invoice_id,amount:row.amount,refundedAmount:row.refunded_amount,status:row.status,date:row.payment_date}))};
+   invoices:invoices.map(row=>({id:row.id,number:row.invoice_number,status:row.status,total:Number(row.total)+Number(row.stripe_tax_amount||0),tax:Number(row.stripe_tax_amount||0),paid:Number(row.amount_paid)+Number(row.stripe_tax_amount||0),balance:invoiceBalance(row),dueDate:row.due_date})),
+   receipts:receipts.map(row=>({id:row.id,invoiceId:row.invoice_id,amount:row.amount,tax:row.tax_amount,taxDetails:row.tax_details,refundedAmount:row.refunded_amount,status:row.status,date:row.payment_date}))};
  });
 }
 export async function sessionInvoice(session,eventId,invoiceId){

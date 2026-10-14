@@ -92,8 +92,9 @@ export default function InvoiceDetail() {
         <p className="note-text">Generating or reissuing access does not cancel a checkout already opened at a payment provider.</p>
       </section>
       <section className="detail-summary">
-        <Metric label="Total" value={formatMoney(invoice.total || 0)} />
-        <Metric label="Paid" value={formatMoney(invoice.amount_paid || 0)} />
+        {Number(invoice.stripe_tax_amount)>0&&<Metric label="Stripe tax collected" value={formatMoney(invoice.stripe_tax_amount)}/>}
+        <Metric label="Total" value={formatMoney(Number(invoice.total||0)+Number(invoice.stripe_tax_amount||0))} />
+        <Metric label="Paid" value={formatMoney(Number(invoice.amount_paid||0)+Number(invoice.stripe_tax_amount||0))} />
         <Metric label="Outstanding" value={formatMoney(invoice.amount_outstanding ?? invoice.balance_due ?? 0)} />
         <Metric label="Due" value={invoice.due_date ? formatDateOnly(invoice.due_date) : "Unset"} />
       </section>

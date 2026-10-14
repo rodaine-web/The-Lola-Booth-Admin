@@ -15,7 +15,7 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
     const invoice = await client.query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [invoiceId]);
     if (!invoice.rows[0]) return null;
     const payments = await client.query(
-      "SELECT COALESCE(sum(payment_net_received(payments)),0)::numeric AS net_paid FROM payments WHERE invoice_id=$1 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL",
+      "SELECT COALESCE(sum(payment_net_received(payments)),0)::numeric AS net_paid, COALESCE(sum(LEAST(tax_amount,GREATEST(0,amount-refunded_amount-disputed_amount))),0)::numeric AS net_tax FROM payments WHERE invoice_id=$1 AND status IN ('SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED') AND deleted_at IS NULL",
       [invoiceId]
     );
     const refunded = await client.query(
@@ -36,8 +36,8 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
       else if (["PAID","PARTIALLY_PAID","PARTIAL","REFUNDED"].includes(previousStatus)) status = "SENT";
     }
     const updated = await client.query(
-      "UPDATE invoices SET amount_paid=$1, balance_due=$2, amount_outstanding=$2, status=$3, updated_at=now() WHERE id=$4 RETURNING *",
-      [paid, outstanding, status, invoiceId]
+      "UPDATE invoices SET amount_paid=$1, balance_due=$2, amount_outstanding=$2, status=$3, stripe_tax_amount=$5, updated_at=now() WHERE id=$4 RETURNING *",
+      [paid, outstanding, status, invoiceId,money(payments.rows[0].net_tax)]
     );
     const converted=await convertPaidCampaignLead(client,updated.rows[0]);
     if(converted)Object.assign(updated.rows[0],converted);

@@ -571,6 +571,7 @@ const invoiceSchema = z.object({
     quantity: z.coerce.number().positive().default(1),
     unit_price: z.coerce.number().min(0),
     taxable: z.boolean().optional(),
+    stripe_tax_code:z.string().regex(/^txcd_\d{8}$/).optional().nullable(),
     tax_rate: z.coerce.number().min(0).optional(),
     discount: z.coerce.number().min(0).optional()
   })).optional()
