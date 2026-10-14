@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import pg from 'pg';
+import {once} from 'node:events';
+import jwt from 'jsonwebtoken';
 
 test('proposal review: published prices, concurrent sends, read-only copies and safe retries',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async()=>{
  const target=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['localhost','127.0.0.1'].includes(target.hostname));assert.match(target.pathname,/lola_.*qa/);
- const schema='review_'+crypto.randomBytes(8).toString('hex'),bootstrap=new pg.Pool({connectionString:target.toString()});let pool;
+ const schema='review_'+crypto.randomBytes(8).toString('hex'),bootstrap=new pg.Pool({connectionString:target.toString()});let pool,server;
  try{
   await bootstrap.query(`CREATE SCHEMA ${schema}`);target.searchParams.set('options',`-c search_path=${schema},public`);
-  Object.assign(process.env,{DATABASE_URL:target.toString(),NODE_ENV:'test',APP_ENV:'test',INTEGRATION_SECRET_KEY:'disposable-qa-only-secret-at-least-32-characters'});
+  Object.assign(process.env,{DATABASE_URL:target.toString(),NODE_ENV:'test',APP_ENV:'test',PORT:'0',JWT_SECRET:'disposable-only-qa-jwt-not-for-real-use',EMAIL_PROVIDER:'development',INTEGRATION_SECRET_KEY:'disposable-qa-only-secret-at-least-32-characters'});
   const db=await import('../server/src/db/pool.js');pool=db.pool;
   const {query,transaction}=db;const dir=new URL('../server/migrations/',import.meta.url);
   for(const file of (await fs.readdir(dir)).filter(f=>f.endsWith('.sql')).sort())await transaction(async()=>query(await fs.readFile(new URL(file,dir),'utf8')));
@@ -33,6 +35,10 @@ test('proposal review: published prices, concurrent sends, read-only copies and 
   await assert.rejects(getProposal(p.secure_token,{publicView:true}),{code:'NOT_FOUND'});
   const copyUrl=sends.find(m=>m.to==='copy@qa.invalid').body.match(/https?:\/\/\S+\/proposal\/([a-f0-9]+)/)?.[1];assert.ok(copyUrl);
   const copy=await getProposal(copyUrl,{publicView:true});assert.equal(copy.view_only,true);assert.equal(copy.secure_token,copyUrl);assert.equal(JSON.stringify(copy).includes(published.secure_token),false);
+  ({server}=await import('../server/src/index.js'));if(!server.listening)await once(server,'listening');const origin=`http://127.0.0.1:${server.address().port}`;
+  const copied=await fetch(`${origin}/api/public/proposals/${copyUrl}`);assert.equal(copied.status,200);const copiedJson=await copied.json();assert.equal(copiedJson.proposal.view_only,true);assert.equal(JSON.stringify(copiedJson).includes(published.secure_token),false);
+  for(const action of ['accept','decline']){const denied=await fetch(`${origin}/api/public/proposals/${copyUrl}/${action}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({acceptedByName:'Copy QA'})});assert.equal(denied.status,403);}
+  const viewer=jwt.sign({sub:user.id},process.env.JWT_SECRET);assert.equal((await fetch(`${origin}/api/proposals/${p.id}/send`,{method:'POST',headers:{'authorization':`Bearer ${viewer}`,'content-type':'application/json'},body:JSON.stringify(body)})).status,403,'Sales permission is enforced');
   await assert.rejects(acceptProposal(p.id,'Copy QA',{...req,params:{token:copyUrl}}),{code:'PROPOSAL_LINK_REPLACED'});
   await acceptProposal(p.id,'QA',{...req,params:{token:published.secure_token}});await assert.rejects(revision(p),{code:'PROPOSAL_NOT_EDITABLE'});
   // The primary may accept the previously published offer while an unsent revision exists.
@@ -47,5 +53,5 @@ test('proposal review: published prices, concurrent sends, read-only copies and 
   const uncertain=await fixture();const unknownBody={requestId:crypto.randomUUID(),versionId:uncertain.published_version_id,recipients:['primary@qa.invalid']};let uncertainSends=0;
   const timeout=async()=>{uncertainSends++;throw new Error('transport timeout');};assert.equal((await sendReviewedProposal({...req,body:unknownBody},uncertain.id,{deliver:timeout})).status,'UNKNOWN');
   assert.equal((await sendReviewedProposal({...req,body:unknownBody},uncertain.id,{deliver:timeout})).status,'UNKNOWN');await assert.rejects(sendReviewedProposal({...req,body:{...unknownBody,requestId:crypto.randomUUID()}},uncertain.id,{deliver:timeout}),{code:'PROPOSAL_DELIVERY_UNCERTAIN'});assert.equal(uncertainSends,1);assert.equal((await latestProposalDelivery(uncertain.id)).recipients[0].status,'UNKNOWN');
- }finally{if(pool)await pool.end();await bootstrap.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await bootstrap.end();}
+ }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await bootstrap.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await bootstrap.end();}
 });

@@ -233,6 +233,7 @@ publicRouter.get("/proposals/:token/pdf", asyncHandler(async (req, res) => {
 publicRouter.post("/proposals/:token/accept", asyncHandler(async (req, res) => {
   const body = z.object({ acceptedByName: z.string().trim().min(2).max(160) }).parse(req.body);
   const proposal = await getProposal(req.params.token, { publicView: true });
+  if(proposal.view_only)throw new AppError('This recipient has an information-only copy. The primary client receives the acceptance link.',403,'PROPOSAL_COPY_ONLY');
   const accepted = await acceptProposal(proposal.id, body.acceptedByName, req);
   const automatic = accepted.invoiceQueued;
   const nextStep = automatic ? { action: "INVOICE_QUEUED", label: "Your invoice will be emailed to you" }
@@ -245,7 +246,8 @@ publicRouter.post("/proposals/:token/accept", asyncHandler(async (req, res) => {
 
 publicRouter.post("/proposals/:token/decline", asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.token, { publicView: true });
-  const updated = await query("UPDATE proposals SET status='DECLINED', updated_at=now() WHERE id=$1 AND status IN ('SENT','VIEWED') RETURNING *", [proposal.id]);
+  if(proposal.view_only)throw new AppError('This is an information-only copy.',403,'PROPOSAL_COPY_ONLY');
+  const updated = await query("UPDATE proposals SET status='DECLINED', updated_at=now() WHERE id=$1 AND secure_token=$2 AND status IN ('SENT','VIEWED') AND NOT EXISTS(SELECT 1 FROM proposal_send_batches WHERE proposal_id=$1 AND status IN ('PROCESSING','UNKNOWN')) RETURNING *", [proposal.id,req.params.token]);
   if (!updated.rows[0]) throw new AppError("This proposal is not available to decline.",409,"PROPOSAL_STATE_CHANGED");
   await recordActivity({ entityType: "proposal", entityId: proposal.id, action: "proposal_declined", summary: `Proposal ${proposal.proposal_number} declined` });
   res.json({ proposal: updated.rows[0] });
