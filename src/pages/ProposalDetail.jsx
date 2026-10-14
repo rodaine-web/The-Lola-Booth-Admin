@@ -81,7 +81,7 @@ export default function ProposalDetail({reviewMode=false}) {
           <h1>{reviewMode?'Final proposal review':proposal.proposal_title || proposal.content?.scenario?.title || proposal.event_name || proposal.client_name || "Proposal"}</h1>
           <p className="lede">{proposal.event_name || "No event"} · {proposal.status} · Total {formatMoney(proposal.total || 0)}</p>
         </div>
-        <div className="detail-actions" hidden={reviewMode}>
+        {!reviewMode&&<div className="detail-actions">
           {can("write:sales") && ["DRAFT", "READY", "SENT", "VIEWED", "EXPIRED"].includes(proposal.status) && !proposal.linked_invoice_id && proposal.proposal_source !== "UPLOADED" && <Link className="primary-action" to={`/sales/proposals/${id}/edit`}>Edit proposal</Link>}
           {accessAvailable && proposal.public_url && <a href={proposal.public_url} target="_blank" rel="noreferrer">Public proposal</a>}
           <button disabled={busy || !accessAvailable} className="primary-action" onClick={() => navigate(`/sales/proposals/${id}/review`)}><Mail size={16} />Review & Send</button>
@@ -90,7 +90,7 @@ export default function ProposalDetail({reviewMode=false}) {
           <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/duplicate`, {}), "Proposal duplicated.")}><Copy size={16} />Duplicate</button>
           <button disabled={busy} onClick={() => action(() => api.post(`/proposals/${id}/archive`, {}), "Proposal archived.")}><Archive size={16} />Archive</button>
           {proposal.linked_invoice_id ? <Link className="primary-action" to={`/finance/invoices/${proposal.linked_invoice_id}`}><ReceiptText size={16} />Open Invoice</Link> : <button className="primary-action" disabled={busy||proposal.status !== "ACCEPTED"} onClick={createInvoiceFromProposal}><ReceiptText size={16} />Create Invoice</button>}
-        </div>
+        </div>}
       </div>
       {(error || notice) && <div role={error?"alert":"status"} className={error ? "toast error" : "toast"}>{error || notice}</div>}
       {proposal.has_unsent_revision&&<p role="status">Unsent revision saved. The client still sees the previously sent proposal until you send this update.</p>}
