@@ -275,7 +275,7 @@ export default function ProposalEditor() {
     try {
       const payload = compact({ ...form, visual_sections:retainProposalPhotoSections(form.visual_sections||[],form.selected_experiences||[]), ...upload, total_investment: form.package_amount });
       const created = id ? await api.patch(`/proposals/${id}`, payload) : mode === "upload" ? await api.post("/proposals/upload", payload) : await api.post("/proposals", payload);
-      navigate(`/sales/proposals/${created.id}`);
+      navigate(`/sales/proposals/${created.id}/review`);
     } catch (err) {
       setError(err.message);
     } finally {setSaving(false);}
@@ -318,7 +318,7 @@ export default function ProposalEditor() {
             <label>Proposal title<input value={form.proposal_title || ""} onChange={(event) => setField("proposal_title", event.target.value)} /></label>
             <label>Proposal date<input type="date" value={form.proposal_date || ""} onChange={(event) => setField("proposal_date", event.target.value)} /></label>
             <label>Expiration date<input type="date" value={form.valid_through || ""} onChange={(event) => setField("valid_through", event.target.value)} /></label>
-            <label>Status<select value={form.status} onChange={(event) => setField("status", event.target.value)}>{["DRAFT", "READY"].map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label>Status<select value={form.status} onChange={(event) => setField("status", event.target.value)}>{[...new Set([form.status,"DRAFT","READY"])].map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
         </section>
 
