@@ -4,6 +4,7 @@ import { grantUsable } from './gallery-policy.js';
 
 // Recheck after claiming work. A provider request already in flight cannot be recalled.
 export async function dispatchDecision(client, message) {
+  if((message.lead_id||message.proposal_id) && (await client.query(`SELECT 1 FROM leads l WHERE l.status='LOST' AND (l.id=$1 OR EXISTS(SELECT 1 FROM proposals p WHERE p.id=$2 AND p.lead_id=l.id))`,[message.lead_id||null,message.proposal_id||null])).rowCount)return 'CANCELLED';
   if (message.trigger_key === 'BOOKING_SEND_WEBSITE_PROPOSAL') {
     if (process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED !== 'true') return 'CANCELLED';
     const allowed = await client.query(`SELECT 1 FROM proposals p JOIN leads l ON l.id=p.lead_id JOIN events e ON e.id=p.event_id

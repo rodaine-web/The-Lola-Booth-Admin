@@ -25,6 +25,7 @@ async function tick() {
   if (stopping || running) return;
   running = true;
   try {
+    await pool.query('SELECT reconcile_sales_lifecycle()');
     await recordWorkerHeartbeat("automation-worker", { pid: process.pid, ...buildInfo(), jobsPaused:stagingJobsPaused(), databaseSystemId });
     const formNotifications=await processFormOwnerNotifications();
     if(formNotifications.processed.length){

@@ -338,6 +338,8 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       const pageSize = filters.pageSize || filters.page_size;
       const offset = (page - 1) * pageSize;
       const where = ["deleted_at IS NULL"];
+      if (table === "clients") where.push("sales_qualified=true");
+      if (["events","bookings"].includes(table)) where.push("sales_closed_at IS NULL");
       const params = [];
       if(filters.data_scope==="business" && ["leads","clients","events","bookings","proposals","invoices","payments","tasks"].includes(table))where.push("data_classification IN ('BUSINESS','UNREVIEWED')");
       if (filters.status) {
@@ -930,6 +932,7 @@ adminRouter.post("/leads/:id/convert", requirePermission("write:sales"), asyncHa
 }));
 
 const clientSchema = z.object({
+  provisional: z.literal(true).optional(),
   first_name: z.string().optional().nullable(),
   last_name: z.string().optional().nullable(),
   name: z.string().optional(),
@@ -966,8 +969,8 @@ adminRouter.post("/clients", requirePermission("write:sales"), validate(clientSc
       throw new AppError("Possible duplicate client found.", 409, "POSSIBLE_DUPLICATE", { duplicate: { ...duplicate.rows[0], match_reason: matchReason } });
     }
   }
-  const body = { ...req.body, name, billing_address: [req.body.address, req.body.city, req.body.state, req.body.zip].filter(Boolean).join(", ") || null };
-  const allowed = ["name", "first_name", "last_name", "email", "phone", "company", "preferred_contact_method", "address", "city", "state", "zip", "notes", "tags", "client_type", "referral_source", "billing_address"];
+  const body = { ...req.body, name, sales_qualified:req.body.provisional!==true, billing_address: [req.body.address, req.body.city, req.body.state, req.body.zip].filter(Boolean).join(", ") || null };
+  const allowed = ["name", "first_name", "last_name", "email", "phone", "company", "preferred_contact_method", "address", "city", "state", "zip", "notes", "tags", "client_type", "referral_source", "billing_address", "sales_qualified"];
   const fields = Object.keys(cleanPatch(body, allowed));
   const values = fields.map((field) => body[field]);
   const inserted = await query(`INSERT INTO clients (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values);
@@ -979,7 +982,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
   const client = await query("SELECT * FROM clients WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!client.rows[0]) throw notFound("Client");
   const [events, proposals, invoices, payments, tasks, files, communications, activity, summary] = await Promise.all([
-    query("SELECT * FROM events WHERE client_id=$1 AND deleted_at IS NULL ORDER BY event_date DESC", [req.params.id]),
+    query("SELECT * FROM events WHERE client_id=$1 AND deleted_at IS NULL AND sales_closed_at IS NULL ORDER BY event_date DESC", [req.params.id]),
     query("SELECT * FROM proposals WHERE client_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
     query("SELECT * FROM invoices WHERE client_id=$1 AND deleted_at IS NULL ORDER BY due_date DESC", [req.params.id]),
     query("SELECT * FROM payments WHERE client_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC", [req.params.id]),
@@ -988,7 +991,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
     query("SELECT * FROM communications WHERE client_id=$1 AND deleted_at IS NULL ORDER BY occurred_at DESC", [req.params.id]),
     query("SELECT * FROM activities WHERE entity_type='client' AND entity_id=$1 ORDER BY created_at DESC", [req.params.id]),
     query(`SELECT count(e.id)::int AS total_events, COALESCE(sum(b.total),0)::text AS lifetime_value, COALESCE(sum(b.balance_due),0)::text AS outstanding_balance
-      FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
+      FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL AND e.sales_closed_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
   ]);
   res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows, communications: communications.rows, activity: activity.rows });
 }));
@@ -1344,7 +1347,7 @@ for (const [resource,table,permission] of [["users","users","read:tasks"],["staf
 }
 
 adminRouter.get("/pickers/clients", requirePermission("read:sales"), asyncHandler(async (req, res) => {
-  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, email AS subtitle FROM clients WHERE deleted_at IS NULL AND (name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) ORDER BY name LIMIT 25");
+  const rows = await pickerRows(req.query.q, "SELECT id, name AS label, email AS subtitle FROM clients WHERE deleted_at IS NULL AND sales_qualified AND (name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1) ORDER BY name LIMIT 25");
   res.json({ data: rows });
 }));
 
@@ -1354,7 +1357,7 @@ adminRouter.get("/pickers/leads", requirePermission("read:sales"), asyncHandler(
 }));
 
 adminRouter.get("/pickers/events", requirePermission("read:events"), asyncHandler(async (req, res) => {
-  const rows = await pickerRows(req.query.q, "SELECT e.id, e.event_name AS label, c.name || COALESCE(' · ' || e.event_date::text, '') AS subtitle, e.client_id FROM events e LEFT JOIN clients c ON c.id=e.client_id WHERE e.deleted_at IS NULL AND (e.event_name ILIKE $1 OR e.event_type ILIKE $1 OR e.venue_name ILIKE $1 OR c.name ILIKE $1) ORDER BY e.event_date DESC NULLS LAST LIMIT 25");
+  const rows = await pickerRows(req.query.q, "SELECT e.id, e.event_name AS label, c.name || COALESCE(' · ' || e.event_date::text, '') AS subtitle, e.client_id FROM events e LEFT JOIN clients c ON c.id=e.client_id WHERE e.deleted_at IS NULL AND e.sales_closed_at IS NULL AND (e.event_name ILIKE $1 OR e.event_type ILIKE $1 OR e.venue_name ILIKE $1 OR c.name ILIKE $1) ORDER BY e.event_date DESC NULLS LAST LIMIT 25");
   res.json({ data: rows });
 }));
 
@@ -2613,6 +2616,7 @@ const taskSchema = z.object({
   lead_id: uuid.optional().nullable(),
   client_id: uuid.optional().nullable(),
   event_id: uuid.optional().nullable(),
+  proposal_id: uuid.optional().nullable(),
   status: z.enum(taskStatuses).default("OPEN"),
   priority: z.enum(taskPriorities).default("NORMAL")
 }).strict();
@@ -2631,7 +2635,7 @@ adminRouter.post("/tasks", requirePermission("write:tasks"), validate(taskSchema
 adminRouter.patch("/tasks/:id", requirePermission("write:tasks"), validate(taskSchema.partial()), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM tasks WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Task");
-  const updated = await updateById({ table: "tasks", id: req.params.id, body: req.body, allowed: ["title", "description", "due_date", "assigned_user_id", "lead_id", "client_id", "event_id", "status", "priority"] });
+  const updated = await updateById({ table: "tasks", id: req.params.id, body: req.body, allowed: ["title", "description", "due_date", "assigned_user_id", "lead_id", "client_id", "event_id", "proposal_id", "status", "priority"] });
   await recordActivity({ actorUserId: req.user.id, entityType: updated.event_id ? "event" : updated.lead_id ? "lead" : "task", entityId: updated.event_id || updated.lead_id || updated.id, action: updated.status === "DONE" ? "task_completed" : "task_edited", summary: updated.status === "DONE" ? `Task completed: ${updated.title}` : `Task edited: ${updated.title}` });
   await writeAudit({ req, action: updated.status === "DONE" ? "task_completed" : "task_edited", entity: "task", entityId: req.params.id, before: before.rows[0], after: updated });
   res.json(updated);

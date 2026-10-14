@@ -152,6 +152,7 @@ export default function ProposalWizard(){
   function eventTitle(){return form.event_name||[actualEventType(),[form.first_name,form.last_name].filter(Boolean).join(" ")].filter(Boolean).join(" · ")||"Event";}
 
   function validateStepOne(){
+    if(lead?.status==="LOST"){setError("This lead is Lost. Reopen and review the opportunity before preparing another proposal.");return false;}
     if(contextLoading || (sourceMode==="context" && !context)){setError("Wait for the linked client and event to load, then try again.");return false;}
     const required=[...(sourceMode==="existing"?[[leadId,"Select a lead"]]:[]),
       [form.first_name,"First name"],[form.last_name,"Last name"],[form.email,"Email"],[form.phone,"Phone"],[form.event_date,"Event date"],[form.event_type,"Event type"],[form.proposal_title,"Proposal name"]
@@ -177,7 +178,7 @@ export default function ProposalWizard(){
     if(lead?.converted_client_id)return lead.converted_client_id;
     try{
       const client=await api.post("/clients",{
-        first_name:form.first_name,last_name:form.last_name,email:form.email,phone:form.phone,
+        provisional:true,first_name:form.first_name,last_name:form.last_name,email:form.email,phone:form.phone,
         name:[form.first_name,form.last_name].filter(Boolean).join(" "),company:form.company||null,notes:form.notes||null
       });
       return client.id;

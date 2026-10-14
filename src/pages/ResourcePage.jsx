@@ -57,6 +57,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     setInlineClientOpen(false);
     setInlineClient({first_name:"",last_name:"",email:"",phone:""});
     setForm(Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? false : ""])));
+    if (endpoint === "/tasks") setForm(current=>({...current,status:"OPEN",priority:"NORMAL"}));
     if (endpoint === "/experiences") setForm(current=>({...current,website_status:"DRAFT",active:true}));
     if (endpoint === "/packages") setForm(current => ({ ...current, pricing_mode: "STARTING", website_status: "DRAFT", currency: "USD", active: true }));
     if (endpoint === "/events") setForm(current=>({...current,package_ids:[],experience_ids:[]}));
@@ -72,9 +73,8 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     try {
       const source = endpoint === "/events" ? await api.get(`${endpoint}/${row.id}`) : row;
       setForm({
-        ...Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(source[name]) : type === "lines" ? (source[name] || []).join("\n") : source[name] ?? ""])),
-        package_ids: source.package_ids || [],
-        experience_ids: source.experience_ids || []
+        ...Object.fromEntries(fields.map(([name, , type]) => [name, type === "checkbox" ? Boolean(source[name]) : type === "lines" ? (source[name] || []).join("\n") : type === "date" ? String(source[name] || "").slice(0,10) : source[name] ?? ""])),
+        ...(endpoint === "/events" ? {package_ids: source.package_ids || [], experience_ids: source.experience_ids || []} : {})
       });
       setEditing({ mode: "edit", id: row.id });
     } catch (err) {
@@ -219,6 +219,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
               <h2>{editing.mode === "edit" ? "Edit" : "New"} {title.replace(/s$/, "")}</h2>
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
+            {error && <p className="toast error" role="alert">{error}</p>}
             <p className="note-text">Fields marked * are required.</p>
             {endpoint==="/payments"&&<p>Select an invoice, or both a client and an event.</p>}
             <div className="form-grid">
