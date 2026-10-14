@@ -65,7 +65,7 @@ export default function PublicProposal() {
         </section>
       )}
       <ProposalPreview key={token} token={token} />
-      <section className="panel public-proposal-acceptance">
+      {proposal.view_only ? <section className="panel"><h2>Proposal copy</h2><p>This copy is for review only. The primary client receives the acceptance link.</p></section> : <section className="panel public-proposal-acceptance">
         <h2>Ready to make it official?</h2>
         <div className="public-proposal-totals">
           <Metric label="Proposal Total" value={formatMoney(pricing.total || proposal.total || 0)} />
@@ -79,11 +79,11 @@ export default function PublicProposal() {
           <button disabled={busy || proposal.status === "ACCEPTED"} onClick={() => decide("decline")}><XCircle size={16} />Decline</button>
           <a href={`mailto:info@thelolabooth.com?subject=${encodeURIComponent(`Question about ${proposal.proposal_number}`)}`}>Ask a Question</a>
         </div>
-      </section>
-      <div className="public-proposal-sticky">
+      </section>}
+      {!proposal.view_only&&<div className="public-proposal-sticky">
         <div><span>Proposal total</span><strong>{formatMoney(pricing.total || proposal.total || 0)}</strong></div>
         <a href="#proposal-acceptance" onClick={(event) => { event.preventDefault(); document.querySelector(".public-proposal-acceptance")?.scrollIntoView({ behavior: "smooth" }); }}>Accept Proposal</a>
-      </div>
+      </div>}
     </PublicShell>
   );
 }

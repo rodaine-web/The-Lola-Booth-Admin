@@ -420,7 +420,7 @@ export async function createProposalVersion(client, proposal, userId) {
 }
 
 export async function getProposal(idOrToken, { publicView = false } = {}) {
-  const where = publicView ? "p.secure_token=$1" : "p.id=$1";
+  const where = publicView ? "(p.secure_token=$1 OR EXISTS(SELECT 1 FROM proposal_send_recipients r JOIN proposal_send_batches b ON b.id=r.batch_id WHERE b.proposal_id=p.id AND b.version_id=p.published_version_id AND r.token_hash=$2 AND r.status='ACCEPTED' AND NOT r.is_primary))" : "p.id=$1";
   const result = await query(
     `SELECT p.*, c.name AS client_name, c.email AS client_email, e.event_name, e.event_type, e.event_date, e.start_time, e.end_time, e.venue_name, e.guest_count,
       pkg.name AS package_name, x.name AS experience_name,
@@ -438,10 +438,16 @@ export async function getProposal(idOrToken, { publicView = false } = {}) {
        LIMIT 1
      ) linked_invoice ON true
      WHERE ${where} AND p.deleted_at IS NULL`,
-    [idOrToken]
+    publicView?[idOrToken,crypto.createHash('sha256').update(String(idOrToken)).digest('hex')]:[idOrToken]
   );
   if (!result.rows[0]) throw notFound("Proposal");
-  const proposal = result.rows[0];
+  let proposal = result.rows[0];
+  if(publicView){proposal={...proposal,view_only:proposal.secure_token!==idOrToken,secure_token:idOrToken};delete proposal.draft_version_id;}
+  else {
+   const draft=proposal.draft_version_id?(await query('SELECT snapshot FROM proposal_versions WHERE id=$1 AND proposal_id=$2',[proposal.draft_version_id,proposal.id])).rows[0]?.snapshot:null;
+   const reviewVersion=proposal.draft_version_id||(await query('SELECT id FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC LIMIT 1',[proposal.id])).rows[0]?.id;
+   proposal={...proposal,...(draft||{}),status:proposal.status,draft_version_id:proposal.draft_version_id,published_version_id:proposal.published_version_id,review_version_id:reviewVersion,has_unsent_revision:Boolean(proposal.draft_version_id)};
+  }
   if (publicView && proposal.proposal_snapshot && typeof proposal.proposal_snapshot === "object") {
     const snapshot = proposal.proposal_snapshot;
     return {
