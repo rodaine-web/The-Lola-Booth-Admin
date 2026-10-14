@@ -32,7 +32,7 @@ export default function EventFilesPanel({eventId}){
   try{await api.post(`/events/${eventId}/files/${sharing.id}/customer-access`,{shared:!sharing.customer_shared_at});setNotice(sharing.customer_shared_at?'Customer access removed. Already downloaded copies cannot be recalled.':'File shared in The Client Workspace. No email was sent.');setSharing(null);await refresh();}catch(e){setError(e.message);}finally{setBusy(false);}
  }
  return <DetailSection title="Event Files">
-  <p>Files stay private to authorized team members unless Admin explicitly shares an eligible file in The Client Workspace. Internal and financial files cannot be shared here.</p>
+  <p>Files stay private to authorized team members unless Admin explicitly shares an eligible file in The Client Workspace. Internal and financial files cannot be shared here. A customer must be linked when the file is uploaded.</p>
   {error&&<p role="alert" className="toast error">{error}</p>}{notice&&<p role="status" className="toast">{notice}</p>}
   {can('write:events')&&managesEventFiles(user)&&<form onSubmit={upload} className="event-files-form">
    <label><span>File <span aria-hidden="true">*</span></span><input ref={input} aria-label="File" type="file" required accept="application/pdf,image/png,image/jpeg" disabled={busy} onChange={e=>chooseFile(e.target.files?.[0]||null)}/><small>PDF, PNG or JPEG · maximum 8 MB</small></label>
