@@ -110,12 +110,18 @@ jobs:
           path: artifacts/v12-event-files/
           if-no-files-found: ignore
 
+      - name: Proposal final review desktop and mobile
+        env:
+          PROPOSAL_REVIEW_BROWSER_TEST: "true"
+        run: node --test test/proposal-review-browser.test.js
+
       - name: Save browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: v11-browser-evidence
           path: |
+            artifacts/proposal-review/
             artifacts/v11-browser/
             artifacts/crm-contacts-browser/
           if-no-files-found: ignore
