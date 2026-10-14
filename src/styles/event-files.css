@@ -6,3 +6,4 @@
 .eventdetail-workspace:has(.event-files-form){min-width:0;width:100%;max-width:100%}
 .eventdetail-workspace>.detail-section{min-width:0;max-width:100%;overflow-wrap:anywhere}
 .eventdetail-workspace>.detail-section .table-wrap{position:relative;contain:inline-size;max-width:100%;overflow-x:auto}
+.event-file-actions{display:flex;gap:8px;flex-wrap:wrap}.event-file-sharing{padding:16px;margin:16px 0;border:1px solid var(--border);border-radius:10px}.event-file-sharing button{margin-right:8px}
