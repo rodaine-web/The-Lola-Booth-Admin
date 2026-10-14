@@ -68,7 +68,54 @@ test('V1.2 private Event Files: real API, storage, concurrency, permissions and 
  assert.equal((await query('SELECT count(*)::int n FROM files WHERE upload_request_id=$1',[uncertain.requestId])).rows[0].n,1);
  const recovered=await files.uploadEventFile(event.id,uncertain,req,{storage:{put:async()=>{throw new Error('Committed retry must not write again');}}});assert.equal(recovered.replayed,true);
  await assert.rejects(files.downloadEventFile(event.id,file.id,req,{storage:{get:async()=>Buffer.from('corrupt')}}),e=>e.code==='EVENT_FILE_INTEGRITY');
- if(process.env.V12_BROWSER_TEST==='true'){const {verifyEventFilesBrowser}=await import('./support/event-files-browser.js');await verifyEventFilesBrowser({origin,eventId:event.id,ownerToken:tokens.owner,png});}
+ // Secure customer sharing: actual session redemption, event grant and byte downloads.
+ delete process.env.APP_ENV;
+ const {env}=await import('../server/src/config/env.js');
+ const customer=(await query("INSERT INTO clients(name,email) VALUES('Files QA Customer','files-customer@example.invalid') RETURNING *")).rows[0];
+ await query("UPDATE events SET client_id=$2,status='CONFIRMED' WHERE id=$1",[event.id,customer.id]);
+ const proposal=(await query("INSERT INTO proposals(proposal_number,client_id,event_id,status,total) VALUES('V12-FILE-CUSTOMER',$1,$2,'CONVERTED',599) RETURNING *",[customer.id,event.id])).rows[0];
+ const version=(await query("INSERT INTO proposal_versions(proposal_id,version_number,snapshot) VALUES($1,1,'{}') RETURNING id",[proposal.id])).rows[0];
+ await query('UPDATE proposals SET accepted_version_id=$2 WHERE id=$1',[proposal.id,version.id]);
+ const contract=(await query("INSERT INTO contracts(proposal_id,revision,status,title,terms,snapshot,signed_at,signer_name,signer_email,document_hash) VALUES($1,1,'SIGNED','Synthetic QA fixture','No real service obligation',$2,now(),'QA Customer',$3,'synthetic-fixture') RETURNING id",[proposal.id,{accepted_version_id:version.id},customer.email])).rows[0];
+ const grant=(await query('INSERT INTO client_workspace_grants(proposal_id,client_id,signed_contract_id) VALUES($1,$2,$3) RETURNING id',[proposal.id,customer.id,contract.id])).rows[0];
+ const invitationToken=crypto.randomBytes(32).toString('hex');
+ await query("INSERT INTO client_workspace_invitations(grant_id,token_hash,token_ciphertext,recipient_email) VALUES($1,$2,'{}',$3)",[grant.id,crypto.createHash('sha256').update(invitationToken).digest('hex'),customer.email]);
+ const redemption=await fetch(origin+'/api/public/client/access',{method:'POST',headers:{Origin:env.clientOrigin,'Content-Type':'application/json'},body:JSON.stringify({token:invitationToken})});assert.equal(redemption.status,200);
+ const customerCookie=redemption.headers.get('set-cookie').split(';')[0];
+ async function customerApi(p,{cookie=customerCookie,raw=false}={}){const response=await fetch(origin+'/api/public/client'+p,{headers:{...(cookie?{Cookie:cookie}:{}),Origin:env.clientOrigin}});return {status:response.status,headers:response.headers,data:raw?Buffer.from(await response.arrayBuffer()):await response.json()};}
+ const customerFile=(await api(`/events/${event.id}/files`,{method:'POST',body:{...input,requestId:crypto.randomUUID(),filename:'client-reference.png'}})).data.file;
+ const baseFilePath=`/events/${event.id}/files/${customerFile.id}`;
+ assert.equal((await customerApi(`/events/${event.id}/files`,{cookie:null})).status,401);
+ assert.deepEqual((await customerApi(`/events/${event.id}/files`)).data.data,[],'No automatic sharing of existing files');
+ assert.equal((await customerApi(baseFilePath+'/download')).status,404);
+ assert.equal((await api(`/events/${event.id}/files/${customerFile.id}/customer-access`,{method:'POST',token:tokens.viewer,body:{shared:true}})).status,403);
+ assert.equal((await api(`/events/${event.id}/files/${customerFile.id}/customer-access`,{method:'POST',body:{shared:true}})).status,200);
+ const sharedList=(await customerApi(`/events/${event.id}/files`)).data.data;assert.equal(sharedList.length,1);assert.equal(sharedList[0].filename,'client-reference.png');assert.ok(!('storage_key' in sharedList[0]));assert.ok(!('uploaded_by' in sharedList[0]));
+ const original=await customerApi(baseFilePath+'/download',{raw:true});assert.equal(original.status,200);assert.deepEqual(original.data,png);assert.match(original.headers.get('cache-control'),/no-store/);assert.match(original.headers.get('content-disposition'),/client-reference.png/);
+ assert.equal((await customerApi(`/events/${other.id}/files/${customerFile.id}/download`)).status,404);
+ const sensitive=(await api(`/events/${event.id}/files`,{method:'POST',body:{...input,requestId:crypto.randomUUID(),category:'CONTRACT',filename:'do-not-share.png'}})).data.file;
+ assert.equal((await api(`/events/${event.id}/files/${sensitive.id}/customer-access`,{method:'POST',body:{shared:true}})).status,422);
+ const internal=(await api(`/events/${event.id}/files`,{method:'POST',body:{...input,requestId:crypto.randomUUID(),visibility:'INTERNAL',filename:'internal-only.png'}})).data.file;
+ assert.equal((await api(`/events/${event.id}/files/${internal.id}/customer-access`,{method:'POST',body:{shared:true}})).status,422);
+ assert.equal((await api(`/events/${event.id}/files/${legacy.id}/customer-access`,{method:'POST',body:{shared:true}})).status,422);
+ await query("UPDATE client_workspace_sessions SET verified_at=now()-interval '16 minutes' WHERE client_id=$1",[customer.id]);
+ assert.equal((await customerApi(baseFilePath+'/download')).data.error.code,'CLIENT_STEP_UP_REQUIRED');
+ await query('UPDATE client_workspace_sessions SET verified_at=now() WHERE client_id=$1',[customer.id]);
+ const sharingService=await import('../server/src/services/customer-event-files-service.js');
+ const session={client_id:customer.id,email:customer.email};
+ await assert.rejects(sharingService.downloadCustomerEventFile(session,event.id,customerFile.id,req,{storage:{get:async()=>{await sharingService.shareEventFile(event.id,customerFile.id,false,req);return png;}}}),e=>e.statusCode===404);
+ assert.deepEqual((await customerApi(`/events/${event.id}/files`)).data.data,[]);
+ assert.equal((await customerApi(baseFilePath+'/download')).status,404);
+ await sharingService.shareEventFile(event.id,customerFile.id,true,req);
+ await assert.rejects(sharingService.downloadCustomerEventFile(session,event.id,customerFile.id,req,{storage:{get:async()=>Buffer.from('corrupt')}}),e=>e.code==='EVENT_FILE_INTEGRITY');
+ await assert.rejects(sharingService.downloadCustomerEventFile(session,event.id,customerFile.id,req,{storage:{get:async()=>{throw new Error('Provider failed');}}}),e=>e.code==='EVENT_FILE_STORAGE_UNAVAILABLE');
+ await assert.rejects(sharingService.downloadCustomerEventFile(session,event.id,customerFile.id,req,{storage:{get:async()=>png},revalidateSession:async()=>{throw new Error('Session revoked during read');}}),/Session revoked/);
+ await query('UPDATE client_workspace_grants SET revoked_at=now() WHERE id=$1',[grant.id]);assert.equal((await customerApi(baseFilePath+'/download')).status,401);
+ await query('UPDATE client_workspace_grants SET revoked_at=NULL WHERE id=$1',[grant.id]);
+ await query("UPDATE client_workspace_sessions SET expires_at=now()-interval '1 second' WHERE client_id=$1",[customer.id]);assert.equal((await customerApi(baseFilePath+'/download')).status,401);
+ await query("UPDATE client_workspace_sessions SET expires_at=now()+interval '1 hour',last_seen_at=now() WHERE client_id=$1",[customer.id]);
+ assert.ok((await query("SELECT count(*)::int n FROM audit_logs WHERE action='event_file_customer_unshared'")).rows[0].n>0);
+ if(process.env.V12_BROWSER_TEST==='true'){const {verifyEventFilesBrowser}=await import('./support/event-files-browser.js');await verifyEventFilesBrowser({origin,eventId:event.id,ownerToken:tokens.owner,png,customerCookie});}
  await query('UPDATE events SET deleted_at=now() WHERE id=$1',[event.id]);assert.equal((await api(`/events/${event.id}/files/${file.id}/download`)).status,404);
  assert.ok((await query("SELECT count(*)::int n FROM audit_logs WHERE action='event_file_uploaded'")).rows[0].n>=1);
  }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await bootstrap.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await bootstrap.end();await fs.rm(root,{recursive:true,force:true});}

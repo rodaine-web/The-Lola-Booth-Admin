@@ -1,4 +1,5 @@
 import {publicCreativeApproval,publicCreativeProof,respondToCreativeApproval} from '../services/creative-approval-service.js';
+import {listCustomerEventFiles,downloadCustomerEventFile} from '../services/customer-event-files-service.js';
 import {publicPlanning,savePlanning,submitPlanning,selectPlanningBackdrop,planningUpload,planningFile} from '../services/event-planning-service.js';
 import {publicBackdropQuote,acceptBackdropQuote} from '../services/backdrop-quote-service.js';
 import {getStorageProvider} from '../services/storage-service.js';
@@ -24,6 +25,14 @@ clientSessionRouter.post('/sign-in',validate(z.object({email:z.string().trim().e
 clientSessionRouter.get('/session',asyncHandler(async(req,res)=>{const session=await authenticateClient(req);res.json({email:session.email,csrfToken:session.csrfToken,events:await clientEvents(session)});}));
 clientSessionRouter.post('/logout',asyncHandler(async(req,res)=>{await endClientSession(req);clearClientCookie(res);res.sendStatus(204);}));
 const event=validate(z.object({eventId:uuid}),'params');
+clientSessionRouter.get('/events/:eventId/files',event,asyncHandler(async(req,res)=>{
+ res.json({data:await listCustomerEventFiles(await authenticateClient(req),req.params.eventId)});
+}));
+clientSessionRouter.get('/events/:eventId/files/:fileId/download',validate(z.object({eventId:uuid,fileId:uuid}),'params'),asyncHandler(async(req,res)=>{
+ const session=await authenticateClient(req,{fresh:true});
+ const result=await downloadCustomerEventFile(session,req.params.eventId,req.params.fileId,req,{revalidateSession:()=>authenticateClient(req,{fresh:true})});
+ res.set({'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}).attachment(result.file.filename).type(result.file.mimeType).send(result.buffer);
+}));
 clientSessionRouter.get('/events/:eventId',event,asyncHandler(async(req,res)=>res.json(await sessionWorkspace(await authenticateClient(req),req.params.eventId))));
 clientSessionRouter.get('/events/:eventId/proposal/pdf',event,asyncHandler(async(req,res)=>{
  const session=await authenticateClient(req,{fresh:true});

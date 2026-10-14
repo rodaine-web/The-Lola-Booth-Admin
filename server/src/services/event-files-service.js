@@ -7,13 +7,13 @@ import {writeAudit} from './audit-service.js';
 import {recordActivity} from './activity-service.js';
 import {logger} from '../config/logger.js';
 import {validPlanningUpload} from '../../../shared/event-planning.js';
-import {EVENT_FILE_MAX_BYTES,eventFileName,managesEventFiles} from '../../../shared/event-files.js';
+import {EVENT_FILE_MAX_BYTES,eventFileName,managesEventFiles,customerShareableEventFile} from '../../../shared/event-files.js';
 
-const fields='id,filename,category,mime_type,size_bytes,visibility,uploaded_by,created_at';
+const fields='id,filename,category,mime_type,size_bytes,visibility,uploaded_by,created_at,customer_shared_at';
 const digest=buffer=>crypto.createHash('sha256').update(buffer).digest('hex');
 const restricted=user=>!managesEventFiles(user);
 export function eventFileSummary(row){
- return Object.fromEntries([...fields.split(',').map(key=>[key,row[key]]),['hasContent',row.hasContent ?? Boolean(row.storage_key&&['LOCAL','AZURE'].includes(row.storage_provider))]]);
+ return Object.fromEntries([...fields.split(',').map(key=>[key,row[key]]),['hasContent',row.hasContent ?? Boolean(row.storage_key&&['LOCAL','AZURE'].includes(row.storage_provider))],['canShareWithClient',customerShareableEventFile(row)]]);
 }
 async function access(eventId,user,lock=false){
  if(!user || !await userCanAccessEvent(user,eventId))throw new AppError('You do not have access to this event.',403,'FORBIDDEN');
@@ -24,7 +24,7 @@ async function access(eventId,user,lock=false){
 function visible(row,user){return !restricted(user) || (row.visibility!=='INTERNAL'&&!['CONTRACT','PROPOSAL','INVOICE','INTERNAL'].includes(row.category));}
 export async function listEventFiles(eventId,user){
  await access(eventId,user);
- const rows=(await query(`SELECT ${fields},storage_key,storage_provider FROM files WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id`,[eventId])).rows;
+ const rows=(await query(`SELECT ${fields},storage_key,storage_provider,content_sha256 FROM files WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id`,[eventId])).rows;
  return rows.filter(row=>visible(row,user)).map(eventFileSummary);
 }
 export function decodeEventFile(input){
