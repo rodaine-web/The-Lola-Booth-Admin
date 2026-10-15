@@ -256,6 +256,7 @@ export default function PublicGallery() {
               aria-label={`Open photo ${index + 1}`}
               onClick={() => setActive(index)}
             >
+              {photo.mediaType === "VIDEO" ? <video src={mediaUrl(photo.url)} muted playsInline preload="metadata" aria-label={`Event video ${index+1}`}/> : (
               <img
                 crossOrigin="anonymous"
                 src={mediaUrl(photo.url)}
@@ -266,6 +267,7 @@ export default function PublicGallery() {
                     "Preview unavailable. Use Refresh gallery to try again.";
                 }}
               />
+              )}
             </button>
             <div className="photo-actions">
               <button
@@ -334,11 +336,13 @@ export default function PublicGallery() {
           >
             <ArrowLeft />
           </button>
+          {selected.mediaType === "VIDEO" ? <video controls playsInline src={mediaUrl(selected.url)} aria-label="Selected event video"/> : (
           <img
             crossOrigin="anonymous"
             src={mediaUrl(selected.url)}
             alt={`Event moment ${active + 1}`}
           />
+          )}
           <button
             className="lightbox-next"
             aria-label="Next photo"

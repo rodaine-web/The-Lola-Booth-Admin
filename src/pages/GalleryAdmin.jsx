@@ -1,3 +1,4 @@
+import FiestaGalleryImport from '../components/FiestaGalleryImport.jsx';
 import "../styles/record-workspace.css";
 import GalleryOverview from "../components/GalleryOverview.jsx";
 import GalleryImports from "../components/GalleryImports.jsx";
@@ -130,7 +131,7 @@ export default function GalleryAdmin() {
     await action(async () => {
       for (const file of files) {
         if (file.size > 10 * 1024 * 1024)
-          throw Error("Each photo must be 10 MB or smaller.");
+          throw Error("Each photo or video must be 10 MB or smaller.");
         await api.post(`${base}/albums/${id}/media`, {
           filename: file.name,
           mime_type: file.type,
@@ -396,7 +397,7 @@ export default function GalleryAdmin() {
                   {busy ? "Uploading…" : "Upload photos"}
                   <input
                     type="file"
-                    accept="image/jpeg,image/png,image/gif"
+                    accept="image/jpeg,image/png,image/gif,video/mp4"
                     multiple
                     disabled={busy}
                     onChange={(e) => {
@@ -453,7 +454,7 @@ export default function GalleryAdmin() {
                     className={selected.includes(m.id) ? "selected" : ""}
                   >
                     <div className="admin-photo-image">
-                      <GalleryThumbnail id={m.id} alt={`Photo ${index + 1}`} />
+                      <GalleryThumbnail id={m.id} alt={`Capture ${index + 1}`} mimeType={m.mime_type} />
                       <label className="photo-select">
                         <input
                           type="checkbox"
@@ -791,6 +792,7 @@ export default function GalleryAdmin() {
               </div>
             </section>
           )}
+          {tab === "Settings" && <FiestaGalleryImport album={data.album} onImported={load}/>}
           {tab === "Settings" && (
             <section className="panel gallery-settings">
               <h2>Gallery settings</h2>
@@ -845,7 +847,7 @@ export default function GalleryAdmin() {
                   {label}
                 </label>
               ))}
-              <p>Published {formatTimestamp(data.album.published_at)}</p>
+              <label>Agreed gallery period for custom/unclassified packages<select value={data.album.retention_days||""} onChange={e=>action(()=>api.patch(`${base}/albums/${id}`,{retention_days:Number(e.target.value)}))}><option value="" disabled>Select period</option><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></label><p>Standard packages use the longest booked tier. Access starts at first publication; republishing does not extend it.</p><p>Published {formatTimestamp(data.album.published_at)}</p>
               <h3>Future capture ingestion</h3>
               <label>
                 Source provider
