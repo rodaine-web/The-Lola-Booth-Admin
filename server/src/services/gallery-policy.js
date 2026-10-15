@@ -121,7 +121,9 @@ export function verifyMediaTicket(token, secret, environment) {
 }
 export function validateGalleryImage(buffer, mime) {
   const valid =
-    mime === "image/png"
+    mime === 'video/mp4'
+      ? buffer.length>=24&&buffer.subarray(4,8).toString()==='ftyp'&&['isom','iso2','mp41','mp42','avc1','M4V '].includes(buffer.subarray(8,12).toString())
+      : mime === "image/png"
       ? buffer
           .subarray(0, 8)
           .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
@@ -132,7 +134,7 @@ export function validateGalleryImage(buffer, mime) {
           : false;
   if (!valid || buffer.length < 20 || buffer.length > 10 * 1024 * 1024)
     throw new AppError(
-      "Upload a JPG, PNG or GIF up to 10 MB.",
+      "Upload a JPG, PNG, GIF or MP4 up to 10 MB.",
       422,
       "GALLERY_IMAGE_INVALID",
     );

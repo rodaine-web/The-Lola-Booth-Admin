@@ -125,3 +125,16 @@ jobs:
             artifacts/v11-browser/
             artifacts/crm-contacts-browser/
           if-no-files-found: ignore
+
+      - name: Fiesta guest gallery desktop and mobile
+        env:
+          FIESTA_GALLERY_BROWSER_TEST: "true"
+        run: node --test test/fiesta-gallery-browser.test.js
+
+      - name: Save Fiesta gallery browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fiesta-gallery-evidence
+          path: artifacts/fiesta-gallery/
+          if-no-files-found: ignore

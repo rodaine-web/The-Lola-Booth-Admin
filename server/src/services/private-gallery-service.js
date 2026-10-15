@@ -11,6 +11,8 @@ import {
   sendCommunication,
 } from "./automation-service.js";
 import { galleryStorage } from "./gallery-storage.js";
+import {galleryRetentionDays} from '../../../shared/fiesta-gallery.js';
+import {reconcileFiestaShares,fiestaGalleryRecipient} from './fiesta-gallery-service.js';
 import {
   assertGalleryEnvironment,
   unavailable,
@@ -88,7 +90,7 @@ export async function resolveGalleryCode(code) {
 export async function allowedMedia(grant) {
   return (
     await query(
-      `SELECT m.id,m.mime_type,m.media_type,m.width,m.height,m.captured_at,m.size_bytes,m.storage_provider,m.storage_key FROM gallery_media m WHERE m.album_id=$1 AND m.status='VISIBLE' AND ($2='ALBUM' OR EXISTS(SELECT 1 FROM gallery_media_people mp WHERE mp.media_id=m.id AND mp.person_id=$3 AND mp.album_id=$1)) ORDER BY m.sort_order,m.created_at`,
+      `SELECT m.id,m.filename,m.checksum,m.mime_type,m.media_type,m.width,m.height,m.captured_at,m.size_bytes,m.storage_provider,m.storage_key FROM gallery_media m WHERE m.album_id=$1 AND m.status='VISIBLE' AND ($2='ALBUM' OR EXISTS(SELECT 1 FROM gallery_media_people mp WHERE mp.media_id=m.id AND mp.person_id=$3 AND mp.album_id=$1)) ORDER BY m.sort_order,m.created_at`,
       [grant.album_id, grant.type, grant.person_id],
     )
   ).rows;
@@ -223,7 +225,15 @@ export async function adminGalleryAlbum(id) {
   return { album, media, people, keys, activity, storage };
 }
 export async function updateGalleryAlbum(id, input, user) {
+ return transaction(async()=>{
+  const current=(await query('SELECT * FROM gallery_albums WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!current)throw unavailable();
+  if(current.published_at&&current.retention_days){
+   const latest=Date.parse(current.published_at)+current.retention_days*86400000;
+   if(('retention_days'in input&&input.retention_days!==current.retention_days)||('expires_at'in input&&(!input.expires_at||Date.parse(input.expires_at)>latest)))throw new AppError('Published galleries retain their original package access window.',422,'GALLERY_RETENTION_FIXED');
+  }
+  if((('source_provider'in input&&input.source_provider!==current.source_provider)||('external_event_id'in input&&input.external_event_id!==current.external_event_id))&&(await query('SELECT 1 FROM fiesta_gallery_shares WHERE album_id=$1 LIMIT 1',[id])).rowCount)throw new AppError('Fiesta mapping is locked after importing recipient associations.',409,'GALLERY_EVENT_CONFLICT');
   const allowed = [
+    "retention_days",
     "title",
     "expires_at",
     "allow_download",
@@ -248,6 +258,7 @@ export async function updateGalleryAlbum(id, input, user) {
     after: input,
   });
   return adminGalleryAlbum(id);
+ });
 }
 export async function transitionGalleryAlbum(id, status, user) {
   return transaction(async () => {
@@ -256,6 +267,19 @@ export async function transitionGalleryAlbum(id, status, user) {
     ).rows[0];
     if (!a) throw unavailable();
     if (status === "PUBLISHED") {
+      if(!a.published_at){
+        const commercial=(await query(`SELECT v.snapshot,pkg.name FROM events e
+          LEFT JOIN packages pkg ON pkg.id=e.package_id
+          LEFT JOIN proposals p ON p.event_id=e.id AND p.status IN('ACCEPTED','CONVERTED') AND p.deleted_at IS NULL
+          LEFT JOIN proposal_versions v ON v.id=p.accepted_version_id AND v.proposal_id=p.id
+          WHERE e.id=$1 ORDER BY p.created_at DESC NULLS LAST LIMIT 1`,[a.event_id])).rows[0];
+        const selections=commercial?.snapshot?.selected_experiences;
+        const names=Array.isArray(selections)&&selections.length?selections.flatMap(item=>(item.packages||[]).map(pkg=>pkg.name)):[commercial?.name].filter(Boolean);
+        const days=galleryRetentionDays(names)||a.retention_days;
+        if(!days)throw new AppError('Select the agreed gallery access period before publishing this custom or unclassified booking.',422,'GALLERY_RETENTION_REQUIRED');
+        await query("UPDATE gallery_albums SET retention_days=$2::integer,expires_at=now()+$2::integer*interval '1 day' WHERE id=$1",[id,days]);
+        a.expires_at=null;
+      }
       const count = (
         await query(
           "SELECT count(*)::int n FROM gallery_media WHERE album_id=$1 AND status='VISIBLE'",
@@ -276,7 +300,7 @@ export async function transitionGalleryAlbum(id, status, user) {
         );
     }
     await query(
-      "UPDATE gallery_albums SET status=$2,published_at=CASE WHEN $2='PUBLISHED' THEN now() ELSE published_at END,updated_at=now() WHERE id=$1",
+      "UPDATE gallery_albums SET status=$2,published_at=CASE WHEN $2='PUBLISHED' THEN COALESCE(published_at,now()) ELSE published_at END,updated_at=now() WHERE id=$1",
       [id, status],
     );
     await writeAudit({
@@ -341,12 +365,15 @@ export async function revealGalleryKey(id) {
     secret(),
     environment(),
   );
-  const url = `${documentOrigin()}/gallery/${key.type === "PERSON" ? "p" : "a"}/${credentials.token}`;
+  const configured=process.env.GALLERY_PUBLIC_ORIGIN;
+  if(configured){const origin=new URL(configured);if(origin.protocol!=='https:'||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash)throw new AppError('Configure a secure gallery domain.',503,'GALLERY_DOMAIN_INVALID');}
+  const url = `${(configured||documentOrigin()).replace(/\/$/,'')}/gallery/${key.type === "PERSON" ? "p" : "a"}/${credentials.token}`;
   return {
     id: key.id,
     type: key.type,
     code: credentials.code.match(/.{1,5}/g).join("-"),
     url,
+    delivery:key.type==='PERSON'?await fiestaGalleryRecipient(key.album_id,key.person_id):null,
     qr: await QRCode.toDataURL(url, {
       width: 600,
       margin: 2,
@@ -394,18 +421,22 @@ export async function changeGalleryKey(id, action, expiresAt, user) {
   });
 }
 export async function uploadGalleryMedia(albumId, input) {
+ return transaction(async()=>{
   if (
-    !(await query("SELECT id FROM gallery_albums WHERE id=$1", [albumId])).rows
+    !(await query("SELECT id FROM gallery_albums WHERE id=$1 FOR UPDATE", [albumId])).rows
       .length
   )
     throw unavailable();
   const buffer = Buffer.from(input.base64, "base64");
   validateGalleryImage(buffer, input.mime_type);
+  const checksum=crypto.createHash('sha256').update(buffer).digest('hex');
+  const existing=(await query("SELECT id,filename,mime_type,status,checksum FROM gallery_media WHERE album_id=$1 AND filename=$2 AND status<>'ARCHIVED'",[albumId,input.filename])).rows;
+  if(existing.length){if(existing.length===1&&existing[0].checksum===checksum){const {checksum:_,...safe}=existing[0];return safe;}throw new AppError('A different capture already uses this filename. Resolve it before importing guest access.',409,'GALLERY_FILENAME_CONFLICT');}
   const storage = galleryStorage();
   const key = await storage.put(buffer, input.mime_type);
-  return (
+  const result=(
     await query(
-      `INSERT INTO gallery_media(album_id,storage_provider,storage_key,filename,mime_type,size_bytes,checksum,captured_at,source_provider,external_capture_id,source_metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,filename,mime_type,status`,
+      `INSERT INTO gallery_media(album_id,storage_provider,storage_key,filename,mime_type,size_bytes,checksum,captured_at,source_provider,external_capture_id,source_metadata,media_type) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id,filename,mime_type,status`,
       [
         albumId,
         storage.provider,
@@ -418,9 +449,13 @@ export async function uploadGalleryMedia(albumId, input) {
         input.source_provider || "MANUAL",
         input.external_capture_id || null,
         input.source_metadata || {},
+        input.mime_type==='video/mp4'?'VIDEO':'IMAGE',
       ],
     )
   ).rows[0];
+  await reconcileFiestaShares(albumId);
+  return result;
+ });
 }
 export async function bulkGalleryMedia(albumId, input, user) {
   return transaction(async () => {
@@ -490,6 +525,10 @@ export async function deliverGallery(id, recipient, user, send) {
     (await query(grantSelect + " WHERE k.id=$1", [id])).rows[0],
   );
   const access = await revealGalleryKey(id);
+  if(access.delivery){
+    if(access.delivery.channel!=='EMAIL')throw new AppError('This imported recipient uses text messaging. SMS delivery is not connected; use the private link or QR without sending an email to a different person.',422,'GALLERY_SMS_UNAVAILABLE');
+    if(recipient.trim().toLowerCase()!==access.delivery.recipient)throw new AppError('Use the recipient linked to these Fiesta captures.',422,'GALLERY_RECIPIENT_MISMATCH');
+  }
   const body = `Your photos are waiting.\n${grant.type === "PERSON" ? "Your personal moments" : "Your private event gallery"} from ${grant.title}.\nOpen your gallery: ${access.url}\nGallery code: ${access.code}\nPlease keep this access link private.`;
   const deliveryKey = `gallery-delivery:${id}:${hashCredential(recipient.trim().toLowerCase())}`;
   const c = await transaction(async () => {
@@ -591,6 +630,7 @@ export async function listGalleryImports() {
 }
 export async function matchGalleryImport(id, albumId, user) {
   return transaction(async () => {
+    await query('SELECT id FROM gallery_albums WHERE id=$1 FOR UPDATE',[albumId]);
     const row = (
       await query("SELECT * FROM gallery_imports WHERE id=$1 FOR UPDATE", [id])
     ).rows[0];
@@ -609,8 +649,10 @@ export async function matchGalleryImport(id, albumId, user) {
         .rows.length
     )
       throw unavailable();
-    await query(
-      `INSERT INTO gallery_media(album_id,storage_provider,storage_key,filename,mime_type,size_bytes,checksum,source_provider,external_capture_id,source_metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(album_id,source_provider,external_capture_id) DO NOTHING`,
+    const existing=(await query("SELECT checksum FROM gallery_media WHERE album_id=$1 AND filename=$2 AND status<>'ARCHIVED'",[albumId,row.filename])).rows;
+    if(existing.length&&(existing.length!==1||existing[0].checksum!==row.checksum))throw new AppError('A different capture uses this filename.',409,'GALLERY_FILENAME_CONFLICT');
+    if(!existing.length)await query(
+      `INSERT INTO gallery_media(album_id,storage_provider,storage_key,filename,mime_type,size_bytes,checksum,source_provider,external_capture_id,source_metadata,media_type) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(album_id,source_provider,external_capture_id) DO NOTHING`,
       [
         albumId,
         row.storage_provider,
@@ -622,8 +664,10 @@ export async function matchGalleryImport(id, albumId, user) {
         row.source_provider,
         row.external_capture_id,
         row.source_metadata,
+        row.mime_type==='video/mp4'?'VIDEO':'IMAGE',
       ],
     );
+    await reconcileFiestaShares(albumId);
     await query(
       "UPDATE gallery_imports SET status='MATCHED',album_id=$2 WHERE id=$1",
       [id, albumId],

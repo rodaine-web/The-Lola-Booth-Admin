@@ -46,6 +46,7 @@ test(
           user,
         ),
         other = await g.createGalleryAlbum(event2.id, "GALLERY QA Other", user);
+      await g.updateGalleryAlbum(album.id,{retention_days:30},user);
       const person = await g.createGalleryPerson(album.id),
         person2 = await g.createGalleryPerson(album.id),
         outsider = await g.createGalleryPerson(other.id);

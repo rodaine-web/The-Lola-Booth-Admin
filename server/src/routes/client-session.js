@@ -16,6 +16,10 @@ import {contractPdf} from '../services/contract-service.js';
 import {getInvoice} from '../services/invoice-service.js';
 import {generateInvoicePdf,generatePaymentReceiptPdf} from '../services/document-service.js';
 import {getReceiptView} from '../services/receipt-service.js';
+import {customerGalleryAccess,customerGalleryView,customerGalleryMedia} from '../services/customer-gallery-service.js';
+import {verifiedGalleryBytes} from '../services/gallery-media-delivery.js';
+import {query} from '../db/pool.js';
+import {ZipArchive} from 'archiver';
 export const clientSessionRouter=Router();
 clientSessionRouter.use((req,res,next)=>{if(req.headers.origin)assertClientOrigin(req);res.set({'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'});next(contractsEnabled(process.env)?undefined:new AppError('Workspace unavailable.',404,'NOT_FOUND'));});
 clientSessionRouter.post('/access',validate(z.object({token:z.string().regex(/^[a-f0-9]{64}$/)}).strict()),asyncHandler(async(req,res)=>{
@@ -25,6 +29,29 @@ clientSessionRouter.post('/sign-in',validate(z.object({email:z.string().trim().e
 clientSessionRouter.get('/session',asyncHandler(async(req,res)=>{const session=await authenticateClient(req);res.json({email:session.email,csrfToken:session.csrfToken,events:await clientEvents(session)});}));
 clientSessionRouter.post('/logout',asyncHandler(async(req,res)=>{await endClientSession(req);clearClientCookie(res);res.sendStatus(204);}));
 const event=validate(z.object({eventId:uuid}),'params');
+clientSessionRouter.get('/events/:eventId/gallery',event,asyncHandler(async(req,res)=>res.json(await customerGalleryView(await authenticateClient(req),req.params.eventId))));
+async function clientCapture(req,res,download){
+ const session=await authenticateClient(req,{fresh:download}),media=await customerGalleryMedia(session,req.params.eventId,req.params.mediaId,download);
+ const bytes=await verifiedGalleryBytes(media,async()=>customerGalleryMedia(await authenticateClient(req,{fresh:download}),req.params.eventId,req.params.mediaId,download));
+ res.set({'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"});
+ if(download)res.attachment(media.filename);res.type(media.mime_type).send(bytes);
+}
+const captureParams=validate(z.object({eventId:uuid,mediaId:uuid}),'params');
+clientSessionRouter.get('/events/:eventId/gallery/media/:mediaId',captureParams,asyncHandler(async(req,res)=>clientCapture(req,res,false)));
+clientSessionRouter.get('/events/:eventId/gallery/media/:mediaId/download',captureParams,asyncHandler(async(req,res)=>clientCapture(req,res,true)));
+clientSessionRouter.get('/events/:eventId/gallery/zip',event,asyncHandler(async(req,res)=>{
+ const session=await authenticateClient(req,{fresh:true}),album=await customerGalleryAccess(session,req.params.eventId);
+ if(!album.allow_zip)throw new AppError('Gallery ZIP unavailable.',403,'FORBIDDEN');
+ const media=(await query("SELECT * FROM gallery_media WHERE album_id=$1 AND status='VISIBLE' ORDER BY sort_order,created_at",[album.id])).rows;
+ if(media.length>1000||media.reduce((n,m)=>n+Number(m.size_bytes),0)>1024**3)throw new AppError('Download individual captures or contact LOLA for this large gallery.',422,'GALLERY_ZIP_LIMIT');
+ res.type('application/zip').attachment('LOLA-Event-Gallery.zip');const archive=new ZipArchive({zlib:{level:0}});
+ archive.on('error',()=>res.destroy());res.on('close',()=>archive.abort());archive.pipe(res);
+ try{for(const [index,m]of media.entries()){
+  if(res.destroyed){archive.abort();return;}
+  const bytes=await verifiedGalleryBytes(m,async()=>{const current=await customerGalleryAccess(await authenticateClient(req,{fresh:true}),req.params.eventId);if(!current.allow_zip)throw new AppError('Gallery ZIP unavailable.',403,'FORBIDDEN');await customerGalleryMedia(session,req.params.eventId,m.id);});
+  archive.append(bytes,{name:`${String(index+1).padStart(4,'0')}-${m.filename.replace(/[^A-Za-z0-9._-]/g,'_')}`});
+ }await archive.finalize();}catch(error){archive.abort();res.destroy();throw error;}
+}));
 clientSessionRouter.get('/events/:eventId/files',event,asyncHandler(async(req,res)=>{
  res.json({data:await listCustomerEventFiles(await authenticateClient(req),req.params.eventId)});
 }));
