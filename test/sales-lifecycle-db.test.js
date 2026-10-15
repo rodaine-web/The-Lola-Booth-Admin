@@ -35,7 +35,7 @@ test('sales lifecycle: lost verdict, expiry, task stop, client promotion and pai
   assert.equal((await row('SELECT count(*)::int n FROM reporting_events WHERE id=$1',[event.id])).n,0);
   // A reopened lead never resurrects old follow-ups.
   await db.query("UPDATE leads SET status='NEW' WHERE id=$1",[lead.id]);assert.equal((await row('SELECT status FROM tasks WHERE id=$1',[task.id])).status,'CANCELLED');
-  const expiring=await row("INSERT INTO proposals(proposal_number,status,secure_token,valid_through) VALUES('EXPIRY-QA','SENT','expiry-qa',current_date-1) RETURNING *");
+  const expiring=await row("INSERT INTO proposals(proposal_number,status,secure_token,valid_through) VALUES('EXPIRY-QA','SENT','expiry-qa',(now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date-1) RETURNING *");
   const expTask=await row("INSERT INTO tasks(title,proposal_id) VALUES('Expired follow-up',$1) RETURNING *",[expiring.id]);assert.equal(expTask.status,'CANCELLED');
   await db.query('SELECT reconcile_sales_lifecycle()');assert.equal((await row('SELECT status FROM proposals WHERE id=$1',[expiring.id])).status,'EXPIRED');
   // WON and client qualification are distinct from confirmation/resource assignment.
