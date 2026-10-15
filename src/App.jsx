@@ -117,6 +117,7 @@ export default function App() {
         <Route path="sales/proposals/new" element={<ProposalWizard />} />
         <Route path="sales/proposals/new/advanced" element={<ProposalEditor />} />
         <Route path="sales/proposals/:id" element={<ProposalDetail />} />
+        <Route path="sales/proposals/:id/review" element={<ProposalDetail reviewMode />} />
         <Route path="events/events" element={<Events />} />
         <Route path="events/events/:id" element={<EventDetail />} />
         <Route path="events/calendar" element={<Calendar />} />

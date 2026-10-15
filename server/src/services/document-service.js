@@ -389,7 +389,7 @@ function drawInvoicePayment(doc, invoice, flow) {
   if (flow.y + 220 > flow.bottom) flow.nextPage();
   const y = flow.y;
   const invoiceUrl = payable ? secureDocumentUrl(documentOrigin(), "pay", invoice) : null;
-  const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", invoice.tax], ["TOTAL", invoice.total], ["PAID", invoice.amount_paid], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
+  const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", Number(invoice.tax||0)+Number(invoice.stripe_tax_amount||0)], ["TOTAL", Number(invoice.total||0)+Number(invoice.stripe_tax_amount||0)], ["PAID", Number(invoice.amount_paid||0)+Number(invoice.stripe_tax_amount||0)], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
   rows.forEach(([label, value], index) => {
     doc.font(index === 5 ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor(navy);
     doc.text(label, 382, y + index * 24, { width: 95, lineBreak: false, characterSpacing: 0 });
@@ -411,7 +411,7 @@ function drawInvoicePayment(doc, invoice, flow) {
 }
 
 function drawTotalsBox(doc, invoice, x, y) {
-  const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", invoice.tax], ["TOTAL", invoice.total], ["DEPOSIT PAID", invoice.amount_paid], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
+  const rows = [["SUBTOTAL", invoice.subtotal], ["DISCOUNT", invoice.discount], ["TAX", Number(invoice.tax||0)+Number(invoice.stripe_tax_amount||0)], ["TOTAL", Number(invoice.total||0)+Number(invoice.stripe_tax_amount||0)], ["DEPOSIT PAID", Number(invoice.amount_paid||0)+Number(invoice.stripe_tax_amount||0)], ["BALANCE DUE", invoice.amount_outstanding ?? invoice.balance_due]];
   rows.forEach(([label, value], index) => {
     doc.rect(x, y + index * 31, 202, 31).strokeColor(brand.champagne).stroke();
     doc.font("Helvetica").fontSize(10).fillColor(navy).text(label, x + 12, y + index * 31 + 10, { width: 100, characterSpacing: 4 });
@@ -480,8 +480,9 @@ export async function generatePaymentReceiptPdf(payment) {
   const details=[['CLIENT',receipt.client],['EVENT',receipt.event],['PAYMENT DATE',String(receipt.paymentDate||'').slice(0,10)],['EVENT DATE',receipt.eventDate],['METHOD / PROVIDER',[receipt.method,receipt.provider].filter(Boolean).join(' · ')],['REFERENCE',receipt.reference],['CURRENCY',receipt.currency],...(receipt.refunded?[['REFUND DATE',receipt.refundDate||'Not recorded']]:[]),...(receipt.balanceDue>0?[['DUE DATE',receipt.dueDate||'See invoice']]:[])].filter(([,value])=>value);
   for(let i=0;i<details.length;i+=2){let rowHeight=40;for(const [column,[label,value]]of details.slice(i,i+2).entries()){const x=60+column*256;doc.font('Helvetica').fontSize(8).fillColor(brand.muted).text(label,x,y,{width:236});doc.font('Helvetica').fontSize(10).fillColor(brand.charcoal).text(String(value),x,y+13,{width:236});rowHeight=Math.max(rowHeight,doc.heightOfString(String(value),{width:236})+24);}y+=rowHeight;}
   y+=13;doc.moveTo(60,y).lineTo(552,y).strokeColor(brand.taupe).stroke();y+=18;
-  const rows=[['Invoice total',receipt.invoiceTotal],['Previously paid (net)',receipt.previouslyPaid],['This payment',receipt.thisPayment],...(receipt.refunded?[['Refunded from this payment',receipt.refunded]]:[]),...(receipt.disputed?[['Disputed funds withheld',receipt.disputed]]:[]),['Total paid to date (net)',receipt.totalPaid],['Remaining balance',receipt.balanceDue]];
-  for(const [label,value]of rows){if(value===undefined)continue;const strong=['This payment','Remaining balance'].includes(label);doc.font(strong?'Helvetica-Bold':'Helvetica').fontSize(strong?12:10).fillColor(brand.charcoal).text(label,60,y,{width:320});doc.text(fmt(value),380,y,{width:172,align:'right'});y+=23;}
+  const rows=[['Invoice total',receipt.invoiceTotal],['Previously paid (net)',receipt.previouslyPaid],...(receipt.taxCalculation?.automaticTaxEnabled?[['Service subtotal',receipt.serviceSubtotal],['Stripe tax',receipt.tax]]:[]),['This payment',receipt.thisPayment],...(receipt.refunded?[['Refunded from this payment',receipt.refunded]]:[]),...(receipt.disputed?[['Disputed funds withheld',receipt.disputed]]:[]),['Total paid to date (net)',receipt.totalPaid],['Remaining balance',receipt.balanceDue]];
+  const receiptRowStep=Math.min(23,Math.floor((676-y)/rows.length));
+  for(const [label,value]of rows){if(value===undefined)continue;const strong=['This payment','Remaining balance'].includes(label);doc.font(strong?'Helvetica-Bold':'Helvetica').fontSize(strong?12:10).fillColor(brand.charcoal).text(label,60,y,{width:320});doc.text(fmt(value),380,y,{width:172,align:'right'});y+=receiptRowStep;}
   doc.font('Helvetica-Bold').fontSize(10).fillColor(receipt.status==='PAID'?'#326448':brand.gold).text((receipt.status||'PAYMENT RECORDED').replaceAll('_',' '),60,y+8,{width:492,align:'center'});
   doc.font('Times-Italic').fontSize(14).fillColor(brand.gold).text('Good people. Better photos.',60,709,{width:492,align:'center'});doc.font('Helvetica').fontSize(8).fillColor(brand.muted).text('thelolabooth.com  |  info@thelolabooth.com',60,733,{width:492,align:'center'});
   doc.end();return done;

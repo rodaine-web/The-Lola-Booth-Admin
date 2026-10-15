@@ -1,3 +1,4 @@
+import {saveSentProposalRevision,sendReviewedProposal,latestProposalDelivery,proposalReviewEmail} from '../services/proposal-review-service.js';
 import {crmContactsRouter} from './crm-contacts.js';
 import {createAdminLead} from '../services/admin-lead-create.js';
 import {previewLeadAvailability,confirmLeadAvailability} from '../services/lead-availability-service.js';
@@ -565,6 +566,7 @@ const invoiceSchema = z.object({
     quantity: z.coerce.number().positive().default(1),
     unit_price: z.coerce.number().min(0),
     taxable: z.boolean().optional(),
+    stripe_tax_code:z.string().regex(/^txcd_\d{8}$/).optional().nullable(),
     tax_rate: z.coerce.number().min(0).optional(),
     discount: z.coerce.number().min(0).optional()
   })).optional()
@@ -1477,16 +1479,21 @@ adminRouter.post("/proposals/upload", requireAnyPermission("proposals.upload", "
 adminRouter.get("/proposals/:id", requirePermission("read:sales"), asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.id);
   const versions = await query("SELECT id, version_number, created_at, created_by FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC", [req.params.id]);
-  res.json({ ...proposal, editable_input: proposalEditInput(proposal), public_url: secureDocumentUrl(documentOrigin(), "proposal", proposal), versions: versions.rows });
+  res.json({ ...proposal, editable_input: proposalEditInput(proposal), public_url: secureDocumentUrl(documentOrigin(), "proposal", proposal), versions: versions.rows,latest_delivery:await latestProposalDelivery(proposal.id),email_preview:proposalReviewEmail(proposal) });
 }));
 
 adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(proposalSchema.partial()), asyncHandler(async (req, res) => {
   const before = await getProposal(req.params.id);
-  if (!["DRAFT", "READY"].includes(before.status)) throw new AppError("Only draft or ready proposals can be edited. Duplicate a sent proposal to prepare a revision.", 409, "PROPOSAL_NOT_EDITABLE");
+  if(['SENT','VIEWED','EXPIRED'].includes(before.status))return res.json(await saveSentProposalRevision(req,before));
+  if (!["DRAFT", "READY"].includes(before.status)) throw new AppError("Accepted or closed proposals need a controlled amendment.", 409, "PROPOSAL_NOT_EDITABLE");
+  if(req.body.status&&!["DRAFT","READY"].includes(req.body.status))throw new AppError("Use the reviewed send flow to publish a proposal.",422,"PROPOSAL_STATUS_REQUIRED");
   const merged = { ...proposalEditInput(before), ...req.body };
   if (req.body.custom_services && !req.body.custom_line_items) merged.custom_line_items = [];
   const snapshot = await buildProposalSnapshot(merged);
   const updated = await transaction(async (client) => {
+    await client.query('SELECT id FROM proposals WHERE id=$1 FOR UPDATE',[req.params.id]);
+    if((await client.query("SELECT 1 FROM proposal_send_batches WHERE proposal_id=$1 AND status IN ('PROCESSING','UNKNOWN') LIMIT 1",[req.params.id])).rowCount)throw new AppError('Delivery is processing or uncertain. Resolve it before editing.',409,'PROPOSAL_DELIVERY_UNCERTAIN');
+
     const result = await client.query(
       `UPDATE proposals SET lead_id=$1, client_id=$2, event_id=$3, package_id=$4, experience_id=$5, status=$6, notes=$7, total=$8, valid_through=$9, content=$10, pricing_snapshot=$11, line_items_snapshot=$12, document_template_key=$13, editable_sections=$14, proposal_title=$15, proposal_date=$16, proposal_type=$17, selected_experiences=$18, proposal_visuals=$19, updated_at=now()
        WHERE id=$20 AND deleted_at IS NULL AND status IN ('DRAFT','READY') RETURNING *`,
@@ -1546,14 +1553,12 @@ adminRouter.get("/proposals/:id/docx", requirePermission("read:sales"), asyncHan
   res.type(document.mimeType).attachment(document.filename).send(buffer);
 }));
 
-adminRouter.post("/proposals/:id/send", requirePermission("write:sales"), asyncHandler(async (req, res) => {
+adminRouter.post("/proposals/:id/send", requirePermission("write:sales"), validate(z.object({requestId:z.string().uuid(),versionId:z.string().uuid(),recipients:z.array(z.string().trim().email().max(254)).min(1).max(10)}).strict()), asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.id);
-  const result = await sendProposal(req, proposal);
+  const result = await sendReviewedProposal(req,proposal.id);
   if (result.document?.storageKey) {
     await recordGeneratedFile({ req, document: result.document, entityType: "proposal", entity: proposal });
   }
-  await recordActivity({actorUserId:req.user.id,entityType:"proposal",entityId:proposal.id,action:"proposal_sent",summary:"Proposal sent to email provider"});
-  await writeAudit({ req, action: "proposal_sent", entity: "proposal", entityId: proposal.id, before: proposal });
   res.json(result);
 }));
 

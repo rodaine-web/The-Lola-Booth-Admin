@@ -84,6 +84,7 @@ export default function PublicReceipt() {
               {[
                 ["Invoice total", receipt.invoiceTotal],
                 ["Previously paid (net)", receipt.previouslyPaid],
+                ...(receipt.taxCalculation?.automaticTaxEnabled?[["Service subtotal",receipt.serviceSubtotal],["Stripe tax",receipt.tax]]:[]),
                 ["This payment", receipt.thisPayment],
                 ...(receipt.refunded
                   ? [["Refunded from this payment", receipt.refunded]]

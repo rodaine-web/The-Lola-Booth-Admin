@@ -58,14 +58,15 @@ export default function PublicInvoice() {
       {error&&<p role="alert" className="toast error">{error}</p>}
       <button className="primary-action" onClick={load}>Refresh status</button>
       <section className="detail-summary">
-        <Metric label="Total" value={formatMoney(invoice.total || 0)} />
+        {Number(invoice.stripe_tax_amount)>0&&<Metric label="Stripe tax collected" value={formatMoney(invoice.stripe_tax_amount)}/>}
+        <Metric label="Total" value={formatMoney(Number(invoice.total||0)+Number(invoice.stripe_tax_amount||0))} />
         <Metric label="Paid" value={formatMoney(amountPaid)} />
         <Metric label="Amount Due" value={formatMoney(amountDue)} />
         <Metric label="Status" value={invoice.status} />
       </section>
       <section className="panel public-invoice-items"><h2>Line Items</h2><DataTable rows={invoice.items} columns={["description", "quantity", "unit_price", "line_total"]} empty="No invoice items." /></section>
       {amountDue <= 0 ? <section className="panel" id="payment-options"><h2>No payment due</h2><p>This invoice has no outstanding balance.</p></section> : <section className="panel" id="payment-options">
-        <h2>Choose payment method</h2>
+        <h2>Choose payment method</h2>{paymentOptions?.taxNotice&&<p role="status">{paymentOptions.taxNotice}</p>}
         <p className="note-text">Amount due: {formatMoney(paymentOptions?.amountDue ?? invoice.amount_outstanding ?? invoice.balance_due ?? 0)}. Flexible payment options may be available at checkout.</p>
         {paymentOptions?.providers?.length ? (
           <div className="quick-actions">
