@@ -630,12 +630,8 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
       return { duplicate: true, communication };
     }
     if (communication.trigger_key === 'BOOKING_SEND_WEBSITE_PROPOSAL') {
-      const {hasCurrentAvailability}=await import('./lead-availability-service.js');
-      const lead=(await client.query('SELECT * FROM leads WHERE id=$1 FOR SHARE',[communication.lead_id])).rows[0];
-      if (process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED !== 'true' || !hasCurrentAvailability(lead, communication.merge_data?.availability_fingerprint)) {
-        const cancelled=(await client.query("UPDATE communications SET status='CANCELLED',updated_at=now() WHERE id=$1 RETURNING *",[id])).rows[0];
-        return {blocked:true,communication:cancelled};
-      }
+      const cancelled=(await client.query("UPDATE communications SET status='CANCELLED',updated_at=now() WHERE id=$1 RETURNING *",[id])).rows[0];
+      return {blocked:true,communication:cancelled};
     }
     if(communication.campaign_recipient_id){
       const recipient=(await client.query("SELECT status FROM campaign_recipients WHERE id=$1",[communication.campaign_recipient_id])).rows[0];

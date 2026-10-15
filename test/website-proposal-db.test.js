@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import pg from 'pg';
+import jwt from 'jsonwebtoken';
+import {once} from 'node:events';
 test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and review-safe',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async()=>{
  const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);
  assert.ok(['localhost','127.0.0.1'].includes(url.hostname));assert.ok(url.pathname.startsWith('/lola_phase1_qa_'));
- const schema='website_'+crypto.randomBytes(8).toString('hex');const bootstrap=new pg.Pool({connectionString:url.toString()});let pool;
+ const schema='website_'+crypto.randomBytes(8).toString('hex');const bootstrap=new pg.Pool({connectionString:url.toString()});let pool,server;
  try{
   await bootstrap.query(`CREATE SCHEMA ${schema}`);url.searchParams.set('options',`-c search_path=${schema},public`);
-  process.env.DATABASE_URL=url.toString();process.env.NODE_ENV='test';delete process.env.APP_ENV;process.env.EMAIL_PROVIDER='development';
+  process.env.DATABASE_URL=url.toString();process.env.NODE_ENV='test';delete process.env.APP_ENV;process.env.EMAIL_PROVIDER='development';process.env.PORT='0';process.env.JWT_SECRET='disposable-availability-review-qa-only';process.env.INTEGRATION_SECRET_KEY='disposable-availability-integration-secret-qa-only';
   process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED='true';process.env.BOOKING_AUTO_QUOTE_CITIES='Chicago';
   const db=await import('../server/src/db/pool.js');pool=db.pool;const {query,transaction}=db;
   const dir=new URL('../server/migrations/',import.meta.url);
@@ -32,8 +34,33 @@ test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and
   assert.equal((await query("SELECT count(*)::int n FROM automation_jobs WHERE related_entity_id=$1",[lead.id])).rows[0].n,1);
   const outcomes=await Promise.all(Array.from({length:8},()=>processWebsiteProposalHandoffs()));
   assert.deepEqual(outcomes.flatMap(x=>x.processed).map(x=>x.status),['COMPLETED'],JSON.stringify((await query('SELECT status,last_error FROM automation_jobs WHERE related_entity_id=$1',[lead.id])).rows));
-  const proposals=(await query('SELECT * FROM proposals WHERE lead_id=$1',[lead.id])).rows;assert.equal(proposals.length,1);assert.equal(proposals[0].status,'SENT');assert.equal(Number(proposals[0].total),599);
-  assert.equal((await query('SELECT count(*)::int n FROM email_messages')).rows[0].n,1);
+  const proposals=(await query('SELECT * FROM proposals WHERE lead_id=$1',[lead.id])).rows;assert.equal(proposals.length,1);assert.equal(proposals[0].status,'DRAFT');assert.equal(Number(proposals[0].total),599);
+  assert.equal((await query('SELECT count(*)::int n FROM email_messages')).rows[0].n,0,'Availability approval must not email the client');
+  assert.equal((await query('SELECT count(*)::int n FROM communications')).rows[0].n,0);
+  assert.equal((await query("SELECT count(*)::int n FROM tasks WHERE proposal_id=$1 AND lifecycle_key=$2",[proposals[0].id,`proposal-ready-review:${proposals[0].id}`])).rows[0].n,1);
+  assert.equal((await query("SELECT count(*)::int n FROM notifications WHERE entity_id=$1 AND title='Proposal ready for review'",[proposals[0].id])).rows[0].n,1);
+  const {dispatchDecision}=await import('../server/src/services/communication-dispatch-policy.js');
+  assert.equal(await transaction(c=>dispatchDecision(c,{trigger_key:'BOOKING_SEND_WEBSITE_PROPOSAL'})),'CANCELLED','Legacy queued sends are blocked');
+  const {sendCommunication}=await import('../server/src/services/automation-service.js');
+  const legacy=(await query("INSERT INTO communications(lead_id,proposal_id,type,channel,direction,recipient,subject,rendered_body,trigger_key,status) VALUES($1,$2,'EMAIL','EMAIL','OUTBOUND','qa@example.invalid','Legacy QA','Must never send','BOOKING_SEND_WEBSITE_PROPOSAL','DRAFT') RETURNING id",[lead.id,proposals[0].id])).rows[0];
+  assert.equal((await sendCommunication(legacy.id)).communication.status,'CANCELLED');
+  assert.equal((await query('SELECT count(*)::int n FROM email_messages')).rows[0].n,0);
+  // Staff adds the actual response and travel charge, saves, then reviews before sending.
+  const {getProposal}=await import('../server/src/services/proposal-service.js');
+  const {proposalEditInput}=await import('../server/src/services/proposal-edit-input.js');
+  const {sendReviewedProposal}=await import('../server/src/services/proposal-review-service.js');
+  const draft=await getProposal(proposals[0].id);
+  await query("INSERT INTO permissions(key) VALUES('*') ON CONFLICT(key) DO NOTHING");
+  await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[user.id]);
+  ({server}=await import('../server/src/index.js'));if(!server.listening)await once(server,'listening');
+  const response=await fetch(`http://127.0.0.1:${server.address().port}/api/proposals/${draft.id}`,{method:'PATCH',headers:{'content-type':'application/json',authorization:`Bearer ${jwt.sign({sub:user.id},process.env.JWT_SECRET)}`},body:JSON.stringify({...proposalEditInput(draft),travel:200,customer_notes:'We need an 8 by 8 foot space. Travel to Boston is included below.',notes:'PRIVATE internal negotiation note'})});
+  assert.equal(response.status,200,await response.text());
+  const reviewed=await getProposal(proposals[0].id);const outgoing=[];
+  await sendReviewedProposal({user,headers:{},body:{requestId:crypto.randomUUID(),versionId:reviewed.review_version_id,recipients:['qa@example.invalid']}},reviewed.id,{deliver:async m=>{outgoing.push(m);return {provider:'QA',providerMessageId:crypto.randomUUID()};}});
+  assert.equal(outgoing.length,1);assert.match(outgoing[0].body,/8 by 8 foot space/);assert.doesNotMatch(outgoing[0].body,/PRIVATE internal/);
+  assert.equal(Number((await getProposal(reviewed.id)).total),799);
+  assert.equal((await query("SELECT status FROM tasks WHERE lifecycle_key=$1",[`proposal-ready-review:${reviewed.id}`])).rows[0].status,'DONE');
+
   await queueWebsiteProposal(lead.id);assert.equal((await processWebsiteProposalHandoffs()).processed.length,0);
   const customPkg=(await query("INSERT INTO packages(name,experience_id,starting_price,active,show_on_website,website_status,pricing_mode) VALUES('Custom',$1,0,true,true,'PUBLISHED','CUSTOM') RETURNING id",[exp.id])).rows[0];
   const custom=await newLead({selections:[{experienceId:exp.id,packageId:customPkg.id}]});
@@ -70,5 +97,5 @@ test('disposable PostgreSQL: website proposal outbox is atomic, deduplicated and
   assert.equal((await query('SELECT count(*)::int n FROM proposals WHERE lead_id=$1',[changed.id])).rows[0].n,0);
   const paused=await newLead();await approve(paused.id);process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED='false';assert.equal((await processWebsiteProposalHandoffs()).processed.length,0);
   assert.equal((await query("SELECT status FROM automation_jobs WHERE related_entity_id=$1",[paused.id])).rows[0].status,'PENDING');
- }finally{if(pool)await pool.end();await bootstrap.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await bootstrap.end();}
+ }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await bootstrap.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await bootstrap.end();}
 });

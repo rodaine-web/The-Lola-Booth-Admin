@@ -193,6 +193,7 @@ export async function buildProposalSnapshot(input) {
       nextSteps: input.next_steps || s.proposal_default_next_steps,
       terms: input.terms || s.proposal_default_terms,
       notes: input.notes || "",
+      customer_notes: input.customer_notes || "",
       closing: "Let's make it official.\n\nGood people. Better photos.\n\nTHE LOLA BOOTH"
     },
     documentTemplateKey: selectedTemplate.key || input.document_template_key || "standard_event_proposal",

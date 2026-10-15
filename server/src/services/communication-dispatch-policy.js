@@ -6,15 +6,10 @@ import { grantUsable } from './gallery-policy.js';
 export async function dispatchDecision(client, message) {
   if((message.lead_id||message.proposal_id) && (await client.query(`SELECT 1 FROM leads l WHERE l.status='LOST' AND (l.id=$1 OR EXISTS(SELECT 1 FROM proposals p WHERE p.id=$2 AND p.lead_id=l.id))`,[message.lead_id||null,message.proposal_id||null])).rowCount)return 'CANCELLED';
   if (message.trigger_key === 'BOOKING_SEND_WEBSITE_PROPOSAL') {
-    if (process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED !== 'true') return 'CANCELLED';
-    const allowed = await client.query(`SELECT 1 FROM proposals p JOIN leads l ON l.id=p.lead_id JOIN events e ON e.id=p.event_id
-      WHERE p.id=$1 AND l.id=$2 AND p.deleted_at IS NULL AND l.deleted_at IS NULL AND e.deleted_at IS NULL AND NOT event_payment_review(e.id)
-      AND p.status IN ('DRAFT','SENT','VIEWED') AND l.status NOT IN ('LOST','WON','ARCHIVED') AND e.status<>'CANCELLED'
-      AND p.content=$5::jsonb AND p.pricing_snapshot=$6::jsonb AND p.line_items_snapshot=$7::jsonb
-      AND lower(l.email)=lower($3) AND l.availability_confirmed_at IS NOT NULL AND l.availability_fingerprint=$8 AND p.content->>'website_submission_fingerprint'=COALESCE(l.source_details->'bookingInquiry'->>'submissionFingerprint',l.availability_fingerprint)
-      AND $4='website-proposal:'||l.id::text||':'||(p.content->>'website_submission_fingerprint')`, [message.proposal_id,message.lead_id,message.recipient,message.idempotency_key,JSON.stringify(message.merge_data?.website_quote_snapshot?.content ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.pricing_snapshot ?? null),JSON.stringify(message.merge_data?.website_quote_snapshot?.line_items_snapshot ?? null),message.merge_data?.availability_fingerprint || null]);
-    if (!allowed.rowCount) return 'CANCELLED';
+    // Retire legacy automatic sends, including already queued/retryable messages.
+    return 'CANCELLED';
   }
+
   if (message.trigger_key === 'BOOKING_SEND_ACCEPTED_INVOICE') {
     if (process.env.BOOKING_INVOICE_HANDOFF_ENABLED !== 'true') return 'CANCELLED';
     const [prefix, proposalId, versionId] = String(message.idempotency_key || '').split(':');
