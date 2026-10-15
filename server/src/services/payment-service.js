@@ -1,3 +1,4 @@
+import {stripeTaxCheckout,validateStripeTaxSession} from './stripe-tax-service.js';
 import {reconcileStripeDispute} from './payment-dispute-service.js';
 import {claimRefund,settleStripeRefund,markRefundRejected} from './refund-ledger-service.js';
 import {stripeConfiguration,assertStripeEventMode,verifyStripeAccount,verifyStripeEventAccount} from './stripe-configuration.js';
@@ -70,6 +71,8 @@ export async function publicPaymentOptions(invoice) {
   return {
     payable,
     reviewRequired,
+    automaticTaxEnabled:process.env.STRIPE_AUTOMATIC_TAX_ENABLED==="true"&&Number(invoice.tax||0)===0,
+    taxNotice:process.env.STRIPE_AUTOMATIC_TAX_ENABLED==="true"?"Service amounts exclude tax. Stripe calculates and displays tax separately before payment.":null,
     amountDue,
     fullAmount: balance,
     minimumAmount: depositAvailable ? amountDue : Math.min(1, balance),
@@ -111,13 +114,15 @@ export async function createPaymentSession({ token, provider, amountChoice = "DE
     if (!Number.isFinite(selectedAmount) || selectedAmount < options.minimumAmount || selectedAmount > options.fullAmount) throw new AppError(`Choose an amount between ${options.minimumAmount.toFixed(2)} and ${options.fullAmount.toFixed(2)}.`,422,"INVALID_PAYMENT_AMOUNT");
   }
   const stripeAccount = normalizedProvider === "STRIPE" ? await verifyStripeAccount() : null;
-  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' AND ($4::text IS NULL OR (metadata->>'stripe_account_id'=$4 AND metadata->>'stripe_mode'=$5)) ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount,stripeAccount?.accountId||null,stripeAccount?.mode||null])).rows[0];
+  const taxPlan=normalizedProvider==="STRIPE"?await stripeTaxCheckout(invoice,selectedAmount):null;
+  const taxScope=taxPlan?"tax-v1:"+taxPlan.taxCode:"legacy";
+  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' AND COALESCE(metadata->>'tax_scope','legacy')=$6 AND ($4::text IS NULL OR (metadata->>'stripe_account_id'=$4 AND metadata->>'stripe_mode'=$5)) ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount,stripeAccount?.accountId||null,stripeAccount?.mode||null,taxScope])).rows[0];
   if(pending)return safeSession(pending,normalizedProvider);
-  const key = `${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}${stripeAccount ? ":"+stripeAccount.accountId+":"+stripeAccount.mode : ""}`;
+  const key = `${taxPlan?taxScope+":":""}${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}${stripeAccount ? ":"+stripeAccount.accountId+":"+stripeAccount.mode : ""}`;
   const existing = await query("SELECT * FROM payment_attempts WHERE idempotency_key=$1 AND invoice_id=$2 AND provider=$3 LIMIT 1", [key, invoice.id, normalizedProvider]);
   if (existing.rows[0] && existing.rows[0].status === "PENDING" && Date.now()-new Date(existing.rows[0].created_at).getTime()<23*3600000) return safeSession(existing.rows[0], normalizedProvider);
   if (existing.rows[0]) throw new AppError("This checkout has ended. Please refresh and try again.", 409, "CHECKOUT_ENDED");
-  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice, stripeAccount,workspaceEventId);
+  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice, stripeAccount,workspaceEventId,taxPlan);
   return createPaypalOrder(invoice, key, options.currency, selectedAmount, amountChoice,workspaceEventId);
 }
 
@@ -258,17 +263,16 @@ export async function handleStripeWebhook(rawBody, signature) {
     if (["checkout.session.completed", "checkout.session.async_payment_succeeded", "payment_intent.succeeded"].includes(event.type)) {
       const object = event.data?.object || {};
       if (event.type.startsWith("checkout.") && object.payment_status !== "paid") return;
-      await recordProviderPayment({
-        provider: "STRIPE",
-        providerPaymentId: object.payment_intent || object.id,
-        providerSessionId: event.type.startsWith("checkout.") ? object.id : null,
-        invoiceId: object.metadata?.invoice_id,
-        clientId: object.metadata?.client_id,
-        eventId: object.metadata?.event_id,
-        amount: money((object.amount_total ?? object.amount_received ?? 0) / 100),
-        currency: String(object.currency || "usd").toUpperCase(),
-        paymentMethod: "ONLINE"
-      });
+      let session=event.type.startsWith('checkout.')?object:null;
+      if(!session&&(object.metadata?.automatic_tax_enabled==='true'||(await query("SELECT 1 FROM payment_attempts WHERE invoice_id=$1 AND provider='STRIPE' AND metadata->>'automatic_tax_enabled'='true' LIMIT 1",[object.metadata?.invoice_id||null])).rowCount)){
+        const sessionId=await stripeSessionForIntent(object.id);
+        if(!sessionId)throw new AppError('Taxed payment needs its verified Checkout session.',409,'STRIPE_TAX_SESSION_REQUIRED');
+        const response=await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,{headers:stripeHeaders(),signal:AbortSignal.timeout(15000)});
+        session=await response.json();
+        if(!response.ok||session.payment_intent!==object.id||session.amount_total!==object.amount_received||session.livemode!==event.livemode)throw new AppError('Stripe tax session does not match the payment.',409,'STRIPE_TAX_SESSION_MISMATCH');
+      }
+      const source=session||object;
+      await recordProviderPayment({provider:'STRIPE',providerPaymentId:session?.payment_intent||object.id,providerSessionId:session?.id||null,invoiceId:source.metadata?.invoice_id,clientId:source.metadata?.client_id,eventId:source.metadata?.event_id,amount:money((source.amount_total??source.amount_received??0)/100),currency:String(source.currency||'usd').toUpperCase(),paymentMethod:'ONLINE',stripeSession:session});
     }
     if (event.type === "payment_intent.payment_failed") {
       const object = event.data?.object || {};
@@ -321,6 +325,12 @@ async function recordProviderPayment(input) {
   const invoice = await query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [input.invoiceId]);
   if (!invoice.rows[0]) throw notFound("Invoice");
   const prior = (await query("SELECT * FROM payments WHERE provider=$1 AND provider_payment_id=$2",[input.provider,input.providerPaymentId])).rows[0];
+  if(prior&&input.stripeSession&&(Number(prior.tax_amount)>0||input.stripeSession.automatic_tax?.enabled)){
+    const savedAttempt=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider='STRIPE' AND provider_session_id=$2",[input.invoiceId,input.providerSessionId])).rows[0];
+    if(!savedAttempt)throw new AppError('Payment tax attempt is missing.',409,'STRIPE_TAX_SESSION_REQUIRED');
+    const finalTax=validateStripeTaxSession(input.stripeSession,savedAttempt);
+    if(cents(finalTax.tax)!==cents(prior.tax_amount)||cents(finalTax.total)!==cents(prior.amount))throw new AppError('Repeated Stripe tax data conflicts with the posted payment.',409,'STRIPE_TAX_REPLAY_MISMATCH');
+  }
   if (prior) {
     // Checkout and PaymentIntent notifications can arrive in either order.
     // Complete the matching attempt and always reconcile the invoice so a retry
@@ -351,18 +361,24 @@ async function recordProviderPayment(input) {
       [input.invoiceId,input.provider,input.amount,input.currency]
     )).rows[0];
   }
-  if (!attempt || cents(attempt.amount)!==cents(input.amount) || String(attempt.currency).toUpperCase()!==String(input.currency).toUpperCase() || input.amount<=0 || input.amount>invoiceBalance(invoice.rows[0])) {
+  let tax=null;
+  if(attempt?.metadata?.automatic_tax_enabled===true||input.stripeSession?.automatic_tax?.enabled===true||Number(input.stripeSession?.total_details?.amount_tax)>0){
+    if(!input.stripeSession)throw new AppError('Stripe final tax details are required.',409,'STRIPE_TAX_SESSION_REQUIRED');
+    tax=validateStripeTaxSession(input.stripeSession,attempt);
+  }
+  const principal=tax?.principal??input.amount;
+  if (!attempt || cents(attempt.amount)!==cents(principal) || String(attempt.currency).toUpperCase()!==String(input.currency).toUpperCase() || input.amount<=0 || principal>invoiceBalance(invoice.rows[0])) {
     throw new AppError("Payment does not match the server invoice checkout.",409,"PAYMENT_MISMATCH");
   }
   input.clientId=invoice.rows[0].client_id;
   input.eventId=invoice.rows[0].event_id;
   const payment = await transaction(async (client) => {
     const result = await client.query(
-      `INSERT INTO payments (invoice_id, event_id, client_id, provider, provider_payment_id, provider_session_id, amount, currency, payment_method, payment_date, paid_at, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,current_date,now(),'SUCCEEDED')
+      `INSERT INTO payments (invoice_id, event_id, client_id, provider, provider_payment_id, provider_session_id, amount, currency, payment_method, tax_amount,tax_details,payment_date, paid_at, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,current_date,now(),'SUCCEEDED')
        ON CONFLICT (provider, provider_payment_id) WHERE provider_payment_id IS NOT NULL DO UPDATE SET updated_at=now()
        RETURNING *`,
-      [input.invoiceId, input.eventId || invoice.rows[0].event_id, input.clientId || invoice.rows[0].client_id, input.provider, input.providerPaymentId, input.providerSessionId || null, input.amount, input.currency, input.paymentMethod]
+      [input.invoiceId, input.eventId || invoice.rows[0].event_id, input.clientId || invoice.rows[0].client_id, input.provider, input.providerPaymentId, input.providerSessionId || null, input.amount, input.currency, input.paymentMethod,tax?.tax||0,tax?JSON.stringify(tax):'{}']
     );
     await client.query("UPDATE payment_attempts SET status='SUCCEEDED', provider_reference=$2, updated_at=now() WHERE id=$1", [attempt.id, input.providerPaymentId]);
     return result.rows[0];
@@ -578,7 +594,7 @@ async function retrieveStripeRefund(id){
   return object;
 }
 
-async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount,workspaceEventId) {
+async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount,workspaceEventId,taxPlan=null) {
   const params = new URLSearchParams({
     mode: "payment",
     integration_identifier: 'lola_invoice_' + [...crypto.createHash('sha256').update(key).digest().subarray(0,8)].map(n=>String.fromCharCode(97+n%26)).join(''),
@@ -595,6 +611,23 @@ async function createStripeCheckout(invoice, key, currency, amount = invoiceBala
     "payment_intent_data[metadata][client_id]": invoice.client_id || "",
     "payment_intent_data[metadata][event_id]": invoice.event_id || ""
   });
+  if(taxPlan){
+    params.set('automatic_tax[enabled]','true');
+    params.set('billing_address_collection','required');
+    for(const key of [...params.keys()])if(key.startsWith('line_items['))params.delete(key);
+    taxPlan.lines.forEach((line,index)=>{
+      const prefix=`line_items[${index}]`;
+      params.set(`${prefix}[price_data][currency]`,currency.toLowerCase());
+      params.set(`${prefix}[price_data][unit_amount]`,String(line.amount));
+      params.set(`${prefix}[price_data][tax_behavior]`,'exclusive');
+      params.set(`${prefix}[price_data][product_data][name]`,line.name);
+      params.set(`${prefix}[price_data][product_data][tax_code]`,line.taxCode);
+      params.set(`${prefix}[quantity]`,'1');
+    });
+    params.set('metadata[automatic_tax_enabled]','true');
+    params.set('payment_intent_data[metadata][automatic_tax_enabled]','true');
+    logger.info({invoiceId:invoice.id,automaticTaxEnabled:true,mode:stripeAccount.mode,serviceAmount:amount,currency,taxCodes:[...new Set(taxPlan.lines.map(line=>line.taxCode))],billingAddressCollection:true},'Stripe automatic tax checkout requested');
+  }
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.stripeSecretKey}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": key, "Stripe-Version":"2026-08-26.dahlia" },
@@ -604,7 +637,7 @@ async function createStripeCheckout(invoice, key, currency, amount = invoiceBala
   const data = await response.json();
   if (!response.ok) throw new AppError(safeProviderMessage(data.error?.message), 502, "STRIPE_SESSION_FAILED");
   if(data.livemode !== (stripeAccount.mode === 'LIVE'))throw new AppError('Stripe checkout environment does not match this invoice.',502,'STRIPE_MODE_MISMATCH');
-  await insertAttempt({ invoice, stripeAccount, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice });
+  await insertAttempt({ invoice, stripeAccount, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice,taxPlan });
   return { provider: "STRIPE", checkoutUrl: data.url, sessionId: data.id, amount, currency };
 }
 
@@ -626,12 +659,12 @@ async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance
   return { provider: "PAYPAL", checkoutUrl, sessionId: data.id, amount, currency };
 }
 
-async function insertAttempt({ invoice, stripeAccount, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT" }) {
+async function insertAttempt({ invoice, stripeAccount, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT",taxPlan=null }) {
   await query(
     `INSERT INTO payment_attempts (invoice_id, client_id, event_id, proposal_id, provider, provider_reference, provider_session_id, checkout_url, amount, currency, status, idempotency_key, metadata)
      VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number, amount_choice: amountChoice, ...(stripeAccount ? {stripe_account_id:stripeAccount.accountId,stripe_mode:stripeAccount.mode} : {}) })]
+    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number, amount_choice: amountChoice, automatic_tax_enabled:Boolean(taxPlan),tax_scope:taxPlan?'tax-v1:'+taxPlan.taxCode:'legacy', ...(stripeAccount ? {stripe_account_id:stripeAccount.accountId,stripe_mode:stripeAccount.mode} : {}) })]
   );
 }
 

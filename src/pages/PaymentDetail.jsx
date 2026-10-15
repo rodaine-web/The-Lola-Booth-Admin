@@ -59,6 +59,7 @@ export default function PaymentDetail() {
       </div>
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       <section className="detail-summary">
+        {payment.tax_details?.automaticTaxEnabled&&<><Metric label="Service subtotal" value={formatMoney(Number(payment.amount)-Number(payment.tax_amount))}/><Metric label="Stripe tax" value={formatMoney(payment.tax_amount)}/><Metric label="Total charged" value={formatMoney(payment.amount)}/></>}
         <Metric label="Method" value={payment.payment_method} />
         <Metric label="Reference" value={payment.provider_payment_id || payment.reference_number || "None"} />
         <Metric label="Paid" value={payment.paid_at || payment.payment_date} />
