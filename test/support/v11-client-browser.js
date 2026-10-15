@@ -53,7 +53,7 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
    await availabilityBox.waitFor();assert.equal(await availabilityBox.isChecked(),false);
    await availabilityBox.check();await page.getByText(/Confirmed by QA Owner/).waitFor();
    await page.reload();await page.getByText(/Confirmed by QA Owner/).waitFor();assert.equal(await availabilityBox.isChecked(),true);
-   await availabilityBox.uncheck();await page.getByText('Confirm availability to generate and send the standard proposal.',{exact:true}).waitFor();
+   await availabilityBox.uncheck();await page.getByText('Confirm availability to prepare a proposal draft. It will not be emailed automatically.',{exact:true}).waitFor();
    await availabilityBox.waitFor();assert.equal(await availabilityBox.isChecked(),false,'Clearing approval keeps the card usable');
    await availabilityBox.check();await page.getByText(/Confirmed by QA Owner/).waitFor();
    await page.screenshot({path:fileURLToPath(new URL('availability-desktop.png',evidence)),fullPage:true});

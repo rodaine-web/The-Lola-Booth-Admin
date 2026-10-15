@@ -56,6 +56,8 @@ export default function ProposalEditor() {
     sections: ["Introduction", "Event Details", "Proposed Experience", "Package Includes", "Investment Summary", "Next Steps", "Terms"].map((title, index) => section(title, index))
   });
   const [error, setError] = useState("");
+  const [originalRequest,setOriginalRequest]=useState(null);
+  useEffect(()=>{let active=true;setOriginalRequest(null);if(form.lead_id)api.get(`/leads/${form.lead_id}`).then(lead=>{if(active)setOriginalRequest(lead.message||null);}).catch(()=>{});return()=>{active=false;};},[form.lead_id]);
   const [saving,setSaving]=useState(false);
   const [hydratingSource,setHydratingSource]=useState(false);
 
@@ -477,7 +479,8 @@ export default function ProposalEditor() {
           </>
         )}
 
-        {form.scenario_enabled && <label>Client-facing notes<textarea value={form.customer_notes||''} onChange={event=>setField('customer_notes',event.target.value)}/></label>}
+        {originalRequest&&<section aria-label="Original client request"><h3>Original client request</h3><p style={{whiteSpace:"pre-wrap"}}>{originalRequest}</p></section>}
+        <label>Client-facing notes (proposal and email)<textarea value={form.customer_notes||''} onChange={event=>setField('customer_notes',event.target.value)}/></label>
         {form.scenario_enabled && <ProposalScenarioReview scenario={form.content?.scenario} overrides={form.scenario_overrides||{}} onChange={value=>setField('scenario_overrides',value)} experiences={form.selected_experiences||[]} onExperiencesChange={value=>setField('selected_experiences',value)}/>}
         {mode === "create" && <ProposalVisualEditor experiences={form.selected_experiences||[]} value={form.visual_sections||[]} onChange={value=>setField("visual_sections",value)}/>}
         <section className="panel">
@@ -530,7 +533,7 @@ function hydrateProposalFromLead(current, lead) {
     experience_id: lead.preferred_experience_id || current.experience_id,
     package_amount: preferredPackage?.starting_price ?? current.package_amount,
     selected_experiences: selectedExperiences,
-    customer_notes: lead.message || '',
+    customer_notes: '',
     client_details: {...current.client_details, ...Object.fromEntries(['first_name','last_name','email','phone','company'].map(key=>[key,lead[key] || '']))},
     event_type: bookingPrefill.fields.event_type,
     event_details: {...current.event_details, ...Object.fromEntries(['event_name','event_type','event_date','start_time','end_time','guest_count','venue_name','venue_address','city','state','zip'].map(key=>[key,bookingPrefill.fields[key]]))},

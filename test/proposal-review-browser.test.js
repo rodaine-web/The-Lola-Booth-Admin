@@ -15,7 +15,7 @@ test('final review: desktop/mobile recipients, consent gate and explicit update 
    page=await browser.newPage({viewport:{width,height:1000}});let sends=0;const errors=[];page.on('pageerror',error=>errors.push(error.message));
    await page.route(url=>url.pathname.startsWith('/api/'),async route=>{
     const path=new URL(route.request().url()).pathname;
-    const proposal={id,proposal_number:'QA-ONLY',status:'SENT',total:800,client_email:'primary@qa.invalid',client_name:'QA Client',secure_token:'qa-only',has_unsent_revision:true,review_version_id:version,versions:[],email_preview:{subject:'There is an update to your Proposal from The Lola Booth.',body:'QA review email'}};
+    const proposal={id,proposal_number:'QA-ONLY',status:'SENT',total:800,client_email:'primary@qa.invalid',client_name:'QA Client',secure_token:'qa-only',has_unsent_revision:true,review_version_id:version,versions:[],email_preview:{subject:'There is an update to your Proposal from The Lola Booth.',body:'QA review email. We need an 8 by 8 foot space; Boston travel is included.'}};
     if(path.endsWith('/send')){sends++;assert.deepEqual(route.request().postDataJSON().recipients,['primary@qa.invalid','copy@qa.invalid']);return route.fulfill({json:{status:'COMPLETE'}});}
     if(path.endsWith('/auth/me'))return route.fulfill({json:{user:{id:'qa',name:'QA Owner',permissions:['*']}}});
     if(path.endsWith('/preview'))return route.fulfill({contentType:'text/html',body:'<h1>Reviewed negotiated price $800</h1>'});
@@ -24,7 +24,7 @@ test('final review: desktop/mobile recipients, consent gate and explicit update 
    });
    await page.goto(`${origin}/sales/proposals/${id}`);
    await page.getByRole('button',{name:'Review & Send',exact:true}).click();
-   await page.getByRole('heading',{name:'Final proposal review'}).waitFor();assert.equal(sends,0,'Review & Send only navigates');
+   await page.getByRole('heading',{name:'Final proposal review'}).waitFor();assert.equal(sends,0,'Review & Send only navigates');await page.getByText(/We need an 8 by 8 foot space; Boston travel is included/).waitFor();
    const send=page.getByRole('button',{name:'Send Updated Proposal',exact:true});assert.equal(await send.isDisabled(),true);
    await page.getByRole('textbox',{name:'Additional recipient 1',exact:true}).fill('copy@qa.invalid');
    await page.getByRole('checkbox',{name:'I have reviewed the proposal, pricing and recipient addresses.'}).check();assert.equal(sends,0);
