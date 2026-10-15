@@ -56,6 +56,7 @@ export default function GalleryAdmin() {
   const accessDialog = useRef(null);
   useEffect(() => {
     if (!access) return;
+    setRecipient(access.delivery?.channel==='EMAIL'?access.delivery.recipient:'');
     const previous = document.activeElement,
       before = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -956,8 +957,10 @@ export default function GalleryAdmin() {
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
                 placeholder="Recipient email"
+                readOnly={Boolean(access.delivery)}
               />
             </label>
+            {access.delivery?.channel==='SMS'&&<p>Fiesta recorded this guest as a text recipient. SMS is not connected here. Copy their private link or QR; do not email it to a different recipient.</p>}
             <div className="quick-actions">
               <button
                 disabled={!recipient || busy}

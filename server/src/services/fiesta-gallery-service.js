@@ -3,8 +3,12 @@ import {query,transaction} from '../db/pool.js';
 import {env} from '../config/env.js';
 import {AppError} from '../utils/errors.js';
 import {writeAudit} from './audit-service.js';
-import {encryptSecretJson} from './integration-secrets.js';
+import {encryptSecretJson,decryptSecretJson} from './integration-secrets.js';
 import {parseFiestaShares} from '../../../shared/fiesta-gallery.js';
+export async function fiestaGalleryRecipient(albumId,personId){
+ const row=(await query('SELECT channel,recipient_ciphertext FROM fiesta_gallery_shares WHERE album_id=$1 AND person_id=$2 LIMIT 1',[albumId,personId])).rows[0];
+ return row?{channel:row.channel,recipient:decryptSecretJson(row.recipient_ciphertext).recipient}:null;
+}
 
 // Called under the same album lock by both CSV import and media ingestion.
 export async function reconcileFiestaShares(albumId){
@@ -27,7 +31,7 @@ export async function importFiestaShares(albumId,csv,eventCode,user){
   for(const record of parsed.records){
    const external='fiesta:'+crypto.createHmac('sha256',env.integrationSecretKey).update(record.channel+':'+record.recipient).digest('hex');
    const person=(await query(`INSERT INTO gallery_people(album_id,display_name,external_ref) VALUES($1,$2,$3)
-    ON CONFLICT(album_id,external_ref) WHERE external_ref IS NOT NULL DO UPDATE SET external_ref=EXCLUDED.external_ref RETURNING id,status`,[albumId,'Fiesta guest '+external.slice(-8),external])).rows[0];
+    ON CONFLICT(album_id,external_ref) WHERE external_ref IS NOT NULL DO UPDATE SET external_ref=EXCLUDED.external_ref RETURNING id,status`,[albumId,'Fiesta '+record.channel.toLowerCase()+' guest '+external.slice(-8),external])).rows[0];
    if(person.status!=='ACTIVE')continue; // An archived guest is never silently reactivated.
    await query(`INSERT INTO fiesta_gallery_shares(album_id,person_id,filename,channel,recipient_ciphertext,capture_ref,source_share_time)
     VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,[albumId,person.id,record.filename,record.channel,encryptSecretJson({recipient:record.recipient}),record.captureRef,record.sharedAt]);

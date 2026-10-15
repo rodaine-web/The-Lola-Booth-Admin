@@ -12,7 +12,7 @@ import {
 } from "./automation-service.js";
 import { galleryStorage } from "./gallery-storage.js";
 import {galleryRetentionDays} from '../../../shared/fiesta-gallery.js';
-import {reconcileFiestaShares} from './fiesta-gallery-service.js';
+import {reconcileFiestaShares,fiestaGalleryRecipient} from './fiesta-gallery-service.js';
 import {
   assertGalleryEnvironment,
   unavailable,
@@ -373,6 +373,7 @@ export async function revealGalleryKey(id) {
     type: key.type,
     code: credentials.code.match(/.{1,5}/g).join("-"),
     url,
+    delivery:key.type==='PERSON'?await fiestaGalleryRecipient(key.album_id,key.person_id):null,
     qr: await QRCode.toDataURL(url, {
       width: 600,
       margin: 2,
@@ -524,6 +525,10 @@ export async function deliverGallery(id, recipient, user, send) {
     (await query(grantSelect + " WHERE k.id=$1", [id])).rows[0],
   );
   const access = await revealGalleryKey(id);
+  if(access.delivery){
+    if(access.delivery.channel!=='EMAIL')throw new AppError('This imported recipient uses text messaging. SMS delivery is not connected; use the private link or QR without sending an email to a different person.',422,'GALLERY_SMS_UNAVAILABLE');
+    if(recipient.trim().toLowerCase()!==access.delivery.recipient)throw new AppError('Use the recipient linked to these Fiesta captures.',422,'GALLERY_RECIPIENT_MISMATCH');
+  }
   const body = `Your photos are waiting.\n${grant.type === "PERSON" ? "Your personal moments" : "Your private event gallery"} from ${grant.title}.\nOpen your gallery: ${access.url}\nGallery code: ${access.code}\nPlease keep this access link private.`;
   const deliveryKey = `gallery-delivery:${id}:${hashCredential(recipient.trim().toLowerCase())}`;
   const c = await transaction(async () => {

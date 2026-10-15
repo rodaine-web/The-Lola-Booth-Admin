@@ -41,7 +41,7 @@ export default function GalleryOverview({ data, onTab, onAccess }) {
                   onClick={() => onTab("Photos")}
                   aria-label={`Manage photo ${i + 1}`}
                 >
-                  <GalleryThumbnail id={m.id} />
+                  <GalleryThumbnail id={m.id} mimeType={m.mime_type} />
                   {m.status === "HIDDEN" && <span>Hidden</span>}
                 </button>
               ))}
