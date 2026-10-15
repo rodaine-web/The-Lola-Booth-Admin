@@ -4,13 +4,13 @@ import { query, transaction } from '../db/pool.js';
 import { AppError } from '../utils/errors.js';
 import { stagingJobsPaused, stagingAutomationScope } from '../config/staging-safety.js';
 import { publicBookingCatalog, validateBookingSelections } from './public-booking-service.js';
-import { createProposal, createProposalVersion, getProposal, publicProposalUrl } from './proposal-service.js';
-import { createCommunicationDraft, sendCommunication, brandedEmailHtml, renderCommunicationTemplateByKey } from './automation-service.js';
+import { createProposal, createProposalVersion } from './proposal-service.js';
+import { createNotification } from './notification-service.js';
 
 export const WEBSITE_PROPOSAL_JOB = 'BOOKING_SEND_WEBSITE_PROPOSAL';
 export const websiteProposalEnabled = () => process.env.BOOKING_WEBSITE_PROPOSAL_ENABLED === 'true';
 
-// Staff availability approval authorizes standard published prices; custom amounts still require review.
+// Availability approval authorizes draft preparation only. Customer delivery always requires final Admin review.
 export function automaticWebsiteQuoteDecision(booking, input, config = process.env) {
   if (!booking?.selections?.length) return 'Choose experiences and packages';
   if (!input?.eventDate || !input.eventStartTime || !input.eventEndTime || !input.venueAddress) return 'Complete event date, times and venue address';
@@ -76,25 +76,20 @@ async function prepareWebsiteProposal(job) {
       proposal = (await client.query('UPDATE proposals SET content=content||$2::jsonb WHERE id=$1 RETURNING *', [proposal.id, { website_submission_fingerprint: job.payload.fingerprint }])).rows[0];
       await createProposalVersion(client, proposal, null);
     }
-    if (['ACCEPTED','CONVERTED','DECLINED','EXPIRED'].includes(proposal.status)) return null;
-    const expanded = await getProposal(proposal.id);
-    const key = `website-proposal:${lead.id}:${job.payload.fingerprint}`;
-    let message = (await client.query('SELECT * FROM communications WHERE idempotency_key=$1', [key])).rows[0];
-    if (!message) {
-      const url = publicProposalUrl(expanded);
-      if (!url) throw new AppError('Secure proposal access is unavailable.', 409, 'WEBSITE_PROPOSAL_ACCESS', { retryable: false });
-      const merge = { client_name: customerName(expanded), first_name: lead.first_name, proposal_number: expanded.proposal_number, proposal_url: url, proposal: { ...expanded, url, public_url: url } };
-      const rendered = await renderCommunicationTemplateByKey('PROPOSAL_DELIVERY', merge) || await renderCommunicationTemplateByKey('proposal_sent', merge);
-      const body = rendered?.body || `Hi ${lead.first_name},\n\nYour LOLA proposal is ready. Review the services and pricing here:\n${url}\n\nYour date is not reserved by this proposal. Booking confirmation requires accepted terms, the required booking retainer fee payment, your signed agreement and availability checks.\n\nThe LOLA Booth`;
-      message = await createCommunicationDraft({ lead_id: lead.id, client_id: expanded.client_id, event_id: expanded.event_id, proposal_id: expanded.id, recipient: lead.email,
-        subject: rendered?.subject || `Your LOLA proposal ${expanded.proposal_number}`, body, html: brandedEmailHtml(body, { ctaLabel: 'View proposal', ctaUrl: url }), trigger_key: WEBSITE_PROPOSAL_JOB,
-        template_id: rendered?.template?.id, merge_data: {...merge, availability_fingerprint: job.payload.approvalFingerprint, website_quote_snapshot: {content:expanded.content, pricing_snapshot:expanded.pricing_snapshot, line_items_snapshot:expanded.line_items_snapshot}} });
-      await client.query('UPDATE communications SET idempotency_key=$2 WHERE id=$1', [message.id, key]);
-    }
-    return { message, proposalId: proposal.id, leadId: lead.id };
+    if (!['DRAFT','READY'].includes(proposal.status)) return null;
+    await client.query("UPDATE leads SET status='PROPOSAL_DRAFT',updated_at=now() WHERE id=$1 AND status IN ('NEW','CONTACTED','QUALIFIED','FOLLOW_UP')",[lead.id]);
+    const taskKey=`proposal-ready-review:${proposal.id}`;
+    await client.query(`INSERT INTO tasks(lifecycle_key,title,description,lead_id,proposal_id,priority)
+      VALUES($1,'Review and send proposal',$2,$3,$4,'HIGH')
+      ON CONFLICT(lifecycle_key) WHERE lifecycle_key IS NOT NULL DO NOTHING`,
+      [taskKey,'Availability is confirmed. Review the original request, answer client questions, and check travel and other charges before sending. No proposal email has been sent.',lead.id,proposal.id]);
+    if (!(await client.query("SELECT 1 FROM notifications WHERE entity_type='proposal' AND entity_id=$1 AND metadata->>'reason'='AVAILABILITY_DRAFT_READY'",[proposal.id])).rowCount)
+      await createNotification({roleTarget:'OWNER_ADMIN',category:'SALES',title:'Proposal ready for review',
+        body:`${proposal.proposal_number}: availability confirmed. Review client questions, notes and charges, then explicitly send the proposal.`,
+        entityType:'proposal',entityId:proposal.id,actionUrl:`/sales/proposals/${proposal.id}`,metadata:{reason:'AVAILABILITY_DRAFT_READY',lead_id:lead.id}});
+    return { proposalId:proposal.id, leadId:lead.id };
   });
 }
-const customerName = p => p.client_name || 'there';
 
 export async function processWebsiteProposalHandoffs({ limit = 10 } = {}) {
   if (!websiteProposalEnabled() || stagingJobsPaused()) return { processed: [] };
@@ -102,7 +97,7 @@ export async function processWebsiteProposalHandoffs({ limit = 10 } = {}) {
   const jobs = await transaction(async client => {
     const params = [WEBSITE_PROPOSAL_JOB, scope?.since || null, scope?.recipients || []];
     const guard = `job_type=$1 AND ($2::timestamptz IS NULL OR (created_at>=$2 AND EXISTS(SELECT 1 FROM leads l WHERE l.id=related_entity_id AND (cardinality($3::text[])=0 OR lower(l.email)=ANY($3::text[])))))`;
-    await client.query(`UPDATE automation_jobs SET status='FAILED',last_error='Interrupted proposal delivery; review provider history before retrying',updated_at=now() WHERE ${guard} AND status='PROCESSING' AND started_at<now()-interval '10 minutes'`, params);
+    await client.query(`UPDATE automation_jobs SET status='FAILED',last_error='Interrupted proposal preparation; review draft before retrying',updated_at=now() WHERE ${guard} AND status='PROCESSING' AND started_at<now()-interval '10 minutes'`, params);
     const rows = (await client.query(`SELECT * FROM automation_jobs WHERE ${guard} AND status='PENDING' AND scheduled_for<=now() ORDER BY scheduled_for LIMIT $4 FOR UPDATE SKIP LOCKED`, [...params, limit])).rows;
     for (const row of rows) await client.query("UPDATE automation_jobs SET status='PROCESSING',started_at=now(),attempt_count=attempt_count+1 WHERE id=$1", [row.id]);
     return rows;
@@ -111,17 +106,8 @@ export async function processWebsiteProposalHandoffs({ limit = 10 } = {}) {
   for (const job of jobs) {
     try {
       const prepared = await prepareWebsiteProposal(job);
-      const sent = prepared ? await sendCommunication(prepared.message.id) : null;
-      const status = !prepared || sent.communication.status === 'CANCELLED' ? 'CANCELLED' : 'COMPLETED';
-      if (status === 'COMPLETED' && !['SENT','SENT_TO_PROVIDER','DELIVERED'].includes(sent.communication.status)) throw new AppError('Review proposal delivery.',409,'WEBSITE_DELIVERY_UNCERTAIN',{retryable:false});
-      await transaction(async client => {
-        if (status === 'COMPLETED') {
-          await client.query(`UPDATE proposals SET status=CASE WHEN status='DRAFT' THEN 'SENT' ELSE status END,sent_at=COALESCE(sent_at,now()),updated_at=now(),proposal_snapshot=COALESCE(proposal_snapshot,jsonb_build_object('content',content,'pricing_snapshot',pricing_snapshot,'line_items_snapshot',line_items_snapshot,'selected_experiences',selected_experiences)) WHERE id=$1`, [prepared.proposalId]);
-          await client.query("UPDATE leads SET status='PROPOSAL_SENT',updated_at=now() WHERE id=$1 AND status IN ('NEW','CONTACTED','QUALIFIED','PROPOSAL_DRAFT','FOLLOW_UP')", [prepared.leadId]);
-          if (!(await client.query('SELECT 1 FROM proposal_deliveries WHERE proposal_id=$1', [prepared.proposalId])).rowCount) await client.query("INSERT INTO proposal_deliveries(proposal_id,recipient_email,delivery_method,status,sent_at) VALUES($1,$2,'EMAIL',$3,now())", [prepared.proposalId, sent.communication.recipient, 'SENT']);
-        }
-        await client.query('UPDATE automation_jobs SET status=$2,completed_at=now(),last_error=NULL,updated_at=now() WHERE id=$1', [job.id, status]);
-      });
+      const status=prepared?'COMPLETED':'CANCELLED';
+      await query('UPDATE automation_jobs SET status=$2,completed_at=now(),last_error=NULL,updated_at=now() WHERE id=$1',[job.id,status]);
       processed.push({ id: job.id, status });
     } catch (error) {
       const status = error.details?.retryable !== false && job.attempt_count + 1 < job.max_attempts ? 'PENDING' : 'FAILED';
