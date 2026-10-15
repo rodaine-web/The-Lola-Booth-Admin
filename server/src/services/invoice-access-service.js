@@ -25,9 +25,9 @@ export async function requestInvoiceAccess({invoiceNumber,email}) {
 }
 
 export function publicInvoiceSummary(invoice){
- const fields=['invoice_number','client_name','event_name','due_date','status','subtotal','discount','tax','total','amount_paid','amount_outstanding','balance_due','currency','data_quality'];
+ const fields=['invoice_number','client_name','event_name','due_date','status','subtotal','discount','tax','stripe_tax_amount','total','amount_paid','amount_outstanding','balance_due','currency','data_quality'];
  const result=Object.fromEntries(fields.map(k=>[k,invoice[k]]));
  result.items=invoice.items.map(({description,quantity,unit_price,line_total})=>({description,quantity,unit_price,line_total}));
- result.payments=invoice.payments.filter(p=>['SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED'].includes(p.status)).map(({id,amount,currency,payment_date,provider,status,receipt_available})=>({id,amount,currency,payment_date,provider,status,receipt_available:Boolean(receipt_available)}));
+ result.payments=invoice.payments.filter(p=>['SUCCEEDED','PARTIALLY_REFUNDED','REFUNDED'].includes(p.status)).map(({id,amount,tax_amount,currency,payment_date,provider,status,receipt_available})=>({id,amount,tax_amount,currency,payment_date,provider,status,receipt_available:Boolean(receipt_available)}));
  return result;
 }
