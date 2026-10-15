@@ -1464,3 +1464,10 @@
   font-size: 10px;
   padding: 6px;
 }
+
+/* Preserve existing gallery layout for video captures and workspace previews. */
+.photo-open > video {width:100%;height:100%;object-fit:cover;display:block;}
+.gallery-lightbox > video {max-width:90vw;max-height:75vh;object-fit:contain;}
+.admin-photo-image > video {width:100%;height:100%;object-fit:cover;}
+.workspace-card .customer-photo-grid {grid-template-columns:repeat(auto-fit,minmax(120px,1fr));}
+.workspace-card .customer-photo-grid img,.workspace-card .customer-photo-grid video {width:100%;max-height:220px;object-fit:contain;}

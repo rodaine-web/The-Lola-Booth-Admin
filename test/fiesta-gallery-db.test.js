@@ -5,12 +5,15 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import pg from 'pg';
+import jwt from 'jsonwebtoken';
+import {once} from 'node:events';
+import {unzipSync} from 'fflate';
 test('Fiesta gallery persistence, privacy, retention and customer access',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async()=>{
  const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['127.0.0.1','localhost'].includes(url.hostname));assert.match(url.pathname,/lola_.*qa/);
- const bootstrap=new pg.Pool({connectionString:url.toString()}),schema='fiesta_qa_'+crypto.randomBytes(6).toString('hex'),root=await fs.mkdtemp(path.join(os.tmpdir(),'fiesta-qa-'));let pool;
+ const bootstrap=new pg.Pool({connectionString:url.toString()}),schema='fiesta_qa_'+crypto.randomBytes(6).toString('hex'),root=await fs.mkdtemp(path.join(os.tmpdir(),'fiesta-qa-'));let pool,server;
  try{
   await bootstrap.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');
-  Object.assign(process.env,{DATABASE_URL:url.toString(),APP_ENV:'test',NODE_ENV:'test',JWT_SECRET:'synthetic-fiesta-gallery-test-only-secret',INTEGRATION_SECRET_KEY:'synthetic-fiesta-test-only-encryption-key',GALLERY_STORAGE_PROVIDER:'local',GALLERY_LOCAL_ROOT:root,EMAIL_PROVIDER:'development'});
+  Object.assign(process.env,{DATABASE_URL:url.toString(),APP_ENV:'test',NODE_ENV:'test',PORT:'0',JWT_SECRET:'synthetic-fiesta-gallery-test-only-secret',INTEGRATION_SECRET_KEY:'synthetic-fiesta-test-only-encryption-key',GALLERY_STORAGE_PROVIDER:'local',GALLERY_LOCAL_ROOT:root,EMAIL_PROVIDER:'development'});
   const db=await import('../server/src/db/pool.js');pool=db.pool;const {query,transaction}=db;
   for(const file of(await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(f=>f.endsWith('.sql')).sort())await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/'+file,import.meta.url),'utf8')));
   const one=async(sql,args=[])=>(await query(sql,args)).rows[0];
@@ -35,8 +38,21 @@ test('Fiesta gallery persistence, privacy, retention and customer access',{skip:
   assert.equal((await g.uploadGalleryMedia(album.id,{filename:'PHOTO1.png',mime_type:'image/png',base64:png})).id,first.id,'upload replay returns same media');
   const otherEvent=await one("INSERT INTO events(event_name,event_type,event_date) VALUES('OTHER QA','Wedding','2035-10-16') RETURNING id"),other=await g.createGalleryAlbum(otherEvent.id,null,user);await assert.rejects(importFiestaShares(other.id,csv,'QA1',user),{code:'GALLERY_EVENT_CONFLICT'});
   const media=await customerGallery.customerGalleryMedia(session,event.id,first.id,true);assert.deepEqual(await verifiedGalleryBytes(media),Buffer.from(png,'base64'));
+  // Real HTTP/cookie journey, not a mocked authorization response.
+  delete process.env.APP_ENV;
+  await query("INSERT INTO permissions(key) VALUES('*'),('read:events') ON CONFLICT(key) DO NOTHING");await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[user.id]);
+  const viewer=await one("INSERT INTO users(name,email,password_hash) VALUES('Viewer','fiesta-viewer@example.invalid','not-a-login') RETURNING id");await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='read:events'",[viewer.id]);
+  ({server}=await import('../server/src/index.js'));if(!server.listening)await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
+  const token=crypto.randomBytes(32).toString('hex');await query("INSERT INTO client_workspace_invitations(grant_id,token_hash,token_ciphertext,recipient_email) VALUES($1,$2,'{}',$3)",[grant.id,crypto.createHash('sha256').update(token).digest('hex'),client.email]);
+  const redemption=await fetch(origin+'/api/public/client/access',{method:'POST',headers:{Origin:'http://localhost:5173','Content-Type':'application/json'},body:JSON.stringify({token})});assert.equal(redemption.status,200);const cookie=redemption.headers.get('set-cookie').split(';')[0];
+  const get=(suffix,includeCookie=true)=>fetch(origin+'/api/public/client/events/'+event.id+'/gallery'+suffix,{headers:{...(includeCookie?{Cookie:cookie}:{}),Origin:'http://localhost:5173'}});
+  assert.equal((await get('',false)).status,401);assert.equal((await get('')).status,200);
+  const download=await get('/media/'+first.id+'/download');assert.equal(download.status,200);assert.match(download.headers.get('content-disposition'),/PHOTO1.png/);assert.deepEqual(Buffer.from(await download.arrayBuffer()),Buffer.from(png,'base64'));
+  const zip=await get('/zip');assert.equal(zip.status,200);assert.equal(Object.keys(unzipSync(new Uint8Array(await zip.arrayBuffer()))).length,2);
+  const viewerToken=jwt.sign({sub:viewer.id},process.env.JWT_SECRET),denied=await fetch(origin+'/api/gallery-admin/albums/'+album.id+'/fiesta-shares',{method:'POST',headers:{Authorization:'Bearer '+viewerToken,'Content-Type':'application/json'},body:JSON.stringify({eventCode:'QA1',csv})});assert.equal(denied.status,403);
+  await query("UPDATE client_workspace_sessions SET verified_at=now()-interval '16 minutes'");assert.equal((await get('/media/'+first.id+'/download')).status,403);await query('UPDATE client_workspace_sessions SET verified_at=now()');
   await assert.rejects(verifiedGalleryBytes({...media,checksum:'invalid'}),{code:'GALLERY_MEDIA_INTEGRITY'});await assert.rejects(verifiedGalleryBytes(media,async()=>{throw Error('Access removed during read');}));
   await query('UPDATE client_workspace_grants SET revoked_at=now() WHERE id=$1',[grant.id]);await assert.rejects(customerGallery.customerGalleryView(session,event.id));
   await query("UPDATE gallery_albums SET expires_at=now()-interval '1 second' WHERE id=$1",[album.id]);await assert.rejects(g.resolveGalleryToken('PERSON',token));
- }finally{if(pool)await pool.end();await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();await fs.rm(root,{recursive:true,force:true});}
+ }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();await fs.rm(root,{recursive:true,force:true});}
 });
