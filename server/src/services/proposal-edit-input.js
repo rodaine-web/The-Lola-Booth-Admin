@@ -10,7 +10,7 @@ export function proposalEditInput(proposal) {
     event_type: content.scenario?.eventType,
     event_details: content.scenario?.details,
     client_details: content.scenario?.client,
-    customer_notes: content.scenario?.customer_notes,
+    customer_notes: content.scenario?.customer_notes ?? content.customer_notes ?? "",
     proposal_type: proposal.proposal_type || 'PRIVATE_EVENT',
     selected_experiences: proposal.selected_experiences || [],
     proposal_visuals: proposal.proposal_visuals || {},

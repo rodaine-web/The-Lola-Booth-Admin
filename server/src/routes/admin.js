@@ -499,6 +499,7 @@ async function pickerRows(search, sql) {
 }
 
 const proposalSchema = z.object({
+  customer_notes:z.string().max(10000).optional().nullable(),
   scenario_enabled:z.boolean().optional(),
   scenario_overrides:scenarioOverridesSchema.optional(),
   visual_sections: proposalVisualSchema.optional(),
