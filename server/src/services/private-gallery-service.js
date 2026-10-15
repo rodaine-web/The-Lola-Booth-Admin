@@ -277,7 +277,7 @@ export async function transitionGalleryAlbum(id, status, user) {
         const names=Array.isArray(selections)&&selections.length?selections.flatMap(item=>(item.packages||[]).map(pkg=>pkg.name)):[commercial?.name].filter(Boolean);
         const days=galleryRetentionDays(names)||a.retention_days;
         if(!days)throw new AppError('Select the agreed gallery access period before publishing this custom or unclassified booking.',422,'GALLERY_RETENTION_REQUIRED');
-        await query("UPDATE gallery_albums SET retention_days=$2,expires_at=now()+$2*interval '1 day' WHERE id=$1",[id,days]);
+        await query("UPDATE gallery_albums SET retention_days=$2::integer,expires_at=now()+$2::integer*interval '1 day' WHERE id=$1",[id,days]);
         a.expires_at=null;
       }
       const count = (
