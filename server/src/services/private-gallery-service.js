@@ -134,7 +134,7 @@ export async function mediaTicket(grant, id, purpose = "download") {
     url: `/api/gallery/media/${issueMediaTicket(grant.id, id, purpose, secret(), environment())}`,
   };
 }
-export async function authorizedMediaTicket(token) {
+export async function authorizedMediaTicket(token, { recordActivity = true } = {}) {
   assertGalleryEnvironment();
   const payload = verifyMediaTicket(token, secret(), environment());
   if (!["view", "download"].includes(payload.purpose)) throw unavailable();
@@ -147,11 +147,13 @@ export async function authorizedMediaTicket(token) {
     (m) => m.id === payload.mediaId,
   );
   if (!media) throw unavailable();
-  await galleryActivity(
-    grant,
-    payload.purpose === "download" ? "PHOTO_DOWNLOADED" : "PHOTO_VIEWED",
-    media.id,
-  );
+  if (recordActivity) {
+    await galleryActivity(
+      grant,
+      payload.purpose === "download" ? "PHOTO_DOWNLOADED" : "PHOTO_VIEWED",
+      media.id,
+    );
+  }
   return { media, download: payload.purpose === "download" };
 }
 export async function listGalleryAlbums() {

@@ -158,6 +158,7 @@ galleryPublicRouter.get(
   asyncHandler(async (req, res) => {
     const { media, download } = await gallery.authorizedMediaTicket(
       req.params.ticket,
+      { recordActivity: false },
     );
     await streamMedia(media, res, download,()=>gallery.authorizedMediaTicket(req.params.ticket));
   }),
