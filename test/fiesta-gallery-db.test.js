@@ -48,6 +48,17 @@ test('Fiesta gallery persistence, privacy, retention and customer access',{skip:
   const invitationToken=crypto.randomBytes(32).toString('hex');await query("INSERT INTO client_workspace_invitations(grant_id,token_hash,token_ciphertext,recipient_email) VALUES($1,$2,'{}',$3)",[grant.id,crypto.createHash('sha256').update(invitationToken).digest('hex'),client.email]);
   const redemption=await fetch(origin+'/api/public/client/access',{method:'POST',headers:{Origin:'http://localhost:5173','Content-Type':'application/json'},body:JSON.stringify({token:invitationToken})});assert.equal(redemption.status,200);const cookie=redemption.headers.get('set-cookie').split(';')[0];
   const get=(suffix,includeCookie=true)=>fetch(origin+'/api/public/client/events/'+event.id+'/gallery'+suffix,{headers:{...(includeCookie?{Cookie:cookie}:{}),Origin:'http://localhost:5173'}});
+  // The pre-read authorization and post-read revocation check must produce one
+  // activity entry per successful response, not one entry per security check.
+  const activityCount=async(action)=>(await one('SELECT count(*)::int n FROM gallery_activity WHERE access_key_id=$1 AND action=$2',[key.id,action])).n;
+  const guestTicket=await g.mediaTicket(guest,first.id,'download');
+  const downloadsBefore=await activityCount('PHOTO_DOWNLOADED');
+  const guestDownload=await fetch(origin+guestTicket.url);
+  assert.equal(guestDownload.status,200);assert.deepEqual(Buffer.from(await guestDownload.arrayBuffer()),Buffer.from(png,'base64'));
+  assert.equal(await activityCount('PHOTO_DOWNLOADED'),downloadsBefore+1);
+  const guestView=await g.publicGalleryView(guest,false),viewsBefore=await activityCount('PHOTO_VIEWED');
+  const guestImage=await fetch(origin+guestView.media[0].url);assert.equal(guestImage.status,200);await guestImage.arrayBuffer();
+  assert.equal(await activityCount('PHOTO_VIEWED'),viewsBefore+1);
   assert.equal((await get('',false)).status,401);assert.equal((await get('')).status,200);
   const download=await get('/media/'+first.id+'/download');assert.equal(download.status,200);assert.match(download.headers.get('content-disposition'),/PHOTO1.png/);assert.deepEqual(Buffer.from(await download.arrayBuffer()),Buffer.from(png,'base64'));
   const zip=await get('/zip');assert.equal(zip.status,200);assert.equal(Object.keys(unzipSync(new Uint8Array(await zip.arrayBuffer()))).length,2);
