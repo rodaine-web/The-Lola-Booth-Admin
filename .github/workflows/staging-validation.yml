@@ -124,6 +124,7 @@ jobs:
             artifacts/proposal-review/
             artifacts/v11-browser/
             artifacts/crm-contacts-browser/
+          if-no-files-found: ignore
 
       - name: Fiesta guest gallery desktop and mobile
         env:
@@ -136,5 +137,4 @@ jobs:
         with:
           name: fiesta-gallery-evidence
           path: artifacts/fiesta-gallery/
-          if-no-files-found: ignore
           if-no-files-found: ignore
