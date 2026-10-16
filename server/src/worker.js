@@ -1,4 +1,5 @@
 import {queuePeriodicOutlook} from './services/crm-outlook-service.js';
+import {processDropboxGallerySources} from './services/dropbox-gallery-service.js';
 import {processWebsiteProposalHandoffs} from './services/website-proposal-handoff-service.js';
 import {queueBookingLifecycleReminders} from './services/booking-lifecycle-reminders.js';
 import { processBookingInvoiceHandoffs } from './services/booking-invoice-handoff-service.js';
@@ -35,6 +36,8 @@ async function tick() {
     const campaigns=await processCampaignJobs({limit:25});
     if(campaigns.processed.length)await recordWorkerProcessingResult("automation-worker",{success:campaigns.processed.every(item=>item.status==='SENT_TO_PROVIDER'),processed:campaigns.processed.length,campaignsOnly:true});
     if(!isStaging()||process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true')await queuePeriodicOutlook();
+    const galleryImports=await processDropboxGallerySources();
+    if(galleryImports.length)logger.info({results:galleryImports},'Dropbox gallery import results');
     if(stagingJobsPaused()){if(isStaging()&&process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:result.processed.every(item=>item.status!=='FAILED'),processed:result.processed.length,qualificationOnly:true});return;}
     const websiteProposals = await processWebsiteProposalHandoffs();
     if (websiteProposals.processed.length) logger.info({processed:websiteProposals.processed}, 'Website proposal handoffs processed');

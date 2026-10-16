@@ -15,6 +15,9 @@ import { galleryStorage } from "../services/gallery-storage.js";
 import * as gallery from "../services/private-gallery-service.js";
 import {importFiestaShares} from '../services/fiesta-gallery-service.js';
 import {verifiedGalleryBytes} from '../services/gallery-media-delivery.js';
+import {dropboxGalleryStatus,saveDropboxGallerySource,pauseDropboxGallerySource,syncDropboxGallerySource} from '../services/dropbox-gallery-service.js';
+import {startDropboxGalleryOAuth,finishDropboxGalleryOAuth,disconnectDropboxGallery} from '../services/dropbox-gallery-connection.js';
+import {env} from '../config/env.js';
 const id = z.string().uuid(),
   date = z.string().datetime({ offset: true }).nullable().optional();
 const noCache = (_req, res, next) => {
@@ -171,6 +174,25 @@ galleryAdminRouter.use(
   requirePermission("read:events"),
 );
 const write = requirePermission("write:operations");
+const dropboxCookie={httpOnly:true,secure:['staging','production'].includes(process.env.APP_ENV),sameSite:'lax',path:'/api/integrations/dropbox-gallery/callback',maxAge:600000};
+galleryAdminRouter.post('/albums/:id/dropbox/connect',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{
+  const result=await startDropboxGalleryOAuth(id.parse(req.params.id),req);res.cookie('lola_dropbox_gallery_oauth',result.browser,dropboxCookie);res.json({url:result.url});
+}));
+galleryAdminRouter.post('/dropbox/disconnect',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await disconnectDropboxGallery(req))));
+galleryAdminRouter.get('/albums/:id/dropbox',requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await dropboxGalleryStatus(id.parse(req.params.id)))));
+galleryAdminRouter.post('/albums/:id/dropbox',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{
+  const input=z.object({folderPath:z.string().min(2).max(1000),enabled:z.boolean().default(false)}).strict().parse(req.body);
+  res.json(await saveDropboxGallerySource(id.parse(req.params.id),input,req.user));
+}));
+galleryAdminRouter.post('/albums/:id/dropbox/pause',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await pauseDropboxGallerySource(id.parse(req.params.id),req.user))));
+galleryAdminRouter.post('/albums/:id/dropbox/sync',write,requirePermission('write:integrations'),rateLimit({windowMs:60000,limit:3,standardHeaders:true,legacyHeaders:false}),asyncHandler(async(req,res)=>res.json(await syncDropboxGallerySource(id.parse(req.params.id),{user:req.user}))));
+export const galleryDropboxOAuthRouter=Router();
+galleryDropboxOAuthRouter.get('/dropbox-gallery/callback',gate,noCache,rateLimit({windowMs:600000,limit:20,standardHeaders:true,legacyHeaders:false}),asyncHandler(async(req,res)=>{
+  const browser=String(req.headers.cookie||'').split(';').map(value=>value.trim()).find(value=>value.startsWith('lola_dropbox_gallery_oauth='))?.split('=').slice(1).join('=');
+  res.clearCookie('lola_dropbox_gallery_oauth',dropboxCookie);
+  const result=await finishDropboxGalleryOAuth({state:req.query.state,code:req.query.code,error:req.query.error,browser},req);
+  res.redirect(`${env.clientOrigin.replace(/\/$/,'')}/operations/galleries/${result.albumId}?dropbox=connected`);
+}));
 galleryAdminRouter.post('/albums/:id/fiesta-shares',write,asyncHandler(async(req,res)=>{
  const input=z.object({csv:z.string().max(1024*1024),eventCode:z.string().regex(/^[A-Za-z0-9_-]+$/).max(100)}).strict().parse(req.body);
  res.json(await importFiestaShares(id.parse(req.params.id),input.csv,input.eventCode,req.user));

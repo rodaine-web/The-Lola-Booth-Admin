@@ -15,7 +15,7 @@ import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { authRouter } from "./routes/auth.js";
-import {galleryPublicRouter,galleryAdminRouter} from "./routes/gallery.js";
+import {galleryPublicRouter,galleryAdminRouter,galleryDropboxOAuthRouter} from "./routes/gallery.js";
 import { publicRouter } from "./routes/public.js";
 import { adminRouter } from "./routes/admin.js";
 import { webhookRouter } from "./routes/webhooks.js";
@@ -36,6 +36,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(pinoHttp({ logger, genReqId: (_req, res) => { const id = crypto.randomUUID(); res.setHeader("X-Request-ID", id); return id; }, serializers: { req: safeRequestLog, res: safeResponseLog } }));
+app.use("/api/integrations",galleryDropboxOAuthRouter);
 app.use("/api/integrations",crmOutlookCallbackRouter);
 app.use("/api/integrations",externalOAuthRouter);
 app.use("/api/webhooks", express.raw({ type: "application/json", limit: "1mb" }), webhookRouter);
