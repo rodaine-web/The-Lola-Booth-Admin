@@ -12,5 +12,5 @@ test('connected requires operational evidence; recommendation never implies conn
 });
 test('filters combine search and category; metrics deduplicate multi-category providers',()=>{
  const apps=definitions.map(d=>({...d,state:marketplaceState(d,{status:d.id==='MAILCHIMP'?'CONNECTED':'NOT_CONNECTED',verified:d.id==='MAILCHIMP'})}));
- assert.equal(filterIntegrations(apps,'mailchimp','automation').length,1);assert.equal(filterIntegrations(apps,'mailchimp','connected').length,1);assert.equal(filterIntegrations(apps,'not-a-provider','all').length,0);assert.equal(marketplaceMetrics(apps).connected,1);assert.ok(filterIntegrations(apps,'','recommended').every(a=>a.recommended));
+ assert.equal(filterIntegrations(apps,'mailchimp','automation').length,1);assert.equal(filterIntegrations(apps,'mailchimp','connected').length,1);assert.equal(filterIntegrations(apps,'not-a-provider','all').length,0);assert.equal(marketplaceMetrics(apps).connected,1);assert.equal(filterIntegrations(apps,'Photo Booth Apps','all').length,6);assert.equal(filterIntegrations(apps,'productivity','all').length,7);assert.ok(filterIntegrations(apps,'','recommended').every(a=>a.recommended));
 });

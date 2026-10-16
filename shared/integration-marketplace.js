@@ -19,6 +19,6 @@ export function marketplaceState(definition, evidence={}) {
 }
 export function filterIntegrations(items,search='',filter='all') {
  const term=search.trim().toLowerCase();
- return items.filter(item=>(filter==='all'||filter==='recommended'&&item.recommended||filter==='connected'&&item.state.status==='CONNECTED'||item.categories.includes(filter))&&`${item.name} ${item.description} ${item.categories.join(' ')}`.toLowerCase().includes(term));
+ return items.filter(item=>(filter==='all'||filter==='recommended'&&item.recommended||filter==='connected'&&item.state.status==='CONNECTED'||item.categories.includes(filter))&&`${item.name} ${item.description} ${item.categories.join(' ')} ${integrationCategories.filter(category=>category.includes.some(id=>item.categories.includes(id))).map(category=>category.name).join(' ')} ${integrationFilters.filter(([id])=>item.categories.includes(id)).map(([,label])=>label).join(' ')}`.toLowerCase().includes(term));
 }
 export function marketplaceMetrics(items){return {connected:items.filter(i=>i.state.status==='CONNECTED').length,available:items.filter(i=>i.implementationStatus==='supported'&&!['DISABLED','COMING_SOON'].includes(i.state.status)).length,attention:items.filter(i=>i.state.health==='attention'||i.state.status==='SETUP_REQUIRED').length,issues:items.filter(i=>i.state.health==='attention').length};}
