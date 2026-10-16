@@ -1,3 +1,4 @@
+import DropboxGalleryImport from '../components/DropboxGalleryImport.jsx';
 import FiestaGalleryImport from '../components/FiestaGalleryImport.jsx';
 import "../styles/record-workspace.css";
 import GalleryOverview from "../components/GalleryOverview.jsx";
@@ -794,6 +795,7 @@ export default function GalleryAdmin() {
             </section>
           )}
           {tab === "Settings" && <FiestaGalleryImport album={data.album} onImported={load}/>}
+          {tab === "Settings" && <DropboxGalleryImport key={data.album.id} album={data.album} onImported={load}/>}
           {tab === "Settings" && (
             <section className="panel gallery-settings">
               <h2>Gallery settings</h2>
