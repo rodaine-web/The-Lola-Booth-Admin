@@ -115,7 +115,7 @@ test("frontend adds integrations and communications workflows without redesignin
   assert.match(app, /<Communications \/>/);
   assert.match(integrations, /Lead Sources/);
   assert.match(integrations, /Failed inbound leads/);
-  assert.match(integrations, /Provider approval requirements are shown on the integration card above/);
+  assert.match(fs.readFileSync(new URL('../src/components/integrations/IntegrationDetailPanel.jsx', import.meta.url),'utf8'), /Provider approval requirements must be completed/);
   assert.match(integrationCatalog, /status=initiated\?\'PENDING_APPROVAL\':\'NOT_CONFIGURED\'/);
   assert.match(integrationCatalog, /mode=initiated\?\'SETUP_STARTED\':\'DISABLED\'/);
   assert.match(integrationCatalog, /No LinkedIn setup has been initiated/);
