@@ -1,3 +1,4 @@
+import {integrationMarketplace} from '../services/integration-marketplace-service.js';
 import {saveSentProposalRevision,sendReviewedProposal,latestProposalDelivery,proposalReviewEmail} from '../services/proposal-review-service.js';
 import {crmContactsRouter} from './crm-contacts.js';
 import {createAdminLead} from '../services/admin-lead-create.js';
@@ -2849,6 +2850,7 @@ adminRouter.patch("/settings", requirePermission("write:settings"), validate(set
   res.json(updated.rows[0]);
 }));
 
+adminRouter.get('/integrations/marketplace',requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await integrationMarketplace(req.query))));
 adminRouter.get('/integrations/catalog',requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await integrationCatalog())));
 adminRouter.post('/integrations/:provider/local-test',requirePermission('write:settings'),asyncHandler(async(req,res)=>res.json(await testIntegration(req.params.provider,req.user))));
 adminRouter.patch('/sms-consent/:type/:id',requirePermission('write:sales'),asyncHandler(async(req,res)=>{

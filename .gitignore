@@ -22,3 +22,7 @@ work/qa-scenarios/
 
 # Private offline backup recovery keys; never publish.
 work/backup-recovery/
+
+# Local integration visual QA caches
+/.qa/
+/.qa-vite/

@@ -1,0 +1,682 @@
+[
+  {
+    "id": "STRIPE",
+    "name": "Stripe",
+    "description": "Online payments, invoices and transactions.",
+    "categories": [
+      "payments"
+    ],
+    "officialWebsite": "https://stripe.com",
+    "recommended": true,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": "/assets/integrations/stripe.svg",
+    "logoVerified": true,
+    "logoSource": "https://images.stripeassets.com/fzn2n1nzq965/1hgcBNd12BfT9VLgbId7By/01d91920114b124fb4cf6d448f9f06eb/favicon.svg",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Stripe | Financial Infrastructure to Grow Your Revenue",
+    "verifiedWebsite": "https://stripe.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "PAYPAL",
+    "name": "PayPal",
+    "description": "Alternative payment processing.",
+    "categories": [
+      "payments"
+    ],
+    "officialWebsite": "https://www.paypal.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": "/assets/integrations/paypal.png",
+    "logoVerified": true,
+    "logoSource": "https://www.paypalobjects.com/marketing/web/icons/monogram/pp114.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Pay, Send and Save Money with PayPal | PayPal US",
+    "verifiedWebsite": "https://www.paypal.com/us/home",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "SQUARE",
+    "name": "Square",
+    "description": "Point-of-sale and in-person payments.",
+    "categories": [
+      "payments"
+    ],
+    "officialWebsite": "https://squareup.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Power your entire business | Square",
+    "verifiedWebsite": "https://squareup.com/us/en"
+  },
+  {
+    "id": "QUICKBOOKS",
+    "name": "QuickBooks Online",
+    "description": "Synchronize accounting records with your existing invoices.",
+    "categories": [
+      "accounting"
+    ],
+    "officialWebsite": "https://quickbooks.intuit.com",
+    "recommended": true,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": false,
+    "verificationNote": "Official-site request unavailable: TimeoutError; use letter fallback, no logo verification claimed."
+  },
+  {
+    "id": "XERO",
+    "name": "Xero",
+    "description": "Cloud accounting and financial reconciliation.",
+    "categories": [
+      "accounting"
+    ],
+    "officialWebsite": "https://www.xero.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/xero.png",
+    "logoVerified": true,
+    "logoSource": "https://www.xero.com/content/dam/xero/pilot-images/admin/icons/favicon/apple-touch-icon.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://www.xero.com/us/",
+    "verificationNote": "Official product page checked: Accounting Software for Small Businesses | Xero USDismissXero homepageIncludedIncludedIncludedIncludedIncludedIncludedIncludedIncl",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "WAVE",
+    "name": "Wave",
+    "description": "Small-business bookkeeping and accounting.",
+    "categories": [
+      "accounting"
+    ],
+    "officialWebsite": "https://www.waveapps.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/wave.png",
+    "logoVerified": true,
+    "logoSource": "https://cdn.prod.website-files.com/62446230dcb514b828a6e237/627e0a14ff7686635f162d06_favicon-large.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://www.waveapps.com",
+    "verificationNote": "Official product page checked: Wave: Small Business Software - Wave Financial",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "FRESHBOOKS",
+    "name": "FreshBooks",
+    "description": "Accounting and financial record synchronization.",
+    "categories": [
+      "accounting"
+    ],
+    "officialWebsite": "https://www.freshbooks.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/freshbooks.svg",
+    "logoVerified": true,
+    "logoSource": "https://www.freshbooks.com/mask-icon.svg",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Invoice and Accounting Software for Small Businesses - FreshBooks",
+    "verifiedWebsite": "https://www.freshbooks.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "GA4",
+    "name": "Google Analytics",
+    "description": "Website traffic and inquiry conversion reporting.",
+    "categories": [
+      "marketing",
+      "website"
+    ],
+    "officialWebsite": "https://marketingplatform.google.com/about/analytics/",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://marketingplatform.google.com/about/analytics/",
+    "verificationNote": "Official product page checked: Analytics Tools & Solutions for Your Business - Google Analyticspeople iconbulb iconrestart iconchecklist iconpeople iconbulb icon"
+  },
+  {
+    "id": "META",
+    "name": "Meta / Facebook / Instagram",
+    "description": "Lead forms and advertising attribution.",
+    "categories": [
+      "marketing"
+    ],
+    "officialWebsite": "https://about.meta.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": "/assets/integrations/meta.webp",
+    "logoVerified": true,
+    "logoSource": "https://static.xx.fbcdn.net/rsrc.php/yQ/r/0eWKxz9kEoF.webp",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: About Meta | Our Company, Mission, Apps & Products | Meta",
+    "verifiedWebsite": "https://www.meta.com/about/?utm_source=about.meta.com&utm_medium=redirect",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "TIKTOK",
+    "name": "TikTok",
+    "description": "Lead forms and conversion event reporting.",
+    "categories": [
+      "marketing"
+    ],
+    "officialWebsite": "https://www.tiktok.com/business/",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: TikTok for Business | Marketing & Advertising on TikTok",
+    "verifiedWebsite": "https://ads.tiktok.com/business/en-US?tt4b_lang_redirect=1"
+  },
+  {
+    "id": "LINKEDIN",
+    "name": "LinkedIn",
+    "description": "Lead tracking and business audience engagement.",
+    "categories": [
+      "marketing"
+    ],
+    "officialWebsite": "https://business.linkedin.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": "/assets/integrations/linkedin.png",
+    "logoVerified": true,
+    "logoSource": "https://content.linkedin.com/lem/static/etc.clientlibs/linkedin-experience-manager/clientlibs/clientlib-site/resources/icons/favicon.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Business Solutions on LinkedIn I LinkedIn",
+    "verifiedWebsite": "https://business.linkedin.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "MAILCHIMP",
+    "name": "Mailchimp",
+    "description": "Sync subscribed contacts and view campaign reports.",
+    "categories": [
+      "marketing",
+      "automation"
+    ],
+    "officialWebsite": "https://mailchimp.com",
+    "recommended": true,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": "/assets/integrations/mailchimp.svg",
+    "logoVerified": true,
+    "logoSource": "https://mailchimp.com/release/plums/a9c5b58dea3269f6.svg",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Email & SMS Marketing Platform | Mailchimp",
+    "verifiedWebsite": "https://mailchimp.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "KLAVIYO",
+    "name": "Klaviyo",
+    "description": "Email and SMS marketing audience management.",
+    "categories": [
+      "marketing",
+      "automation"
+    ],
+    "officialWebsite": "https://www.klaviyo.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/klaviyo.png",
+    "logoVerified": true,
+    "logoSource": "https://www.klaviyo.com/icons/icon-144x144.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Klaviyo: AI Email Marketing & SMS | B2C CRM",
+    "verifiedWebsite": "https://www.klaviyo.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "FIESTA",
+    "name": "Fiesta",
+    "description": "Photo booth experiences, capture sharing and event software.",
+    "categories": [
+      "booth"
+    ],
+    "officialWebsite": "https://photoboothsupplyco.com/pages/fiesta-software",
+    "recommended": true,
+    "featured": true,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: The Fiesta App - Plug-and-Play Photo Booth Software",
+    "verifiedWebsite": "https://photoboothsupplyco.com/pages/fiesta-software"
+  },
+  {
+    "id": "SNAPPIC",
+    "name": "Snappic",
+    "description": "Photo booth activation, sharing and analytics.",
+    "categories": [
+      "booth"
+    ],
+    "officialWebsite": "https://www.snappic.com",
+    "recommended": true,
+    "featured": true,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/snappic.webp",
+    "logoVerified": true,
+    "logoSource": "https://znrdwtbxkqmnrzt9.public.blob.vercel-storage.com/Favicon.webp",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Photo Booth Software for Professionals | Snappic",
+    "verifiedWebsite": "https://www.snappic.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "BREEZE",
+    "name": "Breeze Booth",
+    "description": "Photo booth capture and event software.",
+    "categories": [
+      "booth"
+    ],
+    "officialWebsite": "https://www.breezesoftware.com",
+    "recommended": true,
+    "featured": true,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/breeze.png",
+    "logoVerified": true,
+    "logoSource": "https://cdn.prod.website-files.com/66987748b386560cebdd40c9/66988d434d57657bba9a6f9b_favicon.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Breeze Software",
+    "verifiedWebsite": "https://www.breezesoftware.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "DSLRBOOTH",
+    "name": "dslrBooth",
+    "description": "DSLR photo booth software, now LumaBooth.",
+    "categories": [
+      "booth"
+    ],
+    "officialWebsite": "https://dslrbooth.com",
+    "recommended": true,
+    "featured": true,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://dslrbooth.com",
+    "verificationNote": "Official product page checked: Photo Booth Software & Apps for PC/Mac, iPad/iPhone and Android by LumaBooth for Windows (dslrBooth)"
+  },
+  {
+    "id": "CURATOR",
+    "name": "Curator Live",
+    "description": "Photo, video and social event experiences.",
+    "categories": [
+      "booth"
+    ],
+    "officialWebsite": "https://curatorlive.com",
+    "recommended": true,
+    "featured": true,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/curator.png",
+    "logoVerified": true,
+    "logoSource": "https://curatorlive.com/wp-content/uploads/2024/06/cropped-fav-icon-curator-live-180x180.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Photo and Video Solutions for Events - Curator LiveExpandExpandToggle MenuExpandExpand",
+    "verifiedWebsite": "https://curatorlive.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "TOUCHPIX",
+    "name": "Touchpix",
+    "description": "Photo, video and interactive event experiences.",
+    "categories": [
+      "booth"
+    ],
+    "officialWebsite": "https://touchpix.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Touchpix | Best 360 Photo Booth App Software | #1 all-in-one solution",
+    "verifiedWebsite": "https://touchpix.com"
+  },
+  {
+    "id": "MICROSOFT",
+    "name": "Microsoft 365",
+    "description": "Business email and shared-mailbox contact discovery.",
+    "categories": [
+      "communication"
+    ],
+    "officialWebsite": "https://www.microsoft.com/microsoft-365",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": false,
+    "verificationNote": "Official-site request unavailable: TimeoutError; use letter fallback, no logo verification claimed."
+  },
+  {
+    "id": "GOOGLE_WORKSPACE",
+    "name": "Google Workspace",
+    "description": "Gmail, Drive and productivity tools for your team.",
+    "categories": [
+      "communication"
+    ],
+    "officialWebsite": "https://workspace.google.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": false,
+    "verifiedWebsite": "https://workspace.google.com",
+    "verificationNote": "Official-site request unavailable: TimeoutError; use letter fallback, no logo verification claimed."
+  },
+  {
+    "id": "TWILIO",
+    "name": "Twilio",
+    "description": "Opt-in SMS and event communication escalation.",
+    "categories": [
+      "communication"
+    ],
+    "officialWebsite": "https://www.twilio.com",
+    "recommended": true,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": false,
+    "verificationNote": "Official-site request unavailable: TimeoutError; use letter fallback, no logo verification claimed."
+  },
+  {
+    "id": "SLACK",
+    "name": "Slack",
+    "description": "Team messaging and collaboration.",
+    "categories": [
+      "communication"
+    ],
+    "officialWebsite": "https://slack.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": false,
+    "verificationNote": "Official-site request unavailable: TimeoutError; use letter fallback, no logo verification claimed."
+  },
+  {
+    "id": "ZOOM",
+    "name": "Zoom",
+    "description": "Video meetings and virtual consultations.",
+    "categories": [
+      "communication"
+    ],
+    "officialWebsite": "https://www.zoom.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": false,
+    "verificationNote": "Official-site request unavailable: TimeoutError; use letter fallback, no logo verification claimed."
+  },
+  {
+    "id": "CALENDLY",
+    "name": "Calendly",
+    "description": "Scheduling for calls and consultations.",
+    "categories": [
+      "communication"
+    ],
+    "officialWebsite": "https://calendly.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": false,
+    "verifiedWebsite": "https://calendly.com",
+    "verificationNote": "Official-site request unavailable: TimeoutError; use letter fallback, no logo verification claimed.",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "GOOGLE_CALENDAR",
+    "name": "Google Calendar",
+    "description": "Team calendars and event availability.",
+    "categories": [
+      "communication"
+    ],
+    "officialWebsite": "https://workspace.google.com/products/calendar/",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Shareable Online Calendar and Scheduling - Google Calendar",
+    "verifiedWebsite": "https://workspace.google.com/products/calendar/"
+  },
+  {
+    "id": "ZAPIER",
+    "name": "Zapier",
+    "description": "Connect workflows across your business tools.",
+    "categories": [
+      "automation"
+    ],
+    "officialWebsite": "https://zapier.com",
+    "recommended": true,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Zapier: Automate AI Workflows, Agents, and Apps",
+    "verifiedWebsite": "https://zapier.com"
+  },
+  {
+    "id": "HUBSPOT",
+    "name": "HubSpot",
+    "description": "Optional CRM, sales and marketing tools.",
+    "categories": [
+      "automation"
+    ],
+    "officialWebsite": "https://www.hubspot.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/hubspot.png",
+    "logoVerified": true,
+    "logoSource": "https://www.hubspot.com/hubfs/HubSpot_Logos/HubSpot-Inversed-Favicon.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://www.hubspot.com",
+    "verificationNote": "Official product page checked: HubSpot | Software & Tools for your Business - HomepageLogo - Full (Color)",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "PIPEDRIVE",
+    "name": "Pipedrive",
+    "description": "Sales pipeline and CRM synchronization.",
+    "categories": [
+      "automation"
+    ],
+    "officialWebsite": "https://www.pipedrive.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/pipedrive.png",
+    "logoVerified": true,
+    "logoSource": "https://cdn.was-1.pipedriveassets.com/www-main-renderer/_next/static/media/apple-touch-icon-114x114.d136e46f.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://www.pipedrive.com",
+    "verificationNote": "Official product page checked: Sales CRM & Pipeline Management Software | Pipedrive",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "TYPEFORM",
+    "name": "Typeform",
+    "description": "Forms, surveys and lead capture.",
+    "categories": [
+      "automation"
+    ],
+    "officialWebsite": "https://www.typeform.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/typeform.png",
+    "logoVerified": true,
+    "logoSource": "https://cdn.prod.website-files.com/66ffe2174aa8e8d5661c2708/68b6f00951eb33cd19b77288_Frame%201867174.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://www.typeform.com",
+    "verificationNote": "Official product page checked: Form Builder with AI Automation | TypeformTypeform IconFacebookTwitter/XInstagramYouTubeLinkedIn",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "WEBSITE",
+    "name": "CMS / Public API",
+    "description": "Publish website content and receive booking inquiries.",
+    "categories": [
+      "website"
+    ],
+    "officialWebsite": "https://www.thelolabooth.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "supported",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "verificationNote": "Native LOLA service; letter icon, not a third-party brand."
+  },
+  {
+    "id": "WORDPRESS",
+    "name": "WordPress",
+    "description": "Website content and form synchronization.",
+    "categories": [
+      "website"
+    ],
+    "officialWebsite": "https://wordpress.org",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/wordpress.png",
+    "logoVerified": true,
+    "logoSource": "https://s.w.org/images/wmark.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://wordpress.org",
+    "verificationNote": "Official product page checked: Blog Tool, Publishing Platform, and CMS \u2013 WordPress.orgWordPress.orgWordPress.orgCode is Poetry",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "WEBFLOW",
+    "name": "Webflow",
+    "description": "Website content and lead forms.",
+    "categories": [
+      "website"
+    ],
+    "officialWebsite": "https://webflow.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/webflow.png",
+    "logoVerified": true,
+    "logoSource": "https://cdn.prod.website-files.com/686294e263eb7e215bd232f7/686d53ceda66a40cb6b6d546_favicon.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://webflow.com",
+    "verificationNote": "Official product page checked: Webflow: The agentic web platform for modern businessesWebflowPlayPausePlayPausePlayPausePlayPausePlayPausePlayPauseMade in Webflo",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "CANVA",
+    "name": "Canva",
+    "description": "Design assets and event templates.",
+    "categories": [
+      "website"
+    ],
+    "officialWebsite": "https://www.canva.com",
+    "recommended": true,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": "/assets/integrations/canva.png",
+    "logoVerified": true,
+    "logoSource": "https://static.canva.com/domain-assets/canva/static/images/android-192x192-2.png",
+    "logoStatus": "Verified official-site asset",
+    "websiteVerified": true,
+    "verificationNote": "Official product page checked: Unsupported client \u2013 Canva",
+    "verifiedWebsite": "https://www.canva.com",
+    "attribution": "Brand identification only; trademark belongs to its owner. Source website asset; no redistribution license implied."
+  },
+  {
+    "id": "GOOGLE_BUSINESS",
+    "name": "Google Business Profile",
+    "description": "Manage business visibility and local presence.",
+    "categories": [
+      "website"
+    ],
+    "officialWebsite": "https://business.google.com",
+    "recommended": false,
+    "featured": false,
+    "implementationStatus": "planned",
+    "logoPath": null,
+    "logoVerified": false,
+    "logoSource": null,
+    "logoStatus": "Letter fallback",
+    "websiteVerified": true,
+    "verifiedWebsite": "https://support.google.com/business/answer/3420286?visit_id=639277708077478799-3637076350&p=browser_support&rd=1",
+    "verificationNote": "Official product page checked: Update your browser to manage your Business Profile - Google Business Profile Help"
+  }
+]
