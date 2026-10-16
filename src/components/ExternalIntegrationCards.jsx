@@ -27,7 +27,7 @@ const info = {
     description: 'Sync subscribed CRM contacts to an audience. Your CRM remains the source of truth.'
   }
 };
-export default function ExternalIntegrationCards() {
+export default function ExternalIntegrationCards({providerFilter}) {
   const {
       can
     } = useAuth(),
@@ -83,7 +83,7 @@ export default function ExternalIntegrationCards() {
     await run('logs', async () => setLogs(await api.get(`/integrations/logs?${new URLSearchParams(Object.entries(next).filter(([, v]) => v))}`)));
   }
   return <section className="integration-section"><h2>External connections</h2><p>Connect each service when its account setup is complete. Sales and LOLA campaigns work independently.</p>{error && <p role="alert" className="error-banner">{error}</p>}{notice && <p role="status" className="toast">{notice}</p>}
- <div className="integration-grid external-grid">{rows.map(row => {
+ <div className="integration-grid external-grid">{rows.filter(row=>!providerFilter||row.provider===providerFilter).map(row => {
         const {
             label,
             Icon,

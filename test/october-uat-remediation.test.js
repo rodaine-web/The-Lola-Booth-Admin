@@ -228,10 +228,10 @@ test("October UAT: controlled client and event values and actionable validation 
 
 
 test("October UAT: integrations expose actionable setup and lifecycle controls", () => {
-  const integrations = source("src/pages/Integrations.jsx");
+  const integrations = source("src/pages/Integrations.jsx") + source("src/components/integrations/IntegrationDetailPanel.jsx");
   assert.match(integrations, /Reconnect \/ Configure/);
   assert.match(integrations, /Recheck status/);
-  assert.match(integrations, /[\"']Disable[\"']/);
+  assert.match(integrations, />Disable<\/button>/);
   assert.match(integrations, /Configuration guidance/);
 });
 
