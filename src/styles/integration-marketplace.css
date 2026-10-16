@@ -16,3 +16,6 @@
 .lola-app-shell .im-page .im-page-heading{margin-bottom:18px!important}
 .lola-app-shell .im-page .im-featured-grid h3{margin-top:18px!important;margin-bottom:7px!important}
 @media(max-width:768px){.lola-app-shell .im-page h1{font-size:36px!important}.lola-app-shell .im-page h2{font-size:18px!important}}
+@media(min-width:1101px){.im-page .im-discovery-grid{grid-template-columns:1fr .8fr 2fr}.im-page .im-discovery-settings{grid-column:auto}}
+@media(min-width:1280px){.im-page .im-app-row .im-app-info{grid-template-columns:minmax(90px,.7fr) minmax(0,1fr)}}
+.im-page #outlook-contacts{scroll-margin-top:80px}
