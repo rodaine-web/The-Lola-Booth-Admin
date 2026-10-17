@@ -41,6 +41,13 @@ test('external hub migration and queue run against disposable PostgreSQL', {
           user,
           headers: {}
         };
+      const {integrationMarketplace}=await import('../server/src/services/integration-marketplace-service.js');
+      const marketplace=await integrationMarketplace({days:30});
+      assert.equal(marketplace.apps.length,35);
+      assert.ok(marketplace.apps.filter(a=>a.implementationStatus==='planned').every(a=>a.state.status==='COMING_SOON'));
+      assert.equal(marketplace.metrics.connected,0,'Fresh schema has no verified provider evidence');
+      assert.ok(!JSON.stringify(marketplace).includes('encrypted_credentials'));
+      await assert.rejects(integrationMarketplace({days:'invalid'}),error=>error.code==='INVALID_DATE_RANGE');
       await query("UPDATE integration_connections SET encrypted_credentials=$1,status='CONNECTED',metadata=$2 WHERE provider='MAILCHIMP'", [encryptSecretJson({
         access_token: 'test-only-token',
         dc: 'us21'
