@@ -4,6 +4,22 @@ import express from 'express';
 import {environmentCors} from '../server/src/middleware/environment-cors.js';
 import {galleryOrigins,environments,assertEnvironmentIsolation} from '../shared/environment-isolation.js';
 
+test('local browser configuration is read per request while hosted origins remain fixed',async()=>{
+  let environment='test',origins=['http://localhost:5173'];
+  const app=express();app.use(environmentCors(()=>environment,()=>origins));
+  app.get('/api/auth/me',(req,res)=>res.json({ok:true}));
+  app.use((error,req,res,next)=>res.status(403).end());
+  const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+  try {
+    const url=`http://127.0.0.1:${server.address().port}/api/auth/me`;
+    origins=['http://localhost:5174'];
+    assert.equal((await fetch(url,{headers:{Origin:origins[0]}})).status,200);
+    assert.equal((await fetch(url,{headers:{Origin:'http://localhost:5173'}})).status,403);
+    environment='production';
+    assert.equal((await fetch(url,{headers:{Origin:origins[0]}})).status,403);
+  } finally {await new Promise(resolve=>server.close(resolve));}
+});
+
 for (const environment of ['staging','production']) {
   test(`${environment} gallery hostname can access public gallery routes only`,async()=>{
     const app=express();app.use(environmentCors(environment));

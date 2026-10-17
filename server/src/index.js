@@ -27,7 +27,7 @@ const app = express();
 
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(environmentCors(process.env.APP_ENV,[env.clientOrigin,...env.publicInquiryAllowedOrigins]));
+app.use(environmentCors(()=>process.env.APP_ENV,()=>[env.clientOrigin,...env.publicInquiryAllowedOrigins]));
 app.use(pinoHttp({ logger, genReqId: (_req, res) => { const id = crypto.randomUUID(); res.setHeader("X-Request-ID", id); return id; }, serializers: { req: safeRequestLog, res: safeResponseLog } }));
 app.use("/api/integrations",galleryDropboxOAuthRouter);
 app.use("/api/integrations",crmOutlookCallbackRouter);
