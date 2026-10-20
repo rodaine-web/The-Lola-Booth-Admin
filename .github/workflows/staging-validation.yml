@@ -37,6 +37,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Backup transport fault tests
+        run: python3 ops/backups/test_backup_transfer.py
+
       - name: Use Node 24
         uses: actions/setup-node@v4
         with:
