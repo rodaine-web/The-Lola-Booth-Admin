@@ -163,6 +163,13 @@ BEGIN
 END $$;
 CREATE TRIGGER workflow_reassign_client_tasks AFTER UPDATE OF owner_id ON crm_contacts FOR EACH ROW EXECUTE FUNCTION workflow_reassign_client_tasks();
 
+-- Repair open generated-task ownership from verified current records/history only.
+-- Assignment triggers audit this change. Notification activation uses a later fresh cutoff.
+UPDATE tasks t SET assigned_user_id=workflow_task_owner(t.lead_id,t.client_id,t.event_id,t.proposal_id),updated_at=now()
+ WHERE t.deleted_at IS NULL AND t.status IN ('OPEN','IN_PROGRESS') AND t.lifecycle_key IS NOT NULL
+  AND workflow_task_owner(t.lead_id,t.client_id,t.event_id,t.proposal_id) IS NOT NULL
+  AND t.assigned_user_id IS DISTINCT FROM workflow_task_owner(t.lead_id,t.client_id,t.event_id,t.proposal_id);
+
 -- Only an issued replacement requires re-signing; a saved draft never revokes a signed agreement.
 CREATE OR REPLACE FUNCTION booking_confirmation_missing(target UUID) RETURNS TEXT[] AS $$
 DECLARE commercial RECORD; missing TEXT[]:=ARRAY[]::TEXT[]; required NUMERIC; paid NUMERIC;

@@ -18,10 +18,16 @@ try{
   tasks:await one("SELECT status,count(*)::int count,count(*) FILTER(WHERE assigned_user_id IS NULL)::int unassigned FROM tasks WHERE deleted_at IS NULL GROUP BY status ORDER BY status"),
   checkouts:await one("SELECT a.provider,a.status,count(*)::int count,min(a.created_at) oldest FROM payment_attempts a GROUP BY a.provider,a.status"),
   currentUnsignedBookings:await one("SELECT count(*)::int count FROM invoices i WHERE i.proposal_id IS NOT NULL AND i.deleted_at IS NULL AND i.status NOT IN ('PAID','VOID','REFUNDED') AND NOT EXISTS(SELECT 1 FROM contracts c WHERE c.proposal_id=i.proposal_id AND c.status='SIGNED')")};
+ const pending=(await client.query("SELECT provider_session_id FROM payment_attempts WHERE provider='STRIPE' AND status='PENDING' ORDER BY created_at LIMIT 100")).rows;
  await client.query('COMMIT');
  if(process.env.STRIPE_SECRET_KEY){
   const r=await fetch('https://api.stripe.com/v1/account',{headers:{Authorization:'Bearer '+process.env.STRIPE_SECRET_KEY,'Stripe-Version':'2026-08-26.dahlia'}}),a=await r.json();
   result.stripeAccount={verified:r.ok&&a.id===process.env.STRIPE_ACCOUNT_ID,chargesEnabled:!!a.charges_enabled};
+  result.pendingProviderStatuses=[];
+  for(const attempt of pending){
+   const response=await fetch('https://api.stripe.com/v1/checkout/sessions/'+encodeURIComponent(attempt.provider_session_id),{headers:{Authorization:'Bearer '+process.env.STRIPE_SECRET_KEY,'Stripe-Version':'2026-08-26.dahlia'}}),session=await response.json();
+   result.pendingProviderStatuses.push({verified:response.ok,status:session.status||'UNKNOWN',paymentStatus:session.payment_status||'UNKNOWN',livemode:session.livemode});
+  }
  }
  console.log(JSON.stringify(result));
 }finally{client.release();await pool.end();}

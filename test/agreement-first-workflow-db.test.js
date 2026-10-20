@@ -16,6 +16,11 @@ test('agreement-first persisted lifecycle, conversion, task ownership and remind
   await query("INSERT INTO business_settings(business_name) VALUES('Workflow QA')");
   const owner=await row("INSERT INTO users(name,email,password_hash) VALUES('Owner','owner@qa.invalid','not-a-login') RETURNING id"),nextOwner=await row("INSERT INTO users(name,email,password_hash) VALUES('Next owner','next@qa.invalid','not-a-login') RETURNING id");
   const lead=await row("INSERT INTO leads(first_name,last_name,email,event_type,event_date,assigned_user_id) VALUES('Workflow','QA','workflow@qa.invalid','Wedding','2035-10-15',$1) RETURNING *",[owner.id]);
+  const creatorLead=await row("INSERT INTO leads(first_name,last_name,email,event_type) VALUES('Creator','Fallback','creator@qa.invalid','Wedding') RETURNING id");
+  await query("INSERT INTO audit_logs(action,entity,entity_id,actor_user_id) VALUES('lead_created','lead',$1,$2),('lead_reassigned','lead',$1,$3)",[creatorLead.id,owner.id,nextOwner.id]);
+  const creatorTask=await row("INSERT INTO tasks(title,lead_id,lifecycle_key) VALUES('Creator fallback',$1,'qa-creator') RETURNING *",[creatorLead.id]);
+  assert.equal(creatorTask.assigned_user_id,owner.id,'Unassigned lead defaults to creator, not the person who edited/reassigned it');
+  await query("UPDATE tasks SET status='DONE' WHERE id=$1",[creatorTask.id]);
   const customer=await row("INSERT INTO clients(name,email,sales_qualified) VALUES('Workflow QA','workflow@qa.invalid',false) RETURNING *");
   const event=await row("INSERT INTO events(event_name,event_type,event_date,start_time,end_time,status,client_id) VALUES('Workflow QA','Wedding','2035-10-15','18:00','22:00','PENDING_CONTRACT',$1) RETURNING *",[customer.id]);
   const proposal=await row("INSERT INTO proposals(proposal_number,lead_id,client_id,event_id,status,total,secure_token,pricing_snapshot,line_items_snapshot) VALUES('QA-WORKFLOW',$1,$2,$3,'SENT',1000,$4,$5,$6) RETURNING *",[lead.id,customer.id,event.id,crypto.randomBytes(24).toString('hex'),{total:1000,deposit_amount:300,tax_rate:0},JSON.stringify([{description:'Photo booth',quantity:1,unit_price:1000}])]);

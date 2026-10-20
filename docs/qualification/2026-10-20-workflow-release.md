@@ -50,3 +50,5 @@ Pause new dispatch and task notifications first. Preserve invoices, payments, si
 ## Production ancestry merge
 
 The production backup branch was merged normally, retaining its ancestry and three backup-source files plus the CI fault-test step. Shared application conflicts were inspected: the incoming copies represented the already deployed older payment-first behavior and placeholder file/gallery UI. The current staging versions preserve all production-equivalent proposal/tax/CRM fixes and the newly tested lifecycle and V1.2 implementation. No staging functionality was removed. The combined tree is requalified before deployment.
+
+Historical queue inspection: staging has no pending handoff jobs or scheduled email; production has no pending handoff jobs or scheduled email. Task notification activation will use a fresh post-migration cutoff. Read-only Stripe verification found three expired staging Checkouts and one open unpaid production Checkout; inspect/retire the obsolete production session before activating the new journey. Both Stripe account identities match their environment, and production charges are enabled; no charges were created for this check.
