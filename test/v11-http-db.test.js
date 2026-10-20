@@ -34,6 +34,14 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
    const response=await fetch(`${origin}/api${path}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});
    return {status:response.status,data:await response.json()};
   }
+  const taskCreated=await api('/tasks',{method:'POST',body:{title:'Resolution note API QA',assigned_user_id:user.id}});assert.equal(taskCreated.status,201);
+  assert.equal((await api('/tasks/'+taskCreated.data.id,{method:'PATCH',body:{status:'DONE'}})).status,422);
+  assert.equal((await api('/tasks/'+taskCreated.data.id,{method:'PATCH',body:{status:'DONE',closure_reason:'Verified by the assigned owner.'}})).status,200);
+  assert.equal((await pool.query('SELECT closure_reason FROM tasks WHERE id=$1',[taskCreated.data.id])).rows[0].closure_reason,'Verified by the assigned owner.');
+  assert.equal((await api('/tasks/'+taskCreated.data.id,{method:'PATCH',body:{closure_reason:null}})).status,422,'Closed tasks retain their resolution note');
+  assert.equal((await api('/tasks/'+taskCreated.data.id,{method:'PATCH',body:{status:'OPEN'}})).status,200);
+  assert.equal((await pool.query('SELECT closure_reason FROM tasks WHERE id=$1',[taskCreated.data.id])).rows[0].closure_reason,null);
+  assert.equal((await api('/tasks/'+taskCreated.data.id,{method:'PATCH',body:{status:'CANCELLED'}})).status,422,'Reclosing requires a new note');
   const availabilityLead=(await pool.query("INSERT INTO leads(first_name,last_name,email,event_type,event_date,event_start_time,event_end_time,venue_address) VALUES('Availability','QA','availability@example.invalid','Wedding','2030-12-03','18:00','22:00','QA venue') RETURNING id")).rows[0];
   assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{token:viewerToken})).status,403);
   assert.equal((await api(`/leads/${availabilityLead.id}/availability`,{method:'POST',body:{confirmed:true},token:viewerToken})).status,403);

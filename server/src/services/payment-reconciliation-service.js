@@ -1,3 +1,4 @@
+import {queueSignedWorkspace} from './client-session-service.js';
 import {convertPaidLead} from './paid-lead-conversion.js';
 import { queuePaidAgreement } from './booking-agreement-handoff-service.js';
 import {ensureEventPlanning,autoPlanningInvitation} from "./event-planning-service.js";
@@ -45,6 +46,8 @@ export async function reconcileInvoice(invoiceId, { req = null, actorUserId = nu
     if(paidClient)Object.assign(updated.rows[0],paidClient);
     await reconcileEventFinance(client, updated.rows[0].event_id);
     await queuePaidAgreement(client, updated.rows[0]);
+    const signed=(await client.query("SELECT * FROM contracts WHERE proposal_id=$1 AND status='SIGNED' ORDER BY revision DESC LIMIT 1",[updated.rows[0].proposal_id])).rows[0];
+    if(signed)await queueSignedWorkspace(signed);
     return { before: invoice.rows[0], after: updated.rows[0], refunded: money(refunded.rows[0].refunded) };
   });
   if (!result) return null;

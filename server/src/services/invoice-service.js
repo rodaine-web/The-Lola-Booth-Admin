@@ -1,3 +1,4 @@
+import {queuePaidAgreement} from './booking-agreement-handoff-service.js';
 import {proposalInvoiceSnapshot} from "../../../shared/proposal-invoice-snapshot.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
 import { documentOrigin } from "../utils/public-document-url.js";
@@ -209,7 +210,10 @@ export async function sendInvoice(req, invoice) {
     }
   });
   const email = await sendEmail({ to: req.body.recipient || invoice.client_email, subject, body, html, attachments: [doc] });
-  await query("UPDATE invoices SET status='SENT', sent_at=now(), updated_at=now() WHERE id=$1", [invoice.id]);
+  await transaction(async client=>{
+    const sent=(await client.query("UPDATE invoices SET status='SENT', sent_at=now(), updated_at=now() WHERE id=$1 RETURNING *",[invoice.id])).rows[0];
+    await queuePaidAgreement(client,sent);
+  });
   const communication = await query(
     `INSERT INTO communications (
        client_id, event_id, invoice_id, type, channel, direction, template_id, template_key, template_version,

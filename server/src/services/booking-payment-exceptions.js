@@ -23,9 +23,7 @@ export async function approveBookingPaymentException(eventId,input,req){
 export async function agreementPaymentQualified(invoice){
  if(!invoice||['DRAFT','VOID','REFUNDED'].includes(invoice.status)||!(Number(invoice.total)>0))return false;
  if((await query('SELECT invoice_payment_review($1) OR event_payment_review($2) AS held',[invoice.id,invoice.event_id||null])).rows[0]?.held)return false;
- const exception=invoice.event_id?(await query('SELECT minimum_before_agreement FROM booking_payment_exceptions WHERE event_id=$1 AND revoked_at IS NULL',[invoice.event_id])).rows[0]:null;
- const required=exception?Math.round(Number(exception.minimum_before_agreement)*100):Math.ceil(Math.round(Number(invoice.total)*100)*.3);
- return Math.round(Number(invoice.amount_paid)*100)>=required;
+ return true; // Agreement precedes first payment; invoice and dispute checks remain mandatory.
 }
 
 export async function bookingAgreementTerms(eventId){

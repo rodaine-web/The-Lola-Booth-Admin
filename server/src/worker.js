@@ -1,3 +1,5 @@
+import {expireStaleBookingCheckouts} from './services/checkout-lifecycle-service.js';
+import {queueTaskNotifications} from './services/task-notification-service.js';
 import {queuePeriodicOutlook} from './services/crm-outlook-service.js';
 import {processDropboxGallerySources} from './services/dropbox-gallery-service.js';
 import {processWebsiteProposalHandoffs} from './services/website-proposal-handoff-service.js';
@@ -39,6 +41,7 @@ async function tick() {
     const galleryImports=await processDropboxGallerySources();
     if(galleryImports.length)logger.info({results:galleryImports},'Dropbox gallery import results');
     if(stagingJobsPaused()){if(isStaging()&&process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:result.processed.every(item=>item.status!=='FAILED'),processed:result.processed.length,qualificationOnly:true});return;}
+    await expireStaleBookingCheckouts();
     const websiteProposals = await processWebsiteProposalHandoffs();
     if (websiteProposals.processed.length) logger.info({processed:websiteProposals.processed}, 'Website proposal handoffs processed');
     const invoiceHandoffs = await processBookingInvoiceHandoffs();
@@ -48,6 +51,7 @@ async function tick() {
     await expireBookingHolds();
     await queuePlanningReminders();
     await queueBookingLifecycleReminders();
+    await queueTaskNotifications();
     const result = await processDueJobs({ limit: 25 });
     if(!isStaging()){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25});}else if(process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}
     await recordWorkerProcessingResult("automation-worker", { success: result.processed.every(item=>item.status!=="FAILED"&& !item.error), processed: result.processed.length });

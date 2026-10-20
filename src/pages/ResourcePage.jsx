@@ -130,6 +130,9 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
     if(saving)return;
     setError("");
     setNotice("");
+    if(endpoint==='/tasks'&&['DONE','CANCELLED'].includes(form.status)&&!form.closure_reason?.trim()){
+      setError('A resolution note is required before resolving or cancelling a task.');return;
+    }
     if (endpoint === "/events") {
       const required = [
         ["client_id","Client"],

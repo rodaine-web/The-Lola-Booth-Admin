@@ -51,11 +51,17 @@ export async function verifyCampaignSales({api,pool,viewerToken,origin}){
  const snapshot=await buildProposalSnapshot({scenario_enabled:true,selected_experiences:campaignOffer.selections.map(s=>({...s,price:1,packages:s.packages.map(p=>({...p,price:1}))})),deposit_value:30});
  assert.equal(snapshot.selectedExperiences[0].price,800,'Campaign price is resolved on the server, ignoring a modified client price');
  const pay=amount=>api('/payments',{method:'POST',body:{invoice_id:invoice.id,amount,payment_method:'BANK_TRANSFER',payment_date:'2099-12-18',idempotency_key:'campaign-sales-'+amount}});
- const partial=await pay(100);assert.equal(partial.status,201,JSON.stringify(partial.data));assert.equal(partial.data.client_id,invoice.client_id);
- assert.equal((await pool.query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'WON','A posted campaign payment converts the lead to a client');
+ assert.equal((await pay(100)).status,409,'Payment cannot bypass agreement');
+ const agreement=await api(`/proposals/${proposal.id}/contracts`,{method:'POST',body:{title:'Campaign QA agreement',terms:'Campaign QA only agreement terms. No real service obligation.'}});assert.equal(agreement.status,201,JSON.stringify(agreement.data));
+ const issued=await api(`/contracts/${agreement.data.id}/issue`,{method:'POST'});assert.equal(issued.status,200,JSON.stringify(issued.data));
+ const signingToken=issued.data.signing_url.split('/').at(-1);
+ const signed=await api(`/public/contracts/${signingToken}/sign`,{method:'POST',token:null,body:{name:'Campaign Prospect',email:'campaign-sales@example.com',consent:true,documentHash:issued.data.document_hash}});assert.equal(signed.status,200,JSON.stringify(signed.data));
+ assert.equal((await pay(100)).status,422,'First payment below thirty percent is rejected');
+ const partial=await pay(240);assert.equal(partial.status,201,JSON.stringify(partial.data));assert.equal(partial.data.client_id,invoice.client_id);
+ assert.equal((await pool.query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'WON','Acceptance already converted the campaign lead to a client');
  await pool.query("INSERT INTO payments(invoice_id,amount,payment_method,payment_date,status) VALUES($1,1000,'CARD','2099-12-18','FAILED')",[invoice.id]);
  const {reconcileInvoice}=await import('../../server/src/services/payment-reconciliation-service.js');await reconcileInvoice(invoice.id);
- assert.notEqual((await pool.query('SELECT status FROM events WHERE id=$1',[invoice.event_id])).rows[0].status,'CONFIRMED','Failed payments never confirm the booking');
+ assert.equal(Number((await pool.query('SELECT amount_paid FROM invoices WHERE id=$1',[invoice.id])).rows[0].amount_paid),240,'Failed payment does not increase successful paid principal');
  const deposit=await pay(140);assert.equal(deposit.status,201,JSON.stringify(deposit.data));assert.ok(deposit.data.client_id);assert.ok(deposit.data.event_id);
  const won=(await pool.query('SELECT * FROM leads WHERE id=$1',[lead.id])).rows[0];assert.equal(won.status,'WON');assert.equal(won.converted_client_id,deposit.data.client_id);
  assert.equal((await pool.query('SELECT count(*)::int n FROM bookings WHERE event_id=$1',[deposit.data.event_id])).rows[0].n,1);
@@ -66,5 +72,5 @@ export async function verifyCampaignSales({api,pool,viewerToken,origin}){
  assert.equal((await pool.query('SELECT count(*)::int n FROM events WHERE client_id=$1',[won.converted_client_id])).rows[0].n,1);
  assert.equal((await pool.query("SELECT count(*)::int n FROM payments WHERE invoice_id=$1 AND client_id=$2 AND status='SUCCEEDED'",[invoice.id,won.converted_client_id])).rows[0].n,2);
  assert.equal((await api(`/campaigns/${id}/interests/${interest.id}/invoice`,{method:'POST',body:{send:true}})).status,409,'No new deposit request after the deposit is paid');
- return {campaignId:id,leadId:lead.id,offerKey:key,invoiceId:invoice.id};
+ return {campaignId:id,leadId:lead.id,clientId:won.converted_client_id,eventId:deposit.data.event_id,offerKey:key,invoiceId:invoice.id};
 }
