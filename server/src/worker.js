@@ -21,6 +21,13 @@ import {expireBookingHolds} from './services/booking-hold-service.js';
 import { recordWorkerHeartbeat, recordWorkerProcessingResult } from "./services/system-health-service.js";
 
 const databaseSystemId = await assertDatabaseIdentity(pool);
+// API startup owns migration execution. A simultaneous worker rollout must wait for it.
+for(let attempt=0;;attempt++){
+  if((await pool.query("SELECT 1 FROM schema_migrations WHERE filename='068_agreement_first_lifecycle_tasks.sql'")).rowCount)break;
+  if(attempt>=60)throw new Error('Workflow migration is not ready; worker will restart without dispatching.');
+  if(attempt===0)logger.info('Waiting for workflow migration before worker dispatch');
+  await new Promise(resolve=>setTimeout(resolve,1000));
+}
 let stopping = false;
 let running = false;
 
