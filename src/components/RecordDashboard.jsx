@@ -7,15 +7,16 @@ import { formatDateOnly, formatTimestamp } from '../utils/display.js';
 import { bookingOverview } from '../utils/booking-overview.js';
 
 export function useRecordJourney(event, proposals = [], lead) {
-  const proposal = proposals.find(p => ['ACCEPTED', 'CONVERTED'].includes(p.status)) || proposals[0];
+  const proposal = event?.lifecycle?.proposal || proposals.find(p => ['ACCEPTED', 'CONVERTED'].includes(p.status)) || proposals[0];
   const [agreement, setAgreement] = useState({ proposalId: null, records: null });
   useEffect(() => {
     let current = true;
+    if(event?.lifecycle)return;
     if (proposal?.id) api.get(`/proposals/${proposal.id}/contracts`).then(records => {
       if (current) setAgreement({ proposalId: proposal.id, records });
     }).catch(() => { if (current) setAgreement({ proposalId: proposal.id, records: null }); });
     return () => { current = false; };
-  }, [proposal?.id, proposal?.updated_at]);
+  }, [proposal?.id, proposal?.updated_at, event?.lifecycle]);
   return bookingOverview({ event, proposal, lead, contracts: agreement.proposalId === proposal?.id ? agreement.records : null });
 }
 
@@ -29,7 +30,7 @@ export function RecordIdentity({ name, status, subtitle, event, actions, image }
   </header>;
 }
 export function JourneyStrip({ journey, lead = false }) {
-  const steps = lead ? [journey.steps[0], {key:'sent',label:'Proposal Sent',complete:journey.sent,detail:journey.sent?'Sent':'Pending'}, {...journey.steps[1],label:'Proposal Accepted'}, journey.steps[2], journey.steps[3], journey.confirmation] : journey.steps;
+  const steps = journey.steps;
   return <ol className="record-journey" aria-label="Booking progress">{steps.map((step, i) => <li key={step.key} className={step.complete ? 'complete' : i === steps.findIndex(s => !s.complete) ? 'current' : ''}><span className="journey-dot">{step.complete ? <Check size={19}/> : i + 1}</span><div><strong>{step.label}</strong><small>{step.detail}</small></div>{i < steps.length - 1 && <ArrowRight size={16} className="journey-arrow"/>}</li>)}</ol>;
 }
 export function DashboardCard({ title, action, children, className = '' }) {

@@ -28,8 +28,9 @@ export default function PublicInvoice() {
     }
   }, [invoice]);
   async function pay(provider){
+    if(paymentOptions?.agreementRequired){if(paymentOptions.agreementUrl)window.location.assign(paymentOptions.agreementUrl);else setError("Your agreement is being prepared. Please refresh shortly or contact LOLA.");return;}
     if(paymentLock.current)return;paymentLock.current=true;setBusy(provider);setError("");
-    try{const res=await fetch(`${API_URL}/public/invoices/${token}/payment-session`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,idempotencyKey:paymentKeys.current[`${token}:${provider}`]??=(crypto.randomUUID())})});const data=await res.json();if(!res.ok)throw new Error(data.error?.message||'Checkout is unavailable. Please try again.');const url=new URL(data.checkoutUrl);if(url.protocol!=='https:'||!['checkout.stripe.com','www.paypal.com','www.sandbox.paypal.com'].includes(url.hostname))throw new Error('Invalid checkout destination.');window.location.assign(url.href);}catch(err){setError(err.message);}finally{setBusy('');paymentLock.current=false;}
+    try{const res=await fetch(`${API_URL}/public/invoices/${token}/payment-session`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,amountChoice:paymentOptions.depositAvailable?'DEPOSIT':'FULL',idempotencyKey:paymentKeys.current[`${token}:${provider}`]??=(crypto.randomUUID())})});const data=await res.json();if(!res.ok)throw new Error(data.error?.message||'Checkout is unavailable. Please try again.');const url=new URL(data.checkoutUrl);if(url.protocol!=='https:'||!['checkout.stripe.com','www.paypal.com','www.sandbox.paypal.com'].includes(url.hostname))throw new Error('Invalid checkout destination.');window.location.assign(url.href);}catch(err){setError(err.message);}finally{setBusy('');paymentLock.current=false;}
   }
 
   if (error&&!invoice) return <main className="public-document"><h1>Invoice unavailable</h1><div role="alert" className="toast error">{error}</div><button className="primary-action" onClick={load}>Try again</button><a href="/pay">Request a new link</a></main>;
@@ -68,7 +69,7 @@ export default function PublicInvoice() {
       {amountDue <= 0 ? <section className="panel" id="payment-options"><h2>No payment due</h2><p>This invoice has no outstanding balance.</p></section> : <section className="panel" id="payment-options">
         <h2>Choose payment method</h2>{paymentOptions?.taxNotice&&<p role="status">{paymentOptions.taxNotice}</p>}
         <p className="note-text">Amount due: {formatMoney(paymentOptions?.amountDue ?? invoice.amount_outstanding ?? invoice.balance_due ?? 0)}. Flexible payment options may be available at checkout.</p>
-        {paymentOptions?.providers?.length ? (
+        {paymentOptions?.agreementRequired ? <button className="primary-action" disabled={Boolean(busy)} onClick={()=>pay("STRIPE")}>Review & Sign Agreement</button> : paymentOptions?.providers?.length ? (
           <div className="quick-actions">
             {paymentOptions.providers.map((provider) => (
               <button key={provider.provider} className="primary-action" disabled={Boolean(busy) || (paymentSucceeded && !["CONFIRMED","RECORDED"].includes(confirmation?.status))} onClick={() => pay(provider.provider)}>

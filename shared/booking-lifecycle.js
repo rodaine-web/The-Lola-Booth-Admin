@@ -8,9 +8,9 @@ export function bookingNextAction({ commercialAccepted = false, invoice = null, 
   if (!Number.isFinite(Number(total)) || cents(total) <= 0) return 'REVIEW_PRICING';
   if (!invoice) return 'CREATE_SEND_INVOICE';
   if (invoice.status === 'DRAFT') return 'SEND_INVOICE';
-  if (!Number.isFinite(Number(netPaid)) || cents(netPaid) < Math.ceil(cents(total) * 0.3)) return 'PAY_BOOKING_RETAINER_FEE';
   if (!contract || contract.status === 'DRAFT') return 'PREPARE_SEND_AGREEMENT';
   if (contract.status !== 'SIGNED') return contract.status === 'ISSUED' ? 'SIGN_AGREEMENT' : 'REVIEW_AGREEMENT';
+  if (!Number.isFinite(Number(netPaid)) || cents(netPaid) < Math.ceil(cents(total) * 0.3)) return 'PAY_BOOKING_RETAINER_FEE';
   // Signing unlocks the workspace invitation, not planning or booking confirmation.
   if (!workspaceInvited) return 'SEND_WORKSPACE_INVITATION';
   const required = requiredPayment == null ? (shortNotice ? cents(total) : Math.ceil(cents(total) * 0.3)) : cents(requiredPayment);

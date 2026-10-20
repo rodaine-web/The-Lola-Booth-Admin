@@ -1,3 +1,4 @@
+import {recordJourney} from '../services/record-journey-service.js';
 import {integrationMarketplace} from '../services/integration-marketplace-service.js';
 import {saveSentProposalRevision,sendReviewedProposal,latestProposalDelivery,proposalReviewEmail} from '../services/proposal-review-service.js';
 import {crmContactsRouter} from './crm-contacts.js';
@@ -992,7 +993,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
   if (!client.rows[0]) throw notFound("Client");
   const [events, proposals, invoices, payments, tasks, files, communications, activity, summary] = await Promise.all([
     query("SELECT * FROM events WHERE client_id=$1 AND deleted_at IS NULL AND sales_closed_at IS NULL ORDER BY event_date DESC", [req.params.id]),
-    query("SELECT * FROM proposals WHERE client_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
+    query("SELECT p.* FROM proposals p WHERE (p.client_id=$1 OR p.lead_id IN(SELECT id FROM leads WHERE converted_client_id=$1)) AND p.deleted_at IS NULL ORDER BY p.created_at DESC", [req.params.id]),
     query("SELECT * FROM invoices WHERE client_id=$1 AND deleted_at IS NULL ORDER BY due_date DESC", [req.params.id]),
     query("SELECT * FROM payments WHERE client_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC", [req.params.id]),
     query("SELECT * FROM tasks WHERE client_id=$1 AND deleted_at IS NULL ORDER BY due_date NULLS LAST", [req.params.id]),
@@ -1002,7 +1003,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
     query(`SELECT count(e.id)::int AS total_events, COALESCE(sum(b.total),0)::text AS lifetime_value, COALESCE(sum(b.balance_due),0)::text AS outstanding_balance
       FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL AND e.sales_closed_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
   ]);
-  res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), communications: communications.rows, activity: activity.rows });
+  res.json({ ...client.rows[0], summary: summary.rows[0], events: await Promise.all(events.rows.map(event=>recordJourney(event))), journey: events.rows.length?null:await recordJourney({id:null},req.params.id), proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), communications: communications.rows, activity: activity.rows });
 }));
 
 adminRouter.get("/clients/:id/duplicates", requirePermission("read:sales"), asyncHandler(async (req, res) => {
@@ -1229,7 +1230,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query("SELECT ep.package_id AS id, p.name, p.starting_price, ep.display_order FROM event_packages ep JOIN packages p ON p.id=ep.package_id WHERE ep.event_id=$1 ORDER BY ep.display_order, p.name", [req.params.id]),
     query("SELECT ee.experience_id AS id, x.name, x.base_price, ee.display_order FROM event_experiences ee JOIN experiences x ON x.id=ee.experience_id WHERE ee.event_id=$1 ORDER BY ee.display_order, x.name", [req.params.id])
   ]);
-  res.json({ ...eventFinanceSummary(event.rows[0], invoices.rows), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
+  res.json({ ...await recordJourney(eventFinanceSummary(event.rows[0], invoices.rows)), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
 }));
 
 adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {
@@ -2629,11 +2630,13 @@ const taskSchema = z.object({
   client_id: uuid.optional().nullable(),
   event_id: uuid.optional().nullable(),
   proposal_id: uuid.optional().nullable(),
+  closure_reason: z.string().trim().min(1).max(4000).optional().nullable(),
   status: z.enum(taskStatuses).default("OPEN"),
   priority: z.enum(taskPriorities).default("NORMAL")
 }).strict();
 
 adminRouter.post("/tasks", requirePermission("write:tasks"), validate(taskSchema), asyncHandler(async (req, res) => {
+  if(['DONE','CANCELLED'].includes(req.body.status)&&!req.body.closure_reason?.trim())throw new AppError('A resolution note is required to close a task.',422,'TASK_RESOLUTION_NOTE_REQUIRED');
   const fields = Object.keys(req.body);
   const values = Object.values(req.body);
   const inserted = await query(`INSERT INTO tasks (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values);
@@ -2644,12 +2647,17 @@ adminRouter.post("/tasks", requirePermission("write:tasks"), validate(taskSchema
   res.status(201).json(inserted.rows[0]);
 }));
 
-adminRouter.patch("/tasks/:id", requirePermission("write:tasks"), validate(taskSchema.partial()), asyncHandler(async (req, res) => {
-  const before = await query("SELECT * FROM tasks WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
+adminRouter.patch("/tasks/:id", requirePermission("write:tasks"), validate(taskSchema.omit({status:true,priority:true}).partial().extend({status:z.enum(taskStatuses).optional(),priority:z.enum(taskPriorities).optional()})), asyncHandler(async (req, res) => {
+  const updated = await transaction(async () => {
+  const before = await query("SELECT * FROM tasks WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.params.id]);
   if (!before.rows[0]) throw notFound("Task");
-  const updated = await updateById({ table: "tasks", id: req.params.id, body: req.body, allowed: ["title", "description", "due_date", "assigned_user_id", "lead_id", "client_id", "event_id", "proposal_id", "status", "priority"] });
+  if(['DONE','CANCELLED'].includes(req.body.status)&&req.body.status!==before.rows[0].status&&!req.body.closure_reason?.trim())throw new AppError('A resolution note is required to close a task.',422,'TASK_RESOLUTION_NOTE_REQUIRED');
+  if(['DONE','CANCELLED'].includes(req.body.status||before.rows[0].status)&&Object.hasOwn(req.body,'closure_reason')&&!req.body.closure_reason?.trim())throw new AppError('A closed task must retain its resolution note.',422,'TASK_RESOLUTION_NOTE_REQUIRED');
+  const updated = await updateById({ table: "tasks", id: req.params.id, body: req.body, allowed: ["title", "description", "due_date", "assigned_user_id", "lead_id", "client_id", "event_id", "proposal_id", "status", "priority", "closure_reason"] });
   await recordActivity({ actorUserId: req.user.id, entityType: updated.event_id ? "event" : updated.lead_id ? "lead" : "task", entityId: updated.event_id || updated.lead_id || updated.id, action: updated.status === "DONE" ? "task_completed" : "task_edited", summary: updated.status === "DONE" ? `Task completed: ${updated.title}` : `Task edited: ${updated.title}` });
   await writeAudit({ req, action: updated.status === "DONE" ? "task_completed" : "task_edited", entity: "task", entityId: req.params.id, before: before.rows[0], after: updated });
+  return updated;
+  });
   res.json(updated);
 }));
 

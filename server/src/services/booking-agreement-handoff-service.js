@@ -10,7 +10,7 @@ export const agreementHandoffEnabled=()=>process.env.BOOKING_AGREEMENT_HANDOFF_E
 export async function queuePaidAgreement(client,invoice) {
   if(!agreementHandoffEnabled() || !invoice.proposal_id || ['VOID','REFUNDED'].includes(invoice.status))return;
   const proposal=(await client.query(`SELECT p.accepted_version_id FROM proposals p WHERE p.id=$1 AND p.deleted_at IS NULL
-    AND p.status IN ('ACCEPTED','CONVERTED') AND EXISTS(SELECT 1 FROM automation_jobs j WHERE j.related_entity_id=p.id AND j.job_type='BOOKING_SEND_ACCEPTED_INVOICE')`,[invoice.proposal_id])).rows[0];
+    AND p.status IN ('ACCEPTED','CONVERTED')`,[invoice.proposal_id])).rows[0];
   if(!proposal?.accepted_version_id)return;
   if(!await agreementPaymentQualified(invoice))return;
   const key=`paid-agreement:${invoice.proposal_id}:${proposal.accepted_version_id}`;

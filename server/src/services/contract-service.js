@@ -1,3 +1,6 @@
+import {closeProposalCheckouts} from './checkout-lifecycle-service.js';
+import {secureDocumentUrl} from '../../../shared/document-access.js';
+import {documentOrigin} from '../utils/public-document-url.js';
 import {agreementPaymentQualified} from './booking-payment-exceptions.js';
 import crypto from 'node:crypto';
 import {queueSignedWorkspace} from './client-session-service.js';
@@ -74,6 +77,7 @@ export async function issueContract(id, req) {
     const snapshot = await proposalSnapshot(row.proposal_id);
     await assertAgreementPrerequisites(row.proposal_id,snapshot.accepted_version_id);
     if(snapshot.payment_exception&&!row.terms.includes(snapshot.payment_exception.id))fail('Include the approved written payment exception in these agreement terms before issuing.','AGREEMENT_EXCEPTION_REVIEW');
+    await closeProposalCheckouts(row.proposal_id);
     const token = crypto.randomBytes(32).toString('hex');
     const digest = hashContractValue(contractDocument(row.title,row.terms,snapshot));
     const updated=(await query(`UPDATE contracts SET status='ISSUED',snapshot=$2,document_hash=$3,token_hash=$4,
@@ -102,7 +106,11 @@ async function tokenContract(token,lock=false) {
   if(new Date(row.expires_at).getTime()<=Date.now()) throw new AppError('This agreement link has expired. Contact The Lola Booth.',410,'CONTRACT_EXPIRED');
   return row;
 }
-export async function publicContract(token) { const {signing_grace_until,...contract}=visible(await tokenContract(token));return contract; }
+async function agreementPaymentUrl(proposalId){
+ const invoice=(await query("SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1",[proposalId])).rows[0];
+ return invoice?secureDocumentUrl(documentOrigin(),'pay',invoice):null;
+}
+export async function publicContract(token) { const {signing_grace_until,...contract}=visible(await tokenContract(token));return {...contract,payment_url:contract.status==='SIGNED'?await agreementPaymentUrl(contract.proposal_id):null}; }
 export async function signContract(token,body,req) {
   const signed=await transaction(async()=>{
     const row=await tokenContract(token,true);
@@ -132,11 +140,15 @@ export async function signContract(token,body,req) {
     signed.booking_confirmation={status:event&&['CONFIRMED','PREPARING','READY','IN_PROGRESS'].includes(event.status)?'CONFIRMED':'PENDING'};
     if(event)await query("UPDATE tasks SET status='DONE',updated_at=now() WHERE lifecycle_key=$1",['booking-confirmation:'+proposal.event_id]);
    } catch(error) {
-    signed.booking_confirmation={status:'PENDING',message:'Agreement signed. LOLA must review booking confirmation before planning opens.'};
+    const missing=error.details?.missing||[];
+    const paymentOnly=missing.length>0&&missing.every(item=>/required booking payment/.test(item));
+    signed.booking_confirmation={status:'PENDING',message:paymentOnly?'Agreement signed. Complete your required booking payment next.':'Agreement signed. LOLA must review booking confirmation before planning opens.'};
+    if(paymentOnly)return {...signed,payment_url:await agreementPaymentUrl(signed.proposal_id)};
     await query(`INSERT INTO tasks(lifecycle_key,title,description,event_id,priority) VALUES($1,'Review signed booking confirmation',$2,$3,'HIGH')
      ON CONFLICT(lifecycle_key) WHERE lifecycle_key IS NOT NULL DO UPDATE SET description=EXCLUDED.description,status='OPEN',updated_at=now()`,['booking-confirmation:'+proposal.event_id,String(error.message).slice(0,3000),proposal.event_id]);
    }
   }
+  signed.payment_url=await agreementPaymentUrl(signed.proposal_id);
   return signed;
 }
 export async function contractPdf(row) { return renderContractPdf(row); }
@@ -170,7 +182,7 @@ async function assertAgreementPrerequisites(proposalId,versionId){
  if(!proposal||!['ACCEPTED','CONVERTED'].includes(proposal.status)||proposal.accepted_version_id!==versionId)fail('Review the current accepted proposal before signing or issuing an agreement.','AGREEMENT_VERSION_CHANGED');
  if(!proposal.event_id||!(await query('SELECT booking_journey_managed($1) AS managed',[proposal.event_id])).rows[0]?.managed)return;
  const invoice=(await query("SELECT * FROM invoices WHERE proposal_id=$1 AND pricing_snapshot->>'accepted_version_id'=$2 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1",[proposalId,versionId])).rows[0];
- if(!await agreementPaymentQualified(invoice))fail('Verify the required booking payment before issuing or signing this agreement.','AGREEMENT_PAYMENT_REQUIRED');
+ if(!await agreementPaymentQualified(invoice))fail('Issue the accepted booking invoice before issuing or signing this agreement.','AGREEMENT_INVOICE_REQUIRED');
 }
 
 // Bounded Admin index; signing credentials and signature evidence never enter list responses.

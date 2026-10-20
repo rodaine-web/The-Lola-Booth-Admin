@@ -35,10 +35,10 @@ export default function ClientDetail() {
     setEventDetail(null); setEventError('');
     if (selectedEvent?.id) api.get(`/events/${selectedEvent.id}`).then(value=>{if(current)setEventDetail(value);}).catch(err=>{if(current)setEventError(err.message);});
     return () => {current=false;};
-  }, [selectedEvent?.id]);
+  }, [selectedEvent]);
   const activeEvent = eventDetail?.id === selectedEvent?.id ? eventDetail : selectedEvent;
-  const activeProposals = activeEvent ? (client?.proposals || []).filter(proposal=>proposal.event_id===activeEvent.id) : [];
-  const journey = useRecordJourney(activeEvent, activeProposals);
+  const activeProposals = activeEvent ? (client?.proposals || []).filter(proposal=>proposal.event_id===activeEvent.id) : (client?.proposals||[]);
+  const journey = useRecordJourney(activeEvent||client?.journey, activeProposals);
   async function saveClient(values) { await api.patch(`/clients/${id}`,values); await loadClient(); setNotice('Client details saved.'); }
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function ClientDetail() {
       {(notice || error) && <div role={error ? 'alert' : 'status'} className={error ? 'toast error' : 'toast'}>{error || notice}</div>}
       {client.events?.length > 1 && <label className="record-event-select">Booking / Event<select value={selectedEvent?.id || ''} onChange={e=>setSelectedEventId(e.target.value)}>{client.events.map(event=><option key={event.id} value={event.id}>{event.event_name} · {event.event_date ? formatDateOnly(event.event_date) : 'Date TBD'}</option>)}</select></label>}
       {eventError && <p role="alert">Event details unavailable: {eventError}</p>}
-      {activeEvent ? <JourneyStrip journey={journey}/> : <p className="record-muted">No event linked yet. Create a proposal to start a booking.</p>}
+      {activeEvent || journey.proposal ? <JourneyStrip journey={journey}/> : <p className="record-muted">No event linked yet. Create a proposal to start a booking.</p>}
       <section className="record-client-top">
         <NextBookingAction journey={journey} proposalHref={`/sales/proposals/new?clientId=${id}`} onTasks={()=>setTab('Tasks')} onPlanning={activeEvent ? ()=>navigate(`/events/events/${activeEvent.id}?section=planning`) : undefined} onFinance={()=>setTab('Invoices')}/>
         <DashboardCard title="Client Overview" action={<button className="record-text-action" disabled={!can("write:sales")} onClick={()=>setEditing(true)}>Edit</button>}><Field label="Full Name" value={client.name}/><Field label="Email" value={client.email}/><Field label="Phone" value={client.phone}/><Field label="Company" value={client.company}/><Field label="Preferred Contact" value={client.preferred_contact_method}/><Field label="Notes" value={client.notes}/><div className="record-tags">{client.tags?.map(tag=><span key={tag}>{tag}</span>)}</div></DashboardCard>

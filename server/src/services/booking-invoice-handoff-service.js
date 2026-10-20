@@ -1,5 +1,5 @@
 import {WORKSPACE_HANDOFF_JOB,workspaceHandoffEnabled,deliverSignedWorkspace,deliverClientInvitation} from './client-session-service.js';
-import {AGREEMENT_HANDOFF_JOB,agreementHandoffEnabled,deliverPaidAgreement} from './booking-agreement-handoff-service.js';
+import {AGREEMENT_HANDOFF_JOB,agreementHandoffEnabled,deliverPaidAgreement,queuePaidAgreement} from './booking-agreement-handoff-service.js';
 import { query, transaction } from '../db/pool.js';
 import { AppError } from '../utils/errors.js';
 import { stagingJobsPaused, stagingAutomationScope } from '../config/staging-safety.js';
@@ -24,7 +24,7 @@ async function prepareInvoiceMessage(job) {
     let communication = (await client.query('SELECT * FROM communications WHERE idempotency_key=$1', [key])).rows[0];
     if (!communication) {
       const url = publicInvoiceUrl(invoice);
-      const body = `Hi ${invoice.client_name || 'there'},\n\nThank you for accepting your LOLA proposal.\n\nYour invoice total is $${Number(invoice.total).toFixed(2)}. Your booking retainer fee payment requested now is $${Number(invoice.pricing_snapshot.amount_due_now).toFixed(2)} and is credited toward your total.\n\nView your invoice and payment options:\n${url}\n\nPayment alone does not confirm your booking. We will send your agreement after the required minimum payment is verified.\n\nThe LOLA Booth`;
+      const body = `Hi ${invoice.client_name || 'there'},\n\nThank you for accepting your LOLA proposal.\n\nYour invoice total is $${Number(invoice.total).toFixed(2)}. Your booking retainer fee payment requested now is $${Number(invoice.pricing_snapshot.amount_due_now).toFixed(2)} and is credited toward your total.\n\nView your invoice and payment options:\n${url}\n\nPlease review and sign your agreement before your first payment. Your payment link will guide you through signing first.\n\nThe LOLA Booth`;
       communication = await createCommunicationDraft({ client_id: invoice.client_id, event_id: invoice.event_id, proposal_id: proposal.id,
         invoice_id: invoice.id, recipient: invoice.client_email, subject: `Your LOLA invoice ${invoice.invoice_number}`,
         body, html: brandedEmailHtml(body, {kicker:'Your booking invoice', ctaLabel:'View invoice and pay', ctaUrl:url}), trigger_key:INVOICE_HANDOFF_JOB });
@@ -73,6 +73,7 @@ export async function processBookingInvoiceHandoffs({limit=10}={}) {
       if (!['SENT','SENT_TO_PROVIDER','DELIVERED'].includes(sent.communication.status)) throw new AppError('Invoice delivery was not confirmed. Review its communication.', 409, 'INVOICE_DELIVERY_NOT_CONFIRMED', {retryable:false});
       await transaction(async client => {
         await client.query("UPDATE invoices SET status=CASE WHEN status='DRAFT' THEN 'SENT' ELSE status END,sent_at=COALESCE(sent_at,now()),updated_at=now() WHERE id=$1", [prepared.invoiceId]);
+        await queuePaidAgreement(client,(await client.query("SELECT * FROM invoices WHERE id=$1",[prepared.invoiceId])).rows[0]);
         await client.query("UPDATE automation_jobs SET status='COMPLETED',completed_at=now(),last_error=NULL,updated_at=now() WHERE id=$1", [job.id]);
       });
       processed.push({id:job.id,status:'COMPLETED'});

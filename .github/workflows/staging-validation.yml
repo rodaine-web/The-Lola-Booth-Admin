@@ -49,6 +49,9 @@ jobs:
       - name: Install canvas native binding
         run: npm install --no-save @napi-rs/canvas-linux-x64-gnu@1.0.9
 
+      - name: Backup transfer fault regression
+        run: python3 -m unittest discover -s ops/backups -p "test_*.py" -v
+
       - name: Run tests
         run: npm test
 

@@ -1,3 +1,6 @@
+import {expireOtherCheckouts} from './checkout-lifecycle-service.js';
+import {bookingPaymentPolicy} from '../../../shared/booking-payment-policy.js';
+import {assertInvoiceAgreement,invoiceAgreementState} from './booking-payment-gate.js';
 import {stripeTaxCheckout,validateStripeTaxSession} from './stripe-tax-service.js';
 import {reconcileStripeDispute} from './payment-dispute-service.js';
 import {claimRefund,settleStripeRefund,markRefundRejected} from './refund-ledger-service.js';
@@ -56,45 +59,39 @@ export async function publicPaymentOptions(invoice) {
     }, "Staging payment options diagnostic");
   }
   const balance = invoiceBalance(invoice);
-  const paid = money(invoice.amount_paid || 0);
-  const storedMinimum = invoice.pricing_snapshot?.amount_due_now;
-  const hasStoredMinimum = storedMinimum !== null && storedMinimum !== undefined && storedMinimum !== "";
-  const configuredMinimum = hasStoredMinimum ? money(storedMinimum) : null;
-  const depositRemaining = hasStoredMinimum ? Math.max(0, configuredMinimum - paid) : null;
-  const depositSatisfied = hasStoredMinimum
-    ? configuredMinimum <= 0 || paid >= configuredMinimum
-    : paid > 0;
-  const depositAvailable = !depositSatisfied && depositRemaining > 0 && depositRemaining < balance;
-  // Legacy invoices without a stored minimum use their authoritative outstanding
-  // balance. Once any payment has been made, "deposit" is no longer offered.
-  const amountDue = depositAvailable ? money(depositRemaining) : balance;
+  const clock=(await query("SELECT (now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date AS today, ($1::date+time '00:00') AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago') AS due_at",[invoice.due_date||null])).rows[0];
+  const businessDate=clock.today;
+  const policy=bookingPaymentPolicy({total:invoice.total,paid:invoice.amount_paid,balance,dueDate:invoice.due_date,businessDate,dueAt:clock.due_at?.toISOString()});
+  const agreement=await invoiceAgreementState(invoice,{includeUrl:true});
   return {
-    payable,
+    payable:payable&&!agreement.required,
     reviewRequired,
     automaticTaxEnabled:process.env.STRIPE_AUTOMATIC_TAX_ENABLED==="true"&&Number(invoice.tax||0)===0,
     taxNotice:process.env.STRIPE_AUTOMATIC_TAX_ENABLED==="true"?"Service amounts exclude tax. Stripe calculates and displays tax separately before payment.":null,
-    amountDue,
-    fullAmount: balance,
-    minimumAmount: depositAvailable ? amountDue : Math.min(1, balance),
-    depositSatisfied,
-    depositAvailable,
-    depositRemaining: depositAvailable ? amountDue : 0,
-    paymentMode: invoice.pricing_snapshot?.payment_mode || "BALANCE_DUE",
-    allowPayInFull: invoice.pricing_snapshot?.allow_pay_in_full !== false,
-    allowCustomAmount: invoice.pricing_snapshot?.allow_custom_amount !== false,
+    ...policy,
+    agreementRequired:payable&&agreement.required,
+    agreementUrl:payable?(agreement.signingUrl||null):null,
     currency: invoice.currency || s.currency || "USD",
     providers: [
-      ...(payable && s.stripe_enabled && status.stripe.enabled && ["TEST_READY", "LIVE_READY"].includes(status.stripe.readiness) ? [{ provider: "STRIPE", label: "Card / wallet checkout" }] : []),
-      ...(payable && s.paypal_enabled && status.paypal.enabled && ["TEST_READY", "LIVE_READY"].includes(status.paypal.readiness) ? [{ provider: "PAYPAL", label: "PayPal checkout" }] : [])
+      ...(payable && !agreement.required && s.stripe_enabled && status.stripe.enabled && ["TEST_READY", "LIVE_READY"].includes(status.stripe.readiness) ? [{ provider: "STRIPE", label: "Card / wallet checkout" }] : []),
+      ...(payable && !agreement.required && s.paypal_enabled && status.paypal.enabled && ["TEST_READY", "LIVE_READY"].includes(status.paypal.readiness) ? [{ provider: "PAYPAL", label: "PayPal checkout" }] : [])
     ],
     offlinePaymentInstructions: s.offline_payment_instructions || ""
   };
 }
 
-export async function createPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey, workspaceEventId }) {
+export async function createPaymentSession(input) {
+ return transaction(async client=>{
+  const locked=(await client.query("SELECT id FROM invoices WHERE secure_token=$1 AND deleted_at IS NULL FOR UPDATE",[input.token])).rows[0];
+  if(!locked)throw notFound('Invoice');
+  return createLockedPaymentSession(input);
+ });
+}
+async function createLockedPaymentSession({ token, provider, amountChoice = "DEPOSIT", customAmount, idempotencyKey, workspaceEventId }) {
   const invoice = await loadInvoiceByToken(token);
   if (!isInvoicePayable(invoice)) throw new AppError("This invoice is not payable.", 409, "INVOICE_NOT_PAYABLE");
   if((await query('SELECT invoice_payment_review($1) OR event_payment_review($2) AS held',[invoice.id,invoice.event_id||null])).rows[0]?.held)throw new AppError('A payment dispute requires Admin review before another payment.',409,'PAYMENT_DISPUTE_REVIEW');
+  const agreement=await assertInvoiceAgreement(invoice);
   await assertCheckoutHold(invoice.event_id);
   const normalizedProvider = String(provider || "").toUpperCase();
   if (!["STRIPE", "PAYPAL"].includes(normalizedProvider)) throw new AppError("Unsupported payment provider.", 400, "UNSUPPORTED_PROVIDER");
@@ -115,26 +112,42 @@ export async function createPaymentSession({ token, provider, amountChoice = "DE
   }
   const stripeAccount = normalizedProvider === "STRIPE" ? await verifyStripeAccount() : null;
   const taxPlan=normalizedProvider==="STRIPE"?await stripeTaxCheckout(invoice,selectedAmount):null;
+  const gateScope=`agreement:${agreement.contractId||'none'}:paid:${cents(invoice.amount_paid)}:due:${invoice.due_date||'none'}`;
   const taxScope=taxPlan?"tax-v1:"+taxPlan.taxCode:"legacy";
-  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' AND COALESCE(metadata->>'tax_scope','legacy')=$6 AND ($4::text IS NULL OR (metadata->>'stripe_account_id'=$4 AND metadata->>'stripe_mode'=$5)) ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount,stripeAccount?.accountId||null,stripeAccount?.mode||null,taxScope])).rows[0];
+  await expireOtherCheckouts(invoice,selectedAmount,gateScope);
+  const pending=(await query("SELECT * FROM payment_attempts WHERE invoice_id=$1 AND provider=$2 AND amount=$3 AND status='PENDING' AND created_at>now()-interval '23 hours' AND COALESCE(metadata->>'tax_scope','legacy')=$6 AND metadata->>'agreement_scope'=$7 AND ($4::text IS NULL OR (metadata->>'stripe_account_id'=$4 AND metadata->>'stripe_mode'=$5)) ORDER BY created_at DESC LIMIT 1",[invoice.id,normalizedProvider,selectedAmount,stripeAccount?.accountId||null,stripeAccount?.mode||null,taxScope,gateScope])).rows[0];
   if(pending)return safeSession(pending,normalizedProvider);
-  const key = `${taxPlan?taxScope+":":""}${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}${stripeAccount ? ":"+stripeAccount.accountId+":"+stripeAccount.mode : ""}`;
+  const rawKey = `${gateScope}:${taxPlan?taxScope+":":""}${normalizedProvider}:${invoice.id}:${cents(selectedAmount)}:${amountChoice}:${idempotencyKey || "default"}${stripeAccount ? ":"+stripeAccount.accountId+":"+stripeAccount.mode : ""}`;
+  const key='lola-v2:'+crypto.createHash('sha256').update(rawKey).digest('hex');
   const existing = await query("SELECT * FROM payment_attempts WHERE idempotency_key=$1 AND invoice_id=$2 AND provider=$3 LIMIT 1", [key, invoice.id, normalizedProvider]);
   if (existing.rows[0] && existing.rows[0].status === "PENDING" && Date.now()-new Date(existing.rows[0].created_at).getTime()<23*3600000) return safeSession(existing.rows[0], normalizedProvider);
   if (existing.rows[0]) throw new AppError("This checkout has ended. Please refresh and try again.", 409, "CHECKOUT_ENDED");
-  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice, stripeAccount,workspaceEventId,taxPlan);
+  if (normalizedProvider === "STRIPE") return createStripeCheckout(invoice, key, options.currency, selectedAmount, amountChoice, stripeAccount,workspaceEventId,taxPlan,gateScope,options.dueAt);
   return createPaypalOrder(invoice, key, options.currency, selectedAmount, amountChoice,workspaceEventId);
 }
 
 export async function recordManualPayment(req) {
+ return transaction(async client=>{
+  if(req.body.invoice_id)await client.query('SELECT id FROM invoices WHERE id=$1 FOR UPDATE',[req.body.invoice_id]);
+  if(req.body.idempotency_key){const prior=(await client.query("SELECT * FROM payments WHERE idempotency_key=$1 AND provider='MANUAL'",[req.body.idempotency_key])).rows[0];if(prior){if(prior.invoice_id!==(req.body.invoice_id||null)||cents(prior.amount)!==cents(req.body.amount))throw new AppError('Payment retry does not match its original request.',409,'PAYMENT_REPLAY_MISMATCH');return prior;}}
+  return recordLockedManualPayment(req);
+ });
+}
+async function recordLockedManualPayment(req) {
   const invoice = req.body.invoice_id ? await lockableInvoice(req.body.invoice_id) : null;
   if((await query('SELECT event_payment_review($1) OR invoice_payment_review($2) AS held',[invoice?.event_id||req.body.event_id||null,invoice?.id||null])).rows[0]?.held)throw new AppError('Resolve the payment dispute before recording another payment.',409,'PAYMENT_DISPUTE_REVIEW');
+  if(!invoice&&req.body.event_id&&(await query("SELECT 1 FROM proposals WHERE event_id=$1 AND deleted_at IS NULL",[req.body.event_id])).rowCount)throw new AppError('Use the linked invoice to record this booking payment.',422,'BOOKING_INVOICE_REQUIRED');
   const amount = money(req.body.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new AppError("Payment amount must be greater than zero.", 422, "INVALID_PAYMENT_AMOUNT");
   }
   if (invoice && amount > invoiceBalance(invoice)) {
     throw new AppError("Manual payment cannot exceed the invoice balance.", 409, "PAYMENT_EXCEEDS_BALANCE");
+  }
+  if(invoice){
+    await assertInvoiceAgreement(invoice);
+    const rules=await publicPaymentOptions(invoice);
+    if(amount<rules.minimumAmount||(rules.overdue&&cents(amount)!==cents(rules.fullAmount)))throw new AppError('This payment does not satisfy the booking minimum or balance due requirement.',422,'INVALID_PAYMENT_AMOUNT');
   }
   const paymentEventId = invoice ? invoice.event_id : req.body.event_id;
   const paymentClientId = invoice ? invoice.client_id : req.body.client_id;
@@ -594,7 +607,7 @@ async function retrieveStripeRefund(id){
   return object;
 }
 
-async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount,workspaceEventId,taxPlan=null) {
+async function createStripeCheckout(invoice, key, currency, amount = invoiceBalance(invoice), amountChoice = "DEPOSIT", stripeAccount,workspaceEventId,taxPlan=null,gateScope=null,dueAt=null) {
   const params = new URLSearchParams({
     mode: "payment",
     integration_identifier: 'lola_invoice_' + [...crypto.createHash('sha256').update(key).digest().subarray(0,8)].map(n=>String.fromCharCode(97+n%26)).join(''),
@@ -628,6 +641,11 @@ async function createStripeCheckout(invoice, key, currency, amount = invoiceBala
     params.set('payment_intent_data[metadata][automatic_tax_enabled]','true');
     logger.info({invoiceId:invoice.id,automaticTaxEnabled:true,mode:stripeAccount.mode,serviceAmount:amount,currency,taxCodes:[...new Set(taxPlan.lines.map(line=>line.taxCode))],billingAddressCollection:true},'Stripe automatic tax checkout requested');
   }
+  if(amount < invoiceBalance(invoice) && dueAt){
+    const deadline=Math.floor(Date.parse(dueAt)/1000),now=Math.floor(Date.now()/1000);
+    if(!Number.isFinite(deadline)||deadline-now<=1800)throw new AppError('Only the full remaining balance is available within 30 minutes of the balance deadline. Refresh your payment options.',409,'BALANCE_DEADLINE_CHECKOUT');
+    params.set('expires_at',String(Math.min(deadline,now+23*3600)));
+  }
   const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.stripeSecretKey}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": key, "Stripe-Version":"2026-08-26.dahlia" },
@@ -637,7 +655,7 @@ async function createStripeCheckout(invoice, key, currency, amount = invoiceBala
   const data = await response.json();
   if (!response.ok) throw new AppError(safeProviderMessage(data.error?.message), 502, "STRIPE_SESSION_FAILED");
   if(data.livemode !== (stripeAccount.mode === 'LIVE'))throw new AppError('Stripe checkout environment does not match this invoice.',502,'STRIPE_MODE_MISMATCH');
-  await insertAttempt({ invoice, stripeAccount, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice,taxPlan });
+  await insertAttempt({ invoice, stripeAccount, provider: "STRIPE", key, amount, currency, providerSessionId: data.id, checkoutUrl: data.url, status: "PENDING", amountChoice,taxPlan,gateScope });
   return { provider: "STRIPE", checkoutUrl: data.url, sessionId: data.id, amount, currency };
 }
 
@@ -659,12 +677,12 @@ async function createPaypalOrder(invoice, key, currency, amount = invoiceBalance
   return { provider: "PAYPAL", checkoutUrl, sessionId: data.id, amount, currency };
 }
 
-async function insertAttempt({ invoice, stripeAccount, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT",taxPlan=null }) {
+async function insertAttempt({ invoice, stripeAccount, provider, key, amount, currency, providerSessionId, checkoutUrl, status, amountChoice = "DEPOSIT",taxPlan=null,gateScope=null }) {
   await query(
     `INSERT INTO payment_attempts (invoice_id, client_id, event_id, proposal_id, provider, provider_reference, provider_session_id, checkout_url, amount, currency, status, idempotency_key, metadata)
      VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ invoice_number: invoice.invoice_number, amount_choice: amountChoice, automatic_tax_enabled:Boolean(taxPlan),tax_scope:taxPlan?'tax-v1:'+taxPlan.taxCode:'legacy', ...(stripeAccount ? {stripe_account_id:stripeAccount.accountId,stripe_mode:stripeAccount.mode} : {}) })]
+    [invoice.id, invoice.client_id, invoice.event_id, invoice.proposal_id, provider, providerSessionId, checkoutUrl, amount, currency, status, key, JSON.stringify({ agreement_scope:gateScope, invoice_number: invoice.invoice_number, amount_choice: amountChoice, automatic_tax_enabled:Boolean(taxPlan),tax_scope:taxPlan?'tax-v1:'+taxPlan.taxCode:'legacy', ...(stripeAccount ? {stripe_account_id:stripeAccount.accountId,stripe_mode:stripeAccount.mode} : {}) })]
   );
 }
 
