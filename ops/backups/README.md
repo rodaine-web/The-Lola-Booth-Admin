@@ -33,3 +33,13 @@ Azure account trial expiry remains an independent retention risk; maintain an ac
 - Corrected container preparation, PostgreSQL executable paths and Azure denial-code handling during qualification. Failed attempts did not mutate source records. They are not counted as successful backup runs.
 - Activated cron `0 8 * * *`; temporary verification private key variable cleared before daily-mode deployment. Separate local recovery key: `work/backup-recovery/production-backup-recovery.pem`, permissions 0600, excluded by `.gitignore`. Owner should secure an independent copy outside this checkout; do not commit or email the key.
 - Scope is database backup infrastructure only; no production app/worker code rollout, customer charges, application schema migrations or booking mutations.
+
+## Upload recovery — October 20, 2026
+
+The October 20 scheduled job passed its local restore but failed during a single large Azure upload after the 120-second request timeout. The old diagnostic recorded only `URLError`, so the underlying network cause is unconfirmed. Previous private backups remain intact.
+
+Large encrypted dumps now use 4 MiB Azure blocks with per-block transport checksums, followed by a conditional block-list commit. Transient timeouts, connection failures and HTTP 408/429/5xx responses receive up to four attempts with bounded backoff. TLS verification and authorization failures remain fail-closed. Readback retries interrupted downloads. Uncertain successful commits are reconciled against exact stored bytes; existing different blobs are never overwritten. Logs report sanitized error categories and Azure request identifiers, without credentials, URLs or provider bodies.
+
+Encryption format, source read-only snapshot, disposable local restore, exact Azure readback, anonymous denial check, schedule and retention are unchanged. Run `python3 ops/backups/test_backup_transfer.py` for offline failure-injection coverage. The backup helper embeds this script in its Railway start command; committing source alone does not update the running helper. Deploy only that helper and require a fresh successful backup before calling recovery complete.
+
+Azure protocol references: [Put Block](https://learn.microsoft.com/en-us/rest/api/storageservices/put-block), [Put Block List](https://learn.microsoft.com/en-us/rest/api/storageservices/put-block-list).

@@ -46,3 +46,7 @@ Hosted staging qualification, real test-provider delivery, final production migr
 ## Rollback
 
 Pause new dispatch and task notifications first. Preserve invoices, payments, signed agreements, audit history, grants and migration history. Do not undo additive migrations by dropping customer records. Reconcile uncertain provider sends/payments before retrying. Reverting to a payment-first application build would undo the approved signature prerequisite; use a reviewed forward fix or keep affected payment dispatch paused instead of silently reopening that path.
+
+## Production ancestry merge
+
+The production backup branch was merged normally, retaining its ancestry and three backup-source files plus the CI fault-test step. Shared application conflicts were inspected: the incoming copies represented the already deployed older payment-first behavior and placeholder file/gallery UI. The current staging versions preserve all production-equivalent proposal/tax/CRM fixes and the newly tested lifecycle and V1.2 implementation. No staging functionality was removed. The combined tree is requalified before deployment.
