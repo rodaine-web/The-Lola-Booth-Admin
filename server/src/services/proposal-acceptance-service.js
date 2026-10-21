@@ -24,6 +24,7 @@ export async function acceptProposal(proposalId, acceptedByName, req) {
       WHERE id=$1 AND (valid_through IS NULL OR valid_through>=current_date) RETURNING *`,
     [proposalId, acceptedByName, req.ip, req.headers?.['user-agent'] || null, version.id])).rows[0];
     if (!updated) throw new AppError('This proposal has expired. Contact The LOLA Booth for an updated proposal.', 409, 'PROPOSAL_EXPIRED');
+    Object.assign(updated,(await client.query('SELECT * FROM proposals WHERE id=$1',[proposalId])).rows[0]);
     const invoiceQueued = invoiceHandoffEnabled();
     if (invoiceQueued) {
       await client.query(`INSERT INTO automation_jobs(job_type,related_entity_type,related_entity_id,payload,scheduled_for)

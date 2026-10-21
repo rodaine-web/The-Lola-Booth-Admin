@@ -63,6 +63,16 @@ export async function verifyClientBrowser({api,origin,proposalId,workspaceToken,
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Availability control fits mobile');
    await page.screenshot({path:fileURLToPath(new URL('availability-mobile.png',evidence)),fullPage:true});
    await page.setViewportSize({width:1440,height:1000});
+   await page.goto(`${base}/sales/clients/${campaignSales.clientId}`);
+   const progress=page.getByRole('list',{name:'Booking progress'});await progress.waitFor();
+   await page.getByText('48% Paid',{exact:true}).waitFor();
+   assert.deepEqual(await progress.locator('strong').allTextContents(),['Lead','Proposal','Proposal Accepted / Client','Invoice','Agreement','Booking Fee / Payment','Workspace / Active Event']);
+   assert.equal(await page.getByRole('list',{name:'Booking progress'}).count(),1,'Update the existing tracker without duplication');
+   await page.screenshot({path:fileURLToPath(new URL('client-lifecycle-desktop.png',evidence)),fullPage:true});
+   await page.reload();await page.getByText('48% Paid',{exact:true}).waitFor();
+   await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'Lifecycle fits mobile');
+   await page.screenshot({path:fileURLToPath(new URL('client-lifecycle-mobile.png',evidence)),fullPage:true});
+   await page.setViewportSize({width:1440,height:1000});
    await page.goto(`${base}/sales/agreements`);
    await page.getByRole('heading',{name:'Agreements',exact:true}).waitFor();
    await page.getByRole('searchbox',{name:'Search agreements'}).fill('Browser demo agreement');

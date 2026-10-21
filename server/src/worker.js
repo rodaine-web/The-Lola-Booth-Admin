@@ -1,4 +1,7 @@
+import {expireStaleBookingCheckouts} from './services/checkout-lifecycle-service.js';
+import {queueTaskNotifications} from './services/task-notification-service.js';
 import {queuePeriodicOutlook} from './services/crm-outlook-service.js';
+import {processDropboxGallerySources} from './services/dropbox-gallery-service.js';
 import {processWebsiteProposalHandoffs} from './services/website-proposal-handoff-service.js';
 import {queueBookingLifecycleReminders} from './services/booking-lifecycle-reminders.js';
 import { processBookingInvoiceHandoffs } from './services/booking-invoice-handoff-service.js';
@@ -18,6 +21,13 @@ import {expireBookingHolds} from './services/booking-hold-service.js';
 import { recordWorkerHeartbeat, recordWorkerProcessingResult } from "./services/system-health-service.js";
 
 const databaseSystemId = await assertDatabaseIdentity(pool);
+// API startup owns migration execution. A simultaneous worker rollout must wait for it.
+for(let attempt=0;;attempt++){
+  if((await pool.query("SELECT 1 FROM schema_migrations WHERE filename='068_agreement_first_lifecycle_tasks.sql'")).rowCount)break;
+  if(attempt>=60)throw new Error('Workflow migration is not ready; worker will restart without dispatching.');
+  if(attempt===0)logger.info('Waiting for workflow migration before worker dispatch');
+  await new Promise(resolve=>setTimeout(resolve,1000));
+}
 let stopping = false;
 let running = false;
 
@@ -35,7 +45,10 @@ async function tick() {
     const campaigns=await processCampaignJobs({limit:25});
     if(campaigns.processed.length)await recordWorkerProcessingResult("automation-worker",{success:campaigns.processed.every(item=>item.status==='SENT_TO_PROVIDER'),processed:campaigns.processed.length,campaignsOnly:true});
     if(!isStaging()||process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true')await queuePeriodicOutlook();
+    const galleryImports=await processDropboxGallerySources();
+    if(galleryImports.length)logger.info({results:galleryImports},'Dropbox gallery import results');
     if(stagingJobsPaused()){if(isStaging()&&process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:result.processed.every(item=>item.status!=='FAILED'),processed:result.processed.length,qualificationOnly:true});return;}
+    await expireStaleBookingCheckouts();
     const websiteProposals = await processWebsiteProposalHandoffs();
     if (websiteProposals.processed.length) logger.info({processed:websiteProposals.processed}, 'Website proposal handoffs processed');
     const invoiceHandoffs = await processBookingInvoiceHandoffs();
@@ -45,6 +58,7 @@ async function tick() {
     await expireBookingHolds();
     await queuePlanningReminders();
     await queueBookingLifecycleReminders();
+    await queueTaskNotifications();
     const result = await processDueJobs({ limit: 25 });
     if(!isStaging()){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25});}else if(process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}
     await recordWorkerProcessingResult("automation-worker", { success: result.processed.every(item=>item.status!=="FAILED"&& !item.error), processed: result.processed.length });

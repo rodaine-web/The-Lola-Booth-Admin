@@ -13,6 +13,11 @@ import {
 } from "../services/gallery-policy.js";
 import { galleryStorage } from "../services/gallery-storage.js";
 import * as gallery from "../services/private-gallery-service.js";
+import {importFiestaShares} from '../services/fiesta-gallery-service.js';
+import {verifiedGalleryBytes} from '../services/gallery-media-delivery.js';
+import {dropboxGalleryStatus,saveDropboxGallerySource,pauseDropboxGallerySource,syncDropboxGallerySource} from '../services/dropbox-gallery-service.js';
+import {startDropboxGalleryOAuth,finishDropboxGalleryOAuth,disconnectDropboxGallery} from '../services/dropbox-gallery-connection.js';
+import {env} from '../config/env.js';
 const id = z.string().uuid(),
   date = z.string().datetime({ offset: true }).nullable().optional();
 const noCache = (_req, res, next) => {
@@ -41,9 +46,9 @@ const parseGrant = (req) =>
     req.params.token,
   );
 const extension = (mime) =>
-  ({ "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif" })[mime] ||
+  ({ "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif",'video/mp4':'mp4' })[mime] ||
   "bin";
-async function streamMedia(media, res, download = false) {
+async function streamMedia(media, res, download = false,revalidate=async()=>{}) {
   const storage = galleryStorage();
   if (storage.provider !== media.storage_provider)
     throw new AppError(
@@ -56,7 +61,7 @@ async function streamMedia(media, res, download = false) {
     "Content-Disposition",
     `${download ? "attachment" : "inline"}; filename="LOLA-Photo.${extension(media.mime_type)}"`,
   );
-  await pipeline(await storage.get(media.storage_key), res);
+  res.send(await verifiedGalleryBytes(media,revalidate));
 }
 export const galleryPublicRouter = Router();
 galleryPublicRouter.use(gate, noCache);
@@ -143,11 +148,12 @@ galleryPublicRouter.get(
     archive.on("error", () => res.destroy());
     res.on("close", () => archive.abort());
     archive.pipe(res);
-    for (const [index, m] of media.entries())
-      archive.append(await storage.get(m.storage_key), {
+    try{for (const [index, m] of media.entries()){
+      const bytes=await verifiedGalleryBytes(m,async()=>{const current=await parseGrant(req);if(!downloadAllowed(current,true)||!(await gallery.allowedMedia(current)).some(row=>row.id===m.id))throw unavailable();});
+      archive.append(bytes, {
         name: `LOLA-Photo-${String(index + 1).padStart(3, "0")}.${extension(m.mime_type)}`,
       });
-    await archive.finalize();
+    }await archive.finalize();}catch(error){archive.abort();res.destroy();throw error;}
   }),
 );
 galleryPublicRouter.get(
@@ -155,8 +161,9 @@ galleryPublicRouter.get(
   asyncHandler(async (req, res) => {
     const { media, download } = await gallery.authorizedMediaTicket(
       req.params.ticket,
+      { recordActivity: false },
     );
-    await streamMedia(media, res, download);
+    await streamMedia(media, res, download,()=>gallery.authorizedMediaTicket(req.params.ticket));
   }),
 );
 export const galleryAdminRouter = Router();
@@ -167,6 +174,29 @@ galleryAdminRouter.use(
   requirePermission("read:events"),
 );
 const write = requirePermission("write:operations");
+const dropboxCookie={httpOnly:true,secure:['staging','production'].includes(process.env.APP_ENV),sameSite:'lax',path:'/api/integrations/dropbox-gallery/callback',maxAge:600000};
+galleryAdminRouter.post('/albums/:id/dropbox/connect',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{
+  const result=await startDropboxGalleryOAuth(id.parse(req.params.id),req);res.cookie('lola_dropbox_gallery_oauth',result.browser,dropboxCookie);res.json({url:result.url});
+}));
+galleryAdminRouter.post('/dropbox/disconnect',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await disconnectDropboxGallery(req))));
+galleryAdminRouter.get('/albums/:id/dropbox',requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await dropboxGalleryStatus(id.parse(req.params.id)))));
+galleryAdminRouter.post('/albums/:id/dropbox',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{
+  const input=z.object({folderPath:z.string().min(2).max(1000),enabled:z.boolean().default(false)}).strict().parse(req.body);
+  res.json(await saveDropboxGallerySource(id.parse(req.params.id),input,req.user));
+}));
+galleryAdminRouter.post('/albums/:id/dropbox/pause',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await pauseDropboxGallerySource(id.parse(req.params.id),req.user))));
+galleryAdminRouter.post('/albums/:id/dropbox/sync',write,requirePermission('write:integrations'),rateLimit({windowMs:60000,limit:3,standardHeaders:true,legacyHeaders:false}),asyncHandler(async(req,res)=>res.json(await syncDropboxGallerySource(id.parse(req.params.id),{user:req.user}))));
+export const galleryDropboxOAuthRouter=Router();
+galleryDropboxOAuthRouter.get('/dropbox-gallery/callback',gate,noCache,rateLimit({windowMs:600000,limit:20,standardHeaders:true,legacyHeaders:false}),asyncHandler(async(req,res)=>{
+  const browser=String(req.headers.cookie||'').split(';').map(value=>value.trim()).find(value=>value.startsWith('lola_dropbox_gallery_oauth='))?.split('=').slice(1).join('=');
+  res.clearCookie('lola_dropbox_gallery_oauth',dropboxCookie);
+  const result=await finishDropboxGalleryOAuth({state:req.query.state,code:req.query.code,error:req.query.error,browser},req);
+  res.redirect(`${env.clientOrigin.replace(/\/$/,'')}/operations/galleries/${result.albumId}?dropbox=connected`);
+}));
+galleryAdminRouter.post('/albums/:id/fiesta-shares',write,asyncHandler(async(req,res)=>{
+ const input=z.object({csv:z.string().max(1024*1024),eventCode:z.string().regex(/^[A-Za-z0-9_-]+$/).max(100)}).strict().parse(req.body);
+ res.json(await importFiestaShares(id.parse(req.params.id),input.csv,input.eventCode,req.user));
+}));
 galleryAdminRouter.get(
   "/albums",
   asyncHandler(async (_req, res) =>
@@ -201,6 +231,7 @@ galleryAdminRouter.patch(
     const b = z
       .object({
         title: z.string().trim().min(1).max(200).optional(),
+        retention_days:z.union([z.literal(30),z.literal(60),z.literal(90)]).optional(),
         expires_at: date,
         allow_download: z.boolean().optional(),
         allow_zip: z.boolean().optional(),
@@ -346,7 +377,7 @@ galleryAdminRouter.post(
     const b = z
       .object({
         filename: z.string().min(1).max(200),
-        mime_type: z.enum(["image/jpeg", "image/png", "image/gif"]),
+        mime_type: z.enum(["image/jpeg", "image/png", "image/gif", "video/mp4"]),
         base64: z
           .string()
           .min(1)
@@ -412,7 +443,7 @@ galleryAdminRouter.post(
         external_event_id: z.string().min(1).max(200),
         external_capture_id: z.string().min(1).max(200),
         filename: z.string().min(1).max(200),
-        mime_type: z.enum(["image/jpeg", "image/png", "image/gif"]),
+        mime_type: z.enum(["image/jpeg", "image/png", "image/gif", "video/mp4"]),
         base64: z
           .string()
           .min(1)

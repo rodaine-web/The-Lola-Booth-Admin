@@ -49,6 +49,9 @@ jobs:
       - name: Install canvas native binding
         run: npm install --no-save @napi-rs/canvas-linux-x64-gnu@1.0.9
 
+      - name: Backup transfer fault regression
+        run: python3 -m unittest discover -s ops/backups -p "test_*.py" -v
+
       - name: Run tests
         run: npm test
 
@@ -96,6 +99,20 @@ jobs:
           V11_BROWSER_TEST: "true"
         run: node --test test/v11-http-db.test.js
 
+      - name: Preserve staging Event Files browser journey
+        env:
+          BOOKING_LIFECYCLE_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_ci_qa
+          V12_BROWSER_TEST: "true"
+        run: node --test test/event-files-db.test.js
+
+      - name: Save Event Files browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v12-event-files-evidence
+          path: artifacts/v12-event-files/
+          if-no-files-found: ignore
+
       - name: Proposal final review desktop and mobile
         env:
           PROPOSAL_REVIEW_BROWSER_TEST: "true"
@@ -116,4 +133,17 @@ jobs:
             artifacts/proposal-review/
             artifacts/v11-browser/
             artifacts/crm-contacts-browser/
+          if-no-files-found: ignore
+
+      - name: Fiesta guest gallery desktop and mobile
+        env:
+          FIESTA_GALLERY_BROWSER_TEST: "true"
+        run: node --test test/fiesta-gallery-browser.test.js
+
+      - name: Save Fiesta gallery browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fiesta-gallery-evidence
+          path: artifacts/fiesta-gallery/
           if-no-files-found: ignore

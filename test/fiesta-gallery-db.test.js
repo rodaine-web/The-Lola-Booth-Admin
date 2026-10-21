@@ -1,0 +1,71 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import pg from 'pg';
+import jwt from 'jsonwebtoken';
+import {once} from 'node:events';
+import {unzipSync} from 'fflate';
+test('Fiesta gallery persistence, privacy, retention and customer access',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async()=>{
+ const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['127.0.0.1','localhost'].includes(url.hostname));assert.match(url.pathname,/lola_.*qa/);
+ const bootstrap=new pg.Pool({connectionString:url.toString()}),schema='fiesta_qa_'+crypto.randomBytes(6).toString('hex'),root=await fs.mkdtemp(path.join(os.tmpdir(),'fiesta-qa-'));let pool,server;
+ try{
+  await bootstrap.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');
+  Object.assign(process.env,{DATABASE_URL:url.toString(),APP_ENV:'test',NODE_ENV:'test',PORT:'0',JWT_SECRET:'synthetic-fiesta-gallery-test-only-secret',INTEGRATION_SECRET_KEY:'synthetic-fiesta-test-only-encryption-key',GALLERY_STORAGE_PROVIDER:'local',GALLERY_LOCAL_ROOT:root,EMAIL_PROVIDER:'development'});
+  const db=await import('../server/src/db/pool.js');pool=db.pool;const {query,transaction}=db;
+  for(const file of(await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(f=>f.endsWith('.sql')).sort())await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/'+file,import.meta.url),'utf8')));
+  const one=async(sql,args=[])=>(await query(sql,args)).rows[0];
+  const g=await import('../server/src/services/private-gallery-service.js'),{importFiestaShares}=await import('../server/src/services/fiesta-gallery-service.js'),customerGallery=await import('../server/src/services/customer-gallery-service.js'),{verifiedGalleryBytes}=await import('../server/src/services/gallery-media-delivery.js');
+  const user=await one("INSERT INTO users(name,email,password_hash) VALUES('Fiesta QA','fiesta-admin@example.invalid','not-a-login') RETURNING id"),client=await one("INSERT INTO clients(name,email) VALUES('Fiesta QA Client','fiesta-client@example.invalid') RETURNING *"),event=await one("INSERT INTO events(client_id,event_name,event_type,event_date,status) VALUES($1,'FIESTA QA ONLY','Wedding','2035-10-15','CONFIRMED') RETURNING id",[client.id]);
+  const proposal=await one("INSERT INTO proposals(proposal_number,client_id,event_id,status,total) VALUES('FIESTA-QA',$1,$2,'CONVERTED',999) RETURNING id",[client.id,event.id]);
+  const version=await one('INSERT INTO proposal_versions(proposal_id,version_number,snapshot) VALUES($1,1,$2) RETURNING id',[proposal.id,{selected_experiences:[{packages:[{name:'The Essential'}]},{packages:[{name:'The Luxe'}]}]}]);await query('UPDATE proposals SET accepted_version_id=$2 WHERE id=$1',[proposal.id,version.id]);
+  const contract=await one("INSERT INTO contracts(proposal_id,revision,status,title,terms,snapshot,signed_at,signer_name,signer_email,document_hash) VALUES($1,1,'SIGNED','QA fixture','No real obligation',$2,now(),'QA',$3,'fixture') RETURNING id",[proposal.id,{accepted_version_id:version.id},client.email]);
+  const grant=await one('INSERT INTO client_workspace_grants(proposal_id,client_id,signed_contract_id) VALUES($1,$2,$3) RETURNING id',[proposal.id,client.id,contract.id]);
+  const session={client_id:client.id,email:client.email},album=await g.createGalleryAlbum(event.id,null,user);
+  const csv='Shared via,Email Address,Phone Number,Content Link,File Name,Share Time\nE-mail,guest1@example.invalid,,https://boothpics.com/QA1/capture1,PHOTO1.png,2026-09-28 16:36 PST\nPhone number,,17735550123,https://boothpics.com/QA1/capture1,PHOTO1.png,2026-09-28 16:36 PST\nE-mail,guest2@example.invalid,,https://boothpics.com/QA1/capture2,PHOTO2.png,2026-09-28 16:36 PST';
+  const pending=await importFiestaShares(album.id,csv,'QA1',user);assert.equal(pending.pending,3);
+  const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII=';
+  const first=await g.uploadGalleryMedia(album.id,{filename:'PHOTO1.png',mime_type:'image/png',base64:png}),second=await g.uploadGalleryMedia(album.id,{filename:'PHOTO2.png',mime_type:'image/png',base64:png});
+  const replay=await importFiestaShares(album.id,csv,'QA1',user);assert.equal(replay.matched,3);assert.equal(replay.pending,0);assert.equal((await one('SELECT count(*)::int n FROM gallery_people')).n,3);assert.equal((await one('SELECT count(*)::int n FROM gallery_media_people')).n,3);
+  const stored=(await query('SELECT * FROM fiesta_gallery_shares')).rows;assert.ok(!JSON.stringify(stored).includes('guest1@example.invalid'),'recipient values encrypted at rest');
+  await assert.rejects(customerGallery.customerGalleryView(session,event.id),'draft albums are private');
+  await g.transitionGalleryAlbum(album.id,'PUBLISHED',user);const published=await one('SELECT * FROM gallery_albums WHERE id=$1',[album.id]);assert.equal(published.retention_days,90);assert.ok(Math.abs((Date.parse(published.expires_at)-Date.parse(published.published_at))/86400000-90)<0.001);
+  await g.transitionGalleryAlbum(album.id,'PUBLISHED',user);assert.equal(String((await one('SELECT expires_at FROM gallery_albums WHERE id=$1',[album.id])).expires_at),String(published.expires_at));
+  const person=(await one('SELECT person_id FROM fiesta_gallery_shares WHERE filename=$1 LIMIT 1',['PHOTO1.png'])).person_id,key=await g.createGalleryKey(album.id,'PERSON',person,null,user),token=key.url.split('/').at(-1),guest=await g.resolveGalleryToken('PERSON',token);
+  assert.deepEqual((await g.allowedMedia(guest)).map(m=>m.id),[first.id]);await assert.rejects(g.mediaTicket(guest,second.id));assert.equal((await customerGallery.customerGalleryView(session,event.id)).media.length,2);await assert.rejects(customerGallery.customerGalleryView({...session,client_id:crypto.randomUUID()},event.id));
+  const emailPerson=(await one("SELECT person_id FROM fiesta_gallery_shares WHERE channel='EMAIL' AND filename='PHOTO2.png' LIMIT 1")).person_id,emailKey=await g.createGalleryKey(album.id,'PERSON',emailPerson,null,user);assert.equal(emailKey.delivery.channel,'EMAIL');
+  await assert.rejects(g.deliverGallery(emailKey.id,'someone-else@example.invalid',user,false),{code:'GALLERY_RECIPIENT_MISMATCH'});assert.equal((await one('SELECT count(*)::int n FROM communications')).n,0);
+  assert.equal((await g.uploadGalleryMedia(album.id,{filename:'PHOTO1.png',mime_type:'image/png',base64:png})).id,first.id,'upload replay returns same media');
+  const otherEvent=await one("INSERT INTO events(event_name,event_type,event_date) VALUES('OTHER QA','Wedding','2035-10-16') RETURNING id"),other=await g.createGalleryAlbum(otherEvent.id,null,user);await assert.rejects(importFiestaShares(other.id,csv,'QA1',user),{code:'GALLERY_EVENT_CONFLICT'});
+  const media=await customerGallery.customerGalleryMedia(session,event.id,first.id,true);assert.deepEqual(await verifiedGalleryBytes(media),Buffer.from(png,'base64'));
+  // Real HTTP/cookie journey, not a mocked authorization response.
+  delete process.env.APP_ENV;
+  await query("INSERT INTO permissions(key) VALUES('*'),('read:events') ON CONFLICT(key) DO NOTHING");await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[user.id]);
+  const viewer=await one("INSERT INTO users(name,email,password_hash) VALUES('Viewer','fiesta-viewer@example.invalid','not-a-login') RETURNING id");await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='read:events'",[viewer.id]);
+  ({server}=await import('../server/src/index.js'));if(!server.listening)await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
+  const invitationToken=crypto.randomBytes(32).toString('hex');await query("INSERT INTO client_workspace_invitations(grant_id,token_hash,token_ciphertext,recipient_email) VALUES($1,$2,'{}',$3)",[grant.id,crypto.createHash('sha256').update(invitationToken).digest('hex'),client.email]);
+  const redemption=await fetch(origin+'/api/public/client/access',{method:'POST',headers:{Origin:'http://localhost:5173','Content-Type':'application/json'},body:JSON.stringify({token:invitationToken})});assert.equal(redemption.status,200);const cookie=redemption.headers.get('set-cookie').split(';')[0];
+  const get=(suffix,includeCookie=true)=>fetch(origin+'/api/public/client/events/'+event.id+'/gallery'+suffix,{headers:{...(includeCookie?{Cookie:cookie}:{}),Origin:'http://localhost:5173'}});
+  // The pre-read authorization and post-read revocation check must produce one
+  // activity entry per successful response, not one entry per security check.
+  const activityCount=async(action)=>(await one('SELECT count(*)::int n FROM gallery_activity WHERE access_key_id=$1 AND action=$2',[key.id,action])).n;
+  const guestTicket=await g.mediaTicket(guest,first.id,'download');
+  const downloadsBefore=await activityCount('PHOTO_DOWNLOADED');
+  const guestDownload=await fetch(origin+guestTicket.url);
+  assert.equal(guestDownload.status,200);assert.deepEqual(Buffer.from(await guestDownload.arrayBuffer()),Buffer.from(png,'base64'));
+  assert.equal(await activityCount('PHOTO_DOWNLOADED'),downloadsBefore+1);
+  const guestView=await g.publicGalleryView(guest,false),viewsBefore=await activityCount('PHOTO_VIEWED');
+  const guestImage=await fetch(origin+guestView.media[0].url);assert.equal(guestImage.status,200);await guestImage.arrayBuffer();
+  assert.equal(await activityCount('PHOTO_VIEWED'),viewsBefore+1);
+  assert.equal((await get('',false)).status,401);assert.equal((await get('')).status,200);
+  const download=await get('/media/'+first.id+'/download');assert.equal(download.status,200);assert.match(download.headers.get('content-disposition'),/PHOTO1.png/);assert.deepEqual(Buffer.from(await download.arrayBuffer()),Buffer.from(png,'base64'));
+  const zip=await get('/zip');assert.equal(zip.status,200);assert.equal(Object.keys(unzipSync(new Uint8Array(await zip.arrayBuffer()))).length,2);
+  const viewerToken=jwt.sign({sub:viewer.id},process.env.JWT_SECRET),denied=await fetch(origin+'/api/gallery-admin/albums/'+album.id+'/fiesta-shares',{method:'POST',headers:{Authorization:'Bearer '+viewerToken,'Content-Type':'application/json'},body:JSON.stringify({eventCode:'QA1',csv})});assert.equal(denied.status,403);
+  await query("UPDATE client_workspace_sessions SET verified_at=now()-interval '16 minutes'");assert.equal((await get('/media/'+first.id+'/download')).status,403);await query('UPDATE client_workspace_sessions SET verified_at=now()');
+  await assert.rejects(verifiedGalleryBytes({...media,checksum:'invalid'}),{code:'GALLERY_MEDIA_INTEGRITY'});await assert.rejects(verifiedGalleryBytes(media,async()=>{throw Error('Access removed during read');}));
+  await query('UPDATE client_workspace_grants SET revoked_at=now() WHERE id=$1',[grant.id]);await assert.rejects(customerGallery.customerGalleryView(session,event.id));
+  await query("UPDATE gallery_albums SET expires_at=now()-interval '1 second' WHERE id=$1",[album.id]);await assert.rejects(g.resolveGalleryToken('PERSON',token));
+ }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();await fs.rm(root,{recursive:true,force:true});}
+});

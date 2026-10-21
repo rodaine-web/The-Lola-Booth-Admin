@@ -2,12 +2,11 @@ import {crmOutlookCallbackRouter} from './routes/crm-contacts.js';
 import {externalOAuthRouter} from './routes/external-integrations.js';
 import {pool} from './db/pool.js';
 import {assertDatabaseIdentity} from './config/database-identity.js';
-import {originAllowed} from '../../shared/environment-isolation.js';
+import {environmentCors} from './middleware/environment-cors.js';
 import {buildInfo} from './config/staging-safety.js';
 import crypto from "node:crypto";
 import { safeRequestLog, safeResponseLog } from "./utils/request-log.js";
 import express from "express";
-import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
 import {createApiRateLimits} from "./middleware/api-rate-limits.js";
@@ -15,7 +14,7 @@ import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { authRouter } from "./routes/auth.js";
-import {galleryPublicRouter,galleryAdminRouter} from "./routes/gallery.js";
+import {galleryPublicRouter,galleryAdminRouter,galleryDropboxOAuthRouter} from "./routes/gallery.js";
 import { publicRouter } from "./routes/public.js";
 import { adminRouter } from "./routes/admin.js";
 import { webhookRouter } from "./routes/webhooks.js";
@@ -28,14 +27,9 @@ const app = express();
 
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(cors({
-  origin(origin, callback) {
-    if (originAllowed(process.env.APP_ENV, origin, [env.clientOrigin, ...env.publicInquiryAllowedOrigins])) return callback(null, true);
-    return callback(new AppError("Requests are not allowed from this origin.", 403, "CORS_REJECTED"));
-  },
-  credentials: true
-}));
+app.use(environmentCors(()=>process.env.APP_ENV,()=>[env.clientOrigin,...env.publicInquiryAllowedOrigins]));
 app.use(pinoHttp({ logger, genReqId: (_req, res) => { const id = crypto.randomUUID(); res.setHeader("X-Request-ID", id); return id; }, serializers: { req: safeRequestLog, res: safeResponseLog } }));
+app.use("/api/integrations",galleryDropboxOAuthRouter);
 app.use("/api/integrations",crmOutlookCallbackRouter);
 app.use("/api/integrations",externalOAuthRouter);
 app.use("/api/webhooks", express.raw({ type: "application/json", limit: "1mb" }), webhookRouter);

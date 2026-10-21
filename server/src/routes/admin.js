@@ -1,7 +1,11 @@
+import {recordJourney} from '../services/record-journey-service.js';
 import {integrationMarketplace} from '../services/integration-marketplace-service.js';
 import {saveSentProposalRevision,sendReviewedProposal,latestProposalDelivery,proposalReviewEmail} from '../services/proposal-review-service.js';
 import {crmContactsRouter} from './crm-contacts.js';
 import {createAdminLead} from '../services/admin-lead-create.js';
+import {eventFilesRouter} from './event-files.js';
+import {managesEventFiles} from '../../../shared/event-files.js';
+import {eventFileSummary,listEventFiles} from '../services/event-files-service.js';
 import {previewLeadAvailability,confirmLeadAvailability} from '../services/lead-availability-service.js';
 import {disconnect as disconnectExternal,retryExternalInbound} from '../services/external-connections-service.js';
 import {externalIntegrationsRouter} from './external-integrations.js';
@@ -185,6 +189,7 @@ adminRouter.use(authenticate);
 adminRouter.use(crmContactsRouter);
 adminRouter.use(appearanceRouter);
 adminRouter.use(adminPlanningRouter);
+adminRouter.use(eventFilesRouter);
 adminRouter.use('/integrations',externalIntegrationsRouter);
 adminRouter.use(contractsRouter);
 adminRouter.use((req,_res,next)=>{
@@ -335,6 +340,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
     requirePermission(permission),
     validate(paginationSchema, "query"),
     asyncHandler(async (req, res) => {
+      if (table==='files'&&!managesEventFiles(req.user))throw new AppError('Open an assigned event to view its available files.',403,'FORBIDDEN');
       const filters = req.validatedQuery;
       const page = filters.page;
       const pageSize = filters.pageSize || filters.page_size;
@@ -344,7 +350,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       if (["events","bookings"].includes(table)) where.push("sales_closed_at IS NULL");
       const params = [];
       if(filters.data_scope==="business" && ["leads","clients","events","bookings","proposals","invoices","payments","tasks"].includes(table))where.push("data_classification IN ('BUSINESS','UNREVIEWED')");
-      if (filters.status) {
+      if (filters.status && table !== "files") {
         params.push(filters.status);
         where.push(`status = $${params.length}`);
       }
@@ -451,7 +457,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         params.push(`%${filters.search}%`);
         where.push(`(${searchable.map((field) => `${field} ILIKE $${params.length}`).join(" OR ")})`);
       }
-      const sortable = new Set(["created_at", "updated_at", "event_date", "due_date", "display_order", "name", "status"]);
+      const sortable = new Set(table === "files" ? ["created_at", "filename", "category"] : ["created_at", "updated_at", "event_date", "due_date", "display_order", "name", "status"]);
       const sortBy = sortable.has(filters.sort_by || filters.sort) ? (filters.sort_by || filters.sort) : "created_at";
       const direction = String(filters.sort_direction || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
       params.push(pageSize, offset);
@@ -460,7 +466,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         params
       );
       const count = await query(`SELECT count(*)::int AS count FROM ${table} WHERE ${where.join(" AND ")}`, params.slice(0, -2));
-      let data=rows.rows;
+      let data=table==='files'?rows.rows.map(eventFileSummary):rows.rows;
       if(table==='packages'&&data.length){const items=(await query("SELECT package_id,label FROM package_items WHERE package_id=ANY($1::uuid[]) ORDER BY display_order",[data.map(row=>row.id)])).rows;data=data.map(row=>({...row,items:items.filter(item=>item.package_id===row.id).map(item=>item.label)}));}
       if(table==='tasks'&&data.length){const ids=data.map(r=>r.id);data=(await query(`SELECT t.*,u.name AS owner_name,e.event_name,c.name AS client_name FROM tasks t LEFT JOIN users u ON u.id=t.assigned_user_id LEFT JOIN events e ON e.id=t.event_id LEFT JOIN clients c ON c.id=t.client_id WHERE t.id=ANY($1::uuid[]) ORDER BY array_position($1::uuid[],t.id)`,[ids])).rows;}
       res.json({ data, pagination: { page, pageSize, total: count.rows[0].count } });
@@ -987,7 +993,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
   if (!client.rows[0]) throw notFound("Client");
   const [events, proposals, invoices, payments, tasks, files, communications, activity, summary] = await Promise.all([
     query("SELECT * FROM events WHERE client_id=$1 AND deleted_at IS NULL AND sales_closed_at IS NULL ORDER BY event_date DESC", [req.params.id]),
-    query("SELECT * FROM proposals WHERE client_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
+    query("SELECT p.* FROM proposals p WHERE (p.client_id=$1 OR p.lead_id IN(SELECT id FROM leads WHERE converted_client_id=$1)) AND p.deleted_at IS NULL ORDER BY p.created_at DESC", [req.params.id]),
     query("SELECT * FROM invoices WHERE client_id=$1 AND deleted_at IS NULL ORDER BY due_date DESC", [req.params.id]),
     query("SELECT * FROM payments WHERE client_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC", [req.params.id]),
     query("SELECT * FROM tasks WHERE client_id=$1 AND deleted_at IS NULL ORDER BY due_date NULLS LAST", [req.params.id]),
@@ -997,7 +1003,7 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
     query(`SELECT count(e.id)::int AS total_events, COALESCE(sum(b.total),0)::text AS lifetime_value, COALESCE(sum(b.balance_due),0)::text AS outstanding_balance
       FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL AND e.sales_closed_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
   ]);
-  res.json({ ...client.rows[0], summary: summary.rows[0], events: events.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows, communications: communications.rows, activity: activity.rows });
+  res.json({ ...client.rows[0], summary: summary.rows[0], events: await Promise.all(events.rows.map(event=>recordJourney(event))), journey: events.rows.length?null:await recordJourney({id:null},req.params.id), proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), communications: communications.rows, activity: activity.rows });
 }));
 
 adminRouter.get("/clients/:id/duplicates", requirePermission("read:sales"), asyncHandler(async (req, res) => {
@@ -1212,7 +1218,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query(`SELECT sa.*, sp.name, sp.email, sp.phone FROM staff_assignments sa JOIN staff_profiles sp ON sp.id=sa.staff_profile_id WHERE sa.event_id=$1 AND sa.released_at IS NULL ORDER BY sa.created_at`, [req.params.id]),
     query(`SELECT ea.*, eq.name, eq.category, eq.status FROM equipment_assignments ea JOIN equipment eq ON eq.id=ea.equipment_id WHERE ea.event_id=$1 AND ea.released_at IS NULL ORDER BY ea.created_at`, [req.params.id]),
     query("SELECT * FROM tasks WHERE event_id=$1 AND deleted_at IS NULL ORDER BY due_date NULLS LAST", [req.params.id]),
-    query("SELECT * FROM files WHERE event_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC", [req.params.id]),
+    listEventFiles(req.params.id,req.user).then(rows=>({rows})),
     query("SELECT * FROM payments WHERE event_id=$1 AND deleted_at IS NULL ORDER BY payment_date DESC", [req.params.id]),
     query("SELECT * FROM communications WHERE event_id=$1 AND deleted_at IS NULL ORDER BY occurred_at DESC", [req.params.id]),
     query("SELECT * FROM activities WHERE entity_type='event' AND entity_id=$1 ORDER BY created_at DESC", [req.params.id]),
@@ -1224,7 +1230,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
     query("SELECT ep.package_id AS id, p.name, p.starting_price, ep.display_order FROM event_packages ep JOIN packages p ON p.id=ep.package_id WHERE ep.event_id=$1 ORDER BY ep.display_order, p.name", [req.params.id]),
     query("SELECT ee.experience_id AS id, x.name, x.base_price, ee.display_order FROM event_experiences ee JOIN experiences x ON x.id=ee.experience_id WHERE ee.event_id=$1 ORDER BY ee.display_order, x.name", [req.params.id])
   ]);
-  res.json({ ...eventFinanceSummary(event.rows[0], invoices.rows), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows, payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
+  res.json({ ...await recordJourney(eventFinanceSummary(event.rows[0], invoices.rows)), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
 }));
 
 adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {
@@ -1877,7 +1883,7 @@ adminRouter.post("/equipment/qr-labels.pdf", requirePermission("equipment.overri
 
 adminRouter.get("/equipment", ...listRoute("equipment", ["name", "category", "serial_number", "asset_uid", "status"], "read:events"));
 adminRouter.get("/tasks", ...listRoute("tasks", ["title", "description"], "read:tasks"));
-adminRouter.get("/files", ...listRoute("files", ["filename", "category", "storage_provider"], "read:tasks"));
+adminRouter.get("/files", ...listRoute("files", ["filename", "category"], "read:events"));
 adminRouter.get("/galleries", ...listRoute("galleries", ["gallery_name", "gallery_url", "status"], "read:tasks"));
 adminRouter.get("/users", requirePermission("view:users"), asyncHandler(async (req, res) => {
   const rows = await query(
@@ -2624,11 +2630,13 @@ const taskSchema = z.object({
   client_id: uuid.optional().nullable(),
   event_id: uuid.optional().nullable(),
   proposal_id: uuid.optional().nullable(),
+  closure_reason: z.string().trim().min(1).max(4000).optional().nullable(),
   status: z.enum(taskStatuses).default("OPEN"),
   priority: z.enum(taskPriorities).default("NORMAL")
 }).strict();
 
 adminRouter.post("/tasks", requirePermission("write:tasks"), validate(taskSchema), asyncHandler(async (req, res) => {
+  if(['DONE','CANCELLED'].includes(req.body.status)&&!req.body.closure_reason?.trim())throw new AppError('A resolution note is required to close a task.',422,'TASK_RESOLUTION_NOTE_REQUIRED');
   const fields = Object.keys(req.body);
   const values = Object.values(req.body);
   const inserted = await query(`INSERT INTO tasks (${fields.join(",")}) VALUES (${fields.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, values);
@@ -2639,12 +2647,17 @@ adminRouter.post("/tasks", requirePermission("write:tasks"), validate(taskSchema
   res.status(201).json(inserted.rows[0]);
 }));
 
-adminRouter.patch("/tasks/:id", requirePermission("write:tasks"), validate(taskSchema.partial()), asyncHandler(async (req, res) => {
-  const before = await query("SELECT * FROM tasks WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
+adminRouter.patch("/tasks/:id", requirePermission("write:tasks"), validate(taskSchema.omit({status:true,priority:true}).partial().extend({status:z.enum(taskStatuses).optional(),priority:z.enum(taskPriorities).optional()})), asyncHandler(async (req, res) => {
+  const updated = await transaction(async () => {
+  const before = await query("SELECT * FROM tasks WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.params.id]);
   if (!before.rows[0]) throw notFound("Task");
-  const updated = await updateById({ table: "tasks", id: req.params.id, body: req.body, allowed: ["title", "description", "due_date", "assigned_user_id", "lead_id", "client_id", "event_id", "proposal_id", "status", "priority"] });
+  if(['DONE','CANCELLED'].includes(req.body.status)&&req.body.status!==before.rows[0].status&&!req.body.closure_reason?.trim())throw new AppError('A resolution note is required to close a task.',422,'TASK_RESOLUTION_NOTE_REQUIRED');
+  if(['DONE','CANCELLED'].includes(req.body.status||before.rows[0].status)&&Object.hasOwn(req.body,'closure_reason')&&!req.body.closure_reason?.trim())throw new AppError('A closed task must retain its resolution note.',422,'TASK_RESOLUTION_NOTE_REQUIRED');
+  const updated = await updateById({ table: "tasks", id: req.params.id, body: req.body, allowed: ["title", "description", "due_date", "assigned_user_id", "lead_id", "client_id", "event_id", "proposal_id", "status", "priority", "closure_reason"] });
   await recordActivity({ actorUserId: req.user.id, entityType: updated.event_id ? "event" : updated.lead_id ? "lead" : "task", entityId: updated.event_id || updated.lead_id || updated.id, action: updated.status === "DONE" ? "task_completed" : "task_edited", summary: updated.status === "DONE" ? `Task completed: ${updated.title}` : `Task edited: ${updated.title}` });
   await writeAudit({ req, action: updated.status === "DONE" ? "task_completed" : "task_edited", entity: "task", entityId: req.params.id, before: before.rows[0], after: updated });
+  return updated;
+  });
   res.json(updated);
 }));
 

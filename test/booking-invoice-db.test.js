@@ -52,11 +52,11 @@ test('disposable PostgreSQL: concurrent acceptance and invoice conversion preser
       VALUES($1,$2,$3,300,'CARD',current_date,'PENDING') RETURNING id`,[converted[0].id,event.id,contact.id])).rows[0];
     const jobCount=async()=>Number((await query("SELECT count(*)::int n FROM automation_jobs WHERE job_type='BOOKING_SEND_PAID_AGREEMENT' AND related_entity_id=$1",[proposal.id])).rows[0].n);
     await reconcileInvoice(converted[0].id);
-    assert.equal(await jobCount(),0,'Pending payment cannot trigger an agreement');
-    assert.equal((await query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'PROPOSAL_SENT');
+    assert.equal(await jobCount(),1,'Accepted unpaid invoice prepares agreement before payment');
+    assert.equal((await query('SELECT status FROM leads WHERE id=$1',[lead.id])).rows[0].status,'WON');
     await query("UPDATE payments SET status='SUCCEEDED',amount=299.99 WHERE id=$1",[payment.id]);
     await reconcileInvoice(converted[0].id);
-    assert.equal(await jobCount(),0,'Payment below thirty percent cannot trigger an agreement');
+    assert.equal(await jobCount(),1,'Payment amount does not gate agreement preparation');
     const paidLead=(await query('SELECT * FROM leads WHERE id=$1',[lead.id])).rows[0];
     assert.equal(paidLead.status,'WON','Any posted positive payment classifies the lead as a client');
     assert.equal(paidLead.converted_client_id,contact.id,'Reuse the existing billed client');

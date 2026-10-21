@@ -4,6 +4,15 @@ import { grantUsable } from './gallery-policy.js';
 
 // Recheck after claiming work. A provider request already in flight cannot be recalled.
 export async function dispatchDecision(client, message) {
+  if(message.trigger_key==='TASK_ASSIGNMENT_NOTIFICATION'){
+    if(process.env.TASK_NOTIFICATIONS_ENABLED!=='true')return 'CANCELLED';
+    const allowed=await client.query(`SELECT 1 FROM task_notification_ledger l JOIN tasks t ON t.id=l.task_id JOIN users u ON u.id=t.assigned_user_id
+      WHERE l.communication_id=$1 AND t.deleted_at IS NULL AND t.status IN ('OPEN','IN_PROGRESS')
+       AND l.assigned_user_id=t.assigned_user_id AND l.assignment_version=t.assignment_version
+       AND u.active AND u.deleted_at IS NULL AND lower(u.email)=lower($2)`,[message.id,message.recipient]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+
   if((message.lead_id||message.proposal_id) && (await client.query(`SELECT 1 FROM leads l WHERE l.status='LOST' AND (l.id=$1 OR EXISTS(SELECT 1 FROM proposals p WHERE p.id=$2 AND p.lead_id=l.id))`,[message.lead_id||null,message.proposal_id||null])).rowCount)return 'CANCELLED';
   if (message.trigger_key === 'BOOKING_SEND_WEBSITE_PROPOSAL') {
     // Retire legacy automatic sends, including already queued/retryable messages.
@@ -36,7 +45,7 @@ export async function dispatchDecision(client, message) {
        AND lower(c.email)=lower($2) AND k.snapshot->>'accepted_version_id'=p.accepted_version_id::text
        AND (e.id IS NULL OR (e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND e.status<>'CANCELLED'))
        AND EXISTS(SELECT 1 FROM invoices i WHERE i.proposal_id=p.id AND i.deleted_at IS NULL AND i.status NOT IN ('DRAFT','VOID','REFUNDED')
-        AND i.total>0 AND i.amount_paid>=COALESCE((SELECT x.minimum_before_agreement FROM booking_payment_exceptions x WHERE x.event_id=i.event_id AND x.revoked_at IS NULL),ceil(i.total*100*.3)/100))`,[contractId,message.recipient,deadline]):await client.query(`SELECT 1 FROM invoices i JOIN clients c ON c.id=i.client_id JOIN events e ON e.id=i.event_id
+        AND i.total>0)`,[contractId,message.recipient,deadline]):await client.query(`SELECT 1 FROM invoices i JOIN clients c ON c.id=i.client_id JOIN events e ON e.id=i.event_id
       WHERE i.id=$1 AND i.due_date=$3::date AND i.deleted_at IS NULL AND c.deleted_at IS NULL AND e.deleted_at IS NULL AND NOT event_payment_review(e.id) AND e.status<>'CANCELLED'
        AND lower(c.email)=lower($2) AND i.status NOT IN ('DRAFT','VOID','PAID','REFUNDED') AND i.amount_outstanding>0`,[message.invoice_id,message.recipient,deadline]);
     if(!allowed.rowCount)return 'CANCELLED';

@@ -16,8 +16,19 @@ export function assertEnvironmentIsolation(config) {
   }
   const origins = String(config.PUBLIC_INQUIRY_ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean);
   if (!origins.includes(expected.website) || origins.some(origin => !expected.origins.includes(origin))) throw new Error('Public inquiry origins must belong to this environment.');
+  if (config.GALLERY_PUBLIC_ORIGIN && config.GALLERY_PUBLIC_ORIGIN !== galleryOrigins[config.APP_ENV]) throw new Error('Gallery origin must belong to this environment.');
 }
 
 export function originAllowed(environment, origin, fallbackOrigins = []) {
   return !origin || (environments[environment]?.origins || fallbackOrigins).includes(origin);
+}
+
+export const galleryOrigins = {
+  production: 'https://gallery.thelolabooth.com',
+  staging: 'https://staginggallery.thelolabooth.com'
+};
+
+export function galleryOriginAllowed(environment, origin, path) {
+  return Boolean(galleryOrigins[environment] && origin === galleryOrigins[environment]
+    && (path === '/api/gallery' || path.startsWith('/api/gallery/')));
 }

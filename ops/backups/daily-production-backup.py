@@ -1,6 +1,7 @@
 """Private Azure PostgreSQL backups. Never migrate or mutate the source database."""
 import os, json, base64, hashlib, pathlib, tempfile, subprocess, datetime, uuid, re, shutil
 import urllib.request, urllib.parse, urllib.error, xml.etree.ElementTree as ET
+import time, socket, ssl, http.client
 import psycopg2
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -11,6 +12,34 @@ PREFIX = 'production/postgresql/daily/'
 CONTAINER = os.environ['AZURE_DOCUMENTS_CONTAINER']
 assert re.fullmatch(r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]',CONTAINER) and not CONTAINER.endswith('-staging')
 NOW = datetime.datetime.now(datetime.timezone.utc)
+TRANSFER_BLOCK_BYTES = 4 * 1024 * 1024
+TRANSFER_ATTEMPTS = 4
+
+def transfer_retry(operation, action):
+    for attempt in range(1, TRANSFER_ATTEMPTS + 1):
+        try:
+            return action()
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
+            status = error.code if isinstance(error, urllib.error.HTTPError) else None
+            reason = getattr(error, 'reason', error)
+            category = ('HTTP' if status else 'TIMEOUT' if isinstance(reason, TimeoutError)
+                else 'DNS' if isinstance(reason, socket.gaierror)
+                else 'TLS' if isinstance(reason, ssl.SSLError) else 'CONNECTION')
+            retryable = status in (408, 429, 500, 502, 503, 504) if status else category != 'TLS'
+            headers = getattr(error, 'headers', {}) or {}
+            code = headers.get('x-ms-error-code', '')
+            request_id = headers.get('x-ms-request-id', '')
+            if isinstance(error, urllib.error.HTTPError):
+                error.close()
+            # Never log provider bodies, URLs, authorization headers or exception messages.
+            print('BACKUP_TRANSFER_DIAGNOSTIC', json.dumps({'operation':operation,'attempt':attempt,
+                'category':category,'status':status,
+                'azureCode':code if re.fullmatch(r'[A-Za-z0-9_]{1,80}', code) else '',
+                'requestId':request_id if re.fullmatch(r'[A-Fa-f0-9-]{1,80}', request_id) else '',
+                'retrying':retryable and attempt < TRANSFER_ATTEMPTS}), flush=True)
+            if not retryable or attempt == TRANSFER_ATTEMPTS:
+                raise
+            time.sleep(min(2 ** attempt, 8))
 
 def run(args, **kwargs):
     # Never echo source URLs, provider error bodies, or credentials.
@@ -50,16 +79,55 @@ class Azure:
             'x-ms-version':'2023-11-03'}
     def request(self, suffix='', method='GET', data=None, headers=None):
         req = urllib.request.Request(self.url+suffix,method=method,data=data,headers={**self.headers,**(headers or {})})
-        return urllib.request.urlopen(req,timeout=120)
+        # Conditional retention deletes keep their existing fail-closed behavior.
+        if method not in ('GET','HEAD','PUT'):
+            return urllib.request.urlopen(req,timeout=120)
+        operation = 'UPLOAD_BLOCK' if 'comp=block&' in suffix else 'COMMIT_BLOCKS' if 'comp=blocklist' in suffix else method
+        return transfer_retry(operation, lambda: urllib.request.urlopen(req,timeout=120))
     def prepare(self):
         with self.request('?restype=container') as response:
             assert not response.headers.get('x-ms-blob-public-access'), 'Backup container must be private'
     def put(self, name, data):
         assert name.startswith(PREFIX)
-        with self.request('/'+name,'PUT',data,{'x-ms-blob-type':'BlockBlob','If-None-Match':'*'}) as response:
-            assert response.status==201
+        suffix = '/'+name
+        headers = {'If-None-Match':'*'}
+        body = data
+        if len(data) > TRANSFER_BLOCK_BYTES:
+            blocks = []
+            for index, offset in enumerate(range(0, len(data), TRANSFER_BLOCK_BYTES)):
+                block = data[offset:offset + TRANSFER_BLOCK_BYTES]
+                block_id = base64.b64encode(f'{index:08d}'.encode()).decode()
+                query = urllib.parse.urlencode({'comp':'block','blockid':block_id})
+                with self.request('/'+name+'?'+query,'PUT',block,
+                        {'Content-MD5':base64.b64encode(hashlib.md5(block).digest()).decode()}) as response:
+                    assert response.status == 201
+                blocks.append(block_id)
+                print('BACKUP_UPLOAD_BLOCK_PASS', index + 1, flush=True)
+            body = ('<?xml version="1.0" encoding="utf-8"?><BlockList>' +
+                ''.join('<Latest>'+value+'</Latest>' for value in blocks) + '</BlockList>').encode()
+            suffix += '?comp=blocklist'
+            headers['Content-Type'] = 'application/xml'
+        else:
+            headers['x-ms-blob-type'] = 'BlockBlob'
+        try:
+            with self.request(suffix,'PUT',body,headers) as response:
+                assert response.status == 201
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
+            # A lost success response can yield 412 on retry. Reconcile exact bytes;
+            # never overwrite another object or assume an uncertain PUT succeeded.
+            if isinstance(error, urllib.error.HTTPError) and error.code != 412:
+                raise
+            try:
+                recovered = self.get(name)
+            except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
+                raise error
+            assert recovered == data, 'Existing backup object differs; overwrite refused'
+            print('BACKUP_UPLOAD_RECONCILED', flush=True)
     def get(self, name):
-        with self.request('/'+name) as response: return response.read()
+        def read():
+            req=urllib.request.Request(self.url+'/'+name,headers=self.headers)
+            with urllib.request.urlopen(req,timeout=120) as response: return response.read()
+        return transfer_retry('READBACK',read)
     def private(self,name):
         try:
             with urllib.request.urlopen(self.url+'/'+name,timeout=45):

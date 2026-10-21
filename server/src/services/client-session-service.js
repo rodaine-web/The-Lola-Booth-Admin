@@ -63,6 +63,8 @@ export async function endClientSession(req){const session=await authenticateClie
 
 export async function queueSignedWorkspace(contract){
  if(!workspaceHandoffEnabled()||contract.status!=='SIGNED')return;
+ if(!(await query(`SELECT 1 FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('DRAFT','VOID','REFUNDED') AND total>0
+  AND round(amount_paid*100)>=ceil(round(total*100)*.3)`,[contract.proposal_id])).rowCount)return;
  const key='signed-workspace:'+contract.id;
  await query('SELECT pg_advisory_xact_lock(hashtext($1))',[key]);
  const exists=await query('SELECT 1 FROM automation_jobs WHERE job_type=$1 AND payload->>\'contractId\'=$2 LIMIT 1',[WORKSPACE_HANDOFF_JOB,contract.id]);
