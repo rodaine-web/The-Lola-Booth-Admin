@@ -1,3 +1,5 @@
+import {lockBookingReservations} from '../services/booking-hold-service.js';
+import {rescheduleWarnings} from '../services/event-operations-service.js';
 import {recordJourney} from '../services/record-journey-service.js';
 import {integrationMarketplace} from '../services/integration-marketplace-service.js';
 import {saveSentProposalRevision,sendReviewedProposal,latestProposalDelivery,proposalReviewEmail} from '../services/proposal-review-service.js';
@@ -1098,9 +1100,9 @@ const eventSchema = z.object({
   client_id: uuid,
   event_name: z.string().min(1),
   event_type: z.string().min(1),
-  event_date: z.string(),
-  start_time: z.string(),
-  end_time: z.string(),
+  event_date: z.iso.date(),
+  start_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/).nullable(),
+  end_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/).nullable(),
   setup_time: z.string().optional().nullable(),
   breakdown_time: z.string().optional().nullable(),
   venue_name: z.string().optional().nullable(),
@@ -1203,6 +1205,7 @@ adminRouter.post("/events", requirePermission("write:events"), validate(eventSch
 adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(async (req, res) => {
   const event = await query(
     `SELECT e.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone, c.company AS client_company,
+      (SELECT x.minimum_before_confirmation FROM booking_payment_exceptions x WHERE x.event_id=e.id AND x.revoked_at IS NULL) AS approved_confirmation_minimum,
       p.name AS package_name, x.name AS experience_name, b.total AS booked_total, b.deposit_required,
       b.amount_paid, b.balance_due, b.payment_status
      FROM events e
@@ -1238,6 +1241,15 @@ adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eve
   if (!before.rows[0]) throw notFound("Event");
   validateEventTimes({ ...before.rows[0], ...req.body });
   const updated = await transaction(async (client) => {
+    await lockBookingReservations();
+    const current=(await client.query('SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[req.params.id])).rows[0];
+    const proposed={...current,...req.body};
+    validateEventTimes(proposed);
+    const scheduleChanged=['event_date','start_time','end_time','setup_time','breakdown_time'].some(key=>key in req.body&&String(req.body[key]||'')!==String(current[key]||''));
+    if(scheduleChanged&&proposed.start_time&&proposed.end_time){
+      const warnings=await rescheduleWarnings(req.params.id,proposed);
+      if(warnings.staff_conflicts+warnings.equipment_conflicts>0)throw new AppError('The proposed times conflict with assigned staff or equipment. Review assignments before saving.',409,'EVENT_SCHEDULE_CONFLICT',warnings);
+    }
     const patch = { ...req.body };
     delete patch.package_ids;
     delete patch.experience_ids;

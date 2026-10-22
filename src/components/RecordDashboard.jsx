@@ -20,11 +20,11 @@ export function useRecordJourney(event, proposals = [], lead) {
   return bookingOverview({ event, proposal, lead, contracts: agreement.proposalId === proposal?.id ? agreement.records : null });
 }
 
-export function RecordIdentity({ name, status, subtitle, event, actions, image }) {
+export function RecordIdentity({ name, status, subtitle, event, actions, image, reference }) {
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('');
   return <header className="record-identity">
     {image ? <img className="record-portrait" src={image} alt="" /> : <div className="record-avatar" aria-hidden="true">{initials}</div>}
-    <div className="record-identity-copy"><div className="record-title"><h1>{name}</h1>{status && <span className={`record-status ${/inquiry|new|tentative/i.test(status) ? "inquiry" : /lost|archived|cancelled/i.test(status) ? "closed" : ""}`}>{status.replaceAll('_', ' ')}</span>}</div><p className="record-contact">{subtitle}</p>
+    <div className="record-identity-copy"><div className="record-title"><h1>{name}</h1>{status && <span className={`record-status ${/inquiry|new|tentative/i.test(status) ? "inquiry" : /lost|archived|cancelled/i.test(status) ? "closed" : ""}`}>{status.replaceAll('_', ' ')}</span>}</div><p className="record-contact">{subtitle}</p>{reference&&<p className="record-muted record-reference">{reference.label}: <code>{reference.value}</code></p>}
       {event && <div className="record-meta"><span><CalendarDays size={18}/>{event.event_date ? formatDateOnly(event.event_date) : 'Date TBD'}</span><span><MapPin size={18}/>{[event.city, event.state].filter(Boolean).join(', ') || event.venue_name || 'Location TBD'}</span><span>{event.event_type || 'Event type TBD'}</span><span><Users size={18}/>{event.guest_count ?? 'TBD'} guests</span></div>}
     </div><div className="record-header-actions">{actions}</div>
   </header>;
