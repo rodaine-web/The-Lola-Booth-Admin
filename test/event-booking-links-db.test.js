@@ -52,7 +52,7 @@ test('legacy booking links: audited repair restores finance and confirmation wit
   const path='/events/'+event.id;
   assert.equal((await api(path,{start_time:'16:00',end_time:'20:00'},null)).status,401);
   const edited=await api(path,{start_time:'16:00',end_time:'20:00',setup_time:'15:00',breakdown_time:'21:00',event_type:'Birthday',guest_count:60});
-  assert.equal(edited.status,200,JSON.stringify(edited.data));assert.equal(edited.data.start_time,'16:00:00');assert.equal(edited.data.end_time,'20:00:00');
+  assert.equal(edited.status,200,JSON.stringify(edited.data));assert.equal(edited.data.status,'CONFIRMED','Editing details must not reset booking confirmation');assert.equal(edited.data.start_time,'16:00:00');assert.equal(edited.data.end_time,'20:00:00');
   assert.equal((await api(path,{end_time:'15:00'})).status,400,'End time cannot precede the saved start time');
   assert.equal((await api(path,{start_time:'25:00'})).status,400,'Invalid clock times fail validation');
   const fresh=await fetch(origin+'/api'+path,{headers:{Authorization:'Bearer '+token}});const detail=await fresh.json();
