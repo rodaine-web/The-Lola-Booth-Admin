@@ -1236,7 +1236,7 @@ adminRouter.get("/events/:id", requirePermission("read:events"), asyncHandler(as
   res.json({ ...await recordJourney(eventFinanceSummary(event.rows[0], invoices.rows)), package_ids: packages.rows.map(row=>row.id), experience_ids: experiences.rows.map(row=>row.id), packages: packages.rows, experiences: experiences.rows, staff: staff.rows, equipment: equipment.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), payments: payments.rows, communications: communications.rows, activity: activity.rows, audit: audit.rows, addons: addons.rows, proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), operations });
 }));
 
-adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial()), asyncHandler(async (req, res) => {
+adminRouter.patch("/events/:id", requirePermission("write:events"), validate(eventSchema.partial().extend({status:z.enum(eventStatuses).optional()})), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM events WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Event");
   validateEventTimes({ ...before.rows[0], ...req.body });
