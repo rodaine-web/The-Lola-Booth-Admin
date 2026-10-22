@@ -1,3 +1,4 @@
+import {linkEventBooking} from '../services/event-booking-links.js';
 import {adminWorkspaceInvitation} from '../services/client-session-service.js';
 import {approveBookingPaymentException} from '../services/booking-payment-exceptions.js';
 import {validDrawnSignature} from '../../../shared/signature.js';
@@ -48,3 +49,5 @@ contractsRouter.post('/events/:id/confirm-booking',gate,requirePermission('write
  await (await import('../db/pool.js')).query("UPDATE tasks SET status='DONE',updated_at=now() WHERE lifecycle_key=$1",['booking-confirmation:'+req.params.id]);
  res.json({status:event?.status||'ALREADY_CONFIRMED'});
 }));
+
+contractsRouter.post('/events/:id/link-booking',gate,requirePermission('write:events'),requirePermission('write:sales'),requirePermission('write:finance'),id,validate(z.object({proposalId:uuid}).strict()),asyncHandler(async(req,res)=>res.json(await linkEventBooking(req.params.id,req.body.proposalId,req))));

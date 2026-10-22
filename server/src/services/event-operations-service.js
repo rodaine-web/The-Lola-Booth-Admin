@@ -88,6 +88,7 @@ export async function getEventOperations(eventId, user = null) {
 async function eventHeader(eventId) {
   const result = await query(
     `SELECT e.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone, c.company AS client_company,
+      (SELECT x.minimum_before_confirmation FROM booking_payment_exceptions x WHERE x.event_id=e.id AND x.revoked_at IS NULL) AS approved_confirmation_minimum,
       p.name AS package_name, x.name AS experience_name, b.payment_status, b.deposit_required, b.amount_paid, b.balance_due
      FROM events e
      LEFT JOIN clients c ON c.id=e.client_id
@@ -497,7 +498,7 @@ export async function rescheduleEvent(eventId, body, user) {
   return { before, event: updated.rows[0], warnings };
 }
 
-async function rescheduleWarnings(eventId, body) {
+export async function rescheduleWarnings(eventId, body) {
   const staff = await query(
     `SELECT count(*)::int AS count FROM staff_assignments sa
      JOIN staff_assignments other ON other.staff_profile_id=sa.staff_profile_id AND other.event_id<>sa.event_id AND other.released_at IS NULL
