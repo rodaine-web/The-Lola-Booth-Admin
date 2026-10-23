@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { api } from "../api/client.js";
 import { sourceHref, metricHref } from "../utils/dashboard-links.js";
+import { dashboardGreeting } from "../utils/dashboard-greeting.js";
 
 const sourceColors=["#e5c7a8","#171717","#f9b8d5","#fb8fa6","#b5b7bd","#dfe1e7"];
 const experiences=[
@@ -35,6 +36,19 @@ export default function Dashboard() {
   const [recentProposals,setRecentProposals]=useState([]);
   const [error,setError]=useState("");
   const [revision,setRevision]=useState(0);
+  const [greeting,setGreeting]=useState(dashboardGreeting);
+
+  useEffect(()=>{
+    const refreshGreeting=()=>setGreeting(dashboardGreeting());
+    const timer=window.setInterval(refreshGreeting,60_000);
+    window.addEventListener('focus',refreshGreeting);
+    document.addEventListener('visibilitychange',refreshGreeting);
+    return()=>{
+      window.clearInterval(timer);
+      window.removeEventListener('focus',refreshGreeting);
+      document.removeEventListener('visibilitychange',refreshGreeting);
+    };
+  },[]);
 
   useEffect(()=>{
     let active=true;
@@ -78,7 +92,7 @@ export default function Dashboard() {
       <section className="dashboard-intro-grid">
         <div className="dashboard-intro-left">
           <div className="dashboard-hero-row">
-            <div><h1>Good morning, {firstName(user?.name || data?.viewerName)||"there"}!</h1><p className="lede">Here’s what’s happening with The Lola Booth today.</p></div>
+            <div><h1>{greeting}, {firstName(user?.name || data?.viewerName)||"there"}!</h1><p className="lede">Here’s what’s happening with The Lola Booth today.</p></div>
             <span className="lola-script morning-script" aria-hidden="true">Make it a<br/>Great Day.</span>
           </div>
           <div className="dashboard-kpi-row">
