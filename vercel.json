@@ -36,6 +36,43 @@
           "key": "Content-Security-Policy",
           "value": "default-src 'self'; connect-src 'self' https://stagingapi.thelolabooth.com; img-src 'self' data: blob: https://stagingapi.thelolabooth.com; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' blob: https://stagingapi.thelolabooth.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"
         }
+      ],
+      "missing": [
+        {
+          "type": "host",
+          "value": "(admin|gallery)\\.thelolabooth\\.com"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self), microphone=(), geolocation=()"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; connect-src 'self' https://api.thelolabooth.com; img-src 'self' data: blob: https://api.thelolabooth.com; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' blob: https://api.thelolabooth.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"
+        }
+      ],
+      "has": [
+        {
+          "type": "host",
+          "value": "(admin|gallery)\\.thelolabooth\\.com"
+        }
       ]
     },
     {
@@ -420,6 +457,17 @@
   ],
   "buildCommand": "npm run build && mv dist/index.html dist/admin.html",
   "redirects": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "gallery.thelolabooth.com"
+        }
+      ],
+      "destination": "/gallery",
+      "permanent": false
+    },
     {
       "source": "/",
       "has": [
