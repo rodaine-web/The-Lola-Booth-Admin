@@ -32,7 +32,7 @@ export default function ProposalDetail({reviewMode=false}) {
       const data = await api.get(`/proposals/${id}`);
       setProposal(data);
       const draftKey=`${id}:${data.review_version_id}`;
-      if(emailDraftKey.current!==draftKey){setEmailBody(data.email_preview?.editableBody||'');emailDraftKey.current=draftKey;}
+      if(emailDraftKey.current!==draftKey){setEmailBody(data.email_preview?.editableBody??data.email_preview?.body??'');emailDraftKey.current=draftKey;}
     } catch (err) {
       setError(err.message);
     }
@@ -55,7 +55,7 @@ export default function ProposalDetail({reviewMode=false}) {
     if(busy)return;setBusy(true);setError('');setNotice('');
     try{
       const previous=retry?proposal.latest_delivery:null;
-      const result=await api.post(`/proposals/${id}/send`,{requestId:previous?.request_id||requestId.current,versionId:previous?.version_id||proposal.review_version_id,recipients:previous?previous.recipients.map(row=>row.email):[proposal.client_email,...copies.map(value=>value.trim()).filter(Boolean)],...(!previous?{emailBody}: {})});
+      const result=await api.post(`/proposals/${id}/send`,{requestId:previous?.request_id||requestId.current,versionId:previous?.version_id||proposal.review_version_id,recipients:previous?previous.recipients.map(row=>row.email):[proposal.client_email,...copies.map(value=>value.trim()).filter(Boolean)],...(!previous&&proposal.email_preview?.editableBody!==undefined?{emailBody}: {})});
       setNotice(result.status==='COMPLETE'?'All proposal emails were accepted by the provider.':result.status==='UNKNOWN'?'A delivery outcome is uncertain. Operator review is required before resending.':result.status==='PROCESSING'?'Delivery is already processing. Refresh its status; do not send again.':'Some emails were not accepted. Review the recipient results and retry only failed recipients.');
       await load();
     }catch(err){setError(err.message);}finally{setBusy(false);}
@@ -105,7 +105,7 @@ export default function ProposalDetail({reviewMode=false}) {
         <label>Primary client email<input aria-label="Primary client email" type="email" readOnly value={proposal.client_email||''}/></label>
         {copies.map((value,index)=><label key={index}>Additional recipient {index+1}<input aria-label={`Additional recipient ${index+1}`} type="email" maxLength={254} disabled={busy} value={value} onChange={event=>{setCopies(rows=>rows.map((row,i)=>i===index?event.target.value:row));setReviewed(false);requestId.current=crypto.randomUUID();}}/></label>)}
         <button type="button" disabled={busy||copies.length>=9} onClick={()=>setCopies(rows=>[...rows,''])}>Add another recipient</button>
-        <h3>Email subject</h3><p>{proposal.email_preview?.subject}</p><label>Email message<textarea aria-label="Email message" rows={12} maxLength={12000} required disabled={busy} value={emailBody} onChange={event=>{setEmailBody(event.target.value);setReviewed(false);requestId.current=crypto.randomUUID();}}/></label><p>The secure proposal link and recipient access notice are added automatically. This message changes the email only; proposal content and pricing stay as reviewed.</p>
+        <h3>Email subject</h3><p>{proposal.email_preview?.subject}</p><label>Email message<textarea aria-label="Email message" rows={12} maxLength={12000} required disabled={busy||proposal.email_preview?.editableBody===undefined} value={emailBody} onChange={event=>{setEmailBody(event.target.value);setReviewed(false);requestId.current=crypto.randomUUID();}}/></label><p>The secure proposal link and recipient access notice are added automatically. This message changes the email only; proposal content and pricing stay as reviewed.</p>
         <h3>Proposal preview</h3><AdminProposalPreview key={proposal.review_version_id} id={id}/>
         <label><input type="checkbox" checked={reviewed} disabled={busy} onChange={event=>setReviewed(event.target.checked)}/>I have reviewed the proposal, pricing and recipient addresses.</label>
         <button className="primary-action" disabled={busy||!reviewed||!emailBody.trim()||!can('write:sales')||!['DRAFT','READY','SENT','VIEWED','EXPIRED'].includes(proposal.status)||Boolean(proposal.linked_invoice_id)}>{busy?'Sending…':proposal.has_unsent_revision?'Send Updated Proposal':'Send Proposal'}</button>
