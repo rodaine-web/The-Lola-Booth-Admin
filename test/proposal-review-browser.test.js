@@ -35,8 +35,8 @@ test('final review: desktop/mobile recipients, consent gate and explicit update 
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Final review must fit mobile width');
    await fs.mkdir('artifacts/proposal-review',{recursive:true});await page.screenshot({path:`artifacts/proposal-review/review-${width}.png`,fullPage:true});
    await page.goto(`${origin}/sales/leads`);await page.getByRole('button',{name:'New Lead',exact:true}).click();
-   for(const [name,value] of [['First name *','Bark'],['Last name *','QA'],['Email *','bark-qa@example.invalid'],['Phone *','3125550199'],['Event date *','2035-10-15']])await page.getByLabel(name,{exact:true}).fill(value);
-   await page.getByLabel('Event type *',{exact:true}).selectOption('Birthday');await page.getByLabel('Lead source',{exact:true}).selectOption('Bark.com');
+   for(const [name,value] of [['First name *','Bark'],['Last name *','QA'],['Email *','bark-qa@example.invalid'],['Phone *','3125550199'],['Event date *','2035-10-15']])await page.getByLabel(new RegExp('^'+name.replace('*','\\*')+'$','i')).fill(value);
+   await page.getByRole('combobox',{name:/^Event type \*$/i}).selectOption('Birthday');await page.getByRole('combobox',{name:/^Lead source$/i}).selectOption('Bark.com');
    await page.getByRole('button',{name:'Create Lead',exact:true}).click();await page.getByRole('button',{name:'New Lead',exact:true}).waitFor();
    await page.getByRole('button',{name:'Create Lead',exact:true}).waitFor({state:'hidden'});assert.equal(createdLead.lead_source,'Bark.com');assert.equal(createdLead.referral_source,'Bark.com');
    await page.screenshot({path:`artifacts/proposal-review/leads-source-${width}.png`,fullPage:true});await page.close();
