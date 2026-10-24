@@ -19,3 +19,13 @@ test('plain proposal document narrative uses explicit customer notes and never i
  assert.doesNotMatch(proposalNarrative({content:{notes:'PRIVATE INTERNAL'}}).notes,/PRIVATE INTERNAL/);
  assert.doesNotMatch(proposalReviewEmail({client_name:'QA',notes:'PRIVATE INTERNAL',content:{}}).body,/PRIVATE INTERNAL/);
 });
+
+test('custom email body is escaped and protected links and copy notices remain',()=>{
+ const proposal={client_name:'QA',content:{},notes:'PRIVATE INTERNAL'};
+ const message='Thank you for your question.\nWe need an 8 by 8 foot space. <script>alert(1)</script>';
+ for(const copy of [false,true]){
+  const email=proposalReviewEmail(proposal,{copy,emailBody:message,url:'https://example.invalid/proposal/qa'});
+  assert.ok(email.body.startsWith(message));assert.match(email.body,/https:\/\/example.invalid\/proposal\/qa/);assert.doesNotMatch(email.html,/<script>/);assert.doesNotMatch(email.body,/PRIVATE INTERNAL/);
+  if(copy)assert.match(email.body,/information-only copy/);else assert.match(email.body,/review and accept/);
+ }
+});

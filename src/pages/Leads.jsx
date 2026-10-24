@@ -14,7 +14,7 @@ import "../styles/crm-contacts.css";
 import StatusBadge from "../components/StatusBadge.jsx";
 
 const statuses=["","NEW","CONTACTED","QUALIFIED","PROPOSAL_DRAFT","PROPOSAL_SENT","FOLLOW_UP","WON","LOST"];
-const sources=["","WEBSITE","META","FACEBOOK","INSTAGRAM","TIKTOK","LINKEDIN","Referral","Phone","Manual","Other"];
+const sources=["","WEBSITE","META","FACEBOOK","INSTAGRAM","TIKTOK","LINKEDIN","Referral","Phone","MANUAL","Bark.com","Other"];
 const eventTypes=["Wedding","Birthday","Private Party","Brand Activation","Corporate Event","Other"];
 
 export default function Leads(){
@@ -69,6 +69,8 @@ export default function Leads(){
     try{
       await api.post("/leads",{
         ...draft,
+        lead_source:draft.lead_source||"MANUAL",
+        referral_source:draft.lead_source&&draft.lead_source!=="MANUAL"?draft.lead_source:null,
         guest_count:draft.guest_count?Number(draft.guest_count):null,
         event_type:draft.event_type==="Other"?(draft.custom_event_type||"Other"):draft.event_type
       });
@@ -129,6 +131,7 @@ export default function Leads(){
           <label>Event type *<select required value={draft.event_type||""} onChange={e=>setDraft({...draft,event_type:e.target.value})}><option value="">Select event type</option>{eventTypes.map(type=><option key={type}>{type}</option>)}</select></label>
           {draft.event_type==="Other"&&<label>Describe event type <span className="required-mark" aria-hidden="true">*</span><input aria-label="Describe event type" required value={draft.custom_event_type||""} onChange={e=>setDraft({...draft,custom_event_type:e.target.value})}/></label>}
           <label>Guests<input type="number" min="1" value={draft.guest_count||""} onChange={e=>setDraft({...draft,guest_count:e.target.value})}/></label>
+          <label>Lead source<select value={draft.lead_source||"MANUAL"} onChange={e=>setDraft({...draft,lead_source:e.target.value})}>{sources.filter(Boolean).map(item=><option key={item} value={item}>{item==="MANUAL"?"Manual":item}</option>)}</select></label>
           <label>Venue<input value={draft.venue_name||""} onChange={e=>setDraft({...draft,venue_name:e.target.value})}/></label>
           <label className="wide">Notes<textarea value={draft.message||""} onChange={e=>setDraft({...draft,message:e.target.value})} placeholder="What did the client tell us?"/></label>
         </div>
