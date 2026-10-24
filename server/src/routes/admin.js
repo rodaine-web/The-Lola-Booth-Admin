@@ -367,7 +367,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
 
         if (filters.source) {
           params.push(filters.source);
-          where.push(`(lead_source = $${params.length} OR source_subtype = $${params.length} OR provider = $${params.length})`);
+          where.push(`(lead_source = $${params.length} OR source_subtype = $${params.length} OR provider = $${params.length} OR referral_source = $${params.length})`);
         }
         if (filters.campaign) {
           params.push(filters.campaign);
@@ -673,6 +673,7 @@ const leadSchema = z.object({
   zip: z.string().optional().nullable(),
   preferred_experience_id: uuid.optional().nullable(),
   preferred_package_id: uuid.optional().nullable(),
+  lead_source: z.string().trim().min(1).max(120).optional(),
   referral_source: z.string().optional().nullable(),
   message: z.string().optional().nullable(),
   assigned_user_id: uuid.optional().nullable(),
@@ -1573,7 +1574,7 @@ adminRouter.get("/proposals/:id/docx", requirePermission("read:sales"), asyncHan
   res.type(document.mimeType).attachment(document.filename).send(buffer);
 }));
 
-adminRouter.post("/proposals/:id/send", requirePermission("write:sales"), validate(z.object({requestId:z.string().uuid(),versionId:z.string().uuid(),recipients:z.array(z.string().trim().email().max(254)).min(1).max(10)}).strict()), asyncHandler(async (req, res) => {
+adminRouter.post("/proposals/:id/send", requirePermission("write:sales"), validate(z.object({requestId:z.string().uuid(),versionId:z.string().uuid(),recipients:z.array(z.string().trim().email().max(254)).min(1).max(10),emailBody:z.string().trim().min(1).max(12000).optional()}).strict()), asyncHandler(async (req, res) => {
   const proposal = await getProposal(req.params.id);
   const result = await sendReviewedProposal(req,proposal.id);
   if (result.document?.storageKey) {

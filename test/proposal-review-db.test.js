@@ -23,6 +23,10 @@ test('proposal review: published prices, concurrent sends, read-only copies and 
   const {saveSentProposalRevision,sendReviewedProposal,latestProposalDelivery}=await import('../server/src/services/proposal-review-service.js');
   const {acceptProposal}=await import('../server/src/services/proposal-acceptance-service.js');
   const req={user:{id:user.id},headers:{},ip:'127.0.0.1'};
+  const {createAdminLead}=await import('../server/src/services/admin-lead-create.js');
+  const bark=await createAdminLead({first_name:'Bark',last_name:'QA',email:'bark@qa.invalid',phone:'3125550199',event_date:'2035-10-15',event_type:'Birthday',lead_source:'Bark.com',referral_source:'Bark.com'},req);
+  assert.equal(bark.lead_source,'Bark.com');assert.equal(bark.referral_source,'Bark.com');
+  const sourced=await createAdminLead({first_name:'Referral',last_name:'QA',email:'source@qa.invalid',phone:'3125550188',event_date:'2035-10-15',event_type:'Birthday',referral_source:'Bark.com'},req);assert.equal(sourced.lead_source,'Bark.com');
   let serial=0;
   async function fixture(){const p=await row("INSERT INTO proposals(client_id,proposal_number,status,total,pricing_snapshot,line_items_snapshot,content,secure_token,valid_through,sent_at) VALUES($1,$2,'SENT',1000,$3,$4,$5,$6,'2035-10-15',now()) RETURNING *",[client.id,'QA-'+(++serial),{total:1000,deposit_amount:300},JSON.stringify([{description:'Original',quantity:1,unit_price:1000}]),{},crypto.randomBytes(24).toString('hex')]);const v=await transaction(c=>createProposalVersion(c,p,user.id));await query('UPDATE proposals SET published_version_id=$2 WHERE id=$1',[p.id,v.id]);return {...p,published_version_id:v.id};}
   async function revision(p){await saveSentProposalRevision({...req,body:{client_id:client.id,custom_line_items:[{description:'Negotiated experience',quantity:1,unit_price:800}],valid_through:'2035-10-15',customer_notes:'We need an 8 by 8 foot space. Travel is included.',notes:'PRIVATE INTERNAL ONLY'}},await getProposal(p.id));return getProposal(p.id);}
@@ -44,11 +48,12 @@ test('proposal review: published prices, concurrent sends, read-only copies and 
   // The primary may accept the previously published offer while an unsent revision exists.
   const old=await fixture();await revision(old);await acceptProposal(old.id,'QA',{...req,params:{token:old.secure_token}});const accepted=await row('SELECT * FROM proposals WHERE id=$1',[old.id]);assert.equal(accepted.accepted_version_id,old.published_version_id);assert.equal(Number(accepted.total),1000);assert.equal(accepted.draft_version_id,null);
   // A failed copy retries alone, even after primary acceptance.
-  const partial=await fixture(),draft=await revision(partial);let copyFail=true,primarySends=0,copySends=0;
-  const partiallyDeliver=async m=>{if(m.to.startsWith('primary'))primarySends++;else{copySends++;if(copyFail){const e=new Error('confirmed provider rejection');e.code='QA_REJECTED';e.details={status:400,outcomeUnknown:false};throw e;}}return {provider:'QA',providerMessageId:crypto.randomUUID()};};
-  const partialBody={requestId:crypto.randomUUID(),versionId:draft.review_version_id,recipients:body.recipients};assert.equal((await sendReviewedProposal({...req,body:partialBody},partial.id,{deliver:partiallyDeliver})).status,'PARTIAL');
+  const partial=await fixture(),draft=await revision(partial);let copyFail=true,primarySends=0,copySends=0;const retryMessages=[];
+  const partiallyDeliver=async m=>{retryMessages.push(m.body);if(m.to.startsWith('primary'))primarySends++;else{copySends++;if(copyFail){const e=new Error('confirmed provider rejection');e.code='QA_REJECTED';e.details={status:400,outcomeUnknown:false};throw e;}}return {provider:'QA',providerMessageId:crypto.randomUUID()};};
+  const partialBody={requestId:crypto.randomUUID(),versionId:draft.review_version_id,recipients:body.recipients,emailBody:'Personal reply: Boston travel and setup are covered.'};assert.equal((await sendReviewedProposal({...req,body:partialBody},partial.id,{deliver:partiallyDeliver})).status,'PARTIAL');
+  await assert.rejects(sendReviewedProposal({...req,body:{...partialBody,emailBody:'Changed after sending'}},partial.id,{deliver:partiallyDeliver}),{code:'PROPOSAL_REQUEST_REUSED'});
   const live=await row('SELECT secure_token FROM proposals WHERE id=$1',[partial.id]);await acceptProposal(partial.id,'QA',{...req,params:{token:live.secure_token}});copyFail=false;
-  assert.equal((await sendReviewedProposal({...req,body:partialBody},partial.id,{deliver:partiallyDeliver})).status,'COMPLETE');assert.equal(primarySends,1);assert.equal(copySends,2);
+  assert.equal((await sendReviewedProposal({...req,body:partialBody},partial.id,{deliver:partiallyDeliver})).status,'COMPLETE');assert.equal(primarySends,1);assert.equal(copySends,2);assert.ok(retryMessages.every(message=>message.includes(partialBody.emailBody)));const savedEmail=await row('SELECT snapshot FROM proposal_send_batches WHERE proposal_id=$1',[partial.id]);assert.equal(savedEmail.snapshot.delivery_email_body,partialBody.emailBody);
   // A timeout has an unknown outcome; neither retry nor a new request resends it.
   const uncertain=await fixture();const unknownBody={requestId:crypto.randomUUID(),versionId:uncertain.published_version_id,recipients:['primary@qa.invalid']};let uncertainSends=0;
   const timeout=async()=>{uncertainSends++;throw new Error('transport timeout');};assert.equal((await sendReviewedProposal({...req,body:unknownBody},uncertain.id,{deliver:timeout})).status,'UNKNOWN');

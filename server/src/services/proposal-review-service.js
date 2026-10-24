@@ -35,12 +35,14 @@ export async function saveSentProposalRevision(req,before){
   return {...candidate,draft_version_id:version.id};
  });
 }
-export function proposalReviewEmail(proposal,{copy=false,url='[Secure proposal link included when sent]'}={}){
+export function proposalReviewEmail(proposal,{copy=false,url='[Secure proposal link included when sent]',emailBody}={}){
  const updated=Boolean(proposal.sent_at);
  const subject=updated?'There is an update to your Proposal from The Lola Booth.':'Your Proposal from The Lola Booth';
  const customerNotes=proposal.content?.scenario?.customer_notes ?? proposal.content?.customer_notes ?? '';
- const body=`Hi ${proposal.client_name||'there'},\n\n${updated?'There is an update to your Proposal from The Lola Booth. Please review the latest event details, services and pricing.':'Your proposal from The Lola Booth is ready. Please review your event details, services and pricing.'}${customerNotes?`\n\nA note from The Lola Booth:\n${customerNotes}`:''}\n\n${copy?'This is an information-only copy. The primary client receives the link to accept or decline.':'You can review and accept your proposal using the secure link below.'}\n\n${url}\n\nQuestions or changes? Reply to this email.\n\nThe Lola Booth\nGood people. Better photos.`;
- return {subject,body,html:brandedEmailHtml(body,{firstName:proposal.client_name,kicker:updated?'Your proposal has been updated':'Your proposal is ready',ctaLabel:copy?'View proposal copy':'Review Your Proposal',ctaUrl:url})};
+ const editableBody=`Hi ${proposal.client_name||'there'},\n\n${updated?'There is an update to your Proposal from The Lola Booth. Please review the latest event details, services and pricing.':'Your proposal from The Lola Booth is ready. Please review your event details, services and pricing.'}${customerNotes?`\n\nA note from The Lola Booth:\n${customerNotes}`:''}\n\nQuestions or changes? Reply to this email.\n\nThe Lola Booth\nGood people. Better photos.`;
+ const defaultBody=`Hi ${proposal.client_name||'there'},\n\n${updated?'There is an update to your Proposal from The Lola Booth. Please review the latest event details, services and pricing.':'Your proposal from The Lola Booth is ready. Please review your event details, services and pricing.'}${customerNotes?`\n\nA note from The Lola Booth:\n${customerNotes}`:''}\n\n${copy?'This is an information-only copy. The primary client receives the link to accept or decline.':'You can review and accept your proposal using the secure link below.'}\n\n${url}\n\nQuestions or changes? Reply to this email.\n\nThe Lola Booth\nGood people. Better photos.`;
+ const body=emailBody!==undefined?`${emailBody.trim()}\n\n${copy?'This is an information-only copy. The primary client receives the link to accept or decline.':'You can review and accept your proposal using the secure link below.'}\n\n${url}`:defaultBody;
+ return {subject,body,editableBody,html:brandedEmailHtml(body,{firstName:proposal.client_name,kicker:updated?'Your proposal has been updated':'Your proposal is ready',ctaLabel:copy?'View proposal copy':'Review Your Proposal',ctaUrl:url})};
 }
 export async function latestProposalDelivery(proposalId){
  const batch=(await query('SELECT id,version_id,request_id,status FROM proposal_send_batches WHERE proposal_id=$1 ORDER BY created_at DESC LIMIT 1',[proposalId])).rows[0];
@@ -52,7 +54,10 @@ async function batchResult(batchId){
  return {...batch,recipients:(await query('SELECT email,is_primary,status,error_code FROM proposal_send_recipients WHERE batch_id=$1 ORDER BY is_primary DESC,email',[batchId])).rows};
 }
 export async function sendReviewedProposal(req,proposalId,{deliver=sendEmail}={}){
- const input=req.body,recipients=[...new Set(input.recipients.map(value=>value.trim().toLowerCase()))].sort();
+ const input=req.body;
+ if(input.emailBody!==undefined&&(typeof input.emailBody!=='string'||!input.emailBody.trim()||input.emailBody.trim().length>12000))throw new AppError('Enter an email message of 1 to 12,000 characters.',422,'PROPOSAL_EMAIL_INVALID');
+ const emailBody=input.emailBody?.trim();
+ const recipients=[...new Set(input.recipients.map(value=>value.trim().toLowerCase()))].sort();
  // Validate the complete recipient scope before any external delivery occurs.
  for(const to of recipients)stagingEmailPolicy({to,subject:'Proposal review delivery'},process.env);
  const claimed=await transaction(async client=>{
@@ -60,7 +65,7 @@ export async function sendReviewedProposal(req,proposalId,{deliver=sendEmail}={}
   if(!proposal)throw notFound('Proposal');
   const previous=(await client.query('SELECT * FROM proposal_send_batches WHERE proposal_id=$1 AND request_id=$2 FOR UPDATE',[proposalId,input.requestId])).rows[0];
   if(previous){
-   if(previous.version_id!==input.versionId||JSON.stringify(previous.recipients)!==JSON.stringify(recipients))throw failure('This send request was used for different content or recipients. Refresh the review.','PROPOSAL_REQUEST_REUSED');
+   if(previous.version_id!==input.versionId||JSON.stringify(previous.recipients)!==JSON.stringify(recipients)||(emailBody!==undefined&&emailBody!==previous.snapshot.delivery_email_body))throw failure('This send request was used for different content or recipients. Refresh the review.','PROPOSAL_REQUEST_REUSED');
    if(['COMPLETE','PROCESSING','UNKNOWN'].includes(previous.status))return {batch:previous,replayed:true};
   }
   const retryingPublishedCopies=previous&&proposal.published_version_id===previous.version_id&&(await client.query("SELECT 1 FROM proposal_send_recipients WHERE batch_id=$1 AND is_primary AND status='ACCEPTED'",[previous.id])).rowCount>0;
@@ -76,7 +81,7 @@ export async function sendReviewedProposal(req,proposalId,{deliver=sendEmail}={}
   if(!previous&&!publicProposalUrl({...proposal,secure_token:token}))throw failure("Generate fresh secure proposal access before sending.","DOCUMENT_ACCESS_UNAVAILABLE");
   let batch=previous;
   if(!batch){
-   const frozen={...proposal,...version.snapshot,client_email:proposal.client_email,client_name:proposal.client_name,secure_token:token};
+   const frozen={...proposal,...version.snapshot,client_email:proposal.client_email,client_name:proposal.client_name,secure_token:token,...(emailBody!==undefined?{delivery_email_body:emailBody}:{})};
    batch=(await client.query('INSERT INTO proposal_send_batches(proposal_id,version_id,request_id,snapshot,primary_token,recipients,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[proposalId,version.id,input.requestId,JSON.stringify(frozen),encryptSecretJson({token}),JSON.stringify(recipients),req.user.id])).rows[0];
    for(const email of recipients){const primary=email===proposal.client_email.toLowerCase(),recipientToken=primary?token:crypto.randomBytes(24).toString('hex');await client.query('INSERT INTO proposal_send_recipients(batch_id,email,is_primary,token_hash,token_ciphertext) VALUES($1,$2,$3,$4,$5)',[batch.id,email,primary,primary?null:hash(recipientToken),encryptSecretJson({token:recipientToken})]);}
   }
@@ -92,7 +97,7 @@ export async function sendReviewedProposal(req,proposalId,{deliver=sendEmail}={}
    const locked=await query("UPDATE proposal_send_recipients SET status='PROCESSING',error_code=NULL,updated_at=now() WHERE id=$1 AND status IN ('PENDING','FAILED') RETURNING id",[row.id]);
    if(!locked.rowCount)throw failure('Delivery status is uncertain. Do not resend without operator review.','PROPOSAL_DELIVERY_UNCERTAIN');
    const token=decryptSecretJson(row.token_ciphertext).token;
-   const message=proposalReviewEmail(batch.snapshot,{copy:!row.is_primary,url:publicProposalUrl({...batch.snapshot,secure_token:token})});
+   const message=proposalReviewEmail(batch.snapshot,{emailBody:batch.snapshot.delivery_email_body,copy:!row.is_primary,url:publicProposalUrl({...batch.snapshot,secure_token:token})});
    let email;
    try{email=await deliver({to:row.email,...message,attachments:[]});}
    catch(error){
