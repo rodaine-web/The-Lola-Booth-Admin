@@ -30,6 +30,15 @@ test('Dropbox ingestion persists exact mappings and survives retries without pub
   const first=await sync.syncDropboxGallerySource(album.id,{connect,user});assert.equal(first.imported,1);assert.equal(first.messagesSent,0);
   assert.equal((await one('SELECT count(*)::int n FROM gallery_media_people')).n,1);assert.equal((await one('SELECT status FROM gallery_albums WHERE id=$1',[album.id])).status,'DRAFT');
   assert.equal((await sync.syncDropboxGallerySource(album.id,{connect,user})).replayed,1);assert.equal(downloads,1);
+  // Production polling must dispatch eligible sources only with both explicit flags.
+  Object.assign(process.env,{APP_ENV:'production',GALLERY_ENABLED:'true'});
+  await query("UPDATE gallery_dropbox_sources SET next_sync_at=now()-interval '1 minute' WHERE album_id=$1",[album.id]);
+  const polled=await sync.processDropboxGallerySources({connect});assert.equal(polled.length,1);assert.equal(polled[0].albumId,album.id);assert.equal(polled[0].replayed,1);assert.equal(downloads,1);
+  await query("UPDATE gallery_dropbox_sources SET next_sync_at=now()-interval '1 minute' WHERE album_id=$1",[album.id]);
+  process.env.GALLERY_ENABLED='false';assert.deepEqual(await sync.processDropboxGallerySources({connect}),[]);
+  process.env.GALLERY_ENABLED='true';process.env.GALLERY_DROPBOX_SYNC_ENABLED='false';assert.deepEqual(await sync.processDropboxGallerySources({connect}),[]);
+  process.env.GALLERY_DROPBOX_SYNC_ENABLED='true';await query('UPDATE gallery_dropbox_sources SET enabled=false WHERE album_id=$1',[album.id]);assert.deepEqual(await sync.processDropboxGallerySources({connect}),[]);
+  await query('UPDATE gallery_dropbox_sources SET enabled=true WHERE album_id=$1',[album.id]);process.env.APP_ENV='test';
   entries=[entry('two','TWO.png'),entry('three','THREE.png')];interrupt=async capture=>{if(capture.id==='id:three')throw Error('provider failure containing sensitive text');};
   await assert.rejects(sync.syncDropboxGallerySource(album.id,{connect,user}),{code:'DROPBOX_SYNC_FAILED'});
   assert.equal((await one('SELECT count(*)::int n FROM gallery_media')).n,2);
@@ -47,6 +56,7 @@ test('Dropbox ingestion persists exact mappings and survives retries without pub
   await query("UPDATE events SET status='INQUIRY' WHERE id=$1",[event.id]);
   await g.updateGalleryAlbum(album.id,{retention_days:30},user);await g.transitionGalleryAlbum(album.id,'PUBLISHED',user);
   interrupt=null;await assert.rejects(sync.syncDropboxGallerySource(album.id,{connect,user}),{code:'DROPBOX_GALLERY_PUBLISHED'});
+  Object.assign(process.env,{APP_ENV:'production',GALLERY_ENABLED:'true'});await query("UPDATE gallery_dropbox_sources SET enabled=true,next_sync_at=now()-interval '1 minute' WHERE album_id=$1",[album.id]);assert.deepEqual(await sync.processDropboxGallerySources({connect}),[]);process.env.APP_ENV='test';
   assert.equal((await one('SELECT count(*)::int n FROM communications')).n,0);assert.equal((await one('SELECT count(*)::int n FROM gallery_access_keys')).n,0);
   const oauth=await import('../server/src/services/dropbox-gallery-connection.js');
   Object.assign(process.env,{DROPBOX_GALLERY_APP_KEY:'fixture-app',DROPBOX_GALLERY_APP_SECRET:'fixture-secret'});

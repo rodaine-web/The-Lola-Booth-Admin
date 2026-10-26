@@ -1,3 +1,4 @@
+import {galleryEnabled} from '../../../shared/features.js';
 import crypto from 'node:crypto';
 import {query,transaction} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
@@ -85,9 +86,9 @@ export async function syncDropboxGallerySource(albumId,{connect=connectedDropbox
   throw new AppError('Dropbox import stopped. Review its status before retrying.',502,code);
  }
 }
-export async function processDropboxGallerySources({limit=2}={}) {
- if(process.env.GALLERY_DROPBOX_SYNC_ENABLED!=='true'||process.env.APP_ENV==='production'||process.env.APP_ENV==='staging'&&process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED!=='true')return [];
+export async function processDropboxGallerySources({limit=2,connect=connectedDropboxGallery}={}) {
+ if(!galleryEnabled(process.env)||process.env.GALLERY_DROPBOX_SYNC_ENABLED!=='true'||process.env.APP_ENV==='staging'&&process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED!=='true')return [];
  const sources=(await query(`SELECT s.album_id FROM gallery_dropbox_sources s JOIN gallery_albums a ON a.id=s.album_id JOIN events e ON e.id=a.event_id
  WHERE s.enabled AND s.next_sync_at<=now() AND (s.lease_until IS NULL OR s.lease_until<now()) AND a.published_at IS NULL AND a.status IN ('DRAFT','PROCESSING','READY') AND e.deleted_at IS NULL AND e.status<>'CANCELLED' ORDER BY s.next_sync_at LIMIT $1`,[Math.min(2,Math.max(1,limit))])).rows;
- const results=[];for(const row of sources){try{results.push({albumId:row.album_id,...await syncDropboxGallerySource(row.album_id,{periodic:true})});}catch(error){if(error.code==='FORBIDDEN')await query("UPDATE gallery_dropbox_sources SET enabled=false,last_error_code='FORBIDDEN' WHERE album_id=$1",[row.album_id]);results.push({albumId:row.album_id,errorCode:error.code||'DROPBOX_SYNC_FAILED'});}}return results;
+ const results=[];for(const row of sources){try{results.push({albumId:row.album_id,...await syncDropboxGallerySource(row.album_id,{periodic:true,connect})});}catch(error){if(error.code==='FORBIDDEN')await query("UPDATE gallery_dropbox_sources SET enabled=false,last_error_code='FORBIDDEN' WHERE album_id=$1",[row.album_id]);results.push({albumId:row.album_id,errorCode:error.code||'DROPBOX_SYNC_FAILED'});}}return results;
 }
