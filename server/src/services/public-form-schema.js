@@ -52,6 +52,7 @@ const baseInquirySchema = z.object({
   preferredExperienceId: z.string().uuid().optional(),
   preferredPackageId: z.string().uuid().optional(),
   referralSource: z.string().trim().max(120).optional(),
+  eventReferralCode: z.string().trim().max(80).optional(),
   message: z.string().trim().max(3000).optional(),
   utm_source: z.string().trim().max(120).optional(),
   utm_medium: z.string().trim().max(120).optional(),

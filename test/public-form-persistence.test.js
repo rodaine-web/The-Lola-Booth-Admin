@@ -70,6 +70,7 @@ test(
         formKind: "BOOKING",
         form_id: "booking",
         phone: "555-010-0100",
+        eventReferralCode: "  LOLA-EVENT-10  ",
         eventDate: "2027-10-10",
         eventType: "Wedding",
         city: "Chicago",
@@ -85,6 +86,7 @@ test(
         await query("SELECT * FROM leads WHERE email=$1", [common.email])
       ).rows;
       assert.equal(leads.length, 3);
+      assert.equal(leads.find(l => l.source_subtype !== "CONTACT").source_details.eventReferralCode, "LOLA-EVENT-10");
       assert.equal(
         leads.filter(
           (l) => l.source_subtype === "CONTACT" && l.event_date === null,

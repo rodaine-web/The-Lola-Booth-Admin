@@ -271,6 +271,7 @@ export default function ProposalWizard(){
       {[["1","Client & Event"],["2","Services & Pricing"],["3","Review & Send"]].map(([number,label])=><div key={number} aria-current={step===Number(number)?"step":undefined} className={step>=Number(number)?"active":""}><span>{step>Number(number)?<Check size={14}/>:number}</span><strong>{label}</strong></div>)}
     </div>
     {error&&<div className="toast error">{error}</div>}
+    {lead?.source_details?.eventReferralCode&&<div className="panel" role="note"><strong>Event discount / referral code: {lead.source_details.eventReferralCode}</strong><p>Review this code and apply any agreed discount manually. No discount has been applied automatically.</p></div>}
 
     {step===1&&<section className="wizard-panel">
       <div className="wizard-heading"><p className="eyebrow">Step 1 of 3</p><h2>Let’s get started</h2><p>Choose an existing lead or create a new one. We’ll prefill what we know and you can complete any gaps.</p></div>
