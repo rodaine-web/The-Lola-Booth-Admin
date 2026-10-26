@@ -28,3 +28,15 @@ test('v2 schema rejects impossible dates and strips price/protected fields',()=>
  const contact=inquirySchema.parse({...payload,formKind:'CONTACT',topic:'General inquiry',message:'Question'});assert.equal(contact.selections,undefined);assert.equal(contact.bookingVersion,undefined);
  const a=normalizeWebsiteLead(payload),b=normalizeWebsiteLead({...payload,eventName:'changed'}),c=normalizeWebsiteLead({...payload,submissionId:ids[1]});assert.equal(a.external_lead_id,b.external_lead_id);assert.notEqual(a.external_lead_id,c.external_lead_id);
 });
+
+test('optional event referral code survives ingestion without changing proposal pricing',()=>{
+ const payload={firstName:'QA',lastName:'Guest',email:'qa@example.invalid',phone:'3125550100',eventDate:'2030-06-20',eventType:'Wedding',city:'Chicago',state:'IL'};
+ const plain=inquirySchema.parse(payload);
+ const coded=inquirySchema.parse({...payload,eventReferralCode:'  EVENT-10  '});
+ assert.equal(plain.eventReferralCode,undefined);
+ assert.equal(coded.eventReferralCode,'EVENT-10');
+ assert.equal(inquirySchema.safeParse({...payload,eventReferralCode:'x'.repeat(81)}).success,false);
+ const a=normalizeWebsiteLead(plain),b=normalizeWebsiteLead(coded);
+ assert.equal(b.source_details.eventReferralCode,'EVENT-10');
+ assert.deepEqual(proposalBookingPrefill(a,catalog.experiences,catalog.packages),proposalBookingPrefill(b,catalog.experiences,catalog.packages));
+});

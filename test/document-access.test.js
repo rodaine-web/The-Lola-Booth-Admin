@@ -21,7 +21,11 @@ for (const [label,record,state] of [
   }
 });
 test('Gallery production exclusion and explicit staging flag',()=>{
-  assert.equal(galleryEnabled({APP_ENV:'production',GALLERY_ENABLED:'true'}),false);
+  assert.equal(galleryEnabled({APP_ENV:'production',GALLERY_ENABLED:'true'}),true);
+  assert.equal(galleryEnabled({APP_ENV:'production'}),false);
+  assert.equal(galleryEnabled({APP_ENV:'production',GALLERY_ENABLED:'false'}),false);
+  assert.equal(galleryEnabled({VITE_APP_ENV:'production',VITE_GALLERY_ENABLED:'true'}),true);
+  assert.equal(galleryEnabled({APP_ENV:'production',GALLERY_ENABLED:'false',VITE_GALLERY_ENABLED:'true'}),false);
   assert.equal(galleryEnabled({APP_ENV:'staging',GALLERY_ENABLED:'false'}),false);
   assert.equal(galleryEnabled({APP_ENV:'staging',GALLERY_ENABLED:'true'}),true);
   assert.equal(galleryEnabled({VITE_APP_ENV:'production',VITE_GALLERY_ENABLED:'false'}),false);

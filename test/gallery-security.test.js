@@ -99,8 +99,9 @@ test("media tickets reject forgery, wrong environment, wrong audience and expira
     verifyMediaTicket(jwt.sign({}, secret), secret, "staging"),
   );
 });
-test("gallery cannot activate production or silently use a deployed local volume", () => {
+test("gallery requires explicit production activation and rejects deployed local volumes", () => {
   assert.throws(() => assertGalleryEnvironment({ APP_ENV: "production" }));
+  assert.doesNotThrow(() => assertGalleryEnvironment({ APP_ENV: "production", GALLERY_ENABLED: "true" }));
   assert.throws(() =>
     galleryStorage({ APP_ENV: "staging", GALLERY_STORAGE_PROVIDER: "local" }),
   );
