@@ -57,7 +57,8 @@ export default function ProposalEditor() {
   });
   const [error, setError] = useState("");
   const [originalRequest,setOriginalRequest]=useState(null);
-  useEffect(()=>{let active=true;setOriginalRequest(null);if(form.lead_id)api.get(`/leads/${form.lead_id}`).then(lead=>{if(active)setOriginalRequest(lead.message||null);}).catch(()=>{});return()=>{active=false;};},[form.lead_id]);
+  const [eventReferralCode,setEventReferralCode]=useState("");
+  useEffect(()=>{let active=true;setOriginalRequest(null);setEventReferralCode("");if(form.lead_id)api.get(`/leads/${form.lead_id}`).then(lead=>{if(active){setOriginalRequest(lead.message||null);setEventReferralCode(lead.source_details?.eventReferralCode||"");}}).catch(()=>{});return()=>{active=false;};},[form.lead_id]);
   const [saving,setSaving]=useState(false);
   const [hydratingSource,setHydratingSource]=useState(false);
 
@@ -296,6 +297,7 @@ export default function ProposalEditor() {
           <button type="button" className={mode === "upload" ? "active" : ""} onClick={() => setMode("upload")}>Upload External Proposal</button>
         </div>
       </div>
+      {eventReferralCode&&<div className="panel" role="note"><strong>Event discount / referral code: {eventReferralCode}</strong><p>Review this code and apply any agreed discount manually. No discount has been applied automatically.</p></div>}
       {catalogError&&<div className="toast error" role="alert">{catalogError} <button onClick={()=>setCatalogAttempt(value=>value+1)}>Retry catalog</button></div>}
       {error && <div id="proposal-error" role="alert" className="toast error">{error}</div>}
       <form aria-describedby={error?"proposal-error":undefined} className="document-editor" onSubmit={save}>
