@@ -67,7 +67,7 @@ export async function connectDropboxGallery({config=process.env, fetcher=fetch}=
     },
     async download(entry,folderPath) {
       const metadata=dropboxCapture(entry,folderPath);if(!metadata)throw fail('DROPBOX_METADATA_INVALID');
-      const response=await request('https://content.dropboxapi.com/2/files/download',{method:'POST',headers:{Authorization:headers.Authorization,'Dropbox-API-Arg':asciiJson({path:metadata.id,rev:metadata.rev})}});
+      const response=await request('https://content.dropboxapi.com/2/files/download',{method:'POST',headers:{Authorization:headers.Authorization,'Dropbox-API-Arg':asciiJson({path:`rev:${metadata.rev}`})}});
       let actual;try{actual=JSON.parse(response.headers.get('dropbox-api-result'));}catch{throw fail('DROPBOX_METADATA_INVALID');}
       if(!actual||actual.id!==metadata.id||actual.rev!==metadata.rev||actual.name!==metadata.name||actual.size!==metadata.size||actual.content_hash!==metadata.content_hash)throw fail('DROPBOX_REVISION_CHANGED');
       const bytes=await bounded(response,DROPBOX_GALLERY_LIMIT);
