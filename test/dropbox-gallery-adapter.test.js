@@ -11,14 +11,14 @@ function fixture({account={},downloadBytes=bytes,result=entry,status=200,page={e
  if(url.endsWith('/users/get_current_account'))return json({account_id:'dbid:test',email:'info@thelolabooth.com',email_verified:true,...account});
  if(url.endsWith('/files/get_metadata'))return json({'.tag':'folder',id:'id:event_folder',path_lower:'/fiesta/test'});
  if(url.endsWith('/files/list_folder')||url.endsWith('/files/list_folder/continue'))return json(page);
- if(url.endsWith('/files/download'))return new Response(downloadBytes,{status,headers:{'dropbox-api-result':JSON.stringify(result)}});
+ if(url.endsWith('/files/download')){const arg=JSON.parse(options.headers['Dropbox-API-Arg']);if('rev' in arg||arg.path!==`rev:${entry.rev}`)return new Response('Rev parameter is deprecated',{status:400});return new Response(downloadBytes,{status,headers:{'dropbox-api-result':JSON.stringify(result)}});}
  throw Error('Unexpected endpoint');};return {calls,fetcher};
 }
 test('Dropbox connection is verified and restricted to fixed read-only endpoints',async()=>{
  const f=fixture(),client=await connectDropboxGallery({config,fetcher:f.fetcher});assert.equal(client.accountId,'dbid:test');assert.equal((await client.folder('/fiesta/test')).id,'id:event_folder');
  await client.page('id:event_folder');await client.page('id:event_folder','cursor-one');assert.deepEqual(await client.download(entry,'/fiesta/test'),bytes);
  const firstList=f.calls.find(c=>c.url.endsWith('/files/list_folder'));assert.deepEqual(JSON.parse(firstList.options.body),{path:'id:event_folder',recursive:false,include_deleted:true,include_mounted_folders:false,limit:20});
- assert.deepEqual(JSON.parse(f.calls.at(-1).options.headers['Dropbox-API-Arg']),{path:entry.id,rev:entry.rev});
+ assert.deepEqual(JSON.parse(f.calls.at(-1).options.headers['Dropbox-API-Arg']),{path:`rev:${entry.rev}`});
  assert.ok(f.calls.every(c=>!/(upload|delete|create_shared_link)/.test(c.url)));
 });
 test('Wrong account, email or unverified identity cannot list or download files',async()=>{
