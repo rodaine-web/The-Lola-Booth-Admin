@@ -47,7 +47,7 @@ export default function InvoiceDetail() {
     setPaymentBusy(true);
     setError(""); setNotice("");
     try {
-      await api.post("/payments", {
+      const result=await api.post("/payments", {
         ...payment,
         amount: payment.amount,
         invoice_id: invoice.id,
@@ -55,7 +55,7 @@ export default function InvoiceDetail() {
         event_id: invoice.event_id,
         idempotency_key: `manual-${invoice.id}-${payment.amount}-${payment.payment_date}-${payment.reference_number}`
       });
-      setNotice("Manual payment recorded.");
+      setNotice(result.receipt_delivery?.status==='NOT_QUEUED'?`Payment recorded. Receipt not queued: ${result.receipt_delivery.reason}.`:"Manual payment recorded. Receipt and invoice links queued for email delivery.");
       setPayment((current) => ({ ...current, amount: "", reference_number: "", notes: "" }));
       await load();
     } catch (err) { setError(err.message); }
@@ -77,6 +77,7 @@ export default function InvoiceDetail() {
           <p className="lede">{invoice.event_name || "No event"} · {invoice.status} · Outstanding {formatMoney(invoice.amount_outstanding ?? invoice.balance_due ?? 0)}</p>
         </div>
         <div className="detail-actions">
+          {canEdit&&!invoice.parent_invoice_id&&!['VOID','REFUNDED'].includes(invoice.status)&&<Link className="primary-action" to={`/finance/invoices/new?parentInvoiceId=${id}`}>Create add-on invoice</Link>}
           {accessAvailable && invoice.public_url && <a href={invoice.public_url} target="_blank" rel="noreferrer">Public invoice</a>}
           {canEdit && invoice.status === "DRAFT" && Number(invoice.amount_paid || 0) === 0 && <Link className="primary-action" to={`/finance/invoices/${id}/edit`}>Edit draft</Link>}
           <button disabled={!accessAvailable} className="primary-action" onClick={() => action(() => api.post(`/invoices/${id}/send`, {}), "Invoice submitted to the email provider.")}><Mail size={16} />Send</button>
@@ -85,6 +86,7 @@ export default function InvoiceDetail() {
           <button onClick={() => action(() => api.post(`/invoices/${id}/void`, {}), "Invoice voided.")}><XCircle size={16} />Void</button>
         </div>
       </div>
+      {invoice.parent_invoice_id&&<p>Supplemental invoice for <Link to={'/finance/invoices/'+invoice.parent_invoice_id}>{invoice.parent_invoice_number}</Link></p>}
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
       {invoice.data_quality==='INCOMPLETE_HISTORICAL'&&<p className="toast" role="status">Historical invoice: line-item detail is missing. Original amounts are preserved; do not reconstruct charges without source records.</p>}
       <section className="panel"><h2>Secure payment access</h2>
@@ -105,7 +107,7 @@ export default function InvoiceDetail() {
       <DocumentPreview path={`/invoices/${id}/pdf`} title="Invoice preview" />
       {canEdit && <section className="panel">
         <h2>Record Manual Payment</h2>
-        <p>Fields marked * are required. Record payments already received outside the online payment page.</p>
+        <p>Fields marked * are required. Record payments already received outside the online payment page. A receipt with invoice and payment details will be emailed to the client.</p>
         <form onSubmit={recordPayment} className="form-grid">
           <label>Amount *<input required disabled={paymentBusy} type="number" min="0.01" step="0.01" max={invoice.amount_outstanding ?? invoice.balance_due ?? 0} value={payment.amount} onChange={(event) => setPayment((current) => ({ ...current, amount: event.target.value }))} /></label>
           <label>Payment method *<select required disabled={paymentBusy} value={payment.payment_method} onChange={(event) => setPayment((current) => ({ ...current, payment_method: event.target.value }))}>{["CASH", "CHECK", "BANK_TRANSFER", "ZELLE", "EXTERNAL_CARD", "OTHER"].map((item) => <option key={item}>{item}</option>)}</select></label>

@@ -123,6 +123,11 @@ jobs:
           INTEGRATION_MARKETPLACE_BROWSER_TEST: "true"
         run: node --test test/integration-marketplace-browser.test.js
 
+      - name: Customer closeout and billing desktop/mobile
+        env:
+          CUSTOMER_CLOSEOUT_BROWSER_TEST: "true"
+        run: node --test test/customer-closeout-browser.test.js
+
       - name: Save browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -131,6 +136,7 @@ jobs:
           path: |
             artifacts/integrations/
             artifacts/proposal-review/
+            artifacts/customer-closeout-browser/
             artifacts/v11-browser/
             artifacts/crm-contacts-browser/
           if-no-files-found: ignore

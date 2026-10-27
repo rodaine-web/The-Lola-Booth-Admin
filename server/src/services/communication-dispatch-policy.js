@@ -4,6 +4,21 @@ import { grantUsable } from './gallery-policy.js';
 
 // Recheck after claiming work. A provider request already in flight cannot be recalled.
 export async function dispatchDecision(client, message) {
+  if(message.trigger_key==='EVENT_CLOSEOUT_APPROVAL'){
+    const allowed=await client.query(`SELECT 1 FROM event_closeouts x JOIN events e ON e.id=x.event_id JOIN clients c ON c.id=e.client_id
+      JOIN gallery_albums a ON a.event_id=e.id JOIN gallery_access_keys k ON k.album_id=a.id
+      WHERE x.communication_id=$1 AND x.approved_at IS NOT NULL AND x.due_at<=now() AND (e.status='COMPLETED' OR e.operational_status='COMPLETED') AND e.status<>'CANCELLED' AND e.deleted_at IS NULL AND e.sales_closed_at IS NULL
+       AND c.deleted_at IS NULL AND lower(c.email)=lower($2) AND a.id=$3 AND a.status='PUBLISHED' AND a.expires_at>now()
+       AND k.id=$4 AND k.type='ALBUM' AND k.status='ACTIVE' AND (k.expires_at IS NULL OR k.expires_at>now())`,[message.id,message.recipient,message.merge_data?.closeout_album_id||null,message.merge_data?.closeout_key_id||null]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+  if(message.trigger_key==='OFFLINE_PAYMENT_RECEIPT'){
+    const allowed=await client.query(`SELECT 1 FROM payments p JOIN invoices i ON i.id=p.invoice_id LEFT JOIN clients c ON c.id=i.client_id LEFT JOIN leads l ON l.id=i.lead_id
+      WHERE p.id=$1 AND p.deleted_at IS NULL AND p.status='SUCCEEDED' AND i.deleted_at IS NULL AND i.status NOT IN ('VOID','REFUNDED')
+      AND lower(COALESCE(c.email,l.email))=lower($2) AND i.secure_token=$3 AND i.token_revoked_at IS NULL AND (i.token_expires_at IS NULL OR i.token_expires_at>now())`,[message.payment_id,message.recipient,message.merge_data?.receipt_invoice_token||null]);
+    if(!allowed.rowCount)return 'CANCELLED';
+  }
+
   if(message.trigger_key==='TASK_ASSIGNMENT_NOTIFICATION'){
     if(process.env.TASK_NOTIFICATIONS_ENABLED!=='true')return 'CANCELLED';
     const allowed=await client.query(`SELECT 1 FROM task_notification_ledger l JOIN tasks t ON t.id=l.task_id JOIN users u ON u.id=t.assigned_user_id
