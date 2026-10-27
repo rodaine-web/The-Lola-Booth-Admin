@@ -19,7 +19,7 @@ const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 export async function getInvoice(idOrToken, { publicView = false } = {}) {
   const where = publicView ? "i.secure_token=$1 AND i.token_revoked_at IS NULL AND (i.token_expires_at IS NULL OR i.token_expires_at>now())" : "i.id=$1";
   const invoice = await query(
-    `SELECT i.*, COALESCE(c.name,concat_ws(' ',l.first_name,l.last_name)) AS client_name, COALESCE(c.email,l.email) AS client_email, COALESCE(c.phone,l.phone) AS client_phone, COALESCE(e.event_name,i.pricing_snapshot->>'campaign_name') event_name, COALESCE(e.event_type,l.event_type) event_type, COALESCE(e.event_date,l.event_date) event_date, COALESCE(e.venue_name,l.venue_name) venue_name, e.venue_address, e.city, e.state, e.guest_count, p.proposal_title, pkg.name AS package_name
+    `SELECT i.*, (SELECT invoice_number FROM invoices parent WHERE parent.id=i.parent_invoice_id) AS parent_invoice_number, COALESCE(c.name,concat_ws(' ',l.first_name,l.last_name)) AS client_name, COALESCE(c.email,l.email) AS client_email, COALESCE(c.phone,l.phone) AS client_phone, COALESCE(e.event_name,i.pricing_snapshot->>'campaign_name') event_name, COALESCE(e.event_type,l.event_type) event_type, COALESCE(e.event_date,l.event_date) event_date, COALESCE(e.venue_name,l.venue_name) venue_name, e.venue_address, e.city, e.state, e.guest_count, p.proposal_title, pkg.name AS package_name
      FROM invoices i
      LEFT JOIN clients c ON c.id=i.client_id
      LEFT JOIN leads l ON l.id=i.lead_id
@@ -47,6 +47,13 @@ export async function createInvoice(req) {
     }
     const settings = await client.query("SELECT * FROM business_settings LIMIT 1");
     let source = {};
+    let parent = null;
+    if(req.body.parent_invoice_id){
+      parent=(await client.query("SELECT * FROM invoices WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",[req.body.parent_invoice_id])).rows[0];
+      if(!parent||parent.parent_invoice_id||['VOID','REFUNDED'].includes(parent.status)||req.body.proposal_id||req.body.client_id&&req.body.client_id!==parent.client_id||req.body.event_id&&req.body.event_id!==parent.event_id)throw new AppError('Select an original invoice for the same client and event.',422,'SUPPLEMENTAL_INVOICE_IDENTITY');
+      source={client_id:parent.client_id,event_id:parent.event_id,lead_id:parent.lead_id};
+      req.body.notes=[`Supplemental invoice for ${parent.invoice_number}`,req.body.notes].filter(Boolean).join('\n');
+    }
     let items = req.body.items || [];
     if (req.body.proposal_id) {
       source = await getProposal(req.body.proposal_id);
@@ -87,9 +94,9 @@ export async function createInvoice(req) {
       payment_terms: req.body.payment_terms || req.body.corporate_billing?.payment_terms || null
     };
     const invoice = await client.query(
-      `INSERT INTO invoices (invoice_number, proposal_id, client_id, event_id, status, subtotal, discount, tax, total, amount_paid, balance_due, amount_outstanding, due_date, notes, terms, secure_token, pricing_snapshot, document_template_key, corporate_billing, lead_id, campaign_interest_id)
-       VALUES ($1,$2,$3,$4,'DRAFT',$5,$6,$7,$8,0,$8,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
-      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || source.content?.scenario?.copy.terms_intro || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, ...(source.content?.campaign_interest_id?{campaign_id:source.content.campaign_id,campaign_name:source.content.campaign_offer?.campaign_name,campaign_offer:source.content.campaign_offer}:{}), ...(source.accepted_version_id?{accepted_version_id:source.accepted_version_id}:{}), ...(source.content?.scenario?{proposal_scenario:source.content.scenario,deposit_amount:source.pricing_snapshot.deposit_amount,balance:source.pricing_snapshot.balance}:{}), payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling), source.lead_id||null,source.content?.campaign_interest_id||null]
+      `INSERT INTO invoices (invoice_number, proposal_id, client_id, event_id, status, subtotal, discount, tax, total, amount_paid, balance_due, amount_outstanding, due_date, notes, terms, secure_token, pricing_snapshot, document_template_key, corporate_billing, lead_id, campaign_interest_id, parent_invoice_id)
+       VALUES ($1,$2,$3,$4,'DRAFT',$5,$6,$7,$8,0,$8,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || source.content?.scenario?.copy.terms_intro || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, ...(source.content?.campaign_interest_id?{campaign_id:source.content.campaign_id,campaign_name:source.content.campaign_offer?.campaign_name,campaign_offer:source.content.campaign_offer}:{}), ...(source.accepted_version_id?{accepted_version_id:source.accepted_version_id}:{}), ...(source.content?.scenario?{proposal_scenario:source.content.scenario,deposit_amount:source.pricing_snapshot.deposit_amount,balance:source.pricing_snapshot.balance}:{}), payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling), source.lead_id||null,source.content?.campaign_interest_id||null,parent?.id||null]
     );
     created = true;
     for (const item of totals.items) {

@@ -45,6 +45,7 @@ export default function PublicInvoice() {
       <div className="public-heading">
         <p className="eyebrow">{invoice.invoice_number}</p>
         <h1>Invoice</h1>
+        {invoice.parent_invoice_number&&<p>Supplemental invoice for {invoice.parent_invoice_number}</p>}
         <p className="lede">{invoice.client_name || "Client"} · {invoice.event_name || "Your event"} · Due {formatDateOnly(invoice.due_date)}</p>
       </div>
       {paymentSucceeded && (

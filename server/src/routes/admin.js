@@ -1,3 +1,4 @@
+import {eventCloseout,saveEventCloseout} from '../services/event-closeout-service.js';
 import {lockBookingReservations} from '../services/booking-hold-service.js';
 import {rescheduleWarnings} from '../services/event-operations-service.js';
 import {recordJourney} from '../services/record-journey-service.js';
@@ -352,11 +353,12 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       if (["events","bookings"].includes(table)) where.push("sales_closed_at IS NULL");
       const params = [];
       if(filters.data_scope==="business" && ["leads","clients","events","bookings","proposals","invoices","payments","tasks"].includes(table))where.push("data_classification IN ('BUSINESS','UNREVIEWED')");
-      if (filters.status && table !== "files") {
+      if (filters.status && table !== "files" && !(table === "leads" && ["ACTIVE","ALL"].includes(filters.status))) {
         params.push(filters.status);
         where.push(`status = $${params.length}`);
       }
       if (table === "leads") {
+        if(filters.status === "ACTIVE") where.push("status NOT IN ('WON','LOST') AND converted_client_id IS NULL");
         if (!filters.status && !filters.funnel) where.push("NOT (status='WON' AND converted_client_id IS NOT NULL)");
         if (filters.funnel === 'qualified') where.push("status IN ('QUALIFIED','PROPOSAL_DRAFT','PROPOSAL_SENT','WON')");
         if (filters.funnel === 'booked') where.push("status='WON'");
@@ -564,6 +566,7 @@ const proposalSchema = z.object({
 }).passthrough();
 
 const invoiceSchema = z.object({
+  parent_invoice_id: uuid.optional().nullable(),
   proposal_id: uuid.optional().nullable(),
   client_id: uuid.optional().nullable(),
   event_id: uuid.optional().nullable(),
@@ -653,6 +656,10 @@ adminRouter.post("/offline-actions/replay", requirePermission("read:attendant"),
 adminRouter.get("/scan/equipment/:token", requireAnyPermission("event.operations.view", "read:attendant"), asyncHandler(async (req, res) => {
   res.json(await equipmentScanLookup(req.params.token, req.user, req.query.eventId || null));
 }));
+
+const closeoutInput=z.object({subject:z.string().trim().min(1).max(250).optional(),body:z.string().trim().min(1).max(12000).optional(),discount_code:z.string().trim().max(80).optional().nullable(),discount_percent:z.coerce.number().positive().max(100).optional().nullable(),discount_expires:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),approve:z.boolean().default(false)}).superRefine((v,ctx)=>{if(v.discount_code||v.discount_percent||v.discount_expires){if(!v.discount_code||!v.discount_percent||!v.discount_expires||!Number.isFinite(Date.parse(v.discount_expires))||new Date(v.discount_expires).toISOString().slice(0,10)!==v.discount_expires||Date.parse(v.discount_expires+'T23:59:59Z')<=Date.now())ctx.addIssue({code:'custom',message:'Provide a discount code, percentage and valid future expiration date.'});}});
+adminRouter.get('/events/:id/closeout',requirePermission('read:events'),asyncHandler(async(req,res)=>res.json(await eventCloseout(uuid.parse(req.params.id)))));
+adminRouter.post('/events/:id/closeout',requirePermission('write:events'),requireAnyPermission('communications.send','write:sales'),validate(closeoutInput),asyncHandler(async(req,res)=>res.json(await saveEventCloseout(uuid.parse(req.params.id),req.body,req))));
 
 adminRouter.get("/leads", ...listRoute("leads", ["first_name", "last_name", "email", "phone", "event_type"], "read:sales"));
 

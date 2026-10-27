@@ -13,7 +13,7 @@ import CrmImportWizard,{CrmImportHistory} from "../components/CrmImportWizard.js
 import "../styles/crm-contacts.css";
 import StatusBadge from "../components/StatusBadge.jsx";
 
-const statuses=["","NEW","CONTACTED","QUALIFIED","PROPOSAL_DRAFT","PROPOSAL_SENT","FOLLOW_UP","WON","LOST"];
+const statuses=["ACTIVE","ALL","NEW","CONTACTED","QUALIFIED","PROPOSAL_DRAFT","PROPOSAL_SENT","FOLLOW_UP","WON","LOST"];
 const sources=["","WEBSITE","META","FACEBOOK","INSTAGRAM","TIKTOK","LINKEDIN","Referral","Phone","MANUAL","Bark.com","Other"];
 const eventTypes=["Wedding","Birthday","Private Party","Brand Activation","Corporate Event","Other"];
 
@@ -33,7 +33,7 @@ export default function Leads(){
   useDialogFocus(creating,()=>setCreating(false));
 
   const source=urlParams.get("source")||urlParams.get("source_group")||"";
-  const status=urlParams.get("status")||"";
+  const status=urlParams.get("status")||(urlParams.get("funnel")==="booked"?"WON":urlParams.get("funnel")==="qualified"?"ALL":"ACTIVE");
   const campaign=urlParams.get("campaign")||"";
 
   useEffect(()=>{
@@ -107,7 +107,7 @@ export default function Leads(){
       <label>Source<select value={source} onChange={e=>setFilter("source",e.target.value)}>{[...new Set([...sources,source])].map(item=><option key={item||"all"} value={item}>{item||"All sources"}</option>)}</select></label>
       <label>Campaign<input value={campaign} onChange={e=>setFilter("campaign",e.target.value)} placeholder="Campaign"/></label>
       <button onClick={()=>{setFilter("source","");setFilter("campaign","");}}>Clear filters</button>
-    </section>}<label>Status<select value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item?item.replaceAll("_"," "):"All statuses"}</option>)}</select></label></div>
+    </section>}<label>Status<select aria-label="Lead status filter" value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item==="ACTIVE"?"Active leads":item==="ALL"?"All statuses":item==="LOST"?"Lost · Archived":item.replaceAll("_"," ")}</option>)}</select></label></div>
 
     {error&&<div className="toast error">{error}</div>}
 
@@ -142,6 +142,6 @@ export default function Leads(){
 }
 
 function LeadBoard({leads}){
-  const boardStatuses=["NEW","CONTACTED","QUALIFIED","PROPOSAL_SENT","FOLLOW_UP","WON"];
+  const boardStatuses=["NEW","CONTACTED","QUALIFIED","PROPOSAL_DRAFT","PROPOSAL_SENT","FOLLOW_UP",...(["WON","LOST"].filter(status=>leads.some(lead=>lead.status===status)))];
   return <div className="kanban lola-kanban">{boardStatuses.map(status=><section key={status}><h2>{status.replaceAll("_"," ")}</h2>{leads.filter(lead=>lead.status===status).map(lead=><Link key={lead.id} className="lead-card" to={`/sales/leads/${lead.id}`}><strong>{lead.first_name} {lead.last_name}</strong><span>{lead.event_type||"Event TBD"} · {lead.event_date?formatDateOnly(lead.event_date):"Date TBD"}</span><small>{lead.email}</small><StatusBadge status={lead.status}/></Link>)}</section>)}</div>;
 }
