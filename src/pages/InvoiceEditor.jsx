@@ -12,9 +12,11 @@ export default function InvoiceEditor(){
   const {id}=useParams();
   const [params]=useSearchParams();
   const [loaded,setLoaded]=useState(!id);
-  const [mode,setMode]=useState(params.get("proposalId")?"proposal":"proposal");
+  const [mode,setMode]=useState(params.get("parentInvoiceId")?"manual":"proposal");
   const [proposal,setProposal]=useState(null);
+  const [parentInvoice,setParentInvoice]=useState(null);
   const [form,setForm]=useState({
+    parent_invoice_id:params.get("parentInvoiceId")||"",
     proposal_id:params.get("proposalId")||"",
     client_id:params.get("clientId")||"",
     event_id:params.get("eventId")||"",
@@ -38,6 +40,8 @@ export default function InvoiceEditor(){
     }else if(!form.proposal_id)setProposal(null);
   },[form.proposal_id,id]);
 
+  useEffect(()=>{let active=true;if(!id&&form.parent_invoice_id)api.get('/invoices/'+form.parent_invoice_id).then(parent=>{if(active){setParentInvoice(parent);setForm(current=>({...current,client_id:parent.client_id||'',event_id:parent.event_id||'',proposal_id:'',depositOnly:false}));}}).catch(err=>setError(err.message));return()=>{active=false;};},[form.parent_invoice_id,id]);
+
   function setField(name,value){setForm(current=>({...current,[name]:value}));}
 
   const manualTotal=useMemo(()=>form.items.reduce((sum,line)=>sum+Math.max(0,Number(line.quantity||1)*Number(line.unit_price||0)-Number(line.discount||0)),0),[form.items]);
@@ -46,7 +50,7 @@ export default function InvoiceEditor(){
     event.preventDefault();if(saving)return;setSaving(true);setError("");
     try{
       const payload=compact({
-        client_id:form.client_id,event_id:form.event_id,due_date:form.due_date,notes:form.notes,terms:form.terms,items:form.items,
+        parent_invoice_id:form.parent_invoice_id,client_id:form.client_id,event_id:form.event_id,due_date:form.due_date,notes:form.notes,terms:form.terms,items:form.items,
         ...(!id?{proposal_id:form.proposal_id||null,depositOnly:mode==="proposal"?true:Boolean(form.depositOnly)}:{})
       });
       const created=id?await api.patch("/invoices/"+id,payload):await api.post("/invoices",payload);
@@ -61,11 +65,12 @@ export default function InvoiceEditor(){
     <section className="page-heading"><div><p className="eyebrow">Create Invoice</p><h1>Create Invoice</h1><p className="lede">Quick and easy from a proposal.</p></div></section>
     {error&&<div className="toast error">{error}</div>}
 
-    <section className="source-choice invoice-source-choice">
+    {!form.parent_invoice_id&&<section className="source-choice invoice-source-choice">
       <button type="button" className={mode==="proposal"?"selected":""} onClick={()=>setMode("proposal")}><FileText size={20}/><strong>From Accepted Proposal</strong><span>Recommended</span></button>
       <button type="button" className={mode==="manual"?"selected":""} onClick={()=>{setMode("manual");setProposal(null);setField("proposal_id","");}}><Plus size={20}/><strong>Manual Invoice</strong><span>For non-proposal charges</span></button>
-    </section>
+    </section>}
 
+    {parentInvoice&&<section className="panel"><h2>Additional services</h2><p>Supplemental invoice referencing <Link to={'/finance/invoices/'+parentInvoice.id}>{parentInvoice.invoice_number}</Link> for {parentInvoice.client_name} · {parentInvoice.event_name}. Review the draft, then use Send to email it to the client.</p></section>}
     <form onSubmit={save}>
       {mode==="proposal"?<section className="wizard-panel invoice-proposal-panel">
         <div className="wizard-heading"><h2>Select the proposal</h2><p>Choose the accepted proposal you want to invoice. Existing proposal pricing will be reused.</p></div>
@@ -87,10 +92,10 @@ export default function InvoiceEditor(){
         </section>
         <div className="wizard-actions"><Link to="/finance/invoices">Cancel</Link><button className="primary-action" disabled={!form.proposal_id||saving}>{saving?"Creating...":"Create Invoice"}</button></div>
       </section>:<section className="wizard-panel">
-        <div className="wizard-heading"><h2>Manual invoice</h2><p>Use this only when the invoice is not tied to an accepted proposal.</p></div>
+        <div className="wizard-heading"><h2>{parentInvoice?"Supplemental invoice":"Manual invoice"}</h2><p>Add the additional charges. Issued and paid invoices retain their original amounts.</p></div>
         <div className="form-grid">
-          <label>Client<RelationshipSelect resource="clients" value={form.client_id} placeholder="Client" onChange={value=>setField("client_id",value)}/></label>
-          <label>Event<RelationshipSelect resource="events" value={form.event_id} placeholder="Event" onChange={value=>setField("event_id",value)}/></label>
+          <label>Client<RelationshipSelect resource="clients" disabled={Boolean(form.parent_invoice_id)} value={form.client_id} placeholder="Client" onChange={value=>setField("client_id",value)}/></label>
+          <label>Event<RelationshipSelect resource="events" disabled={Boolean(form.parent_invoice_id)} value={form.event_id} placeholder="Event" onChange={value=>setField("event_id",value)}/></label>
           <label>Due date<input type="date" value={form.due_date||""} onChange={e=>setField("due_date",e.target.value)}/></label>
           <label className="wide">Notes<textarea value={form.notes||""} onChange={e=>setField("notes",e.target.value)}/></label>
         </div>
@@ -104,7 +109,7 @@ export default function InvoiceEditor(){
           </div>
           <div className="line-list">{form.items.map((line,index)=><div key={line.description+"-"+index}><span>{line.description} · {line.quantity} × {formatMoney(line.unit_price)}</span><button type="button" onClick={()=>setForm(current=>({...current,items:current.items.filter((_,i)=>i!==index)}))}><Trash2 size={14}/></button></div>)}</div>
         </section>
-        <div className="wizard-actions"><Link to="/finance/invoices">Cancel</Link><button className="primary-action" disabled={!form.items.length||saving}>{saving?"Creating...":"Create Invoice"}</button></div>
+        <div className="wizard-actions"><Link to="/finance/invoices">Cancel</Link><button className="primary-action" disabled={!form.items.length||saving||Boolean(form.parent_invoice_id&&!parentInvoice)}>{saving?"Creating...":"Create Invoice"}</button></div>
       </section>}
     </form>
   </main>;

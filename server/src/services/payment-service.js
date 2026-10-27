@@ -1,3 +1,4 @@
+import {queueOfflinePaymentReceipt} from './offline-payment-receipt-service.js';
 import {expireOtherCheckouts} from './checkout-lifecycle-service.js';
 import {bookingPaymentPolicy} from '../../../shared/booking-payment-policy.js';
 import {assertInvoiceAgreement,invoiceAgreementState} from './booking-payment-gate.js';
@@ -129,8 +130,9 @@ async function createLockedPaymentSession({ token, provider, amountChoice = "DEP
 export async function recordManualPayment(req) {
  return transaction(async client=>{
   if(req.body.invoice_id)await client.query('SELECT id FROM invoices WHERE id=$1 FOR UPDATE',[req.body.invoice_id]);
-  if(req.body.idempotency_key){const prior=(await client.query("SELECT * FROM payments WHERE idempotency_key=$1 AND provider='MANUAL'",[req.body.idempotency_key])).rows[0];if(prior){if(prior.invoice_id!==(req.body.invoice_id||null)||cents(prior.amount)!==cents(req.body.amount))throw new AppError('Payment retry does not match its original request.',409,'PAYMENT_REPLAY_MISMATCH');return prior;}}
-  return recordLockedManualPayment(req);
+  if(req.body.idempotency_key){const prior=(await client.query("SELECT * FROM payments WHERE idempotency_key=$1 AND provider='MANUAL'",[req.body.idempotency_key])).rows[0];if(prior){if(prior.invoice_id!==(req.body.invoice_id||null)||cents(prior.amount)!==cents(req.body.amount))throw new AppError('Payment retry does not match its original request.',409,'PAYMENT_REPLAY_MISMATCH');return {...prior,receipt_delivery:await queueOfflinePaymentReceipt(prior)};}}
+  const payment=await recordLockedManualPayment(req);
+  return {...payment,receipt_delivery:await queueOfflinePaymentReceipt(payment)};
  });
 }
 async function recordLockedManualPayment(req) {

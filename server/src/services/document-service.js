@@ -341,7 +341,7 @@ async function addInvoicePages(doc, invoice) {
 
 function drawInfoColumns(doc, invoice, page) {
   const columns = [
-    ["INVOICE INFORMATION", [["Invoice No.", invoice.invoice_number], ["Issue Date", formatDate(invoice.issue_date || invoice.created_at)], ["Due Date", formatDate(invoice.due_date)], ["Event Date", formatDate(invoice.event_date)], ["Page", String(page)]]],
+    ["INVOICE INFORMATION", [["Invoice No.", invoice.invoice_number], ["Original Invoice", invoice.parent_invoice_number], ["Issue Date", formatDate(invoice.issue_date || invoice.created_at)], ["Due Date", formatDate(invoice.due_date)], ["Event Date", formatDate(invoice.event_date)], ["Page", String(page)]]],
     ["BILL TO", [["", invoice.client_name], ["", invoice.corporate_billing?.company], ["", invoice.corporate_billing?.billing_address], ["", invoice.client_email], ["", invoice.client_phone || invoice.phone]]],
     ["EVENT DETAILS", [["Event Name", invoice.event_name], ["Venue", invoice.venue_name], ["Location", invoice.location || invoice.venue_address], ["Event Type", invoice.event_type], ["Package", invoice.package_name || invoice.project_name], ["Guest Count", invoice.guest_count]]]
   ];
