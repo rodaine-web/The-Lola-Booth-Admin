@@ -30,10 +30,10 @@ export async function queueTaskNotifications(){
    const ledger=(await client.query(`INSERT INTO task_notification_ledger(task_id,assigned_user_id,assignment_version,kind,period)
     VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id`,[task.id,task.assigned_user_id,task.assignment_version,kind,period])).rows[0];
    if(!ledger)continue;
-   const url=env.clientOrigin.replace(/\/$/,'')+'/operations/tasks';
+   const url=env.clientOrigin.replace(/\/$/,'')+(task.preparation?'/events/events/'+task.event_id:'/operations/tasks?status=OPEN_ALL');
    const body=task.preparation?`Hi ${task.name||'there'},\n\nEvent preparation summary (${period.startsWith('event-month:')?'monthly':period.startsWith('event-week:')?'weekly':'due / critical tasks'}):\n${summary}\n\n${url}`:`Hi ${task.name||'there'},\n\n${kind==='ASSIGNED'?'A task has been assigned to you':'Reminder: your task remains open'}: ${task.title}\n${task.description||''}\nDue: ${task.due_date||'Not specified'}\n\n${url}`;
    const message=await createCommunicationDraft({recipient:task.email,subject:task.preparation?'Event preparation summary — '+task.title:`${kind==='ASSIGNED'?'Task assigned':'Task reminder'} — ${task.title}`,body,
-    html:brandedEmailHtml(body,{kicker:'Your LOLA task',ctaLabel:'View tasks',ctaUrl:url}),status:'SCHEDULED',send_mode:'SCHEDULED',scheduled_at:new Date().toISOString(),trigger_key:'TASK_ASSIGNMENT_NOTIFICATION'});
+    html:brandedEmailHtml(body,{kicker:'Your LOLA task',ctaLabel:task.preparation?'View event':'View tasks',ctaUrl:url}),status:'SCHEDULED',send_mode:'SCHEDULED',scheduled_at:new Date().toISOString(),trigger_key:'TASK_ASSIGNMENT_NOTIFICATION'});
    await client.query('UPDATE communications SET idempotency_key=$2 WHERE id=$1',[message.id,'task-notification:'+ledger.id]);
    await client.query('UPDATE task_notification_ledger SET communication_id=$2 WHERE id=$1',[ledger.id,message.id]);queued++;
   }
