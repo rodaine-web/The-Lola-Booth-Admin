@@ -32,6 +32,8 @@ export async function verifyContactsBrowser({api,origin,ownerToken}){
  await page.goto(base+'/operations/tasks');await page.getByRole('button',{name:'New Task',exact:true}).click();
  await page.getByRole('dialog').getByLabel('Title',{exact:true}).fill('Lifecycle task browser QA');await page.getByRole('dialog').getByLabel('Due date',{exact:true}).fill('2031-06-19');
  await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
+ assert.equal(await page.getByLabel('Actions for Lifecycle task browser QA',{exact:true}).count(),0,'Future tasks stay out of the actionable landing view');
+ await page.getByRole('combobox',{name:'Task status filter',exact:true}).selectOption('SCHEDULED');
  await page.getByLabel('Actions for Lifecycle task browser QA',{exact:true}).click();await page.getByRole('button',{name:'Edit',exact:true}).click();
  assert.equal(await page.getByRole('dialog').getByLabel('Due date',{exact:true}).inputValue(),'2031-06-19');await page.getByRole('dialog').getByLabel('Status',{exact:true}).selectOption('DONE');await page.getByRole('dialog').getByLabel('Description',{exact:true}).fill('Updated from the real task editor');await page.getByRole('dialog').getByLabel('Resolution note (required when closing)',{exact:true}).fill('Verified and completed during browser QA');
  await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});

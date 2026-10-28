@@ -48,7 +48,7 @@ export default function PublicInvoice() {
         {invoice.parent_invoice_number&&<p>Supplemental invoice for {invoice.parent_invoice_number}</p>}
         <p className="lede">{invoice.client_name || "Client"} · {invoice.event_name || "Your event"} · Due {formatDateOnly(invoice.effective_due_date||invoice.due_date)}</p>
       </div>
-      {(invoice.pricing_snapshot?.full_payment_required||paymentOptions?.overdue)&&<p role="status">{invoice.pricing_snapshot?.full_payment_required?"Full payment is required because your event is within 14 days.":paymentOptions?.paymentMessage}</p>}
+      {amountDue>0&&(invoice.pricing_snapshot?.full_payment_required||paymentOptions?.overdue)&&<p role="status">{invoice.pricing_snapshot?.full_payment_required?"Full payment is required because your event is within 14 days.":paymentOptions?.paymentMessage}</p>}
       {paymentSucceeded && (
         <section className="public-success">
           <CreditCard size={22} />
@@ -70,7 +70,7 @@ export default function PublicInvoice() {
       <section className="panel public-invoice-items"><h2>Line Items</h2><DataTable rows={invoice.items} columns={["description", "quantity", "unit_price", "line_total"]} empty="No invoice items." /></section>
       {amountDue <= 0 ? <section className="panel" id="payment-options"><h2>No payment due</h2><p>This invoice has no outstanding balance.</p></section> : <section className="panel" id="payment-options">
         <h2>Choose payment method</h2>{paymentOptions?.taxNotice&&<p role="status">{paymentOptions.taxNotice}</p>}
-        <p className="note-text">Amount due: {formatMoney(paymentOptions?.amountDue ?? invoice.amount_outstanding ?? invoice.balance_due ?? 0)}. Flexible payment options may be available at checkout.</p>
+        <p className="note-text">Amount due: {formatMoney(paymentOptions?.amountDue ?? invoice.amount_outstanding ?? invoice.balance_due ?? 0)}. {paymentOptions?.allowCustomAmount?"Flexible payment options may be available at checkout.":"Pay the full outstanding amount shown when full payment is required."}</p>
         {paymentOptions?.agreementRequired ? <button className="primary-action" disabled={Boolean(busy)} onClick={()=>pay("STRIPE")}>Review & Sign Agreement</button> : paymentOptions?.providers?.length ? (
           <div className="quick-actions">
             {paymentOptions.providers.map((provider) => (

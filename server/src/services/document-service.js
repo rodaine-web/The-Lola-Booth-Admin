@@ -377,7 +377,7 @@ function drawInvoicePayment(doc, invoice, flow) {
   flow.y += 18;
   const payable = Number(invoice.amount_outstanding) > 0;
   drawFlowText(doc, flow, payable
-    ? `Pay the required booking retainer fee or remaining balance using your secure payment link. Balance due: ${formatDate(invoice.effective_due_date||invoice.due_date) || "see your agreed payment schedule"}. Booking confirmation requires accepted terms, required payment, a signed agreement and written confirmation from The LOLA Booth.`
+    ? `${invoice.pricing_snapshot?.full_payment_required||invoice.full_payment_required_now?"Full outstanding payment is required.":"Pay the required booking retainer fee or remaining balance"} using your secure payment link. Balance due: ${formatDate(invoice.effective_due_date||invoice.due_date) || "see your agreed payment schedule"}. Booking confirmation requires accepted terms, required payment, a signed agreement and written confirmation from The LOLA Booth.`
     : "No payment is due on this invoice. Keep this document with your payment receipts.");
   if (invoice.terms) {
     flow.y += 12;
