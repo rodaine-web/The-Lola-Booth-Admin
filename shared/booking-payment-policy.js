@@ -21,3 +21,11 @@ export function bookingPaymentLabel(paid,total){
   if(p===Math.ceil(t*.3))return 'Paid';
   return `${Math.min(99,Math.round(p/t*100))}% Paid`;
 }
+
+export const SHORT_NOTICE_PAYMENT_MESSAGE='Full payment is required because your event is within 14 days.';
+export function bookingSchedule({eventDate,businessDate,total=0}){
+ const event=String(eventDate||'').slice(0,10),today=String(businessDate||'').slice(0,10);
+ const distance=(Date.parse(event+'T00:00:00Z')-Date.parse(today+'T00:00:00Z'))/86400000;
+ const fullPaymentRequired=Number.isFinite(distance)&&distance<=14;
+ return {fullPaymentRequired,balanceDueDate:Number.isFinite(distance)?new Date(Date.parse(event+'T00:00:00Z')-14*86400000).toISOString().slice(0,10):null,amountDueNow:fullPaymentRequired?Number(total):null,message:fullPaymentRequired?SHORT_NOTICE_PAYMENT_MESSAGE:null};
+}

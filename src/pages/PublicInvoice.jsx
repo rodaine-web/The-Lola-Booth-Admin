@@ -46,8 +46,9 @@ export default function PublicInvoice() {
         <p className="eyebrow">{invoice.invoice_number}</p>
         <h1>Invoice</h1>
         {invoice.parent_invoice_number&&<p>Supplemental invoice for {invoice.parent_invoice_number}</p>}
-        <p className="lede">{invoice.client_name || "Client"} · {invoice.event_name || "Your event"} · Due {formatDateOnly(invoice.due_date)}</p>
+        <p className="lede">{invoice.client_name || "Client"} · {invoice.event_name || "Your event"} · Due {formatDateOnly(invoice.effective_due_date||invoice.due_date)}</p>
       </div>
+      {(invoice.pricing_snapshot?.full_payment_required||paymentOptions?.overdue)&&<p role="status">{invoice.pricing_snapshot?.full_payment_required?"Full payment is required because your event is within 14 days.":paymentOptions?.paymentMessage}</p>}
       {paymentSucceeded && (
         <section className="public-success">
           <CreditCard size={22} />

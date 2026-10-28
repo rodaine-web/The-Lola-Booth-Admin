@@ -20,6 +20,7 @@ export default function Clients(){
   const [notice,setNotice]=useState("");
   const [revision,setRevision]=useState(0);
   const [filtersOpen,setFiltersOpen]=useState(true);
+  const activity=urlParams.get("status")||"ACTIVE";
   const type=urlParams.get("client_type")||"";
   useDialogFocus(creating,()=>setCreating(false));
 
@@ -29,11 +30,11 @@ export default function Clients(){
     let active=true;
     const params=new URLSearchParams(urlParams);
     params.delete("create");
-    params.set("search",search);
+    params.set("search",search);params.set("status",activity);
     if(type)params.set("client_type",type);else params.delete("client_type");
     api.get(`/clients?${params}`).then(result=>active&&setRows(result.data||[])).catch(err=>active&&setError(err.message));
     return()=>{active=false;};
-  },[search,type,urlParams.toString(),revision]);
+  },[search,type,activity,urlParams.toString(),revision]);
 
   function setType(value){setUrlParams(current=>{const next=new URLSearchParams(current);next.delete("create");if(value)next.set("client_type",value);else next.delete("client_type");return next;});}
 
@@ -60,14 +61,14 @@ export default function Clients(){
     </section>
 
     <RecordMetrics module="Clients" rows={rows}/>
-    <div className="record-filter-bar"><section className="lola-list-toolbar">
+    <label>Activity<select aria-label="Client activity filter" value={activity} onChange={e=>setUrlParams(current=>{const next=new URLSearchParams(current);next.set("status",e.target.value);return next;})}><option value="ACTIVE">Active clients</option><option value="PAST">Past clients</option><option value="ALL">All clients</option></select></label><div className="record-filter-bar"><section className="lola-list-toolbar">
       <div className="lola-list-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search clients by name, email, phone or company..."/></div>
     </section>
 
     {filtersOpen&&<section className="lola-filter-drawer"><label>Client type<select value={type} onChange={e=>setType(e.target.value)}>{clientTypes.map(item=><option key={item||"all"} value={item}>{item?item.replaceAll("_"," "):"All clients"}</option>)}</select></label></section>}</div>
 
     {(error||notice)&&<div className={error?"toast error":"toast"}>{error||notice}</div>}
-    <RecordWorkspace module="Clients" rows={rows}>    <RecordTable renderCell={recordCell} title="Clients" rows={rows} columns={["name","company","client_type","phone","updated_at"]} getRowHref={row=>`/sales/clients/${row.id}`} empty="No clients found."/></RecordWorkspace>
+    <RecordWorkspace module="Clients" rows={rows}>    <RecordTable renderCell={recordCell} title="Clients" rows={rows} columns={["name","activity_status","company","client_type","phone","updated_at"]} getRowHref={row=>`/sales/clients/${row.id}`} empty="No clients found."/></RecordWorkspace>
 
     {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="New client">
       <form className="modal lola-create-modal" onSubmit={createClient}>

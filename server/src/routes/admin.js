@@ -353,9 +353,16 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       if (["events","bookings"].includes(table)) where.push("sales_closed_at IS NULL");
       const params = [];
       if(filters.data_scope==="business" && ["leads","clients","events","bookings","proposals","invoices","payments","tasks"].includes(table))where.push("data_classification IN ('BUSINESS','UNREVIEWED')");
-      if (filters.status && table !== "files" && !(table === "leads" && ["ACTIVE","ALL"].includes(filters.status))) {
+      if (filters.status && table !== "files" && !(["leads","clients","events","tasks"].includes(table) && ["ACTIVE","ALL","PAST","SCHEDULED","OPEN_ALL"].includes(filters.status))) {
         params.push(filters.status);
         where.push(`status = $${params.length}`);
+      }
+      if(table==='clients'&&['ACTIVE','PAST'].includes(filters.status))where.push((filters.status==='PAST'?'NOT ':'')+'client_work_active(clients.id)');
+      if(table==='events'&&filters.status==='ACTIVE')where.push('event_work_active(events.id)');
+      if(table==='tasks'){
+        if(filters.status==='ACTIVE')where.push('task_work_actionable(tasks)');
+        if(filters.status==='OPEN_ALL')where.push("status IN ('OPEN','IN_PROGRESS')");
+        if(filters.status==='SCHEDULED')where.push("status IN ('OPEN','IN_PROGRESS') AND NOT task_work_actionable(tasks) AND (NOT task_event_preparation(tasks) OR EXISTS(SELECT 1 FROM events e WHERE e.id=tasks.event_id AND e.status NOT IN ('COMPLETED','CANCELLED') AND COALESCE(e.operational_status,'')<>'COMPLETED'))");
       }
       if (table === "leads") {
         if(filters.status === "ACTIVE") where.push("status NOT IN ('WON','LOST') AND converted_client_id IS NULL");
@@ -466,7 +473,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
       const direction = String(filters.sort_direction || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
       params.push(pageSize, offset);
       const rows = await query(
-        `SELECT * FROM ${table} WHERE ${where.join(" AND ")} ORDER BY ${sortBy} ${direction} LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        `SELECT *${table==='clients'?", CASE WHEN client_work_active(clients.id) THEN 'Active' ELSE 'Past / no active bookings' END AS activity_status":""} FROM ${table} WHERE ${where.join(" AND ")} ORDER BY ${sortBy} ${direction} LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params
       );
       const count = await query(`SELECT count(*)::int AS count FROM ${table} WHERE ${where.join(" AND ")}`, params.slice(0, -2));

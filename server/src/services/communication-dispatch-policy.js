@@ -24,7 +24,9 @@ export async function dispatchDecision(client, message) {
     const allowed=await client.query(`SELECT 1 FROM task_notification_ledger l JOIN tasks t ON t.id=l.task_id JOIN users u ON u.id=t.assigned_user_id
       WHERE l.communication_id=$1 AND t.deleted_at IS NULL AND t.status IN ('OPEN','IN_PROGRESS')
        AND l.assigned_user_id=t.assigned_user_id AND l.assignment_version=t.assignment_version
-       AND u.active AND u.deleted_at IS NULL AND lower(u.email)=lower($2)`,[message.id,message.recipient]);
+       AND u.active AND u.deleted_at IS NULL AND lower(u.email)=lower($2)
+       AND (NOT task_event_preparation(t) OR l.kind='REMINDER')
+       AND (l.kind='ASSIGNED' OR l.period=task_reminder_period(t))`,[message.id,message.recipient]);
     if(!allowed.rowCount)return 'CANCELLED';
   }
 

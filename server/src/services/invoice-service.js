@@ -19,7 +19,7 @@ const money = (value) => Math.round(Number(value || 0) * 100) / 100;
 export async function getInvoice(idOrToken, { publicView = false } = {}) {
   const where = publicView ? "i.secure_token=$1 AND i.token_revoked_at IS NULL AND (i.token_expires_at IS NULL OR i.token_expires_at>now())" : "i.id=$1";
   const invoice = await query(
-    `SELECT i.*, (SELECT invoice_number FROM invoices parent WHERE parent.id=i.parent_invoice_id) AS parent_invoice_number, COALESCE(c.name,concat_ws(' ',l.first_name,l.last_name)) AS client_name, COALESCE(c.email,l.email) AS client_email, COALESCE(c.phone,l.phone) AS client_phone, COALESCE(e.event_name,i.pricing_snapshot->>'campaign_name') event_name, COALESCE(e.event_type,l.event_type) event_type, COALESCE(e.event_date,l.event_date) event_date, COALESCE(e.venue_name,l.venue_name) venue_name, e.venue_address, e.city, e.state, e.guest_count, p.proposal_title, pkg.name AS package_name
+    `SELECT i.*, invoice_balance_deadline(i.id)::text AS effective_due_date, (SELECT invoice_number FROM invoices parent WHERE parent.id=i.parent_invoice_id) AS parent_invoice_number, COALESCE(c.name,concat_ws(' ',l.first_name,l.last_name)) AS client_name, COALESCE(c.email,l.email) AS client_email, COALESCE(c.phone,l.phone) AS client_phone, COALESCE(e.event_name,i.pricing_snapshot->>'campaign_name') event_name, COALESCE(e.event_type,l.event_type) event_type, COALESCE(e.event_date,l.event_date) event_date, COALESCE(e.venue_name,l.venue_name) venue_name, e.venue_address, e.city, e.state, e.guest_count, p.proposal_title, pkg.name AS package_name
      FROM invoices i
      LEFT JOIN clients c ON c.id=i.client_id
      LEFT JOIN leads l ON l.id=i.lead_id
@@ -74,14 +74,16 @@ export async function createInvoice(req) {
       }));
     }
     const totals = proposalInvoiceSnapshot(source) || calculateInvoiceTotals(items);
-    const amountDueNow = req.body.depositOnly && source.pricing_snapshot
+    let amountDueNow = req.body.depositOnly && source.pricing_snapshot
       ? money(Math.min(Number(source.pricing_snapshot.deposit_amount || 0), Number(totals.total || 0)))
       : money(totals.total);
     const invoiceNumber = await nextNumber(client, "next_invoice_number", "invoice_prefix", "LOLA-INV");
-    const managedDue=source.accepted_version_id?(await client.query(`SELECT GREATEST(event_date-14,(now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date)::text AS due FROM events WHERE id=$1`,[source.event_id])).rows[0]?.due:null;
+    const managedDue=(source.event_id||req.body.event_id)?(await client.query(`SELECT GREATEST(event_date-14,(now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date)::text AS due FROM events WHERE id=$1`,[source.event_id||req.body.event_id])).rows[0]?.due:null;
     const exceptionDue=source.accepted_version_id?(await client.query('SELECT balance_due_date::text AS due FROM booking_payment_exceptions WHERE event_id=$1 AND revoked_at IS NULL',[source.event_id])).rows[0]?.due:null;
-    if(managedDue && req.body.due_date && req.body.due_date!==(exceptionDue||managedDue))throw new AppError('Approve a written payment exception before changing the contractual balance due date.',409,'PAYMENT_EXCEPTION_REQUIRED');
+    if(source.accepted_version_id && managedDue && req.body.due_date && req.body.due_date!==(exceptionDue||managedDue))throw new AppError('Approve a written payment exception before changing the contractual balance due date.',409,'PAYMENT_EXCEPTION_REQUIRED');
     const dueDate = exceptionDue || managedDue || req.body.due_date || new Date(Date.now() + Number(settings.rows[0]?.invoice_default_due_days || 7) * 86400000).toISOString().slice(0, 10);
+    const fullRequired=managedDue&&managedDue<=(await client.query('SELECT business_today()::text AS today')).rows[0].today&&!exceptionDue;
+    if(fullRequired)amountDueNow=money(totals.total);
     const documentTemplateKey = req.body.document_template_key || (req.body.corporate_billing ? "corporate_invoice" : "standard_invoice");
     const corporateBilling = {
       company: req.body.company || req.body.corporate_billing?.company || null,
@@ -96,7 +98,7 @@ export async function createInvoice(req) {
     const invoice = await client.query(
       `INSERT INTO invoices (invoice_number, proposal_id, client_id, event_id, status, subtotal, discount, tax, total, amount_paid, balance_due, amount_outstanding, due_date, notes, terms, secure_token, pricing_snapshot, document_template_key, corporate_billing, lead_id, campaign_interest_id, parent_invoice_id)
        VALUES ($1,$2,$3,$4,'DRAFT',$5,$6,$7,$8,0,$8,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
-      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || source.content?.scenario?.copy.terms_intro || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, ...(source.content?.campaign_interest_id?{campaign_id:source.content.campaign_id,campaign_name:source.content.campaign_offer?.campaign_name,campaign_offer:source.content.campaign_offer}:{}), ...(source.accepted_version_id?{accepted_version_id:source.accepted_version_id}:{}), ...(source.content?.scenario?{proposal_scenario:source.content.scenario,deposit_amount:source.pricing_snapshot.deposit_amount,balance:source.pricing_snapshot.balance}:{}), payment_mode: req.body.depositOnly ? "DEPOSIT_REQUEST" : "BALANCE_DUE", amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling), source.lead_id||null,source.content?.campaign_interest_id||null,parent?.id||null]
+      [invoiceNumber, req.body.proposal_id || null, req.body.client_id || source.client_id, req.body.event_id || source.event_id, totals.subtotal, totals.discount, totals.tax, totals.total, dueDate, req.body.notes || (req.body.depositOnly ? `Deposit request for ${source.proposal_number}` : settings.rows[0]?.invoice_default_notes), req.body.terms || source.content?.scenario?.copy.terms_intro || settings.rows[0]?.invoice_default_payment_terms, crypto.randomBytes(24).toString("hex"), JSON.stringify({ ...totals, ...(source.content?.campaign_interest_id?{campaign_id:source.content.campaign_id,campaign_name:source.content.campaign_offer?.campaign_name,campaign_offer:source.content.campaign_offer}:{}), ...(source.accepted_version_id?{accepted_version_id:source.accepted_version_id}:{}), ...(source.content?.scenario?{proposal_scenario:source.content.scenario,deposit_amount:source.pricing_snapshot.deposit_amount,balance:source.pricing_snapshot.balance}:{}), payment_mode: req.body.depositOnly&&!fullRequired ? "DEPOSIT_REQUEST" : "BALANCE_DUE", full_payment_required: Boolean(fullRequired), amount_due_now: amountDueNow, proposal_total: totals.total, allow_pay_in_full: true, allow_custom_amount: true }), documentTemplateKey, JSON.stringify(corporateBilling), source.lead_id||null,source.content?.campaign_interest_id||null,parent?.id||null]
     );
     created = true;
     for (const item of totals.items) {
@@ -188,7 +190,8 @@ export async function sendInvoice(req, invoice) {
     storageProvider: null,
     storageKey: null
   };
-  const minimumDue = Number(invoice.pricing_snapshot?.amount_due_now || 0);
+  const fullDue=invoice.effective_due_date&&invoice.effective_due_date<=(await query('SELECT business_today()::text AS today')).rows[0].today;
+  const minimumDue = fullDue?Number(invoice.total):Number(invoice.pricing_snapshot?.amount_due_now || 0);
   const alreadyPaid = Number(invoice.amount_paid || 0);
   const amountDue = minimumDue > alreadyPaid ? money(minimumDue - alreadyPaid) : money(invoice.amount_outstanding ?? invoice.balance_due);
   const invoiceUrl = publicInvoiceUrl(invoice);

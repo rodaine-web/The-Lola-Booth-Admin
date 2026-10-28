@@ -1,0 +1,17 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import {createServer} from 'vite';import react from '@vitejs/plugin-react';import {fileURLToPath} from 'node:url';
+test('active clients, events and actionable task filters work on desktop/mobile',{skip:process.env.ACTIVE_WORK_BROWSER_TEST!=='true'},async()=>{
+ const server=await createServer({configFile:false,root:fileURLToPath(new URL('../',import.meta.url)),plugins:[react()],define:{__BUILD_REVISION__:JSON.stringify('active-work-qa')},server:{host:'127.0.0.1',port:0}});let browser;
+ try{await server.listen();const origin='http://127.0.0.1:'+server.httpServer.address().port,{chromium}=await import('playwright');browser=await chromium.launch();
+ for(const width of [1440,390]){const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route(url=>url.pathname.startsWith('/api/'),async route=>{const url=new URL(route.request().url()),p=url.pathname,status=url.searchParams.get('status');
+ if(p.endsWith('/auth/me'))return route.fulfill({json:{user:{id:'qa',name:'QA Owner',permissions:['*']}}});
+ if(p==='/api/clients'){const active={id:'active',name:'Active Client QA',activity_status:'Active'},past={id:'past',name:'Past Client QA',activity_status:'Past / no active bookings'};return route.fulfill({json:{data:status==='ALL'?[active,past]:status==='PAST'?[past]:[active]}});}
+ if(p==='/api/events'){const active={id:'active',event_name:'Upcoming Event QA',event_date:'2030-06-26',status:'CONFIRMED'},past={id:'past',event_name:'Completed Event QA',event_date:'2020-01-01',status:'COMPLETED'};return route.fulfill({json:{data:status==='ALL'?[active,past]:status==='COMPLETED'?[past]:[active]}});}
+ if(p==='/api/tasks'){const active={id:'active',title:'Actionable Task QA',status:'OPEN'},future={id:'future',title:'Future Equipment QA',status:'OPEN'},done={id:'done',title:'Completed Task QA',status:'DONE'};return route.fulfill({json:{data:status==='ALL'?[active,future,done]:status==='SCHEDULED'?[future]:status==='DONE'?[done]:[active]}});}
+ return route.fulfill({json:{data:[]}});
+ });
+ for(const [path,filter,active,past,other] of [['/sales/clients','Client activity filter','Active Client QA','Past Client QA','PAST'],['/events/events','Event status filter','Upcoming Event QA','Completed Event QA','COMPLETED'],['/operations/tasks','Task status filter','Actionable Task QA','Future Equipment QA','SCHEDULED']]){
+ await page.goto(origin+path);await page.getByRole('table').getByText(active,{exact:true}).waitFor();assert.equal(await page.getByRole('table').getByText(past,{exact:true}).count(),0);await page.getByRole('combobox',{name:filter,exact:true}).selectOption(other);await page.getByRole('table').getByText(past,{exact:true}).waitFor();await page.getByRole('table').getByText(active,{exact:true}).waitFor({state:'detached'});await page.getByRole('combobox',{name:filter,exact:true}).selectOption('ALL');await page.getByRole('table').getByText(active,{exact:true}).waitFor();await page.getByRole('table').getByText(past,{exact:true}).waitFor();}
+ assert.deepEqual(errors,[]);await fs.mkdir('artifacts/active-work-browser',{recursive:true});await page.screenshot({path:`artifacts/active-work-browser/tasks-${width}.png`,fullPage:true});await page.close();}
+ }finally{await browser?.close();await server.close();}
+});
