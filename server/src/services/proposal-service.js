@@ -242,6 +242,7 @@ export async function buildProposalSnapshot(input) {
     snapshot.content.scenario=freezeDefaultProposalMedia(scenario);
   }
   if(schedule.fullPaymentRequired){snapshot.content.terms=[schedule.message,snapshot.content.terms].filter(Boolean).join('\n\n');if(snapshot.content.scenario){snapshot.content.scenario.copy.terms_intro=[schedule.message,snapshot.content.scenario.copy.terms_intro].filter(Boolean).join('\n\n');snapshot.content.scenario.copy.next_steps=(snapshot.content.scenario.copy.next_steps||[]).map(step=>/retainer/i.test(step)?'Pay in full':step);}}
+  if(snapshot.content.scenario){const steps=snapshot.content.scenario.copy.next_steps;const sign=steps.findIndex(step=>/sign.*agreement/i.test(step)),pay=steps.findIndex(step=>/pay/i.test(step));if(sign>pay&&pay>=0){const [step]=steps.splice(sign,1);steps.splice(pay,0,step);}}
   return snapshot;
 }
 
