@@ -1,3 +1,4 @@
+import {bookingSchedule} from '../../../shared/booking-payment-policy.js';
 import {resolveProposalCampaignPackages} from './campaign-offers.js';
 import {freezeDefaultProposalMedia} from './proposal-default-media.js';
 import { composeProposal } from "../../../shared/proposal-scenario.js";
@@ -162,8 +163,10 @@ export async function buildProposalSnapshot(input) {
   const taxRate = money(input.tax_rate ?? s.sales_tax_percent);
   const tax = taxable * (taxRate / 100);
   const total = taxable + tax;
-  const depositType = input.deposit_type || "PERCENTAGE";
-  const depositValue = money(input.deposit_value ?? s.default_deposit_percent ?? 30);
+  const businessDate=new Intl.DateTimeFormat('en-CA',{timeZone:s.timezone||'America/Chicago'}).format(new Date());
+  const schedule=bookingSchedule({eventDate:ev.event_date||input.event_details?.event_date||input.event_date,businessDate,total});
+  const depositType = schedule.fullPaymentRequired?'PERCENTAGE':input.deposit_type || "PERCENTAGE";
+  const depositValue = schedule.fullPaymentRequired?100:money(input.deposit_value ?? s.default_deposit_percent ?? 30);
   const depositAmount = depositType === "FIXED" ? depositValue : total * (depositValue / 100);
   const selectedTemplate = documentTemplate.rows[0] || {};
   const editableSections = buildEditableProposalSections(selectedTemplate.sections || [], {
@@ -211,7 +214,8 @@ export async function buildProposalSnapshot(input) {
       deposit_value: round(depositValue),
       deposit_amount: round(depositAmount),
       balance: round(total - depositAmount),
-      balance_due_date: input.balance_due_date || null
+      full_payment_required:schedule.fullPaymentRequired, payment_message:schedule.message,
+      balance_due_date: (schedule.fullPaymentRequired?businessDate:schedule.balanceDueDate) || input.balance_due_date || null
     },
     validThrough: input.valid_through || new Date(Date.now() + Number(s.proposal_default_validity_days || 14) * 86400000).toISOString().slice(0, 10),
     proposalType: input.proposal_type || "PRIVATE_EVENT",
@@ -237,6 +241,8 @@ export async function buildProposalSnapshot(input) {
     scenario.mediaImages=Object.fromEntries(mediaSections.map(section=>[section.title,hydrated.visual_sections.find(row=>row.id===section.id)?.images||[]]));
     snapshot.content.scenario=freezeDefaultProposalMedia(scenario);
   }
+  if(schedule.fullPaymentRequired){snapshot.content.terms=[schedule.message,snapshot.content.terms].filter(Boolean).join('\n\n');if(snapshot.content.scenario){snapshot.content.scenario.copy.terms_intro=[schedule.message,snapshot.content.scenario.copy.terms_intro].filter(Boolean).join('\n\n');snapshot.content.scenario.copy.next_steps=(snapshot.content.scenario.copy.next_steps||[]).map(step=>/retainer/i.test(step)?'Pay in full':step);}}
+  if(snapshot.content.scenario){const steps=snapshot.content.scenario.copy.next_steps;const sign=steps.findIndex(step=>/sign.*agreement/i.test(step)),pay=steps.findIndex(step=>/pay/i.test(step));if(sign>pay&&pay>=0){const [step]=steps.splice(sign,1);steps.splice(pay,0,step);}}
   return snapshot;
 }
 
@@ -423,12 +429,13 @@ export async function createProposalVersion(client, proposal, userId) {
 export async function getProposal(idOrToken, { publicView = false } = {}) {
   const where = publicView ? "(p.secure_token=$1 OR EXISTS(SELECT 1 FROM proposal_send_recipients r JOIN proposal_send_batches b ON b.id=r.batch_id WHERE b.proposal_id=p.id AND b.version_id=p.published_version_id AND r.token_hash=$2 AND r.status='ACCEPTED' AND NOT r.is_primary))" : "p.id=$1";
   const result = await query(
-    `SELECT p.*, c.name AS client_name, c.email AS client_email, e.event_name, e.event_type, e.event_date, e.start_time, e.end_time, e.venue_name, e.guest_count,
+    `SELECT p.*, c.name AS client_name, c.email AS client_email, e.event_name, e.event_type, COALESCE(e.event_date,l.event_date) AS event_date, e.start_time, e.end_time, e.venue_name, e.guest_count,
       pkg.name AS package_name, x.name AS experience_name,
       linked_invoice.id AS linked_invoice_id, linked_invoice.invoice_number AS linked_invoice_number, linked_invoice.status AS linked_invoice_status
      FROM proposals p
      LEFT JOIN clients c ON c.id=p.client_id
      LEFT JOIN events e ON e.id=p.event_id
+     LEFT JOIN leads l ON l.id=p.lead_id
      LEFT JOIN packages pkg ON pkg.id=p.package_id
      LEFT JOIN experiences x ON x.id=p.experience_id
      LEFT JOIN LATERAL (
@@ -443,6 +450,8 @@ export async function getProposal(idOrToken, { publicView = false } = {}) {
   );
   if (!result.rows[0]) throw notFound("Proposal");
   let proposal = result.rows[0];
+  const today=(await query('SELECT business_today()::text AS today')).rows[0].today;
+  proposal.payment_requirement=bookingSchedule({eventDate:proposal.event_date,businessDate:today,total:proposal.total});
   if(publicView){proposal={...proposal,view_only:proposal.secure_token!==idOrToken,secure_token:idOrToken};delete proposal.draft_version_id;}
   else {
    const draft=proposal.draft_version_id?(await query('SELECT snapshot FROM proposal_versions WHERE id=$1 AND proposal_id=$2',[proposal.draft_version_id,proposal.id])).rows[0]?.snapshot:null;

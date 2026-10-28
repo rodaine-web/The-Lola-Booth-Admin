@@ -18,7 +18,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   const [rows, setRows] = useState([]);
   const [loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[saving,setSaving]=useState(false);
   const [search, setSearch] = useState(""),[catalogStatus,setCatalogStatus]=useState("");
-  const [statusFilter,setStatusFilter]=useState(routeParams.get("status")||""),[sort,setSort]=useState("created_at"),[overdue,setOverdue]=useState(routeParams.get("overdue")==="true");
+  const [statusFilter,setStatusFilter]=useState(routeParams.get("status")||(endpoint==="/tasks"?"ACTIVE":"")),[sort,setSort]=useState("created_at"),[overdue,setOverdue]=useState(routeParams.get("overdue")==="true");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(null);
@@ -30,7 +30,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
   const [duplicateEvent,setDuplicateEvent]=useState(null);
   useDialogFocus(Boolean(editing),()=>setEditing(null));
 
-  useEffect(()=>{setEditing(null);setForm({});setStatusFilter(routeParams.get("status")||"");setOverdue(routeParams.get("overdue")==="true");},[endpoint,routeParams.toString()]);
+  useEffect(()=>{setEditing(null);setForm({});setStatusFilter(routeParams.get("status")||(endpoint==="/tasks"?"ACTIVE":""));setOverdue(routeParams.get("overdue")==="true");},[endpoint,routeParams.toString()]);
   useEffect(()=>{
     if(endpoint!=="/events") return;
     Promise.all([api.get("/pickers/packages?q="),api.get("/pickers/experiences?q=")])
@@ -210,7 +210,7 @@ export default function ResourcePage({ title, endpoint, columns, phase, rowHref,
       <div className="toolbar">
         <input aria-label="Search records" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}...`} />
 
-        {isCatalog&&<label>Status<select value={catalogStatus} onChange={event=>setCatalogStatus(event.target.value)}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></label>}{columns.includes('status')&&(statusFilter||rows.some(r=>r.status))&&<label>Status<select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">All statuses</option>{[...new Set([statusFilter,...rows.map(r=>r.status)].filter(Boolean))].map(status=><option key={status}>{status}</option>)}</select></label>}
+        {isCatalog&&<label>Status<select value={catalogStatus} onChange={event=>setCatalogStatus(event.target.value)}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></label>}{columns.includes('status')&&(statusFilter||rows.some(r=>r.status))&&<label>Status<select aria-label="Task status filter" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value={endpoint==="/tasks"?"ALL":""}>All statuses</option>{endpoint==="/tasks"&&<><option value="ACTIVE">Active / actionable</option><option value="SCHEDULED">Future / scheduled</option><option value="OPEN_ALL">All open tasks</option></>}{[...new Set([...(endpoint==="/tasks"?["OPEN","IN_PROGRESS","DONE","CANCELLED"]:[statusFilter]),...rows.map(r=>r.status)].filter(Boolean))].map(status=><option key={status}>{status}</option>)}</select></label>}
         <label>Sort<select value={sort} onChange={e=>setSort(e.target.value)}><option value="created_at">Newest first</option><option value="updated_at">Recently updated</option></select></label>
         {endpoint==='/tasks'&&<label>Overdue only<input type="checkbox" checked={overdue} onChange={e=>setOverdue(e.target.checked)}/></label>}
       </div>

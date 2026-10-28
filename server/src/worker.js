@@ -24,7 +24,7 @@ import { recordWorkerHeartbeat, recordWorkerProcessingResult } from "./services/
 const databaseSystemId = await assertDatabaseIdentity(pool);
 // API startup owns migration execution. A simultaneous worker rollout must wait for it.
 for(let attempt=0;;attempt++){
-  if((await pool.query("SELECT 1 FROM schema_migrations WHERE filename='069_event_closeout_supplemental_invoices.sql'")).rowCount)break;
+  if((await pool.query("SELECT 1 FROM schema_migrations WHERE filename='070_active_work_payment_windows.sql'")).rowCount)break;
   if(attempt>=60)throw new Error('Workflow migration is not ready; worker will restart without dispatching.');
   if(attempt===0)logger.info('Waiting for workflow migration before worker dispatch');
   await new Promise(resolve=>setTimeout(resolve,1000));

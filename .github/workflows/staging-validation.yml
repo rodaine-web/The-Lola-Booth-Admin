@@ -123,6 +123,11 @@ jobs:
           INTEGRATION_MARKETPLACE_BROWSER_TEST: "true"
         run: node --test test/integration-marketplace-browser.test.js
 
+      - name: Active work desktop/mobile
+        env:
+          ACTIVE_WORK_BROWSER_TEST: "true"
+        run: node --test test/active-work-browser.test.js
+
       - name: Customer closeout and billing desktop/mobile
         env:
           CUSTOMER_CLOSEOUT_BROWSER_TEST: "true"
@@ -137,6 +142,7 @@ jobs:
             artifacts/integrations/
             artifacts/proposal-review/
             artifacts/customer-closeout-browser/
+            artifacts/active-work-browser/
             artifacts/v11-browser/
             artifacts/crm-contacts-browser/
           if-no-files-found: ignore
