@@ -69,10 +69,10 @@ export default function PublicProposal() {
         <h2>Ready to make it official?</h2>
         <div className="public-proposal-totals">
           <Metric label="Proposal Total" value={formatMoney(pricing.total || proposal.total || 0)} />
-          <Metric label="Due Today" value={formatMoney(pricing.deposit_amount || 0)} />
-          <Metric label="Remaining Balance" value={formatMoney(pricing.balance || 0)} />
+          <Metric label="Due Today" value={formatMoney(proposal.payment_requirement?.fullPaymentRequired?(pricing.total||proposal.total):pricing.deposit_amount || 0)} />
+          <Metric label="Remaining Balance" value={formatMoney(proposal.payment_requirement?.fullPaymentRequired?0:pricing.balance || 0)} />
         </div>
-        <p className="note-text">{payload.acceptanceWording}</p>
+        {proposal.payment_requirement?.message&&<p role="status">{proposal.payment_requirement.message}</p>}<p className="note-text">{payload.acceptanceWording}</p>
         <div className="inline-form note-form">
           <input aria-label="Your full name" value={acceptedByName} onChange={(event) => setAcceptedByName(event.target.value)} placeholder="Your full name" />
           <button className="primary-action" disabled={busy || !acceptedByName.trim() || proposal.status === "ACCEPTED"} onClick={() => decide("accept", { acceptedByName })}><CheckCircle2 size={16} />Accept</button>

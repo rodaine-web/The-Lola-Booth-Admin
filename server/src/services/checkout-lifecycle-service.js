@@ -41,7 +41,7 @@ const staleAttemptsSql=`SELECT a.id,a.invoice_id FROM invoices i JOIN payment_at
   AND (i.status IN ('PAID','VOID','REFUNDED') OR a.amount>i.amount_outstanding
    OR (i.proposal_id IS NOT NULL AND (k.id IS NULL OR k.status<>'SIGNED' OR k.snapshot->>'accepted_version_id' IS DISTINCT FROM p.accepted_version_id::text
       OR (a.metadata->>'agreement_scope' IS NOT NULL AND a.metadata->>'agreement_scope' NOT LIKE 'agreement:'||k.id::text||':%')))
-   OR (i.due_date<=(now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date AND a.amount<i.amount_outstanding))
+   OR (invoice_balance_deadline(i.id)<=business_today() AND a.amount<i.amount_outstanding))
  ORDER BY i.id,a.id LIMIT 100`;
 /** Expire unsafe provider sessions; uncertain payments remain pending for operator review. */
 export async function expireStaleBookingCheckouts(){

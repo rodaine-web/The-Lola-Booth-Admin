@@ -60,9 +60,9 @@ export async function publicPaymentOptions(invoice) {
     }, "Staging payment options diagnostic");
   }
   const balance = invoiceBalance(invoice);
-  const clock=(await query("SELECT (now() AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago'))::date AS today, ($1::date+time '00:00') AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago') AS due_at",[invoice.due_date||null])).rows[0];
+  const clock=(await query("SELECT business_today() AS today,invoice_balance_deadline($1)::text AS effective_due, invoice_balance_deadline($1)::timestamp AT TIME ZONE COALESCE((SELECT timezone FROM business_settings LIMIT 1),'America/Chicago') AS due_at",[invoice.id])).rows[0];
   const businessDate=clock.today;
-  const policy=bookingPaymentPolicy({total:invoice.total,paid:invoice.amount_paid,balance,dueDate:invoice.due_date,businessDate,dueAt:clock.due_at?.toISOString()});
+  const policy=bookingPaymentPolicy({total:invoice.total,paid:invoice.amount_paid,balance,dueDate:clock.effective_due,businessDate,dueAt:clock.due_at?.toISOString()});
   const agreement=await invoiceAgreementState(invoice,{includeUrl:true});
   return {
     payable:payable&&!agreement.required,
@@ -70,6 +70,7 @@ export async function publicPaymentOptions(invoice) {
     automaticTaxEnabled:process.env.STRIPE_AUTOMATIC_TAX_ENABLED==="true"&&Number(invoice.tax||0)===0,
     taxNotice:process.env.STRIPE_AUTOMATIC_TAX_ENABLED==="true"?"Service amounts exclude tax. Stripe calculates and displays tax separately before payment.":null,
     ...policy,
+    paymentMessage:policy.overdue?"Full outstanding payment is required. The balance deadline has been reached.":null,
     agreementRequired:payable&&agreement.required,
     agreementUrl:payable?(agreement.signingUrl||null):null,
     currency: invoice.currency || s.currency || "USD",
@@ -100,7 +101,7 @@ async function createLockedPaymentSession({ token, provider, amountChoice = "DEP
   if (!options.providers.some((item) => item.provider === normalizedProvider)) throw new AppError("This payment provider is not configured.", 409, "PAYMENT_PROVIDER_UNAVAILABLE");
   let selectedAmount = options.amountDue;
   if (amountChoice === "DEPOSIT" && !options.depositAvailable) {
-    throw new AppError("The deposit requirement has already been satisfied. Choose the remaining balance or another amount.",409,"DEPOSIT_ALREADY_SATISFIED");
+    throw new AppError(options.overdue?"Full payment is required at the balance deadline. Choose the full outstanding balance.":"The booking retainer fee has already been satisfied. Choose the remaining balance or another amount.",409,"DEPOSIT_ALREADY_SATISFIED");
   }
   if (amountChoice === "FULL") {
     if (!options.allowPayInFull) throw new AppError("Pay in full is not available for this invoice.",409,"PAYMENT_OPTION_UNAVAILABLE");

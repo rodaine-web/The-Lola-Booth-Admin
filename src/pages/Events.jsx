@@ -10,7 +10,7 @@ import { CalendarDays, Plus, Search, SlidersHorizontal, ArrowLeft, ArrowRight } 
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-const statuses=["","INQUIRY","TENTATIVE","PENDING_CONTRACT","PENDING_DEPOSIT","CONFIRMED","PREPARING","READY","IN_PROGRESS","COMPLETED","CANCELLED"];
+const statuses=["ACTIVE","ALL","INQUIRY","TENTATIVE","PENDING_CONTRACT","PENDING_DEPOSIT","CONFIRMED","PREPARING","READY","IN_PROGRESS","COMPLETED","CANCELLED"];
 const eventTypes=["Wedding","Birthday","Private Party","Brand Activation","Corporate Event","Other"];
 
 export default function Events(){
@@ -27,7 +27,7 @@ export default function Events(){
   const [options,setOptions]=useState({packages:[],experiences:[]});
   const [duplicate,setDuplicate]=useState(null);
   const [form,setForm]=useState(emptyEvent());
-  const status=urlParams.get("status")||"";
+  const status=urlParams.get("status")||"ACTIVE";
 
   useEffect(()=>{if(urlParams.get("create")==="true")openCreate();},[urlParams.toString()]);
 
@@ -100,7 +100,7 @@ export default function Events(){
     </section>
 
     {display==="list"&&<><RecordMetrics module="Events" rows={rows}/><section className="lola-status-tabs">
-      {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setStatus(item)}>{item?item.replaceAll("_"," "):"All"}</button>)}
+      {statuses.map(item=><button key={item||"all"} className={status===item?"active":""} onClick={()=>setStatus(item)}>{item==="ACTIVE"?"Active":item==="ALL"?"All statuses":item.replaceAll("_"," ")}</button>)}
     </section>
 
     <div className="record-filter-bar"><section className="lola-list-toolbar">
@@ -110,7 +110,7 @@ export default function Events(){
     {filtersOpen&&<section className="lola-filter-drawer">
       <label>Date from<input type="date" value={urlParams.get("date_from")||""} onChange={e=>setUrlParams(current=>{const next=new URLSearchParams(current);if(e.target.value)next.set("date_from",e.target.value);else next.delete("date_from");return next;})}/></label>
       <label>Date to<input type="date" value={urlParams.get("date_to")||""} onChange={e=>setUrlParams(current=>{const next=new URLSearchParams(current);if(e.target.value)next.set("date_to",e.target.value);else next.delete("date_to");return next;})}/></label>
-    </section>}<label>Status<select value={status} onChange={e=>setStatus(e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item?item.replaceAll("_"," "):"All statuses"}</option>)}</select></label></div>
+    </section>}<label>Status<select aria-label="Event status filter" value={status} onChange={e=>setStatus(e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item==="ACTIVE"?"Active events":item==="ALL"?"All statuses":item.replaceAll("_"," ")}</option>)}</select></label></div>
 
     {(error||notice)&&<div className={error?"toast error":"toast"}>{error||notice}</div>}
 
