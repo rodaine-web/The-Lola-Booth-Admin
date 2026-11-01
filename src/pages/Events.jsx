@@ -2,6 +2,7 @@ import { recordCell } from '../components/workspace/RecordCells.jsx';
 import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
 import RecordTable from "../components/workspace/RecordTable.jsx";
 
+import {PartnershipEventForm} from './Partners.jsx';
 import Calendar from "./Calendar.jsx";
 import RelationshipSelect from "../components/RelationshipSelect.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -20,6 +21,7 @@ export default function Events(){
   const [search,setSearch]=useState("");
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
+  const [creatingPartnership,setCreatingPartnership]=useState(false);
   const [creating,setCreating]=useState(urlParams.get("create")==="true");
   const [step,setStep]=useState(1);
   const [saving,setSaving]=useState(false);
@@ -95,6 +97,7 @@ export default function Events(){
       <div className="button-row">
 
         {display==="list"&&<button className="lola-secondary-button" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={15}/>Filters</button>}
+        <button onClick={()=>setCreatingPartnership(true)}>New partnership event</button>
         <button className="primary-action" onClick={openCreate}><Plus size={15}/>New Event</button>
       </div>
     </section>
@@ -114,10 +117,11 @@ export default function Events(){
 
     {(error||notice)&&<div className={error?"toast error":"toast"}>{error||notice}</div>}
 
-    <RecordWorkspace module="Events" rows={rows} getRowHref={row=>"/events/events/"+row.id}><RecordTable renderCell={recordCell} title="Events" rows={rows} columns={["event_name","event_type","event_date","venue_name","start_time","guest_count","status"]} getRowHref={row=>"/events/events/"+row.id}/></RecordWorkspace>
+    <RecordWorkspace module="Events" rows={rows} getRowHref={row=>"/events/events/"+row.id}><RecordTable renderCell={recordCell} title="Events" rows={rows} columns={["event_name","event_kind","event_type","event_date","venue_name","start_time","guest_count","status"]} getRowHref={row=>"/events/events/"+row.id}/></RecordWorkspace>
     </>}
     {display==="calendar"&&<Calendar embedded/>}
 
+    {creatingPartnership&&<PartnershipEventForm onClose={()=>setCreatingPartnership(false)} onCreated={event=>{setCreatingPartnership(false);setNotice(event.event_name+" created.");}}/>}
     {creating&&<div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Create event">
       <div className="modal lola-wizard-modal">
         <WizardHeader step={step}/>

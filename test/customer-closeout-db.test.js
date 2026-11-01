@@ -18,7 +18,7 @@ test('closeout scheduling, approval, supplemental billing and offline receipts p
   const historical=await one("INSERT INTO events(event_name,event_type,event_date,status) VALUES('HISTORICAL QA DO NOT TOUCH','Wedding','2035-10-15','COMPLETED') RETURNING *");
   await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/069_event_closeout_supplemental_invoices.sql',import.meta.url),'utf8')));
   for(const file of migrations.filter(f=>f>'069_z'))await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/'+file,import.meta.url),'utf8')));
-  assert.deepEqual(await one('SELECT * FROM events WHERE id=$1',[historical.id]),historical);assert.equal((await one('SELECT count(*)::int n FROM event_closeouts')).n,0);
+  const preserved=await one('SELECT * FROM events WHERE id=$1',[historical.id]);assert.equal(preserved.event_kind,'BOOKING');delete preserved.event_kind;assert.deepEqual(preserved,historical);assert.equal((await one('SELECT count(*)::int n FROM event_closeouts')).n,0);
   await query("INSERT INTO business_settings(business_name) VALUES('Closeout QA')");
   const user=await one("INSERT INTO users(name,email,password_hash) VALUES('CLOSEOUT QA','staff@qa.invalid','not-a-login') RETURNING id");
   await query("INSERT INTO permissions(key) VALUES('*') ON CONFLICT DO NOTHING");await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[user.id]);

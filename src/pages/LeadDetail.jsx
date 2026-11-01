@@ -1,3 +1,4 @@
+import PartnershipLeadPanel from '../components/PartnershipLeadPanel.jsx';
 import LeadAvailability from '../components/LeadAvailability.jsx';
 import { useAuth } from "../context/AuthContext.jsx";
 import { RecordIdentity, JourneyStrip, DashboardCard, NextBookingAction, RecordActivity, RequestedItems, RecordEditDialog, useRecordJourney } from "../components/RecordDashboard.jsx";
@@ -149,6 +150,7 @@ export default function LeadDetail() {
   if (error && !lead) return <main className="page record-detail-redesign"><AsyncState error={error} noun="lead" onRetry={()=>{setError("");loadLead();}}/></main>;
   if (!lead) return <main className="page"><div className="empty-state">Loading lead...</div></main>;
 
+  if(lead.opportunity_type==='PARTNERSHIP')return <PartnershipLeadPanel lead={lead} onUpdated={loadLead}/>;
   const fullName = `${lead.first_name} ${lead.last_name}`;
   const canConvert = lead.status !== "WON" && !lead.converted_event_id;
 

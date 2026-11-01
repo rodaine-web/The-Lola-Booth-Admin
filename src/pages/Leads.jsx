@@ -105,6 +105,7 @@ export default function Leads(){
 
     {filtersOpen&&<section className="lola-filter-drawer">
       <label>Source<select value={source} onChange={e=>setFilter("source",e.target.value)}>{[...new Set([...sources,source])].map(item=><option key={item||"all"} value={item}>{item||"All sources"}</option>)}</select></label>
+      <label>Opportunity type<select value={urlParams.get("opportunity_type")||""} onChange={e=>setFilter("opportunity_type",e.target.value)}><option value="">All opportunities</option><option value="BOOKING">Booking</option><option value="PARTNERSHIP">Partnership</option></select></label>
       <label>Campaign<input value={campaign} onChange={e=>setFilter("campaign",e.target.value)} placeholder="Campaign"/></label>
       <button onClick={()=>{setFilter("source","");setFilter("campaign","");}}>Clear filters</button>
     </section>}<label>Status<select aria-label="Lead status filter" value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item==="ACTIVE"?"Active leads":item==="ALL"?"All statuses":item==="LOST"?"Lost · Archived":item.replaceAll("_"," ")}</option>)}</select></label></div>
@@ -112,7 +113,7 @@ export default function Leads(){
     {error&&<div className="toast error">{error}</div>}
 
     <RecordWorkspace module="Leads" rows={leads}>    {view==="table"
-      ? <RecordTable renderCell={recordCell} title="Leads" rows={leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")}))} columns={["name","event_type","lead_source","status","event_date","updated_at"]} columnLabels={{lead_source:"Source",updated_at:"Last Activity"}} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
+      ? <RecordTable renderCell={recordCell} title="Leads" rows={leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")}))} columns={["name","opportunity_type","event_type","lead_source","status","event_date","updated_at"]} columnLabels={{lead_source:"Source",updated_at:"Last Activity"}} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
       : <LeadBoard leads={leads}/>
     }</RecordWorkspace>
 
@@ -123,6 +124,7 @@ export default function Leads(){
         <div className="modal-heading"><div><p className="eyebrow">New Lead</p><h2>Add a sales opportunity</h2></div><button type="button" onClick={()=>setCreating(false)}>Close</button></div>
         <p className="note-text">Only the essentials are required. Event details can be completed later.</p>
         <div className="form-grid">
+          <label>Opportunity type<select value={draft.opportunity_type||"BOOKING"} onChange={e=>setDraft({...draft,opportunity_type:e.target.value})}><option value="BOOKING">Booking</option><option value="PARTNERSHIP">Partnership</option></select></label><label>Organization<input value={draft.company||""} onChange={e=>setDraft({...draft,company:e.target.value})}/></label>
           <label>First name *<input required value={draft.first_name||""} onChange={e=>setDraft({...draft,first_name:e.target.value})}/></label>
           <label>Last name *<input required value={draft.last_name||""} onChange={e=>setDraft({...draft,last_name:e.target.value})}/></label>
           <label>Email *<input required type="email" value={draft.email||""} onChange={e=>setDraft({...draft,email:e.target.value})}/></label>

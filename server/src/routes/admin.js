@@ -365,6 +365,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         if(filters.status==='SCHEDULED')where.push("status IN ('OPEN','IN_PROGRESS') AND NOT task_work_actionable(tasks) AND (NOT task_event_preparation(tasks) OR EXISTS(SELECT 1 FROM events e WHERE e.id=tasks.event_id AND e.status NOT IN ('COMPLETED','CANCELLED') AND COALESCE(e.operational_status,'')<>'COMPLETED'))");
       }
       if (table === "leads") {
+        if(filters.opportunity_type){params.push(z.enum(['BOOKING','PARTNERSHIP']).parse(filters.opportunity_type));where.push('opportunity_type=$'+params.length);}
         if(filters.status === "ACTIVE") where.push("status NOT IN ('WON','LOST') AND converted_client_id IS NULL");
         if (!filters.status && !filters.funnel) where.push("NOT (status='WON' AND converted_client_id IS NOT NULL)");
         if (filters.funnel === 'qualified') where.push("status IN ('QUALIFIED','PROPOSAL_DRAFT','PROPOSAL_SENT','WON')");
@@ -671,6 +672,7 @@ adminRouter.post('/events/:id/closeout',requirePermission('write:events'),requir
 adminRouter.get("/leads", ...listRoute("leads", ["first_name", "last_name", "email", "phone", "event_type"], "read:sales"));
 
 const leadSchema = z.object({
+  opportunity_type: z.enum(["BOOKING","PARTNERSHIP"]).default("BOOKING"),
   first_name: z.string().min(1),
   last_name: z.string().min(1),
   email: z.string().email(),
@@ -841,7 +843,7 @@ adminRouter.patch("/leads/:id", requirePermission("write:sales"), asyncHandler(a
     "preferred_experience_id", "estimated_budget", "lead_source", "campaign", "referral_source",
     "assigned_user_id", "status", "follow_up_date", "notes", "message",
     "campaign", "utm_source", "utm_medium", "utm_campaign", "utm_content",
-    "marketing_email_opt_in", "first_contacted_at"
+    "marketing_email_opt_in", "first_contacted_at", "opportunity_type"
   ];
   const fields = Object.keys(req.body).filter((key) => allowed.includes(key));
   if (!fields.length) throw new AppError("No supported fields to update.", 400, "NO_FIELDS");
@@ -888,6 +890,7 @@ adminRouter.get("/leads/:id/convert-preview", requirePermission("read:sales"), a
     [req.params.id]
   );
   if (!lead.rows[0]) throw notFound("Lead");
+  if(lead.rows[0].opportunity_type==='PARTNERSHIP')throw new AppError('Use Convert to Partner for this opportunity.',409,'PARTNERSHIP_CONVERSION_REQUIRED');
   const existingClient = await query("SELECT id, name, email, phone FROM clients WHERE lower(email)=lower($1) AND deleted_at IS NULL LIMIT 1", [lead.rows[0].email]);
   res.json({
     lead: lead.rows[0],
@@ -907,6 +910,7 @@ adminRouter.post("/leads/:id/convert", requirePermission("write:sales"), asyncHa
   const converted = await transaction(async (client) => {
     const leadResult = await client.query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.params.id]);
     const lead = leadResult.rows[0];
+    if(lead?.opportunity_type==='PARTNERSHIP')throw new AppError('Use Convert to Partner for this opportunity.',409,'PARTNERSHIP_CONVERSION_REQUIRED');
     if (!lead) throw notFound("Lead");
     if(lead.converted_event_id){
       const [customer,event,booking]=await Promise.all([client.query('SELECT * FROM clients WHERE id=$1',[lead.converted_client_id]),client.query('SELECT * FROM events WHERE id=$1',[lead.converted_event_id]),client.query('SELECT * FROM bookings WHERE lead_id=$1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1',[lead.id])]);
