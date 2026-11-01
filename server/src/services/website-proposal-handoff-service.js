@@ -24,7 +24,7 @@ export async function queueWebsiteProposal(leadId) {
   if (!websiteProposalEnabled()) return;
   return transaction(async client => {
     const lead = (await client.query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [leadId])).rows[0];
-    if (!hasCurrentAvailability(lead)) return;
+    if (lead?.opportunity_type==='PARTNERSHIP' || !hasCurrentAvailability(lead)) return;
     const booking = await leadBookingRequest(lead);
     const review = automaticWebsiteQuoteDecision(booking, leadEventInput(lead));
     if (review) {
@@ -41,7 +41,7 @@ export async function queueWebsiteProposal(leadId) {
 async function prepareWebsiteProposal(job) {
   return transaction(async client => {
     const lead = (await client.query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [job.related_entity_id])).rows[0];
-    if (!lead || ['LOST', 'WON', 'ARCHIVED'].includes(lead.status)) return null;
+    if (!lead || lead.opportunity_type==='PARTNERSHIP' || ['LOST', 'WON', 'ARCHIVED'].includes(lead.status)) return null;
     if (!hasCurrentAvailability(lead, job.payload.approvalFingerprint)) return null;
     const booking = job.payload.booking;
     const input = leadEventInput(lead);

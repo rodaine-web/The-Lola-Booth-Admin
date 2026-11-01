@@ -54,6 +54,7 @@ export async function confirmLeadAvailability(id, {fingerprint,calendarRevision,
     await client.query('SELECT pg_advisory_xact_lock(7811051)');
     const lead=(await client.query('SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[id])).rows[0];
     if (!lead) throw new AppError('Lead not found.',404,'NOT_FOUND');
+    if (lead.opportunity_type==='PARTNERSHIP')throw new AppError('Manage this opportunity in Partnerships; customer availability approval does not apply.',409,'PARTNERSHIP_REVIEW_REQUIRED');
     if (['LOST','WON','ARCHIVED'].includes(lead.status)) throw new AppError('This lead is closed.',409,'LEAD_CLOSED');
     if (!confirmed) {
       await client.query('UPDATE leads SET availability_confirmed_at=NULL,availability_confirmed_by=NULL,availability_fingerprint=NULL,updated_at=now() WHERE id=$1',[id]);

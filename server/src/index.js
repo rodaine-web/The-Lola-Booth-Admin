@@ -16,6 +16,7 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { authRouter } from "./routes/auth.js";
 import {galleryPublicRouter,galleryAdminRouter,galleryDropboxOAuthRouter} from "./routes/gallery.js";
 import { publicRouter } from "./routes/public.js";
+import {partnersRouter} from './routes/partners.js';
 import { adminRouter } from "./routes/admin.js";
 import { webhookRouter } from "./routes/webhooks.js";
 import { getSetupStatus } from "./services/setup-service.js";
@@ -42,6 +43,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/gallery", galleryPublicRouter);
 app.use("/api/gallery-admin", galleryAdminRouter);
 app.use("/api/public", publicRouter);
+app.use("/api", partnersRouter);
 app.use("/api", adminRouter);
 
 app.use(errorHandler);

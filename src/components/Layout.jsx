@@ -32,6 +32,10 @@ const navGroups = [{
     to: '/sales/clients',
     permission: 'read:sales'
   }, {
+    label: 'Partners',
+    to: '/sales/partners',
+    permission: 'read:sales'
+  }, {
     label: 'Contacts',
     to: '/sales/contacts',
     permission: 'read:contacts'

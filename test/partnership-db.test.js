@@ -1,0 +1,106 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import pg from 'pg';
+import jwt from 'jsonwebtoken';
+import {once} from 'node:events';
+test('partnership conversion, events, permission gates and isolated gallery delivery',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async()=>{
+ const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['localhost','127.0.0.1'].includes(url.hostname));assert.match(url.pathname,/qa|test/);
+ const base=new pg.Pool({connectionString:url.toString()}),schema='partner_qa_'+crypto.randomBytes(5).toString('hex'),root=await fs.mkdtemp(path.join(os.tmpdir(),'lola-partner-qa-'));let pool,server;
+ try{
+  await base.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');
+  Object.assign(process.env,{DATABASE_URL:url.toString(),APP_ENV:'test',NODE_ENV:'test',PORT:'0',JWT_SECRET:'partnership-local-qa-secret-at-least-thirty-two-characters',INTEGRATION_SECRET_KEY:'partnership-local-qa-encryption-key-only',GALLERY_STORAGE_PROVIDER:'local',GALLERY_LOCAL_ROOT:root,EMAIL_PROVIDER:'development'});
+  const db=await import('../server/src/db/pool.js');pool=db.pool;const {query,transaction}=db,one=async(sql,args=[])=>(await query(sql,args)).rows[0];
+  for(const file of (await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(x=>x.endsWith('.sql')).sort())await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/'+file,import.meta.url),'utf8')));
+
+  await query("INSERT INTO business_settings(business_name,timezone) VALUES('Partner QA','America/Chicago')");
+  const owner=await one("INSERT INTO users(name,email,password_hash) VALUES('QA Owner','partner-admin@qa.invalid','no-login') RETURNING id");
+  await query("INSERT INTO permissions(key) VALUES('*'),('read:sales'),('read:events') ON CONFLICT DO NOTHING");
+  await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[owner.id]);
+  const viewer=await one("INSERT INTO users(name,email,password_hash) VALUES('QA Viewer','partner-viewer@qa.invalid','no-login') RETURNING id");
+  await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key IN ('read:sales','read:events')",[viewer.id]);
+  const req={user:owner,headers:{}};
+  const partner=await import('../server/src/services/partnership-service.js');
+  const lead=await one("INSERT INTO leads(first_name,last_name,email,phone,event_type,event_date,company,opportunity_type) VALUES('QA','Organizer','organizer@qa.invalid','5555555555','Ball',business_today()-1,'QA Events and Outings','PARTNERSHIP') RETURNING *");
+  await query("INSERT INTO tasks(title,lead_id) VALUES('Discuss partnership',$1)",[lead.id]);
+  const conversions=await Promise.all(Array.from({length:6},()=>partner.convertPartnershipLead(lead.id,req)));
+  assert.equal(new Set(conversions.map(x=>x.partner.id)).size,1);
+  const organizer=conversions[0].partner;
+  assert.equal((await one('SELECT count(*)::int n FROM clients')).n,0);
+  assert.equal((await one('SELECT status FROM tasks WHERE lead_id=$1',[lead.id])).status,'DONE');
+  assert.equal((await one('SELECT converted_client_id FROM leads WHERE id=$1',[lead.id])).converted_client_id,null);
+  await assert.rejects(query("UPDATE leads SET opportunity_type='BOOKING' WHERE id=$1",[lead.id]));
+  const sponsor=await one("INSERT INTO partners(name) VALUES('QA Sponsor') RETURNING *");
+  const event=await partner.createPartnershipEvent({event_name:'QA ONLY — Halloween partnership',event_type:'Ball',event_date:'2026-10-31',status:'COMPLETED',partners:[{partner_id:organizer.id,role:'ORGANIZER'},{partner_id:sponsor.id,role:'SPONSOR'}]},req);
+  assert.equal(event.client_id,null);assert.equal(event.event_kind,'PARTNERSHIP');
+  assert.equal((await partner.partnershipEvent(event.id)).partners.length,2);
+  assert.equal((await one('SELECT count(*)::int n FROM gallery_access_keys')).n,0,'Adding partners never grants access');
+  await query("UPDATE events SET status='CONFIRMED' WHERE id=$1",[event.id]);
+  await query("UPDATE events SET status='COMPLETED' WHERE id=$1",[event.id]);
+  assert.equal((await one('SELECT count(*)::int n FROM event_closeouts')).n,0,'No customer closeout workflow');
+  const g=await import('../server/src/services/private-gallery-service.js');
+  const album=await g.createGalleryAlbum(event.id,null,owner);
+  const {createCanvas}=await import('@napi-rs/canvas');
+  async function photo(color){const canvas=createCanvas(2,2),ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,2,2);return g.uploadGalleryMedia(album.id,{filename:color+'.png',mime_type:'image/png',base64:canvas.toBuffer('image/png').toString('base64')});}
+  const a=await photo('red'),b=await photo('blue');
+  const links=(await partner.partnershipEvent(event.id)).partners;
+  const orgLink=links.find(l=>l.partner_id===organizer.id),sponsorLink=links.find(l=>l.partner_id===sponsor.id);
+  await assert.rejects(partner.grantPartnerGallery(event.id,orgLink.id,{scope:'FULL',media_ids:[]},req),{code:'GALLERY_NOT_READY'});
+  await query('UPDATE gallery_albums SET retention_days=60 WHERE id=$1',[album.id]);
+  await g.transitionGalleryAlbum(album.id,'PUBLISHED',owner);
+  const full=await partner.grantPartnerGallery(event.id,orgLink.id,{scope:'FULL',media_ids:[]},req);
+  const selected=await partner.grantPartnerGallery(event.id,sponsorLink.id,{scope:'SELECTED',media_ids:[a.id]},req);
+  const fullGrant=await g.resolveGalleryToken('ALBUM',full.url.split('/').at(-1));
+  const selectGrant=await g.resolveGalleryToken('PERSON',selected.url.split('/').at(-1));
+  assert.equal((await g.allowedMedia(fullGrant)).length,2);assert.deepEqual((await g.allowedMedia(selectGrant)).map(x=>x.id),[a.id]);
+  await assert.rejects(g.mediaTicket(selectGrant,b.id));
+  await assert.rejects(partner.grantPartnerGallery(event.id,sponsorLink.id,{scope:'SELECTED',media_ids:[crypto.randomUUID()]},req),{code:'PARTNER_MEDIA_INVALID'});
+  const other=await partner.createPartnershipEvent({event_name:'QA unrelated event',event_type:'Ball',event_date:'2026-11-01',status:'TENTATIVE',partners:[{partner_id:sponsor.id,role:'SPONSOR'}]},req);
+  await assert.rejects(partner.grantPartnerGallery(other.id,sponsorLink.id,{scope:'FULL',media_ids:[]},req));
+  const originalExpiry=(await one('SELECT expires_at FROM gallery_albums WHERE id=$1',[album.id])).expires_at;await query("UPDATE gallery_albums SET expires_at=now()-interval '1 second' WHERE id=$1",[album.id]);await assert.rejects(g.resolveGalleryToken('ALBUM',full.url.split('/').at(-1)));await query('UPDATE gallery_albums SET expires_at=$2 WHERE id=$1',[album.id,originalExpiry]);
+  const selectedRecord=(await partner.partnershipEvent(event.id)).grants.find(x=>x.access_key_id===selected.id);
+  await partner.partnerGrantAction(selectedRecord.id,req,true);
+  await assert.rejects(g.resolveGalleryToken('PERSON',selected.url.split('/').at(-1)));
+  assert.equal((await one('SELECT count(*)::int n FROM communications')).n,0,'No partner/customer email is auto-sent');
+  const {createProposal}=await import('../server/src/services/proposal-service.js');
+  await assert.rejects(createProposal({...req,body:{lead_id:lead.id}}),{code:'PARTNERSHIP_DOCUMENT_REQUIRED'});
+  assert.equal((await one('SELECT count(*)::int n FROM clients')).n,0);
+  ({server}=await import('../server/src/index.js'));if(!server.listening)await once(server,'listening');
+  const origin='http://127.0.0.1:'+server.address().port;
+  const call=async(p,method='GET',body,user=owner)=>{const response=await fetch(origin+'/api'+p,{method,headers:{Authorization:'Bearer '+jwt.sign({sub:user.id},process.env.JWT_SECRET),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,body:await response.json()};};
+  assert.equal((await call('/partners')).body.data.length,2);
+  assert.equal((await call('/clients?status=ALL')).body.data.length,0);
+  assert.equal((await call('/partnership-events/'+event.id)).body.partners.length,2);
+  assert.equal((await call('/events/'+event.id)).status,200,'Existing operations page supports partner event');
+  assert.equal((await call('/partners','POST',{name:'Denied'},viewer)).status,403);
+  assert.equal((await call('/partner-gallery-grants/'+selectedRecord.id+'/reveal','POST',{},viewer)).status,403);
+  assert.equal((await call('/leads/'+lead.id+'/convert','POST',{})).status,409,'Customer conversion entry point blocked');
+  assert.equal((await call('/partnership-events','POST',{event_name:'Invalid',event_type:'Ball',event_date:'2026-11-01',partners:[]})).status,422);
+  assert.equal((await call('/leads?status=ALL&opportunity_type=PARTNERSHIP')).body.data.length,1);
+  if(process.env.PARTNERSHIP_BROWSER_TEST==='true'){
+   const {createServer}=await import('vite'),react=(await import('@vitejs/plugin-react')).default,{fileURLToPath}=await import('node:url'),{chromium}=await import('playwright');
+   const vite=await createServer({configFile:false,root:fileURLToPath(new URL('../',import.meta.url)),plugins:[react()],define:{__BUILD_REVISION__:JSON.stringify('partnership-qa')},server:{host:'127.0.0.1',port:0,proxy:{'/api':origin}}});let browser;
+   try{await vite.listen();browser=await chromium.launch();const web='http://127.0.0.1:'+vite.httpServer.address().port;(await import('../server/src/config/env.js')).env.clientOrigin=web;
+    for(const width of [1440,390]){const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+     await page.addInitScript(token=>localStorage.setItem('lola_access_token',token),jwt.sign({sub:owner.id},process.env.JWT_SECRET));
+     await page.goto(web+'/sales/partners');await page.getByRole('heading',{name:'Partners',exact:true,level:1}).waitFor();
+     await page.getByRole('button',{name:'New partner',exact:true}).click();await page.getByLabel('Organization / partner name *',{exact:true}).fill('QA Browser Partner '+width);await page.getByRole('button',{name:'Save Changes',exact:true}).click();
+     await page.getByRole('heading',{name:'QA Browser Partner '+width,exact:true}).waitFor();
+     await page.getByRole('button',{name:'Create partnership event',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Create partnership event',exact:true});
+     await dialog.getByLabel('Event name *',{exact:true}).fill('QA Browser Event '+width);await dialog.getByLabel('Event date *',{exact:true}).fill('2026-10-31');await dialog.getByRole('combobox',{name:'Partnership event status',exact:true}).selectOption('COMPLETED');await dialog.getByRole('button',{name:'Create partnership event',exact:true}).click();
+     await page.getByRole('heading',{name:'QA Browser Event '+width,exact:true}).waitFor();await page.getByRole('heading',{name:'Partnership · partners & gallery access',exact:true}).waitFor();
+     assert.equal(await page.getByRole('link',{name:'Create Invoice',exact:true}).count(),0);assert.equal(await page.getByRole('list',{name:'Booking progress'}).count(),0);
+     await page.goto(web+'/events/events/'+event.id);await page.getByLabel('Recipient partner',{exact:true}).selectOption(sponsorLink.id);await page.getByLabel('Access scope',{exact:true}).selectOption('SELECTED');assert.equal(await page.getByRole('button',{name:'Create secure partner link',exact:true}).isEnabled(),false);
+     await page.getByLabel('red.png',{exact:true}).check();await page.getByRole('button',{name:'Create secure partner link',exact:true}).click();await page.getByLabel('Secure partner link',{exact:true}).waitFor();assert.match(await page.getByLabel('Secure partner link',{exact:true}).inputValue(),/\/gallery\/p\//);await page.getByRole('button',{name:'Hide link',exact:true}).click();
+     await fs.mkdir('artifacts/partnerships',{recursive:true});await page.screenshot({path:'artifacts/partnerships/event-'+width+'.png',fullPage:true});assert.deepEqual(errors,[]);await page.close();
+    }
+   }finally{await browser?.close();await vite.close();}
+  }
+  assert.equal((await call('/partners/'+organizer.id,'PATCH',{status:'ARCHIVED'})).status,200);
+  await assert.rejects(g.resolveGalleryToken('ALBUM',full.url.split('/').at(-1)),'Archiving revokes partner access');
+  assert.equal((await one('SELECT count(*)::int n FROM clients')).n,0);
+ }catch(error){throw error;}finally{if(server)await new Promise(r=>server.close(r));if(pool)await pool.end();await base.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await base.end();await fs.rm(root,{recursive:true,force:true});}
+});
