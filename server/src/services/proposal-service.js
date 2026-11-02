@@ -248,6 +248,7 @@ export async function buildProposalSnapshot(input) {
 
 
 async function resolveProposalRelationships(input = {}) {
+  if ((await query("SELECT 1 FROM leads WHERE id=$1 AND opportunity_type='PARTNERSHIP' UNION ALL SELECT 1 FROM events WHERE id=$2 AND event_kind='PARTNERSHIP'",[input.lead_id||null,input.event_id||null])).rowCount)throw new AppError('Use the partnership workflow; customer booking proposals are not available for partnerships.',409,'PARTNERSHIP_DOCUMENT_REQUIRED');
   if (!input.lead_id) return input;
   const lead = (await query(
     `SELECT id, converted_client_id, converted_event_id, preferred_package_id, preferred_experience_id
