@@ -9,7 +9,7 @@ export default function CatalogQuoteReview({experiences,addons,customLines=[],di
  useEffect(()=>{onQuote(null);},[key]);
  useEffect(()=>{let live=true;api.get('/public/pricing-catalog').then(published=>{if(live){setEnabled(true);setKnownPackages(published.packages);}}).catch(e=>{if(live&&e.status!==404){setEnabled(true);setError(e.message);}});return()=>{live=false;};},[]);
  const selected=experiences.flatMap(item=>item.packages||[]),current=quote?.key===key;
- function option(id,field,value){setChoices(previous=>({...previous,[id]:{...previous[id],[field]:Number(value)}}));}
+ function option(id,field,value){setChoices(previous=>({...previous,[id]:{...previous[id],[field]:field==='prints'&&value===''?undefined:Number(value)}}));}
  const packageProfile=pkg=>knownPackages.find(row=>row.id===pkg.package_id)?.pricing_profile;
  const photoPackage=pkg=>['glam','vogue'].includes(packageProfile(pkg)?.experience);
  async function calculate(){setBusy(true);setError('');try{

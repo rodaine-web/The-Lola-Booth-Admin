@@ -89,8 +89,11 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
      await review.getByLabel('Total physical prints',{exact:true}).selectOption('500');
      await review.getByLabel('Reviewed travel charge ($)',{exact:true}).fill('0');
      await review.getByLabel('Approval / travel review reason',{exact:true}).fill('QA verified city venue and standard scope');
+     await review.getByLabel('Total physical prints',{exact:true}).selectOption('');
+     await review.getByRole('button',{name:'Calculate reviewed package quote',exact:true}).click();await review.getByText(/Service total:.*\$899\.00/).waitFor();
+     await review.getByLabel('Total physical prints',{exact:true}).selectOption('500');
      await review.getByRole('button',{name:'Calculate reviewed package quote',exact:true}).click();
-     await review.getByText('Service total:',{exact:false}).waitFor();assert.match(await review.innerText(),/1,124\.00/);
+     await review.getByText(/Service total:.*\$1,124\.00/).waitFor();assert.match(await review.innerText(),/1,124\.00/);
      await page.getByRole('button',{name:'Continue to Review',exact:false}).click();
      await page.getByRole('button',{name:'Create as Draft',exact:true}).click();
      await page.waitForURL(/\/sales\/proposals\/[a-f0-9-]+$/);
