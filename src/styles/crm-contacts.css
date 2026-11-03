@@ -3,3 +3,6 @@
 @media(max-width:550px){.crm-page{padding:14px}.crm-filters>label{min-width:calc(50% - 12px)}.crm-filters>label.crm-search{min-width:100%}.crm-modal .crm-form-grid{grid-template-columns:1fr}.crm-related{grid-template-columns:1fr}.crm-detail-rows>div{grid-template-columns:100px minmax(0,1fr)}.crm-list>footer{align-items:start}.crm-list>footer .button-row{font-size:11px}.crm-page .page-heading .button-row{width:100%}.crm-tabs button{padding:9px 12px}.crm-profile-title{gap:8px}.crm-page .panel{padding:14px}.crm-page .crm-list{padding:0}}
 
 .crm-row-actions summary{font-size:20px;cursor:pointer;list-style:none;text-align:center}.crm-row-actions>div{display:flex;flex-direction:column;align-items:stretch;gap:4px;margin-top:8px;min-width:110px}.crm-import-steps{list-style:none;padding:0}.crm-import-steps li{border:1px solid #e0e5ee;border-radius:5px;padding:8px 12px;font-size:12px}.crm-import-steps li.active{background:#f0e7d9;border-color:#b39460}
+
+.lead-bulk-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:16px 0; }
+.lead-selection-card > .check-row { margin:10px 0 4px; }

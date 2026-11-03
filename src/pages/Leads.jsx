@@ -5,7 +5,7 @@ import EventTypeSelect from "../components/EventTypeSelect.jsx";
 import { useDialogFocus } from "../utils/use-dialog-focus.js";
 import { formatDateOnly } from "../utils/display.js";
 import { Plus, Search, SlidersHorizontal, Table2, Columns3 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import {useAuth} from "../context/AuthContext.jsx";
@@ -19,6 +19,25 @@ const eventTypes=["Wedding","Birthday","Private Party","Brand Activation","Corpo
 
 export default function Leads(){
   const {can}=useAuth();
+  const [selected, setSelected] = useState([]);
+  const [bulkAction, setBulkAction] = useState(null);
+  const [acting, setActing] = useState(false);
+  const actingRef = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState("");
+  useDialogFocus(Boolean(bulkAction), () => { if (!actingRef.current) setBulkAction(null); });
+  function toggleLead(id) { setSelected(ids => ids.includes(id) ? ids.filter(item => item !== id) : [...ids, id]); }
+  async function applyBulkAction() {
+    if (actingRef.current) return;
+    actingRef.current = true;
+    setActing(true); setError(""); setNotice("");
+    try {
+      const result = await api.post("/leads/bulk-action", { ids: selected, action: bulkAction });
+      setNotice(`${result.count} lead${result.count === 1 ? "" : "s"} ${ { archive: "archived", restore: "restored", delete: "deleted" }[bulkAction]}.`);
+      setSelected([]); setBulkAction(null); setRevision(value => value + 1);
+    } catch (err) { setError(err.message); }
+    finally { actingRef.current = false; setActing(false); }
+  }
   const [importView,setImportView]=useState("");
   const [urlParams,setUrlParams]=useSearchParams();
   const [creating,setCreating]=useState(urlParams.get("create")==="true");
@@ -32,6 +51,7 @@ export default function Leads(){
   const [filtersOpen,setFiltersOpen]=useState(true);
   useDialogFocus(creating,()=>setCreating(false));
 
+  const archived=urlParams.get("archived")==="true";
   const source=urlParams.get("source")||urlParams.get("source_group")||"";
   const status=urlParams.get("status")||(urlParams.get("funnel")==="booked"?"WON":urlParams.get("funnel")==="qualified"?"ALL":"ACTIVE");
   const campaign=urlParams.get("campaign")||"";
@@ -48,7 +68,8 @@ export default function Leads(){
     if(status)params.set("status",status);else params.delete("status");
     if(campaign)params.set("campaign",campaign);else params.delete("campaign");
     let active=true;
-    api.get(`/leads?${params}`).then(result=>{if(active){setLeads(result.data||[]);setError("");}}).catch(err=>active&&setError(err.message));
+    setLoading(true);setSelected([]);
+    api.get(`/leads?${params}`).then(result=>{if(active){setLeads(result.data||[]);setError("");setLoading(false);}}).catch(err=>{if(active){setError(err.message);setLeads([]);setLoading(false);}});
     return()=>{active=false;};
   },[search,source,status,campaign,urlParams.toString(),revision]);
 
@@ -85,6 +106,7 @@ export default function Leads(){
     }finally{setSaving(false);}
   }
 
+  const tableRows=useMemo(()=>leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")})),[leads]);
   const columns=useMemo(()=>["name","email","phone","event_type","status","created_at"],[]);
 
   return <main className="page lola-list-page record-module">
@@ -103,18 +125,34 @@ export default function Leads(){
       <div className="lola-view-toggle"><button aria-label="Table view" className={view==="table"?"active":""} onClick={()=>setView("table")}><Table2 size={15}/></button><button aria-label="Board view" className={view==="kanban"?"active":""} onClick={()=>setView("kanban")}><Columns3 size={15}/></button></div>
     </section>
 
+    <label>Lead visibility<select aria-label="Lead visibility" value={archived?"archived":"active"} onChange={e=>{setSelected([]);setUrlParams(current=>{const next=new URLSearchParams(current);if(e.target.value==="archived"){next.set("archived","true");next.set("status","ALL");}else{next.delete("archived");next.set("status","ACTIVE");}next.delete("funnel");return next;});}}><option value="active">Unarchived leads</option><option value="archived">Archived leads</option></select></label>
     {filtersOpen&&<section className="lola-filter-drawer">
       <label>Source<select value={source} onChange={e=>setFilter("source",e.target.value)}>{[...new Set([...sources,source])].map(item=><option key={item||"all"} value={item}>{item||"All sources"}</option>)}</select></label>
       <label>Opportunity type<select value={urlParams.get("opportunity_type")||""} onChange={e=>setFilter("opportunity_type",e.target.value)}><option value="">All opportunities</option><option value="BOOKING">Booking</option><option value="PARTNERSHIP">Partnership</option></select></label>
       <label>Campaign<input value={campaign} onChange={e=>setFilter("campaign",e.target.value)} placeholder="Campaign"/></label>
       <button onClick={()=>{setFilter("source","");setFilter("campaign","");}}>Clear filters</button>
-    </section>}<label>Status<select aria-label="Lead status filter" value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item==="ACTIVE"?"Active leads":item==="ALL"?"All statuses":item==="LOST"?"Lost · Archived":item.replaceAll("_"," ")}</option>)}</select></label></div>
+    </section>}<label>Status<select aria-label="Lead status filter" value={status} onChange={e=>setFilter("status",e.target.value)}>{statuses.map(item=><option key={item||"all"} value={item}>{item==="ACTIVE"?"Active leads":item==="ALL"?"All statuses":item==="LOST"?"Lost":item.replaceAll("_"," ")}</option>)}</select></label></div>
 
-    {error&&<div className="toast error">{error}</div>}
+    {notice&&<div role="status" className="toast">{notice}</div>}
+    {error&&<div role="alert" className="toast error">{error}</div>}
 
-    <RecordWorkspace module="Leads" rows={leads}>    {view==="table"
-      ? <RecordTable renderCell={recordCell} title="Leads" rows={leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")}))} columns={["name","opportunity_type","event_type","lead_source","status","event_date","updated_at"]} columnLabels={{lead_source:"Source",updated_at:"Last Activity"}} empty="No leads found." getRowHref={lead=>`/sales/leads/${lead.id}`}/>
-      : <LeadBoard leads={leads}/>
+      {can("write:sales") && <div className="lead-bulk-actions" aria-label="Lead selection actions">
+        {view === "kanban" && <label className="check-row"><input type="checkbox" aria-label="Select all visible leads" disabled={loading || acting || !leads.length} checked={leads.length > 0 && leads.every(lead => selected.includes(lead.id))} onChange={event => setSelected(event.target.checked ? leads.map(lead => lead.id) : [])} />Select all visible</label>}
+        <span aria-live="polite">{selected.length} selected</span>
+        <button disabled={!selected.length || acting || loading} onClick={() => { setError(""); setBulkAction(archived ? "restore" : "archive"); }}>{archived ? "Restore selected" : "Archive selected"}</button>
+        <button disabled={!selected.length || acting || loading} onClick={() => { setError(""); setBulkAction("delete"); }}>Delete selected</button>
+        {selected.length > 0 && <button disabled={acting} onClick={() => setSelected([])}>Clear selection</button>}
+      </div>}
+      {bulkAction && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`${bulkAction} selected leads`}><div className="modal">
+        <h2>{ { archive: "Archive", restore: "Restore", delete: "Delete" }[bulkAction]} {selected.length} selected lead{selected.length === 1 ? "" : "s"}?</h2>
+        <p>{bulkAction === "delete" ? "These leads will be removed from the CRM. Linked bookings, proposals, and audit history will be retained. This screen cannot undo deletion." : bulkAction === "archive" ? "These leads will move to Archived leads. You can restore them later." : "These leads will return to Active leads."}</p>
+        {error && <p role="alert">{error}</p>}
+        <button disabled={acting} onClick={applyBulkAction}>{acting ? "Saving…" : "Confirm"}</button><button disabled={acting} onClick={() => setBulkAction(null)}>Cancel</button>
+      </div></div>}
+
+    <RecordWorkspace module="Leads" rows={leads}>    {loading ? <p role="status">Loading leads…</p> : view==="table"
+      ? <RecordTable selectedIds={selected} onSelectionChange={setSelected} selectionDisabled={acting} renderCell={recordCell} title="Leads" rows={tableRows} columns={["name","opportunity_type","event_type","lead_source","status","event_date","updated_at"]} columnLabels={{lead_source:"Source",updated_at:"Last Activity"}} empty={archived?"No archived leads.":"No leads found."} getRowHref={lead=>`/sales/leads/${lead.id}`}/>
+      : <LeadBoard leads={leads} selected={selected} onToggle={can("write:sales")?toggleLead:null} disabled={acting}/>
     }</RecordWorkspace>
 
     {importView==='upload'&&<CrmImportWizard kind="LEADS" onClose={()=>setImportView('')} onDone={()=>setRevision(v=>v+1)}/>}
@@ -143,7 +181,7 @@ export default function Leads(){
   </main>;
 }
 
-function LeadBoard({leads}){
+function LeadBoard({leads,selected,onToggle,disabled}){
   const boardStatuses=["NEW","CONTACTED","QUALIFIED","PROPOSAL_DRAFT","PROPOSAL_SENT","FOLLOW_UP",...(["WON","LOST"].filter(status=>leads.some(lead=>lead.status===status)))];
-  return <div className="kanban lola-kanban">{boardStatuses.map(status=><section key={status}><h2>{status.replaceAll("_"," ")}</h2>{leads.filter(lead=>lead.status===status).map(lead=><Link key={lead.id} className="lead-card" to={`/sales/leads/${lead.id}`}><strong>{lead.first_name} {lead.last_name}</strong><span>{lead.event_type||"Event TBD"} · {lead.event_date?formatDateOnly(lead.event_date):"Date TBD"}</span><small>{lead.email}</small><StatusBadge status={lead.status}/></Link>)}</section>)}</div>;
+  return <div className="kanban lola-kanban">{boardStatuses.map(status=><section key={status}><h2>{status.replaceAll("_"," ")}</h2>{leads.filter(lead=>lead.status===status).map(lead=><div key={lead.id} className="lead-selection-card">{onToggle&&<label className="check-row"><input type="checkbox" aria-label={`Select ${lead.first_name} ${lead.last_name}`} checked={selected.includes(lead.id)} disabled={disabled} onChange={()=>onToggle(lead.id)}/>Select lead</label>}<Link className="lead-card" to={`/sales/leads/${lead.id}`}><strong>{lead.first_name} {lead.last_name}</strong><span>{lead.event_type||"Event TBD"} · {lead.event_date?formatDateOnly(lead.event_date):"Date TBD"}</span><small>{lead.email}</small><StatusBadge status={lead.status}/></Link></div>)}</section>)}</div>;
 }
