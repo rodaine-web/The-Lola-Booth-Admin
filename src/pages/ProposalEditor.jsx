@@ -2,8 +2,9 @@ import {withoutCampaignBundle,removeCampaignExperience} from '../../shared/campa
 import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
 import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
 import ProposalScenarioReview from "../components/ProposalScenarioReview.jsx";
+import CatalogQuoteReview from '../components/CatalogQuoteReview.jsx';
 import {retainProposalPhotoSections} from "../../shared/proposal-photo-mapping.js";
-import {loadCatalog} from "../../shared/catalog-loading.js";
+import {loadProposalCatalog as loadCatalog} from "../../shared/catalog-loading.js";
 import ProposalVisualEditor from "../components/ProposalVisualEditor.jsx";
 import {selectProposalPackage,selectProposalExperience} from '../../shared/proposal-catalog.js';
 import { ArrowDown, ArrowLeft, ArrowUp, FileUp, Plus, Trash2 } from "lucide-react";
@@ -23,6 +24,7 @@ export default function ProposalEditor() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [loaded, setLoaded] = useState(!id);
+  const [catalogQuote,setCatalogQuote]=useState(null);
   const [params] = useSearchParams();
   const [mode, setMode] = useState("create");
   const [addon, setAddon] = useState({ addon_id: "", quantity: 1 });
@@ -276,7 +278,7 @@ export default function ProposalEditor() {
     if(saving)return;setSaving(true);
     setError("");
     try {
-      const payload = compact({ ...form, visual_sections:retainProposalPhotoSections(form.visual_sections||[],form.selected_experiences||[]), ...upload, total_investment: form.package_amount });
+      const payload = compact({ ...form,pricing_quote_id:catalogQuote?.id||null, visual_sections:retainProposalPhotoSections(form.visual_sections||[],form.selected_experiences||[]), ...upload, total_investment: form.package_amount });
       const created = id ? await api.patch(`/proposals/${id}`, payload) : mode === "upload" ? await api.post("/proposals/upload", payload) : await api.post("/proposals", payload);
       navigate(`/sales/proposals/${created.id}/review`);
     } catch (err) {
@@ -482,6 +484,7 @@ export default function ProposalEditor() {
         )}
 
         {originalRequest&&<section aria-label="Original client request"><h3>Original client request</h3><p style={{whiteSpace:"pre-wrap"}}>{originalRequest}</p></section>}
+        {mode!=='upload'&&<CatalogQuoteReview key={form.content?.catalog_quote?.catalogVersion||'new'} experiences={form.selected_experiences||[]} addons={form.addons||[]} customLines={form.custom_line_items||[]} discount={Number(form.discount||0)} otherFees={Number(form.other_fees||0)} travelAmount={form.travel} onTravelChange={value=>setField('travel',value)} initialQuote={form.content?.catalog_quote} onQuote={setCatalogQuote}/>}
         <label>Client-facing notes (proposal and email)<textarea value={form.customer_notes||''} onChange={event=>setField('customer_notes',event.target.value)}/></label>
         {form.scenario_enabled && <ProposalScenarioReview scenario={form.content?.scenario} overrides={form.scenario_overrides||{}} onChange={value=>setField('scenario_overrides',value)} experiences={form.selected_experiences||[]} onExperiencesChange={value=>setField('selected_experiences',value)}/>}
         {mode === "create" && <ProposalVisualEditor experiences={form.selected_experiences||[]} value={form.visual_sections||[]} onChange={value=>setField("visual_sections",value)}/>}

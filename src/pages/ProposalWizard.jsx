@@ -3,8 +3,9 @@ import CampaignPackagePicker,{mergeCampaignSelections} from '../components/Campa
 import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
 import {experienceKey,normalizeScenarioEvent} from "../../shared/proposal-scenario.js";
 import ProposalScenarioReview from "../components/ProposalScenarioReview.jsx";
+import CatalogQuoteReview from '../components/CatalogQuoteReview.jsx';
 import {mappedProposalPhotos} from "../../shared/proposal-photo-mapping.js";
-import {loadCatalog} from "../../shared/catalog-loading.js";
+import {loadProposalCatalog as loadCatalog} from "../../shared/catalog-loading.js";
 import {experienceImage} from "../utils/experience-assets.js";
 
 import { ArrowLeft, ArrowRight, Check, FileText, Plus, Send, UserPlus, UsersRound } from "lucide-react";
@@ -38,6 +39,8 @@ export default function ProposalWizard(){
   const [busy,setBusy]=useState(false);
   const [overrides,setOverrides]=useState({});
   const [customLines,setCustomLines]=useState([]);
+  const [catalogQuote,setCatalogQuote]=useState(null);
+  const quoteSelectionKey=JSON.stringify([selectedExperiences,selectedAddons,customLines]);
   const [preview,setPreview]=useState(null);
   const [previewError,setPreviewError]=useState('');
   const [createdId,setCreatedId]=useState('');
@@ -225,6 +228,7 @@ export default function ProposalWizard(){
   }
 
   const previewPayload=useMemo(()=>clean({
+    pricing_quote_id:catalogQuote?.selectionKey===quoteSelectionKey?catalogQuote.id:undefined,
     scenario_enabled:true,scenario_overrides:overrides,
     client_details:{first_name:form.first_name,last_name:form.last_name,name:[form.first_name,form.last_name].filter(Boolean).join(' '),email:form.email,phone:form.phone,company:form.company},
     event_type:form.event_type,event_details:{event_name:eventTitle(),event_type:actualEventType(),event_date:form.event_date,start_time:form.start_time,end_time:form.end_time,guest_count:form.guest_count,venue_name:form.venue_name,venue_address:form.venue_address,city:form.city,state:form.state,zip:form.zip},
@@ -235,7 +239,7 @@ export default function ProposalWizard(){
     customer_notes:form.customer_notes,notes:form.notes||null,discount:Number(form.discount||0),travel:Number(form.travel||0),other_fees:Number(form.other_fees||0),
     tax_rate:form.tax_rate===''?undefined:Number(form.tax_rate),deposit_type:form.deposit_type,
     deposit_value:form.deposit_value===''?undefined:Number(form.deposit_value),valid_through:form.valid_through||undefined
-  }),[form,selectedExperiences,selectedAddons,customLines,overrides,photoAssets]);
+  }),[form,selectedExperiences,selectedAddons,customLines,overrides,photoAssets,catalogQuote,quoteSelectionKey]);
   const previewKey=JSON.stringify(previewPayload);
   const previewReady=preview?.key===previewKey;
   useEffect(()=>{
@@ -339,6 +343,7 @@ export default function ProposalWizard(){
         {advanced&&<div className="wizard-section"><h3>Selected add-ons</h3>{selectedAddons.map(item=><div className="form-grid" key={item.addon_id}><label>{item.description} — quantity<input type="number" min="1" value={item.quantity} onChange={e=>setSelectedAddons(current=>current.map(row=>row.addon_id===item.addon_id?{...row,quantity:Number(e.target.value)}:row))}/></label><label>Agreed unit price<input type="number" min="0" step="0.01" value={item.unit_price} onChange={e=>setSelectedAddons(current=>current.map(row=>row.addon_id===item.addon_id?{...row,unit_price:Number(e.target.value)}:row))}/></label></div>)}</div>}
         {advanced&&<div className="wizard-section"><h3>Custom line items</h3>{customLines.map((line,index)=><div className="form-grid" key={index}>{['description','detail','quantity','unit_price'].map(field=><label key={field}>{field.replaceAll('_',' ')}<input type={['quantity','unit_price'].includes(field)?'number':'text'} min={field==='quantity'?1:0} value={line[field]} onChange={e=>setCustomLines(current=>current.map((v,i)=>i===index?{...v,[field]:['quantity','unit_price'].includes(field)?Number(e.target.value):e.target.value}:v))}/></label>)}<button onClick={()=>setCustomLines(current=>current.filter((_,i)=>i!==index))}>Remove item</button></div>)}<button onClick={()=>setCustomLines(current=>[...current,{description:'',detail:'',quantity:1,unit_price:0}])}>Add line item</button></div>}
       </section>
+      <CatalogQuoteReview experiences={selectedExperiences} addons={selectedAddons} customLines={customLines} discount={Number(form.discount||0)} otherFees={Number(form.other_fees||0)} travelAmount={form.travel} onTravelChange={value=>setField('travel',value)} initialQuote={lead?.source_details?.bookingInquiry?.pricingQuote} onQuote={quote=>setCatalogQuote(quote?{...quote,selectionKey:quoteSelectionKey}:null)}/>
       <div className="wizard-actions"><button onClick={()=>setStep(1)}><ArrowLeft size={15}/>Back</button><button className="primary-action" onClick={next}>Continue to Review <ArrowRight size={15}/></button></div>
     </section>}
 

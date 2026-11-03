@@ -52,6 +52,7 @@ const PublicDelivery = lazy(() => import("./pages/PublicDelivery.jsx"));
 const Scan = lazy(() => import("./pages/Scan.jsx"));
 const LiveOperations = lazy(() => import("./pages/LiveOperations.jsx"));
 const SystemHealth = lazy(() => import("./pages/SystemHealth.jsx"));
+const PricingCatalog = lazy(() => import("./pages/PricingCatalog.jsx"));
 
 function PrivateRoute({ children }) {
   const { user, loading, authError, retryAuth } = useAuth();
@@ -148,6 +149,7 @@ export default function App() {
         <Route path="website/site-settings" element={<WebsiteCms section="settings" />} />
         </> : <Route path="website/*" element={<main className="page"><h1>Website</h1><p>Website management is not enabled in this release.</p><a href="https://thelolabooth.com" target="_blank" rel="noreferrer">Open website</a></main>} />}
         <Route path="content/packages" element={<ResourcePage title="Packages" endpoint="/packages" columns={["name", "starting_price", "most_popular", "active"]} fields={packageFields} />} />
+        <Route path="content/pricing" element={<PricingCatalog />} />
         <Route path="content/experiences" element={<ResourcePage title="Experiences" endpoint="/experiences" columns={["name", "base_price", "default_duration", "active"]} fields={experienceFields} />} />
         <Route path="content/addons" element={<ResourcePage title="Add-ons" endpoint="/addons" columns={["name", "price", "pricing_type", "active"]} fields={addonFields} />} />
         <Route path="operations/live" element={<LiveOperations />} />

@@ -1,3 +1,4 @@
+import CatalogQuoteSummary from '../components/CatalogQuoteSummary.jsx';
 import PartnershipLeadPanel from '../components/PartnershipLeadPanel.jsx';
 import LeadAvailability from '../components/LeadAvailability.jsx';
 import { useAuth } from "../context/AuthContext.jsx";
@@ -158,7 +159,7 @@ export default function LeadDetail() {
     <main className="page record-workspace record-dashboard leaddetail-workspace">
       <div className="detail-back"><Link to="/sales/leads"><ArrowLeft size={16} />Back to leads</Link></div>
       <RecordIdentity reference={{label:'Lead ID',value:lead.id}} name={fullName} status={lead.status === 'NEW' ? 'New Inquiry' : lead.status} subtitle={<>{lead.email} · {lead.phone || 'No phone'}</>} event={{...lead,start_time:lead.event_start_time,end_time:lead.event_end_time}} actions={<>{lead.status!=='LOST'&&<Link className="primary-action" to={`/sales/proposals/new?leadId=${lead.id}`}>Create Proposal</Link>}<button onClick={()=>setTab('Communications')}>Communications</button><details className="record-more"><summary aria-label="More lead actions">•••</summary><button disabled={!canConvert || busy} onClick={openConvertReview}>Review Booking Conversion</button></details></>}/>
-      {lead.status==='LOST'?<p className="toast" role="status">Opportunity closed — Lost. Sales follow-ups have stopped.</p>:<JourneyStrip journey={journey} lead />}
+      <CatalogQuoteSummary quote={lead.proposals?.find(p=>p.content?.catalog_quote)?.content.catalog_quote||lead.source_details?.bookingInquiry?.pricingQuote}/>{lead.status==='LOST'?<p className="toast" role="status">Opportunity closed — Lost. Sales follow-ups have stopped.</p>:<JourneyStrip journey={journey} lead />}
 
       {(error || notice) && <div className={error ? "toast error" : "toast"}>{error || notice}</div>}
 

@@ -129,6 +129,12 @@ jobs:
           PARTNERSHIP_BROWSER_TEST: "true"
         run: node --test test/partnership-db.test.js
 
+      - name: Pricing catalog Admin and website desktop/mobile
+        env:
+          BOOKING_LIFECYCLE_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_ci_qa
+          PRICING_BROWSER_TEST: "true"
+        run: node --test test/pricing-catalog-db.test.js
+
       - name: Active work desktop/mobile
         env:
           ACTIVE_WORK_BROWSER_TEST: "true"
@@ -150,6 +156,7 @@ jobs:
             artifacts/customer-closeout-browser/
             artifacts/active-work-browser/
             artifacts/partnerships/
+            artifacts/pricing/
             artifacts/v11-browser/
             artifacts/crm-contacts-browser/
           if-no-files-found: ignore

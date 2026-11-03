@@ -1,6 +1,7 @@
 import {projectPageContent} from '../../../shared/public-cms-projection.js';
 import path from "node:path";
 import { projectWebsitePackage } from "./website-pricing.js";
+import {publishedWebsitePricing} from './pricing-catalog-service.js';
 import { query, transaction } from "../db/pool.js";
 import { getStorageProvider } from "./storage-service.js";
 import { AppError, notFound } from "../utils/errors.js";
@@ -318,7 +319,7 @@ export async function publicSitePayload({ preview = false } = {}) {
     settings: settings.rows[0] || {},
     content: projectPageContent(content.rows, pageItems.rows, mediaMappings.rows, hiddenPageItems.rows),
     heroSlides: hero.rows.map(projectHero),
-    packages: packages.rows.map((row) => projectWebsitePackage(row, { showStartingPrice: settings.rows[0]?.show_starting_price !== false })),
+    packages: (await publishedWebsitePricing(packages.rows)).map((row) => projectWebsitePackage(row, { showStartingPrice: settings.rows[0]?.show_starting_price !== false })),
     experiences: experiences.rows.map(projectExperience),
     eventTypes: eventTypes.rows.map(withMediaUrl),
     gallery: gallery.rows.map(projectGalleryItem),
