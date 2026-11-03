@@ -7,17 +7,21 @@ import {calculateCatalogQuote,minorUnits} from './catalog-pricing-engine.js';
 import {packageEntitlementLabels,orderedPricingPackages} from '../../../shared/package-entitlements.js';
 
 export const pricingCatalogEnabled=()=>process.env.PRICING_CATALOG_ENABLED==='true';
+export async function legacyPricingBaseline(){
+ return (await query("SELECT snapshot->'legacyBaseline' AS baseline FROM pricing_catalog_versions WHERE snapshot ? 'legacyBaseline' ORDER BY version_number LIMIT 1")).rows[0]?.baseline||null;
+}
 export async function currentPricingCatalog(){
  const row=(await query("SELECT * FROM pricing_catalog_versions WHERE status='PUBLISHED' AND effective_at<=now() ORDER BY effective_at DESC,version_number DESC LIMIT 1")).rows[0];
  if(!row)throw new AppError('The pricing catalog is awaiting Admin approval.',409,'CATALOG_NOT_PUBLISHED');
  return row;
 }
 export async function publishedWebsitePricing(rows){
- if(!pricingCatalogEnabled())return rows;
- const version=await currentPricingCatalog();
+ const enabled=pricingCatalogEnabled(),source=enabled?(await currentPricingCatalog()).snapshot:await legacyPricingBaseline();
+ if(!source)return rows;
  return rows.map(row=>{
-  const agreed=version.snapshot.packages.find(pkg=>pkg.id===(row.source_catalog_id||row.id));
+  const agreed=source.packages.find(pkg=>pkg.id===(row.source_catalog_id||row.id));
   if(!agreed)return row;
+  if(!enabled)return {...row,starting_price:agreed.starting_price,display_price:agreed.pricing_mode==='CUSTOM'?'Request Pricing':Number(agreed.starting_price),pricing_mode:agreed.pricing_mode,website_features:agreed.website_features};
   return {...row,starting_price:agreed.starting_price,display_price:agreed.pricing_mode==='CUSTOM'?'Request Pricing':Number(agreed.starting_price),pricing_mode:agreed.pricing_mode,duration:agreed.pricing_profile.rentalHours||agreed.pricing_profile.serviceHours,pricing_profile:agreed.pricing_profile,website_features:packageEntitlementLabels(agreed.pricing_profile)};
  });
 }
@@ -45,7 +49,7 @@ export async function publishPricingVersion(id,req,effectiveAt){
   const addons=(await query('SELECT * FROM addons WHERE pricing_policy IS NOT NULL AND deleted_at IS NULL ORDER BY id FOR SHARE')).rows;
   if(!packages.length)throw new AppError('Configure packages before publishing.',422,'CATALOG_EMPTY');
   for(const p of packages){if(!p.pricing_profile?.experience)throw new AppError('Every package requires structured inclusions.',422,'CATALOG_INVALID');if(p.pricing_mode!=='CUSTOM')minorUnits(p.starting_price);}
-  const snapshot={packages,addons,rules:draft.rules};
+  const snapshot={packages,addons,rules:draft.rules,legacyBaseline:draft.snapshot?.legacyBaseline||await legacyPricingBaseline()};
   const row=(await query("UPDATE pricing_catalog_versions SET status='PUBLISHED',snapshot=$2,effective_at=$3,published_at=now(),published_by=$4 WHERE id=$1 RETURNING *",[id,JSON.stringify(snapshot),effectiveAt||new Date().toISOString(),req.user.id])).rows[0];
   await writeAudit({req,action:'pricing_catalog_published',entity:'pricing_catalog_version',entityId:id,after:{version:row.version_number,effectiveAt:row.effective_at,packageCount:packages.length}});
   return row;
@@ -61,6 +65,7 @@ export async function prepareStagingPricingCatalog(req){
   await query("SELECT pg_advisory_xact_lock(hashtext('lola-pricing-catalog-setup'))");
   const prepared=(await query('SELECT * FROM pricing_catalog_versions ORDER BY version_number DESC LIMIT 1')).rows[0];
   if(prepared)return prepared;
+  const legacyBaseline={packages:(await query("SELECT p.id,p.experience_id,p.name,p.website_key,p.starting_price,p.currency,p.duration,p.pricing_mode,p.website_features,p.website_short_description,COALESCE((SELECT json_agg(label ORDER BY display_order) FROM package_items WHERE package_id=p.id),'[]') AS items FROM packages p JOIN experiences e ON e.id=p.experience_id WHERE p.active=true AND p.deleted_at IS NULL AND p.show_on_website=true AND p.website_status='PUBLISHED' AND e.active=true AND e.deleted_at IS NULL AND e.show_on_website=true AND e.website_status='PUBLISHED' ORDER BY p.website_display_order,p.display_order,p.id")).rows,addons:(await query('SELECT id,name,description,price,pricing_type FROM addons WHERE active=true AND deleted_at IS NULL ORDER BY created_at,id')).rows};
   const defaults=pricingPackageDefaults();
   const experiences=(await query('SELECT id,name,slug FROM experiences WHERE deleted_at IS NULL AND active=true')).rows;
   for(const pkg of defaults){
@@ -84,7 +89,7 @@ export async function prepareStagingPricingCatalog(req){
    const label=addon.name.toLowerCase(),category=/print/.test(label)?'PRINTS':/extra.*hour|additional.*hour/.test(label)?'EXTRA_HOURS':/travel/.test(label)?'TRAVEL':'ENHANCEMENT';
    await query('UPDATE addons SET pricing_policy=$2 WHERE id=$1',[addon.id,JSON.stringify({key:/^premium backdrop$/.test(label)?'premium-backdrop':'legacy-'+addon.id,method:'CUSTOM',category,experiences:/backdrop/.test(label)?['glam','vogue']:['glam','360','vogue','audio'],minQuantity:1,maxQuantity:['PER_UNIT','PER_HOUR','PER_GUEST'].includes(addon.pricing_type)?24:1,approvalRequired:true,resources:[]})]);
   }
-  const draft=(await query("INSERT INTO pricing_catalog_versions(rules,created_by) VALUES($1,$2) RETURNING *",[JSON.stringify(defaultPricingRules),req.user.id])).rows[0];
+  const draft=(await query("INSERT INTO pricing_catalog_versions(rules,created_by,snapshot) VALUES($1,$2,$3) RETURNING *",[JSON.stringify(defaultPricingRules),req.user.id,JSON.stringify({legacyBaseline})])).rows[0];
   await writeAudit({req,action:'pricing_catalog_prepared',entity:'pricing_catalog_version',entityId:draft.id,after:{packageCount:defaults.length,environment:process.env.APP_ENV}});
   return draft;
  });

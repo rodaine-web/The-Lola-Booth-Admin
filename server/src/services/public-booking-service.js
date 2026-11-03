@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import {query} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
-import {currentPricingCatalog,pricingCatalogEnabled,createPricingQuote} from './pricing-catalog-service.js';
+import {currentPricingCatalog,pricingCatalogEnabled,createPricingQuote,legacyPricingBaseline} from './pricing-catalog-service.js';
 const names={glam:'The LOLA Glam','360':'The LOLA 360',vogue:'The LOLA Vogue',audio:'The LOLA Guestbook'};
 export function bookingIdentity(item){const text=String(item.slug||item.website_name||item.name||'').toLowerCase();return /360/.test(text)?'360':/vogue/.test(text)?'vogue':/audio|guestbook/.test(text)?'audio':/glam/.test(text)?'glam':null;}
 export function bookingAddonEligible(addon,experiences){
@@ -19,7 +19,8 @@ export async function publicBookingCatalog(){
   query("SELECT id,name,description,price,pricing_type FROM addons WHERE active=true AND deleted_at IS NULL ORDER BY created_at,id")
  ]);
  const version=pricingCatalogEnabled()?await currentPricingCatalog():null;
- return {experiences:experiences.rows.filter(x=>bookingIdentity(x)).map(x=>({...x,key:bookingIdentity(x),name:names[bookingIdentity(x)]})),packages:version?version.snapshot.packages.filter(p=>p.active).map(({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration,pricing_mode,website_features,website_short_description,pricing_profile})=>({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration:pricing_profile.rentalHours||pricing_profile.serviceHours,pricing_mode,website_features,website_short_description,pricing_profile})):packages.rows,addons:version?version.snapshot.addons.filter(a=>a.active).map(({id,name,description,price,pricing_type,pricing_policy})=>({id,name,description,price,pricing_type,pricing_policy})):addons.rows,compatibilityPolicy:version?'structured-v2':'catalog-fallback-v1',...(version?{pricingVersion:version.id,printPrices:version.rules.printPrices}: {})};
+ const baseline=version?null:await legacyPricingBaseline();
+ return {experiences:experiences.rows.filter(x=>bookingIdentity(x)).map(x=>({...x,key:bookingIdentity(x),name:names[bookingIdentity(x)]})),packages:version?version.snapshot.packages.filter(p=>p.active).map(({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration,pricing_mode,website_features,website_short_description,pricing_profile})=>({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration:pricing_profile.rentalHours||pricing_profile.serviceHours,pricing_mode,website_features,website_short_description,pricing_profile})):(baseline?baseline.packages.filter(row=>packages.rows.some(current=>current.id===row.id)):packages.rows),addons:version?version.snapshot.addons.filter(a=>a.active).map(({id,name,description,price,pricing_type,pricing_policy})=>({id,name,description,price,pricing_type,pricing_policy})):(baseline?baseline.addons.filter(row=>addons.rows.some(current=>current.id===row.id)):addons.rows),compatibilityPolicy:version?'structured-v2':'catalog-fallback-v1',...(version?{pricingVersion:version.id,printPrices:version.rules.printPrices}: {})};
 }
 export function validateBookingSelections(input,catalog){
  const selections=input.selections||[];

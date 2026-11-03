@@ -24,7 +24,7 @@ The actual staging website is served from this repository's `public/staging-site
 - Configurable print price matrix; inclusion-credit upgrades; no duplicate print/hour/travel add-ons; high-volume and unlimited requests require explicit scope and price approval.
 - Configurable operating estimates for consumable cost and printer capacity. Missing values remain unknown, never invented.
 - Existing add-on management extended with methods, compatible experiences/packages, quantities, resource requirements, approval rules, active state and display order. Other existing enhancements are retained as reviewable requests.
-- Catalog versions, effective dates, publication snapshots and immutable saved pricing reviews. Staging preparation is idempotent and does not publish/activate anything.
+- Catalog versions, effective dates, publication snapshots and immutable saved pricing reviews. Staging preparation is idempotent and captures the original public catalog before updating draft configuration. The public website keeps that baseline until activation; switching the flag off restores its prices and add-ons while respecting current archiving/active filters.
 - Admin pricing/travel controls, published-price proposal selectors, quote review in both proposal editors, controlled negotiated/custom charges, audited approvals and draft revisions that retain print allowances without charging them twice.
 - Website package catalogs, printing/hours/options and server-calculated live price estimates. Live estimates create no durable quote rows and use a separate bounded quota from enquiry submission.
 - Durable enquiry pricing, availability-approved draft preparation, proposal/invoice line consistency, Workspace inclusions and CRM read-only pricing summaries.
