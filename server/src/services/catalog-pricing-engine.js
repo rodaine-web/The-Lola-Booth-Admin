@@ -58,6 +58,7 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
     if(scopeApproval&&(!admin||!override.reason?.trim()||!scopeApproval.description?.trim()))invalid('Scope approval requires an Admin reason and an explicit description.');
     const priceOverride=override?.packagePrices?.find(item=>item.packageId===pkg.id);
     if((pkg.pricing_mode==='CUSTOM'||profile.quoteRequired)&&(!scopeApproval||!priceOverride)){reasons.push('Custom production requires an approved scope and price.');entitlements.push({packageId:pkg.id,packageName:pkg.name,...profile,scopeApproved:false});continue;}
+    if((pkg.pricing_mode==='CUSTOM'||profile.quoteRequired)&&priceOverride.amountCents<=0)invalid('Enter a positive agreed custom-production price before approving this quote.');
     if(priceOverride&&(!admin||!override.reason?.trim()))invalid('Package price overrides require Admin approval and a reason.');
     const base=priceOverride?moneyInteger(priceOverride.amountCents):minorUnits(pkg.starting_price);allowance=Math.max(allowance,profile.travelMinutes||0);
     const addLine=(type,description,quantity,unitCents)=>{const amount=integer(quantity,1,10000)*moneyInteger(unitCents);moneyInteger(amount);lines.push({type,description,quantity,unitPriceCents:unitCents,amountCents:amount,packageId:pkg.id,experience:profile.experience});};
@@ -93,6 +94,7 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
       if(approval&&(!admin||!override.reason?.trim()||!approval.description?.trim()))invalid('Add-on scope and price require an audited Admin approval.');
       if((['CUSTOM','FROM','CALCULATED'].includes(policy.method)||policy.approvalRequired)&&!approval){reasons.push(`${addon.name} requires an approved quote.`);continue;}
       addLine('ADDON',approval?`${addon.name} — ${approval.description}`:addon.name,qty,approval?moneyInteger(approval.unitPriceCents):minorUnits(addon.price));
+      lines[lines.length-1].addonId=addon.id;
     }
     if(profile.deliveryApprovalRequired&&!scopeApproval)reasons.push(`${pkg.name} has deliverables requiring Admin approval.`);
     if(profile.startingAt&&!scopeApproval)reasons.push(`${pkg.name} is a starting price; scope requires review.`);

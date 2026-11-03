@@ -173,7 +173,7 @@ export async function buildProposalSnapshot(input) {
     ...(money(input.travel) ? [{ type: "TRAVEL", description: "Travel", quantity: 1, unit_price: money(input.travel), line_total: money(input.travel) }] : []),
     ...(money(input.other_fees) ? [{ type: "OTHER", description: "Other fees", quantity: 1, unit_price: money(input.other_fees), line_total: money(input.other_fees) }] : [])
   ];
-  if(catalogQuote)lines=catalogQuote.lines.map(line=>({type:line.type,description:line.description,package_id:line.packageId,quantity:line.quantity,unit_price:line.unitPriceCents/100,line_total:line.amountCents/100,...(line.stripeTaxCode?{stripe_tax_code:line.stripeTaxCode}: {})}));
+  if(catalogQuote)lines=catalogQuote.lines.map(line=>({type:line.type,description:line.description,package_id:line.packageId,...(line.addonId?{addon_id:line.addonId}: {}),quantity:line.quantity,unit_price:line.unitPriceCents/100,line_total:line.amountCents/100,...(line.stripeTaxCode?{stripe_tax_code:line.stripeTaxCode}: {})}));
   const subtotal = lines.reduce((sum, item) => sum + item.line_total, 0);
   const discount = catalogQuote?catalogQuote.discountCents/100:money(input.discount);
   const taxable = Math.max(0, subtotal - discount);

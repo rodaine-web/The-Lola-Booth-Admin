@@ -89,3 +89,8 @@ test('customer pricing excludes internal approval reasons, route evidence and co
  const publicQuote=response.content.scenario.pricing.catalog_quote;
  assert.equal(publicQuote.override,undefined);assert.equal(publicQuote.entitlements[0].printEstimate,undefined);assert.equal(publicQuote.travel.original,undefined);assert.equal(publicQuote.travel.reason,undefined);assert.equal(original.override.reason,'INTERNAL ONLY');
 });
+test('360 can request a separately quoted still-photo station without ordinary print allowances',()=>{
+ const station=addons.find(a=>a.pricing_policy.key==='print-station');
+ assert.equal(quote('360','ESSENTIAL',{addons:[{addonId:station.id}]}).status,'REVIEW_REQUIRED');
+ assert.throws(()=>quote('360','ESSENTIAL',{prints:100}));
+});

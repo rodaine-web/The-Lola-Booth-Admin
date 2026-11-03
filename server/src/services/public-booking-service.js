@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import {query} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
-import {currentPricingCatalog,pricingCatalogEnabled,createPricingQuote} from './pricing-catalog-service.js';
+import {currentPricingCatalog,pricingCatalogEnabled,createPricingQuote,legacyPricingBaseline} from './pricing-catalog-service.js';
 const names={glam:'The LOLA Glam','360':'The LOLA 360',vogue:'The LOLA Vogue',audio:'The LOLA Guestbook'};
 export function bookingIdentity(item){const text=String(item.slug||item.website_name||item.name||'').toLowerCase();return /360/.test(text)?'360':/vogue/.test(text)?'vogue':/audio|guestbook/.test(text)?'audio':/glam/.test(text)?'glam':null;}
 export function bookingAddonEligible(addon,experiences){
@@ -19,7 +19,8 @@ export async function publicBookingCatalog(){
   query("SELECT id,name,description,price,pricing_type FROM addons WHERE active=true AND deleted_at IS NULL ORDER BY created_at,id")
  ]);
  const version=pricingCatalogEnabled()?await currentPricingCatalog():null;
- return {experiences:experiences.rows.filter(x=>bookingIdentity(x)).map(x=>({...x,key:bookingIdentity(x),name:names[bookingIdentity(x)]})),packages:version?version.snapshot.packages.filter(p=>p.active).map(({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration,pricing_mode,website_features,website_short_description,pricing_profile})=>({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration:pricing_profile.rentalHours||pricing_profile.serviceHours,pricing_mode,website_features,website_short_description,pricing_profile})):packages.rows,addons:version?version.snapshot.addons.filter(a=>a.active).map(({id,name,description,price,pricing_type,pricing_policy})=>({id,name,description,price,pricing_type,pricing_policy})):addons.rows,compatibilityPolicy:version?'structured-v2':'catalog-fallback-v1',...(version?{pricingVersion:version.id,printPrices:version.rules.printPrices}: {})};
+ const baseline=version?null:await legacyPricingBaseline();
+ return {experiences:experiences.rows.filter(x=>bookingIdentity(x)).map(x=>({...x,key:bookingIdentity(x),name:names[bookingIdentity(x)]})),packages:version?version.snapshot.packages.filter(p=>p.active).map(({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration,pricing_mode,website_features,website_short_description,pricing_profile})=>({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration:pricing_profile.rentalHours||pricing_profile.serviceHours,pricing_mode,website_features,website_short_description,pricing_profile})):(baseline?baseline.packages.filter(row=>packages.rows.some(current=>current.id===row.id)):packages.rows),addons:version?version.snapshot.addons.filter(a=>a.active).map(({id,name,description,price,pricing_type,pricing_policy})=>({id,name,description,price,pricing_type,pricing_policy})):(baseline?baseline.addons.filter(row=>addons.rows.some(current=>current.id===row.id)):addons.rows),compatibilityPolicy:version?'structured-v2':'catalog-fallback-v1',...(version?{pricingVersion:version.id,printPrices:version.rules.printPrices}: {})};
 }
 export function validateBookingSelections(input,catalog){
  const selections=input.selections||[];
@@ -42,6 +43,7 @@ export function validateBookingSelections(input,catalog){
 }
 export async function preparePublicBooking(payload){
  if(!payload.selections)return payload;
+ if((pricingCatalogEnabled()&&payload.pricingVersion!==(await currentPricingCatalog()).id)||(!pricingCatalogEnabled()&&payload.pricingVersion))throw new AppError('Pricing changed. Reload the booking page and review your selections before submitting.',409,'CATALOG_VERSION_CHANGED');
  // Keep catalog status/prices stable through the enclosing inquiry transaction.
  await query('SELECT id FROM experiences WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[payload.selections.map(x=>x.experienceId)]);
  await query('SELECT id FROM packages WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[payload.selections.map(x=>x.packageId)]);
@@ -51,7 +53,7 @@ export async function preparePublicBooking(payload){
   const version=await currentPricingCatalog();
   const selections=booking.selections.map(item=>({packageId:item.packageId,prints:item.prints,printFormat:item.printFormat,unlimitedPrints:item.unlimitedPrints,extraHours:item.extraHours,addons:[]}));
   for(const selected of booking.addons){const addon=version.snapshot.addons.find(a=>a.id===selected.addonId);const target=selections.find(item=>addon.pricing_policy.experiences.includes(version.snapshot.packages.find(p=>p.id===item.packageId).pricing_profile.experience));if(!target)throw new AppError('Review add-on compatibility.',422,'BOOKING_ADDON_INVALID');target.addons.push({addonId:selected.addonId,quantity:selected.quantity});}
-  const pricing=await createPricingQuote({eventCategory:payload.eventCategory||'PRIVATE_CELEBRATION',customerType:payload.customerType||'INDIVIDUAL',catalogKey:payload.catalogKey,selections});
+  const pricing=await createPricingQuote({catalogVersion:payload.pricingVersion,eventCategory:payload.eventCategory||'PRIVATE_CELEBRATION',customerType:payload.customerType||'INDIVIDUAL',catalogKey:payload.catalogKey,selections});
   booking.pricingQuote=pricing;
  }
  const fingerprint=crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
