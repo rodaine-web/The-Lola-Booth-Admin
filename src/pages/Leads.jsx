@@ -139,15 +139,15 @@ export default function Leads(){
       {can("write:sales") && <div className="lead-bulk-actions" aria-label="Lead selection actions">
         {view === "kanban" && <label className="check-row"><input type="checkbox" aria-label="Select all visible leads" disabled={loading || acting || !leads.length} checked={leads.length > 0 && leads.every(lead => selected.includes(lead.id))} onChange={event => setSelected(event.target.checked ? leads.map(lead => lead.id) : [])} />Select all visible</label>}
         <span aria-live="polite">{selected.length} selected</span>
-        <button disabled={!selected.length || acting || loading} onClick={() => { setError(""); setBulkAction(archived ? "restore" : "archive"); }}>{archived ? "Restore selected" : "Archive selected"}</button>
-        <button disabled={!selected.length || acting || loading} onClick={() => { setError(""); setBulkAction("delete"); }}>Delete selected</button>
-        {selected.length > 0 && <button disabled={acting} onClick={() => setSelected([])}>Clear selection</button>}
+        <button className="lola-secondary-button" disabled={!selected.length || acting || loading} onClick={() => { setError(""); setBulkAction(archived ? "restore" : "archive"); }}>{archived ? "Restore selected" : "Archive selected"}</button>
+        <button className="lola-secondary-button" disabled={!selected.length || acting || loading} onClick={() => { setError(""); setBulkAction("delete"); }}>Delete selected</button>
+        {selected.length > 0 && <button className="lola-secondary-button" disabled={acting} onClick={() => setSelected([])}>Clear selection</button>}
       </div>}
       {bulkAction && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`${bulkAction} selected leads`}><div className="modal">
         <h2>{ { archive: "Archive", restore: "Restore", delete: "Delete" }[bulkAction]} {selected.length} selected lead{selected.length === 1 ? "" : "s"}?</h2>
         <p>{bulkAction === "delete" ? "These leads will be removed from the CRM. Linked bookings, proposals, and audit history will be retained. This screen cannot undo deletion." : bulkAction === "archive" ? "These leads will move to Archived leads. You can restore them later." : "These leads will return to Active leads."}</p>
         {error && <p role="alert">{error}</p>}
-        <button disabled={acting} onClick={applyBulkAction}>{acting ? "Saving…" : "Confirm"}</button><button disabled={acting} onClick={() => setBulkAction(null)}>Cancel</button>
+        <button className="lola-secondary-button" disabled={acting} onClick={applyBulkAction}>{acting ? "Saving…" : "Confirm"}</button><button className="lola-secondary-button" disabled={acting} onClick={() => setBulkAction(null)}>Cancel</button>
       </div></div>}
 
     <RecordWorkspace module="Leads" rows={leads}>    {loading ? <p role="status">Loading leads…</p> : view==="table"
