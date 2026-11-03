@@ -1,0 +1,6 @@
+import {packageEntitlementLabels} from '../../shared/package-entitlements.js';
+const money=value=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(value/100);
+export default function CatalogQuoteSummary({quote}){
+ if(!quote)return null;
+ return <details className="record-advanced"><summary>Package pricing &amp; inclusions</summary><p>{quote.customerType.replaceAll('_',' ')} · {quote.eventCategory.replaceAll('_',' ')} · {quote.catalogKey} catalog</p>{quote.entitlements.map(item=><section key={item.packageId}><h3>{item.packageName}</h3><ul>{packageEntitlementLabels(item).map(text=><li key={text}>{text}</li>)}</ul></section>)}<dl>{quote.lines.map((line,index)=><div key={index}><dt>{line.description}</dt><dd>{money(line.amountCents)}</dd></div>)}{quote.discountCents>0&&<div><dt>Discount</dt><dd>−{money(quote.discountCents)}</dd></div>}<div><dt>Quoted service total</dt><dd>{money(quote.serviceTotalCents)}</dd></div><div><dt>Travel</dt><dd>{quote.travel.amountCents==null?'Review required':money(quote.travel.amountCents)}</dd></div></dl><p>Stripe calculates tax separately using the billing address before payment.</p>{quote.reviewReasons.map(text=><p key={text}>{text}</p>)}</details>;
+}

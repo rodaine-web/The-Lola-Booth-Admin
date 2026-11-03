@@ -1,4 +1,6 @@
 import {bookingSchedule} from '../../../shared/booking-payment-policy.js';
+import {packageEntitlementLabels} from '../../../shared/package-entitlements.js';
+import {pricingCatalogEnabled} from './pricing-catalog-service.js';
 import {resolveProposalCampaignPackages} from './campaign-offers.js';
 import {freezeDefaultProposalMedia} from './proposal-default-media.js';
 import { composeProposal } from "../../../shared/proposal-scenario.js";
@@ -39,6 +41,15 @@ export async function nextNumber(client, column, prefixColumn, fallbackPrefix) {
 }
 
 export async function buildProposalSnapshot(input) {
+  const catalogQuote=input.pricing_quote_id?(await query('SELECT snapshot FROM pricing_quotes WHERE id=$1 AND expires_at>now()',[input.pricing_quote_id])).rows[0]?.snapshot:null;
+  if(input.pricing_quote_id&&!catalogQuote)throw new AppError('This pricing review has expired. Generate and review a fresh quote.',409,'PRICING_QUOTE_EXPIRED');
+  const chosenPackageIds=[...(input.selected_experiences||[]).flatMap(item=>(item.packages||[]).map(p=>p.package_id)),...(!input.selected_experiences?.length&&input.package_id?[input.package_id]:[])].filter(Boolean);
+  // Campaign selections are independently validated against persisted approved offers below.
+  // They keep their agreed offer prices instead of being silently repriced by catalog activation.
+  const packageSelections=(input.selected_experiences||[]).flatMap(item=>item.packages||[]);
+  const campaignOfferOnly=packageSelections.length>0&&packageSelections.every(pkg=>pkg.campaign_id&&pkg.campaign_offer_key);
+  if(catalogQuote&&chosenPackageIds.length&&JSON.stringify([...chosenPackageIds].sort())!==JSON.stringify(catalogQuote.entitlements.map(p=>p.packageId).sort()))throw new AppError('Package selections changed. Recalculate the quote.',409,'PRICING_QUOTE_CHANGED');
+  if(pricingCatalogEnabled()&&!catalogQuote&&!campaignOfferOnly&&chosenPackageIds.length&&(await query('SELECT 1 FROM packages WHERE id=ANY($1::uuid[]) AND catalog_key IS NOT NULL LIMIT 1',[chosenPackageIds])).rowCount)throw new AppError('Calculate and review the catalog quote before preparing this proposal.',422,'PRICING_QUOTE_REQUIRED');
   const visualSections = await validateProposalVisuals(input.visual_sections || []);
   if(input.scenario_enabled && !input.selected_experiences?.length)throw new AppError("Select at least one experience.",422,"EXPERIENCE_REQUIRED");
   if(input.scenario_enabled && (['discount','travel','other_fees','tax_rate','deposit_value'].some(k=>input[k]!=null && (!Number.isFinite(Number(input[k]))||Number(input[k])<0)) || (input.deposit_type!=='FIXED' && Number(input.deposit_value)>100)))throw new AppError("Pricing adjustments must be positive; percentage deposits cannot exceed 100%.",422,"PRICING_INVALID");
@@ -99,8 +110,13 @@ export async function buildProposalSnapshot(input) {
     };
   });
   const addonIds = (input.addons || []).map((item) => item.addon_id).filter(Boolean);
+  if(catalogQuote)for(const experience of selectedExperiences)for(const pkg of experience.packages||[]){
+    const agreed=catalogQuote.entitlements.find(item=>item.packageId===pkg.package_id);
+    if(agreed){pkg.description=packageEntitlementLabels(agreed).join('\n');pkg.features=packageEntitlementLabels(agreed);pkg.included_hours=agreed.serviceHours;pkg.duration=agreed.rentalHours||agreed.serviceHours;pkg.price=catalogQuote.lines.find(line=>line.type==='PACKAGE'&&line.packageId===pkg.package_id)?.amountCents/100||0;}
+  }
+  if(catalogQuote)for(const experience of selectedExperiences)experience.price=(experience.packages||[]).reduce((sum,pkg)=>sum+pkg.price,0);
   const addons = addonIds.length ? await query("SELECT * FROM addons WHERE id = ANY($1::uuid[])", [addonIds]) : { rows: [] };
-  const catalogError = proposalCatalogError(selectedExperiences.length ? {...input, package_amount:selectedExperiences.flatMap(item=>item.packages).find(item=>item.package_id===input.package_id)?.price} : input, pack, addons.rows);
+  const catalogError = catalogQuote?null:proposalCatalogError(selectedExperiences.length ? {...input, package_amount:selectedExperiences.flatMap(item=>item.packages).find(item=>item.package_id===input.package_id)?.price} : input, pack, addons.rows);
   if (catalogError) throw new AppError(catalogError,422,"CATALOG_SELECTION_INVALID");
   const addonRows = input.addons || [];
   const packageAmount = money(input.package_amount ?? pack.starting_price);
@@ -148,7 +164,7 @@ export async function buildProposalSnapshot(input) {
       line_total: item.price
     }];
   });
-  const lines = [
+  let lines = [
     ...(!selectedExperiences.length && (input.package_id || packageAmount > 0 || pack.name) ? [{ type: "PACKAGE", package_id: input.package_id, description: input.package_name || pack.name || "Package", detail: input.package_description || pack.proposal_description || "", quantity: 1, unit_price: packageAmount, line_total: packageAmount }] : []),
     ...(!selectedExperiences.length && experienceAmount ? [{ type: "EXPERIENCE", experience_id: input.experience_id, description: `${experience.name || "Experience"} surcharge`, quantity: 1, unit_price: experienceAmount, line_total: experienceAmount }] : []),
     ...selectedExperienceLines,
@@ -157,10 +173,11 @@ export async function buildProposalSnapshot(input) {
     ...(money(input.travel) ? [{ type: "TRAVEL", description: "Travel", quantity: 1, unit_price: money(input.travel), line_total: money(input.travel) }] : []),
     ...(money(input.other_fees) ? [{ type: "OTHER", description: "Other fees", quantity: 1, unit_price: money(input.other_fees), line_total: money(input.other_fees) }] : [])
   ];
+  if(catalogQuote)lines=catalogQuote.lines.map(line=>({type:line.type,description:line.description,package_id:line.packageId,quantity:line.quantity,unit_price:line.unitPriceCents/100,line_total:line.amountCents/100,...(line.stripeTaxCode?{stripe_tax_code:line.stripeTaxCode}: {})}));
   const subtotal = lines.reduce((sum, item) => sum + item.line_total, 0);
-  const discount = money(input.discount);
+  const discount = catalogQuote?catalogQuote.discountCents/100:money(input.discount);
   const taxable = Math.max(0, subtotal - discount);
-  const taxRate = money(input.tax_rate ?? s.sales_tax_percent);
+  const taxRate = catalogQuote?0:money(input.tax_rate ?? s.sales_tax_percent);
   const tax = taxable * (taxRate / 100);
   const total = taxable + tax;
   const businessDate=new Intl.DateTimeFormat('en-CA',{timeZone:s.timezone||'America/Chicago'}).format(new Date());
@@ -187,6 +204,7 @@ export async function buildProposalSnapshot(input) {
     package: pack,
     experience,
     content: {
+      ...(catalogQuote?{catalog_quote:catalogQuote}:{}),
       introduction: input.introduction || s.proposal_default_intro,
       experienceName: input.experience_name || experience.name,
       experienceDescription: input.experience_description || experience.proposal_description || experience.description,
@@ -205,6 +223,7 @@ export async function buildProposalSnapshot(input) {
     editableSections,
     lineItems: lines,
     pricing: {
+      ...(catalogQuote?{catalog_quote:catalogQuote,pricing_quote_id:input.pricing_quote_id}:{}),
       subtotal: round(subtotal),
       discount: round(discount),
       tax_rate: round(taxRate),
@@ -496,6 +515,7 @@ export async function proposalPdfBuffer(proposal, type = "pdf") {
 }
 
 export async function sendProposal(req, proposal) {
+  if(proposal.content?.catalog_quote?.status==='REVIEW_REQUIRED')throw new AppError('Resolve pricing review before sending.',409,'PRICING_REVIEW_REQUIRED');
   if (!publicProposalUrl(proposal)) throw new AppError("Public access not available. Generate secure access before sending.", 409, "DOCUMENT_ACCESS_UNAVAILABLE");
   const proposalUrl = publicProposalUrl(proposal);
   const mergeData = proposalMergeData(proposal, proposalUrl);

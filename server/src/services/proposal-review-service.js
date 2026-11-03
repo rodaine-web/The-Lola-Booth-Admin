@@ -76,6 +76,7 @@ export async function sendReviewedProposal(req,proposalId,{deliver=sendEmail}={}
   const version=(await client.query('SELECT * FROM proposal_versions WHERE proposal_id=$1 AND id=$2',[proposalId,input.versionId])).rows[0];
   const expected=proposal.draft_version_id||proposal.published_version_id||(await client.query('SELECT id FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC LIMIT 1',[proposalId])).rows[0]?.id;
   if(!version||(!previous&&version.id!==expected)||(previous&&proposal.published_version_id!==version.id&&proposal.draft_version_id!==version.id&&expected!==version.id))throw failure('The proposal changed after review. Refresh and review the latest version.','PROPOSAL_REVIEW_STALE');
+  if(version.snapshot.content?.catalog_quote?.status==='REVIEW_REQUIRED')throw failure('Resolve the catalog quote’s travel, scope or deliverable review before sending.','PRICING_REVIEW_REQUIRED');
   if(version.snapshot.valid_through&&version.snapshot.valid_through<new Date().toISOString().slice(0,10))throw failure('Update the validity date before sending an expired proposal.','PROPOSAL_EXPIRED');
   const token=proposal.draft_version_id?crypto.randomBytes(24).toString('hex'):proposal.secure_token||crypto.randomBytes(24).toString('hex');
   if(!previous&&!publicProposalUrl({...proposal,secure_token:token}))throw failure("Generate fresh secure proposal access before sending.","DOCUMENT_ACCESS_UNAVAILABLE");

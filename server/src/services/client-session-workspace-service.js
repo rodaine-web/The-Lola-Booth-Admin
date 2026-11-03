@@ -35,7 +35,7 @@ export async function sessionWorkspace(session,eventId){
   const selections=proposal.accepted_snapshot?.selected_experiences??proposal.selected_experiences;
   const packageLabel=Array.isArray(selections)?selections.map(row=>row.experienceName||row.experience_name||row.name).filter(value=>typeof value==='string').join(', '):'';
   return {creative:creative.map(row=>({id:row.id,type:row.approval_type,version:row.version,status:row.status})),client:proposal.client_name,event:{id:eventId,name:proposal.event_name,date:proposal.event_date,venue:proposal.venue_name,status:proposal.event_status,start:proposal.start_time,end:proposal.end_time,package:packageLabel||proposal.package_name||null},
-   proposal:{number:proposal.proposal_number,status:proposal.status,total:proposal.total},
+   proposal:{number:proposal.proposal_number,status:proposal.status,total:proposal.total,...(proposal.accepted_snapshot?.content?.catalog_quote?{pricing:proposal.accepted_snapshot.content.catalog_quote}: {})},
    agreements:agreements.map(row=>({id:row.id,title:row.title,revision:row.revision,status:row.status,signedAt:row.signed_at,signerName:row.signer_name})),
    invoices:invoices.map(row=>({id:row.id,number:row.invoice_number,status:row.status,total:Number(row.total)+Number(row.stripe_tax_amount||0),tax:Number(row.stripe_tax_amount||0),paid:Number(row.amount_paid)+Number(row.stripe_tax_amount||0),balance:invoiceBalance(row),dueDate:row.due_date})),
    receipts:receipts.map(row=>({id:row.id,invoiceId:row.invoice_id,amount:row.amount,tax:row.tax_amount,taxDetails:row.tax_details,refundedAmount:row.refunded_amount,status:row.status,date:row.payment_date}))};

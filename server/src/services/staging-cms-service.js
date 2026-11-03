@@ -1,4 +1,5 @@
 import {query,transaction} from '../db/pool.js';
+import {publishedWebsitePricing} from './pricing-catalog-service.js';
 import {AppError} from '../utils/errors.js';
 import {websiteContentDefaults} from './website-cms-service.js';
 
@@ -60,5 +61,6 @@ export function projectStagingSite(rows) {
   return {channel:'STAGING',cmsAuthoritative:true,defaults:websiteContentDefaults(),settings,content,pageItems:typed('pageItems'),heroSlides:typed('hero'),experiences:typed('experiences'),packages,eventTypes:typed('eventTypes'),gallery:typed('gallery'),testimonials:typed('testimonials'),faqs:typed('faqs'),media:typed('media')};
 }
 export async function stagingSitePayload() {
-  return projectStagingSite((await query("SELECT * FROM website_channel_records WHERE channel='STAGING' AND status='PUBLISHED' ORDER BY display_order,entity_key")).rows);
+  const site=projectStagingSite((await query("SELECT * FROM website_channel_records WHERE channel='STAGING' AND status='PUBLISHED' ORDER BY display_order,entity_key")).rows);
+  return {...site,packages:await publishedWebsitePricing(site.packages)};
 }

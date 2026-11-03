@@ -17,7 +17,7 @@ export function proposalEditInput(proposal) {
     package_amount: amount('PACKAGE'), experience_surcharge: amount('EXPERIENCE'),
     travel: amount('TRAVEL'), other_fees: amount('OTHER'),
     addons: lines.filter(line => line.type === 'ADDON').map(line => ({...line})),
-    custom_line_items: lines.filter(line => !['PACKAGE','EXPERIENCE','EXPERIENCE_SELECTED','ADDON','TRAVEL','OTHER'].includes(line.type)).map(line => ({...line})),
+    custom_line_items: lines.filter(line => !['PACKAGE','EXPERIENCE','EXPERIENCE_SELECTED','ADDON','TRAVEL','OTHER',...(content.catalog_quote?['PRINT_UPGRADE','EXTRA_HOURS']:[])].includes(line.type)).map(line => ({...line})),
     introduction: content.scenario ? undefined : content.introduction, experience_name: content.experienceName,
     experience_description: content.experienceDescription, package_name: content.packageName,
     package_description: content.packageDescription, next_steps: content.scenario ? undefined : content.nextSteps, terms: content.scenario ? undefined : content.terms,
