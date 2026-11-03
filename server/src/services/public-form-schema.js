@@ -2,6 +2,7 @@ import { z } from "zod";
 const baseInquirySchema = z.object({
   eventName: z.string().trim().max(160).optional(),
   bookingVersion: z.literal(2).optional(),
+  pricingVersion:z.string().uuid().optional(),
   eventCategory:z.enum(['PRIVATE_CELEBRATION','COMPANY_CELEBRATION','PROFESSIONAL','ACTIVATION','CUSTOM_PRODUCTION']).optional(),
   customerType:z.enum(['INDIVIDUAL','BUSINESS','ORGANIZATION']).optional(),
   catalogKey:z.enum(['STANDARD','PROFESSIONAL','ACTIVATION','CUSTOM']).optional(),

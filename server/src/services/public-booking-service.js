@@ -43,6 +43,7 @@ export function validateBookingSelections(input,catalog){
 }
 export async function preparePublicBooking(payload){
  if(!payload.selections)return payload;
+ if((pricingCatalogEnabled()&&payload.pricingVersion!==(await currentPricingCatalog()).id)||(!pricingCatalogEnabled()&&payload.pricingVersion))throw new AppError('Pricing changed. Reload the booking page and review your selections before submitting.',409,'CATALOG_VERSION_CHANGED');
  // Keep catalog status/prices stable through the enclosing inquiry transaction.
  await query('SELECT id FROM experiences WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[payload.selections.map(x=>x.experienceId)]);
  await query('SELECT id FROM packages WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[payload.selections.map(x=>x.packageId)]);
@@ -52,7 +53,7 @@ export async function preparePublicBooking(payload){
   const version=await currentPricingCatalog();
   const selections=booking.selections.map(item=>({packageId:item.packageId,prints:item.prints,printFormat:item.printFormat,unlimitedPrints:item.unlimitedPrints,extraHours:item.extraHours,addons:[]}));
   for(const selected of booking.addons){const addon=version.snapshot.addons.find(a=>a.id===selected.addonId);const target=selections.find(item=>addon.pricing_policy.experiences.includes(version.snapshot.packages.find(p=>p.id===item.packageId).pricing_profile.experience));if(!target)throw new AppError('Review add-on compatibility.',422,'BOOKING_ADDON_INVALID');target.addons.push({addonId:selected.addonId,quantity:selected.quantity});}
-  const pricing=await createPricingQuote({eventCategory:payload.eventCategory||'PRIVATE_CELEBRATION',customerType:payload.customerType||'INDIVIDUAL',catalogKey:payload.catalogKey,selections});
+  const pricing=await createPricingQuote({catalogVersion:payload.pricingVersion,eventCategory:payload.eventCategory||'PRIVATE_CELEBRATION',customerType:payload.customerType||'INDIVIDUAL',catalogKey:payload.catalogKey,selections});
   booking.pricingQuote=pricing;
  }
  const fingerprint=crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');

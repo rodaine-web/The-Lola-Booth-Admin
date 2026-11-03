@@ -35,6 +35,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
   const pkg=await one("SELECT * FROM packages WHERE catalog_key='STANDARD' AND tier_key='SIGNATURE' AND pricing_profile->>'experience'='glam'");
   const input={eventCategory:'COMPANY_CELEBRATION',customerType:'BUSINESS',selections:[{packageId:pkg.id,prints:500}],override:{travelAmountCents:0,reason:'QA venue inside Chicago, manual review'}};
   const quote=await svc.createPricingQuote(input,req);assert.equal(quote.status,'PRICED');assert.equal(quote.serviceTotalCents,112400);
+  await assert.rejects(svc.createPricingQuote({...input,catalogVersion:crypto.randomUUID()},req),{code:'CATALOG_VERSION_CHANGED'});
   await query('UPDATE packages SET starting_price=999 WHERE id=$1',[pkg.id]);
   const unchanged=await svc.createPricingQuote(input,req);assert.equal(unchanged.serviceTotalCents,112400,'Published version does not follow draft package edits');
   assert.equal((await svc.publishedWebsitePricing([{id:'cms-channel-item',source_catalog_id:pkg.id,starting_price:'1.00'}]))[0].starting_price,'899.00');
@@ -46,6 +47,11 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
   const composed=await proposalSvc.buildProposalSnapshot({client_id:customer.id,event_id:event.id,pricing_quote_id:quote.id,scenario_enabled:true,selected_experiences:[{experience_id:pkg.experience_id,packages:[{package_id:pkg.id,price:1}]}]});
   assert.equal(composed.pricing.total,1124);assert.match(composed.selectedExperiences[0].packages[0].description,/500 physical prints/);assert.equal(composed.selectedExperiences[0].price,899);
   assert.equal(composed.content.scenario.lines.find(line=>line.type==='PRINT_UPGRADE').stripe_tax_code,'txcd_20090028');
+  const creative=await one("SELECT id FROM addons WHERE pricing_policy->>'key'='creative-design'");
+  const enhanced=await svc.createPricingQuote({...input,selections:[{packageId:pkg.id,prints:500,addons:[{addonId:creative.id,quantity:2}]}]},req);
+  const enhancedSnapshot=await proposalSvc.buildProposalSnapshot({client_id:customer.id,event_id:event.id,pricing_quote_id:enhanced.id,selected_experiences:[{experience_id:pkg.experience_id,packages:[{package_id:pkg.id,price:899}]}]});
+  const edit=(await import('../server/src/services/proposal-edit-input.js')).proposalEditInput({content:enhancedSnapshot.content,pricing_snapshot:enhancedSnapshot.pricing,line_items_snapshot:enhancedSnapshot.lineItems});
+  assert.equal(edit.addons[0].addon_id,creative.id);assert.equal(edit.addons[0].quantity,2);assert.equal(edit.custom_line_items.length,0);
   const proposal=await proposalSvc.createProposal({...req,body:{client_id:customer.id,event_id:event.id,pricing_quote_id:quote.id,package_amount:1,travel:900,discount:800,selected_experiences:[]}});
   assert.equal(Number(proposal.total),1124,'Client totals and manual unrelated adjustments do not change the reviewed quote');
   assert.equal(proposal.content.catalog_quote.entitlements[0].selectedPrints,500);
@@ -126,6 +132,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
    }
   }
   process.env.PRICING_CATALOG_ENABLED='false';assert.equal((await call('pricing-catalog',{publicRoute:true})).status,404);
+  await assert.rejects((await import('../server/src/services/public-booking-service.js')).preparePublicBooking({pricingVersion:v.id,selections:[{experienceId:pkg.experience_id,packageId:pkg.id}]}),{code:'CATALOG_VERSION_CHANGED'});
   await query('UPDATE addons SET price=999 WHERE id=$1',[originalAddon.id]);
   const fallback=await (await import('../server/src/services/public-booking-service.js')).publicBookingCatalog();
   assert.equal(fallback.packages.find(row=>row.id===pkg.id).starting_price,'899.00');
