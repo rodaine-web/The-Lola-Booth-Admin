@@ -23,10 +23,11 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
   await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='write:sales'",[sales.id]);
   for(const name of ['glam','360','vogue','audio'])await query('INSERT INTO experiences(name,slug,active) VALUES($1,$1,true)',[name]);
   const originalExperience=await one("UPDATE experiences SET show_on_website=true,website_status='PUBLISHED' WHERE slug='glam' RETURNING id");
-  await query("INSERT INTO packages(name,experience_id,website_key,starting_price,active,show_on_website,website_status,website_features) VALUES('Original Glam Signature',$1,'glam:signature',899,true,true,'PUBLISHED','[\"Original public inclusion\"]')",[originalExperience.id]);
+  await query("INSERT INTO packages(name,experience_id,website_key,starting_price,active,show_on_website,website_status,most_popular,website_features) VALUES('Original Glam Signature',$1,'glam:signature',899,true,true,'PUBLISHED',true,'[\"Original public inclusion\"]')",[originalExperience.id]);
   const originalAddon=await one("INSERT INTO addons(name,price,pricing_type,active) VALUES('Original optional enhancement',125,'FIXED',true) RETURNING id");
   const svc=await import('../server/src/services/pricing-catalog-service.js'),req={user:owner,headers:{}};
-  const draft=await svc.prepareStagingPricingCatalog(req);
+  await assert.rejects(svc.prepareProductionPricingCatalog(req),{code:'PRODUCTION_ONLY'});
+ const draft=await svc.prepareStagingPricingCatalog(req);
   assert.equal((await one('SELECT count(*)::int n FROM packages')).n,36);
   const v=await svc.publishPricingVersion(draft.id,req);
   assert.equal(v.snapshot.packages.length,36);
@@ -72,7 +73,8 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
   const quotesBefore=(await one('SELECT count(*)::int n FROM pricing_quotes')).n;
   const pending=await call('pricing-quotes',{method:'POST',publicRoute:true,body:publicInput});assert.equal(pending.status,200);assert.equal(pending.body.status,'REVIEW_REQUIRED');
   assert.equal((await one('SELECT count(*)::int n FROM pricing_quotes')).n,quotesBefore,'Live estimates do not create durable records or consume booking-send quota');
-  assert.equal((await call('pricing-catalog',{publicRoute:true})).body.packages.length,36);
+  const publishedCatalog=(await call('pricing-catalog',{publicRoute:true})).body;assert.equal(publishedCatalog.packages.length,36);assert.equal(publishedCatalog.packages.find(p=>p.id===pkg.id).most_popular,true);
+  assert.equal((await call('booking-catalog',{publicRoute:true})).body.packages.find(p=>p.id===pkg.id).most_popular,true);
   if(process.env.PRICING_BROWSER_TEST==='true'){
    await query("UPDATE clients SET phone='5555555555' WHERE id=$1",[customer.id]);
    const {createServer}=await import('vite'),react=(await import('@vitejs/plugin-react')).default,{fileURLToPath}=await import('node:url'),{chromium}=await import('playwright');
@@ -125,7 +127,11 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
       await page.goto(web+'/availability.html');await page.locator('[name=eventCategory]').waitFor();await page.locator('[name=customerType]').selectOption('BUSINESS');await page.locator('[name=eventCategory]').selectOption('COMPANY_CELEBRATION');
       await page.locator('[data-experience="glam"]').check();await page.locator('[data-experience-package="glam"]').selectOption(pkg.id);await page.locator('[data-print-allowance="glam"]').selectOption('500');
       await page.locator('[data-booking-summary]').getByText('$1,124.00',{exact:false}).first().waitFor();await page.screenshot({path:'artifacts/pricing/website-booking-'+width+'.png',fullPage:true});
-      await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Conferences & professional events',exact:true}).waitFor();await page.getByRole('button',{name:'Conferences & professional events',exact:true}).click();await page.locator('[data-experience-panel="glam"] .pricing-card').filter({hasText:'$1,399'}).waitFor();
+      await page.goto(web+'/packages.html');await page.locator('[data-experience-panel="glam"] .pricing-badge').filter({hasText:'Most Popular'}).waitFor();
+      for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1,'Every standard experience retains its Custom card');
+      const customLink=await page.locator('[data-experience-panel="glam"] [data-package-key="glam:custom"] a').getAttribute('href');
+      await page.goto(new URL(customLink,web).href);await page.locator('[name=eventCategory]').waitFor();assert.equal(await page.locator('[name=eventCategory]').inputValue(),'CUSTOM_PRODUCTION');assert.equal(await page.locator('[name=catalogKey]').inputValue(),'CUSTOM');await page.locator('[data-booking-summary]').getByText('Custom quote required',{exact:true}).waitFor();assert.equal(await page.locator('[data-booking-summary]').getByText('$0.00',{exact:true}).count(),0);
+      await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Conferences & professional events',exact:true}).waitFor();await page.getByRole('button',{name:'Conferences & professional events',exact:true}).click();for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1);await page.locator('[data-experience-panel="glam"] .pricing-card').filter({hasText:'$1,399'}).waitFor();
       await page.screenshot({path:'artifacts/pricing/website-packages-'+width+'.png',fullPage:true});assert.deepEqual(errors,[]);await page.close();
      }
     }finally{await webBrowser?.close();await website.close();}

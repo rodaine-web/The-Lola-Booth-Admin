@@ -58,10 +58,16 @@ export async function publishPricingVersion(id,req,effectiveAt){
  });
 }
 
-// Explicit, idempotent staging setup. Existing standard package IDs are retained.
+// Explicit, idempotent setup. Existing standard package IDs are retained.
 // Does not publish, enable the engine, or reprice historical documents.
-export async function prepareStagingPricingCatalog(req){
- if(process.env.APP_ENV!=='staging'&&process.env.APP_ENV!=='test')throw new AppError('Catalog setup is restricted to staging.',403,'STAGING_ONLY');
+export async function prepareStagingPricingCatalog(req){return preparePricingCatalog(req);}
+// Deployment tooling only: the public/Admin HTTP setup route remains staging-only.
+export async function prepareProductionPricingCatalog(req){
+ if(process.env.APP_ENV!=='production')throw new AppError('Production catalog setup requires the production environment.',403,'PRODUCTION_ONLY');
+ return preparePricingCatalog(req,{production:true});
+}
+async function preparePricingCatalog(req,{production=false}={}){
+ if(!['staging','test'].includes(process.env.APP_ENV)&&!(production&&process.env.APP_ENV==='production'))throw new AppError('Catalog setup is restricted to staging.',403,'STAGING_ONLY');
  return transaction(async client=>{
   await assertDatabaseIdentity(client);
   await query("SELECT pg_advisory_xact_lock(hashtext('lola-pricing-catalog-setup'))");
