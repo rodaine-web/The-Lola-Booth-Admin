@@ -1,6 +1,6 @@
 # Versioned pricing overhaul — staging release
 
-Status: NOT READY — hosted staging qualification is pending.
+Status: published catalog version 1 is active on staging. The deployed application-service qualification passed; hosted Admin and website review is recorded in the owner release report.
 Production promotion is a separate owner-approved task.
 
 ## Source audit and approach
@@ -71,3 +71,13 @@ Future production promotion requires explicit owner approval, target/revision an
 ## Validation evidence
 
 See the private owner release report for final local/CI/hosted results, revision IDs and screenshots. Do not infer provider delivery or a real Stripe transaction from simulated database fixtures.
+
+## Activation qualification — November 3, 2026
+
+Catalog version 1 (`c2763d59-78c4-4338-8ef9-74489c85f5d5`) contains 36 packages (12 per catalog) and 26 add-ons. The original public baseline retains 16 packages and 10 add-ons. PRICING_CATALOG_ENABLED is enabled on staging API and worker. Activation deployments: API `ea6ac7b9-594f-4a10-af59-dd727de56d68`, worker `0939c5db-3106-41fb-ba2e-df5deabf5a8a`, both successful.
+
+The deployed-service check ran inside a deliberately rolled-back transaction: a company celebration uses standard Glam Signature pricing; 500 prints produce $1,124 with inclusion credit; two additional creative designs produce $1,324; editing preserves the enhancement IDs and quantities; a reviewed $1,124 proposal converts to a $1,124 invoice with the approved Printing tax code; repeat conversion returns the existing invoice; stale catalog versions are rejected. Test customers, quotes, proposals, invoices and jobs did not persist. No email, payment, provider tax calculation, or customer acceptance was performed.
+
+Hosted review found repeated legacy package names across experiences. The Admin table and package editor now display the experience so operators can distinguish each package. Published versions remain immutable.
+
+Recovery: the encrypted full staging snapshot from 2026-11-03T12:05 was already decrypted and restore-verified. Attempts to refresh the full snapshot over SSH timed out; those failed attempts are not counted as recovery copies. A broader export was rejected by automatic review because it included potentially customer-specific quotes. No customer quote export was completed. Preparation itself atomically retained the public catalog rollback baseline. Disable the staging pricing flag to restore that baseline; retain catalog versions and existing business records.
