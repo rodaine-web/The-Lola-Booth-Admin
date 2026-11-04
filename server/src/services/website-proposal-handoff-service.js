@@ -52,7 +52,7 @@ async function prepareWebsiteProposal(job) {
     // Never send an unrelated manually prepared draft, or replace an existing proposal.
     if (proposal && proposal.content?.website_submission_fingerprint !== job.payload.fingerprint) return null;
     if (!proposal) {
-      const selectionInput = { selections: booking.selections.map(x => ({ experienceId: x.experienceId, packageId: x.packageId })), addons: booking.addons.map(x => ({ addonId: x.addonId, quantity: x.quantity })) };
+      const selectionInput = { selections: booking.selections.map(x => ({ experienceId: x.experienceId, packageId: x.packageId,prints:x.prints,printFormat:x.printFormat,unlimitedPrints:x.unlimitedPrints,extraHours:x.extraHours })), addons: booking.addons.map(x => ({ addonId: x.addonId, quantity: x.quantity })) };
       await client.query('SELECT id FROM experiences WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[booking.selections.map(x=>x.experienceId)]);
       await client.query('SELECT id FROM packages WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[booking.selections.map(x=>x.packageId)]);
       await client.query('SELECT id FROM addons WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[booking.addons.map(x=>x.addonId)]);
@@ -71,6 +71,7 @@ async function prepareWebsiteProposal(job) {
       }
       await client.query('UPDATE leads SET converted_client_id=$2,converted_event_id=$3 WHERE id=$1', [lead.id, customer.id, event.id]);
       proposal = await createProposal({ user: {}, headers: {}, body: { lead_id: lead.id, client_id: customer.id, event_id: event.id, scenario_enabled: true,
+        pricing_quote_id:booking.pricingQuote?.id,
         selected_experiences: booking.selections.map(x => ({ experience_id: x.experienceId, packages: [{ package_id: x.packageId, price: x.startingPrice }] })),
         addons: booking.addons.map(x => ({ addon_id: x.addonId, quantity: x.quantity, unit_price: x.unitPrice })), deposit_type: 'PERCENTAGE', deposit_value: 30 } });
       proposal = (await client.query('UPDATE proposals SET content=content||$2::jsonb WHERE id=$1 RETURNING *', [proposal.id, { website_submission_fingerprint: job.payload.fingerprint }])).rows[0];

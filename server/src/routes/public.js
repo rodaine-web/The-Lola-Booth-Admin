@@ -1,4 +1,6 @@
 import {queueWebsiteProposal} from '../services/website-proposal-handoff-service.js';
+import {pricingPublicRouter} from './pricing.js';
+import {customerPricing} from '../../../shared/customer-pricing.js';
 import {clientSessionRouter} from './client-session.js';
 import { acceptProposal } from '../services/proposal-acceptance-service.js';
 import {PostgresPublicRateLimitStore} from '../middleware/postgres-rate-limit-store.js';
@@ -48,11 +50,13 @@ publicRouter.use(rateLimit({
   limit: Math.max(1, Math.min(10000, Number(process.env.PUBLIC_WRITE_RATE_LIMIT_MAX)||20)),
   store: new PostgresPublicRateLimitStore(),
   message:{error:{code:"RATE_LIMITED",message:"We’re receiving too many requests right now. Please wait a little and try again."}},
-  skip: req => ["GET", "HEAD", "OPTIONS"].includes(req.method),
+  skip: req => ["GET", "HEAD", "OPTIONS"].includes(req.method)||(req.method==='POST'&&req.path==='/pricing-quotes'),
   standardHeaders: true,
   legacyHeaders: false
 }));
+publicRouter.use((_req,res,next)=>{const json=res.json.bind(res);res.json=body=>json(customerPricing(body));next();});
 publicRouter.use('/client',clientSessionRouter);
+publicRouter.use(pricingPublicRouter);
 publicRouter.use("/planning",publicPlanningRouter);
 publicRouter.use('/contracts', publicContractsRouter);
 publicRouter.use('/workspaces', publicWorkspaceRouter);

@@ -2,8 +2,12 @@ import { z } from "zod";
 const baseInquirySchema = z.object({
   eventName: z.string().trim().max(160).optional(),
   bookingVersion: z.literal(2).optional(),
-  selections: z.array(z.object({experienceId:z.string().uuid(),packageId:z.string().uuid(),customNotes:z.string().trim().max(1500).optional()})).min(1).max(4).optional(),
-  addons: z.array(z.object({addonId:z.string().uuid(),quantity:z.number().int().min(1).max(24)})).max(40).optional(),
+  pricingVersion:z.string().uuid().optional(),
+  eventCategory:z.enum(['PRIVATE_CELEBRATION','COMPANY_CELEBRATION','PROFESSIONAL','ACTIVATION','CUSTOM_PRODUCTION']).optional(),
+  customerType:z.enum(['INDIVIDUAL','BUSINESS','ORGANIZATION']).optional(),
+  catalogKey:z.enum(['STANDARD','PROFESSIONAL','ACTIVATION','CUSTOM']).optional(),
+  selections: z.array(z.object({experienceId:z.string().uuid(),packageId:z.string().uuid(),customNotes:z.string().trim().max(1500).optional(),prints:z.number().int().nonnegative().max(10000).optional(),printFormat:z.enum(['4X6','2X6']).optional(),unlimitedPrints:z.boolean().optional(),extraHours:z.number().int().nonnegative().max(24).optional()})).min(1).max(4).optional(),
+  addons: z.array(z.object({addonId:z.string().uuid(),quantity:z.number().int().min(1).max(10000)})).max(40).optional(),
   formKind: z.enum(["CONTACT", "BOOKING"]).optional(),
   submissionId: z.string().uuid().optional(),
   topic: z

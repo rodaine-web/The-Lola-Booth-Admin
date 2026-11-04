@@ -1,6 +1,6 @@
 /** Carry an accepted composed quote into invoice accounting without recomputing its agreed totals. */
 export function proposalInvoiceSnapshot(proposal) {
-  const quote=proposal.content?.scenario;
+  const quote=proposal.content?.scenario||(proposal.content?.catalog_quote?{pricing:proposal.pricing_snapshot,lines:proposal.line_items_snapshot}:null);
   if(!quote)return null;
   const pricing=quote.pricing,lines=quote.lines;
   const cents=value=>Math.round(Number(value||0)*100);
@@ -12,7 +12,7 @@ export function proposalInvoiceSnapshot(proposal) {
     const tax=last?cents(pricing.tax)-allocatedTax:Math.round(cents(pricing.tax)*weight);
     allocatedDiscount+=discount;allocatedTax+=tax;
     const quantity=Number(line.quantity)||1;
-    return {description:line.description,quantity,unit_price:gross/100/quantity,taxable:true,tax_rate:Number(pricing.tax_rate)||0,discount:discount/100,tax:tax/100,line_total:(Math.max(0,gross-discount)+tax)/100};
+    return {description:line.description,quantity,unit_price:gross/100/quantity,taxable:true,tax_rate:Number(pricing.tax_rate)||0,discount:discount/100,tax:tax/100,line_total:(Math.max(0,gross-discount)+tax)/100,...(line.stripe_tax_code?{stripe_tax_code:line.stripe_tax_code}: {})};
   });
   return {...pricing,items};
 }

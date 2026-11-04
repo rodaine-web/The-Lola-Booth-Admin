@@ -365,6 +365,7 @@ function listRoute(table, searchable = [], permission = "read:admin") {
         if(filters.status==='SCHEDULED')where.push("status IN ('OPEN','IN_PROGRESS') AND NOT task_work_actionable(tasks) AND (NOT task_event_preparation(tasks) OR EXISTS(SELECT 1 FROM events e WHERE e.id=tasks.event_id AND e.status NOT IN ('COMPLETED','CANCELLED') AND COALESCE(e.operational_status,'')<>'COMPLETED'))");
       }
       if (table === "leads") {
+        where.push(filters.archived === "true" ? "archived_at IS NOT NULL" : "archived_at IS NULL");
         if(filters.opportunity_type){params.push(z.enum(['BOOKING','PARTNERSHIP']).parse(filters.opportunity_type));where.push('opportunity_type=$'+params.length);}
         if(filters.status === "ACTIVE") where.push("status NOT IN ('WON','LOST') AND converted_client_id IS NULL");
         if (!filters.status && !filters.funnel) where.push("NOT (status='WON' AND converted_client_id IS NOT NULL)");
@@ -513,6 +514,7 @@ async function pickerRows(search, sql) {
 }
 
 const proposalSchema = z.object({
+  pricing_quote_id:uuid.optional().nullable(),
   customer_notes:z.string().max(10000).optional().nullable(),
   scenario_enabled:z.boolean().optional(),
   scenario_overrides:scenarioOverridesSchema.optional(),
@@ -670,6 +672,26 @@ adminRouter.get('/events/:id/closeout',requirePermission('read:events'),asyncHan
 adminRouter.post('/events/:id/closeout',requirePermission('write:events'),requireAnyPermission('communications.send','write:sales'),validate(closeoutInput),asyncHandler(async(req,res)=>res.json(await saveEventCloseout(uuid.parse(req.params.id),req.body,req))));
 
 adminRouter.get("/leads", ...listRoute("leads", ["first_name", "last_name", "email", "phone", "event_type"], "read:sales"));
+
+// One transaction keeps a bulk action and its audit history all-or-nothing.
+adminRouter.post("/leads/bulk-action", requirePermission("write:sales"), validate(z.object({
+  ids: z.array(uuid).min(1).max(100),
+  action: z.enum(["archive", "restore", "delete"])
+})), asyncHandler(async (req, res) => {
+  const ids = [...new Set(req.body.ids)];
+  const { action } = req.body;
+  const result = await transaction(async (client) => {
+    const before = await client.query("SELECT * FROM leads WHERE id=ANY($1::uuid[]) AND deleted_at IS NULL ORDER BY id FOR UPDATE", [ids]);
+    if (before.rows.length !== ids.length) throw new AppError("Some selected leads are no longer available. Refresh and try again.", 409, "LEADS_CHANGED");
+    const assignment = { archive: "archived_at=now()", restore: "archived_at=NULL", delete: "deleted_at=now()" }[action];
+    const updated = await client.query(`UPDATE leads SET ${assignment}, updated_at=now() WHERE id=ANY($1::uuid[]) RETURNING *`, [ids]);
+    for (const lead of before.rows) {
+      await writeAudit({ req, action: { archive: "lead_archived", restore: "lead_restored", delete: "lead_deleted" }[action], entity: "lead", entityId: lead.id, before: lead, after: updated.rows.find(row => row.id === lead.id) });
+    }
+    return { count: updated.rows.length };
+  });
+  res.json(result);
+}));
 
 const leadSchema = z.object({
   opportunity_type: z.enum(["BOOKING","PARTNERSHIP"]).default("BOOKING"),

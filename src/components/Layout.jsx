@@ -164,7 +164,7 @@ const navGroups = [{
 }, {
   label: 'Catalog',
   icon: Package,
-  items: [{label:'Backdrops',to:'/catalog/backdrops',permission:'read:events'}, {
+  items: [{label:'Pricing & travel',to:'/content/pricing',permission:'read:content'},{label:'Backdrops',to:'/catalog/backdrops',permission:'read:events'}, {
     label: 'Experiences',
     to: '/content/experiences',
     permission: 'read:content'
