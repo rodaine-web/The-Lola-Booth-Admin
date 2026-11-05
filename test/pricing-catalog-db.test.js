@@ -121,16 +121,36 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
    {
     await query("UPDATE experiences SET show_on_website=true,website_status='PUBLISHED'");
     const website=await createServer({configFile:false,root:process.env.PRICING_WEBSITE_ROOT||fileURLToPath(new URL('../public/staging-site',import.meta.url)),plugins:[{name:'staging-asset-paths',configureServer(server){server.middlewares.use((req,_res,next)=>{if(req.url?.startsWith('/staging-site/'))req.url=req.url.slice('/staging-site'.length);next();});}}],server:{host:'127.0.0.1',port:0,proxy:{'/api':origin}}});let webBrowser;
-    try{await website.listen();webBrowser=await chromium.launch();const web='http://127.0.0.1:'+website.httpServer.address().port;(await import('../server/src/config/env.js')).env.clientOrigin=web;
+    try{await website.listen();webBrowser=await chromium.launch();const web='http://127.0.0.1:'+website.httpServer.address().port;const testEnv=(await import('../server/src/config/env.js')).env;testEnv.clientOrigin=web;testEnv.publicInquiryAllowedOrigins=[web];
      for(const width of [1440,390]){const page=await webBrowser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
       await page.route('https://**',route=>route.abort());await page.route('**/config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.LOLA_CONFIG='+JSON.stringify({apiBase:web,environment:'staging',formsEnabled:true})}));
-      await page.goto(web+'/availability.html');await page.locator('[name=eventCategory]').waitFor();await page.locator('[name=customerType]').selectOption('BUSINESS');await page.locator('[name=eventCategory]').selectOption('COMPANY_CELEBRATION');
-      await page.locator('[data-experience="glam"]').check();await page.locator('[data-experience-package="glam"]').selectOption(pkg.id);await page.locator('[data-print-allowance="glam"]').selectOption('500');
-      await page.locator('[data-booking-summary]').getByText('$1,124.00',{exact:false}).first().waitFor();await page.screenshot({path:'artifacts/pricing/website-booking-'+width+'.png',fullPage:true});
+      await page.goto(web+'/availability.html');await page.locator('[data-catalog-status]').getByText('Choose available catalog packages.',{exact:false}).waitFor();
+      assert.equal(await page.locator('[name=customerType]').inputValue(),'INDIVIDUAL');
+      assert.equal(await page.locator('[name=eventCategory], [name=catalogKey], [data-print-allowance], [data-print-format], [data-unlimited-prints], [data-extra-hours]').count(),0,'The initial form has no pricing configuration steps');
+      await page.locator('[data-experience="glam"]').check();await page.locator('[data-experience-package="glam"]').selectOption(pkg.id);
+      await page.locator('[data-booking-summary]').getByText('$899.00',{exact:false}).waitFor();
+      assert.equal(await page.locator('[data-experience-package="glam"] option').count(),5,'Three standard packages and Custom, without business pricing catalogs');
+      const enhancement=page.locator('[data-addon="'+creative.id+'"]');await page.locator('[data-more-addons]').click();await enhancement.check();
+      await page.screenshot({path:'artifacts/pricing/website-individual-'+width+'.png',fullPage:true});
+      await page.locator('[name=customerType]').selectOption('BUSINESS');
+      assert.equal(await page.locator('[data-experience-package="glam"]').inputValue(),pkg.id,'Switching customer type retains preferences');
+      assert.equal(await enhancement.isChecked(),true);await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();
+      assert.doesNotMatch(await page.locator('[data-multi-booking]').textContent(),/\$[\d,]+/,'Business options, details, add-ons and summary contain no prices, even in collapsed content');
+      let previewCalls=0;page.on('request',r=>{if(r.url().endsWith('/pricing-quotes'))previewCalls++;});
+      for(const [name,value] of Object.entries({eventName:'Simple business QA '+width,eventType:'Wedding',eventDate:'2030-06-20',eventStartTime:'18:00',eventEndTime:'22:00',guestCount:'100',firstName:'Simple',lastName:'Business QA',email:'simple-business-'+width+'@qa.invalid',phone:'3125550100',city:'Chicago',state:'IL'})){
+       const field=page.locator('[name="'+name+'"]');if(name==='eventType')await field.selectOption({label:value});else await field.fill(value);
+      }
+      await page.screenshot({path:'artifacts/pricing/website-business-'+width+'.png',fullPage:true});
+      const response=page.waitForResponse(r=>r.url().endsWith('/api/public/inquiries')&&r.request().method()==='POST');
+      await page.getByRole('button',{name:'Request a Quote →',exact:true}).click();const submitted=await response;assert.equal(submitted.status(),201,await submitted.text());
+      const lead=await one('SELECT source_details FROM leads WHERE email=$1',['simple-business-'+width+'@qa.invalid']);
+      assert.equal(lead.source_details.customerType,'BUSINESS');assert.equal(lead.source_details.bookingInquiry.selections[0].startingPrice,899);assert.equal(lead.source_details.bookingInquiry.addons[0].addonId,creative.id);assert.ok(lead.source_details.bookingInquiry.pricingQuote.id,'Authoritative pricing remains available internally for proposal review');assert.equal(previewCalls,0);
+      await page.locator('[data-form-status]').getByText('Your Quote Request Has Been Submitted!',{exact:false}).waitFor();
+      await page.screenshot({path:'artifacts/pricing/website-booking-'+width+'.png',fullPage:true});
       await page.goto(web+'/packages.html');await page.locator('[data-experience-panel="glam"] .pricing-badge').filter({hasText:'Most Popular'}).waitFor();
       for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1,'Every standard experience retains its Custom card');
       const customLink=await page.locator('[data-experience-panel="glam"] [data-package-key="glam:custom"] a').getAttribute('href');
-      await page.goto(new URL(customLink,web).href);await page.locator('[name=eventCategory]').waitFor();assert.equal(await page.locator('[name=eventCategory]').inputValue(),'CUSTOM_PRODUCTION');assert.equal(await page.locator('[name=catalogKey]').inputValue(),'CUSTOM');await page.locator('[data-booking-summary]').getByText('Custom quote required',{exact:true}).waitFor();assert.equal(await page.locator('[data-booking-summary]').getByText('$0.00',{exact:true}).count(),0);
+      await page.goto(new URL(customLink,web).href);await page.locator('[data-experience-package=glam]').waitFor();await page.locator('[data-booking-summary]').getByText('Custom quote',{exact:false}).waitFor();assert.equal(await page.locator('[name=eventCategory], [name=catalogKey]').count(),0);assert.equal(await page.locator('[data-booking-summary]').getByText('$0.00',{exact:true}).count(),0);
       await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Conferences & professional events',exact:true}).waitFor();await page.getByRole('button',{name:'Conferences & professional events',exact:true}).click();for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1);await page.locator('[data-experience-panel="glam"] .pricing-card').filter({hasText:'$1,399'}).waitFor();
       await page.screenshot({path:'artifacts/pricing/website-packages-'+width+'.png',fullPage:true});assert.deepEqual(errors,[]);await page.close();
      }
