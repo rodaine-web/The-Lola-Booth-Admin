@@ -16,7 +16,7 @@
  const businessHref=key=>'availability.html?'+new URLSearchParams({customerType:'BUSINESS',...(key?{experience:key}:{})});
  document.querySelector('[data-business-experiences]').innerHTML=offerings.map(item=>`<article class="business-experience-card"><img src="${item.image}" alt="${escape(item.name)}" width="600" height="400" loading="lazy"><div class="business-experience-copy"><h3>${escape(item.name)}</h3><p>${escape(item.description)}</p><a class="btn gold" href="${businessHref(item.key)}">Request a Quote →</a></div></article>`).join('');
  function renderBusinessAddons(items){
-  document.querySelector('[data-business-addons]').innerHTML=items.map(item=>`<article class="addon-card"><h4>${escape(item.name)}</h4><p>${escape(item.description||'Tell us what you have in mind. We’ll confirm the details in your proposal.')}</p></article>`).join('');
+  document.querySelector('[data-business-addons]').innerHTML=items.map(item=>`<article class="addon-card"><h4>${escape(item.name)}</h4>${item.description?`<p>${escape(item.description)}</p>`:''}</article>`).join('');
  }
  const fallbackAddons=new Map();
  document.querySelectorAll('[data-experience-addons] .addon-card').forEach(card=>{const name=card.querySelector('h4')?.textContent;if(name&&!fallbackAddons.has(name))fallbackAddons.set(name,{name,description:card.querySelector('p')?.textContent});});
