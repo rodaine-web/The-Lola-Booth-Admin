@@ -59,10 +59,10 @@
   try {if(!/^https:\/\//.test(base)&&!/^http:\/\/(localhost|127\.0\.0\.1):/.test(base))throw new Error('Catalog unavailable');const response=await fetch(base+'/api/public/booking-catalog',{headers:{Accept:'application/json'},cache:'no-store'});if(!response.ok)throw new Error('Catalog unavailable');catalog=await response.json();
    const requested=new URLSearchParams(location.search);
    if(requested.get('customerType')==='BUSINESS')el('[name=customerType]').value='BUSINESS';
-   if(requested.get('eventCategory')==='CUSTOM_PRODUCTION'){
+   if(requested.get('experience')){
     const experience=catalog.experiences.find(x=>x.key===requested.get('experience'));
-    const pkg=catalog.packages.find(x=>x.id===requested.get('packageId')&&x.experience_id===experience?.id&&(x.pricing_profile?.quoteRequired||custom(x)));
-    if(pkg)chosen.set(experience.key,{experienceId:experience.id,packageId:pkg.id,customNotes:''});
+    const pkg=catalog.packages.find(x=>x.id===requested.get('packageId')&&x.experience_id===experience?.id&&(!catalog.pricingVersion||x.catalog_key==='STANDARD'||x.pricing_profile?.quoteRequired));
+    if(experience&&(pkg||requested.get('customerType')==='BUSINESS'))chosen.set(experience.key,{experienceId:experience.id,packageId:pkg?.id||'',customNotes:''});
    }
    updateMode();ready=true;renderExperiences();renderAddons();summary();el('[data-catalog-status]').textContent='Choose available catalog packages. Pricing will be confirmed in your quote.';}
   catch {el('[data-catalog-status]').textContent='We couldn’t load available options. Please retry or contact LOLA.';el('[data-catalog-retry]').hidden=false;}

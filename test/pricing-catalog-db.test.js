@@ -151,8 +151,25 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
       for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1,'Every standard experience retains its Custom card');
       const customLink=await page.locator('[data-experience-panel="glam"] [data-package-key="glam:custom"] a').getAttribute('href');
       await page.goto(new URL(customLink,web).href);await page.locator('[data-experience-package=glam]').waitFor();await page.locator('[data-booking-summary]').getByText('Custom quote',{exact:false}).waitFor();assert.equal(await page.locator('[name=eventCategory], [name=catalogKey]').count(),0);assert.equal(await page.locator('[data-booking-summary]').getByText('$0.00',{exact:true}).count(),0);
-      await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Conferences & professional events',exact:true}).waitFor();await page.getByRole('button',{name:'Conferences & professional events',exact:true}).click();for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1);await page.locator('[data-experience-panel="glam"] .pricing-card').filter({hasText:'$1,399'}).waitFor();
-      await page.screenshot({path:'artifacts/pricing/website-packages-'+width+'.png',fullPage:true});assert.deepEqual(errors,[]);await page.close();
+      await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Individual',exact:true}).waitFor();
+      assert.equal(await page.locator('[data-pricing-catalog]').count(),0,'Only Individual and Business audience choices remain');
+      await page.locator('[data-package-key="glam:signature"] .price').getByText('$899',{exact:true}).waitFor();
+      await page.locator('[data-package-key="glam:signature"] .sub').getByText('Our most popular experience',{exact:false}).waitFor();
+      assert.match(await page.locator('[data-package-key="glam:luxe"] ul').innerText(),/6 hours/,'Approved service hours stay consistent with internal pricing');
+      await page.screenshot({path:'artifacts/pricing/website-packages-individual-'+width+'.png',fullPage:true});
+      await page.getByRole('button',{name:'Business',exact:true}).click();
+      const business=page.locator('[data-audience-view="BUSINESS"]');await business.waitFor({state:'visible'});
+      assert.equal(await business.locator('.business-experience-card').count(),4);assert.ok(await business.locator('.addon-card').count()>0);
+      assert.equal(await page.locator('.pricing-grid:visible').count(),0,'Business sees experiences and add-ons, never tier cards');
+      assert.doesNotMatch(await page.locator('body').innerText(),/\$[\d,]+|THE ESSENTIAL|The Signature|Most Popular/);
+      assert.ok(await page.locator('[data-audience-cta]').getAttribute('href').then(h=>h.includes('customerType=BUSINESS')));assert.equal(await page.locator('header a.btn').textContent(),'Request a Quote →');
+      const businessLinks=await business.locator('.business-experience-card a').evaluateAll(links=>links.map(a=>a.getAttribute('href')));
+      for(const key of ['glam','360','vogue','audio'])assert.ok(businessLinks.some(h=>new URL(h,web).searchParams.get('experience')===key));
+      await page.screenshot({path:'artifacts/pricing/website-packages-business-'+width+'.png',fullPage:true});
+      await page.goto(new URL(businessLinks[0],web).href);await page.locator('[data-catalog-status]').getByText('Choose available catalog packages.',{exact:false}).waitFor();
+      assert.equal(await page.locator('[name=customerType]').inputValue(),'BUSINESS');assert.equal(await page.locator('[data-experience="glam"]').isChecked(),true);await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();assert.doesNotMatch(await page.locator('[data-multi-booking]').textContent(),/\$[\d,]+/);
+      await page.route('**/api/public/pricing-catalog',route=>route.fulfill({status:503,body:'Unavailable'}));await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Business',exact:true}).click();assert.equal(await page.locator('[data-business-experiences] a').count(),4,'Business quote path survives a catalog outage');
+      assert.deepEqual(errors,[]);await page.close();
      }
     }finally{await webBrowser?.close();await website.close();}
    }
