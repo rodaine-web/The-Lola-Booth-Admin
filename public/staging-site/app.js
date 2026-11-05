@@ -110,7 +110,7 @@
     }
   }
   function renderPackages(items,showPrice=true){
-    if(window.lolaVersionedPricingActive)return;
+    if(window.lolaVersionedPricingActive||qs('[data-package-audience]'))return;
     const byKey=new Map(items.filter(x=>x.website_key).map(x=>[x.website_key,x]));
     // Legacy payloads have no experience relationship; do not overwrite approved fallback.
     if(items.length&&!byKey.size)throw new Error('CMS package migration is not available yet');

@@ -147,7 +147,16 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
       assert.equal(lead.source_details.customerType,'BUSINESS');assert.equal(lead.source_details.bookingInquiry.selections[0].startingPrice,899);assert.equal(lead.source_details.bookingInquiry.addons[0].addonId,creative.id);assert.ok(lead.source_details.bookingInquiry.pricingQuote.id,'Authoritative pricing remains available internally for proposal review');assert.equal(previewCalls,0);
       await page.locator('[data-form-status]').getByText('Your Quote Request Has Been Submitted!',{exact:false}).waitFor();
       await page.screenshot({path:'artifacts/pricing/website-booking-'+width+'.png',fullPage:true});
-      await page.goto(web+'/packages.html');await page.locator('[data-experience-panel="glam"] .pricing-badge').filter({hasText:'Most Popular'}).waitFor();
+      const cmsConfig=route=>route.fulfill({contentType:'application/javascript',body:'window.LOLA_CONFIG='+JSON.stringify({apiBase:web,environment:'staging',cmsChannel:'STAGING',formsEnabled:true})});
+      const cmsFixture=route=>route.fulfill({json:{channel:'STAGING',cmsAuthoritative:true,packages:[{website_key:'glam:signature',name:'CMS overwrite',starting_price:1,website_features:['CMS overwrite']}],pageItems:[],content:{},settings:{}}});
+      const delayedPricing=async route=>{await new Promise(resolve=>setTimeout(resolve,350));await route.continue();};
+      await page.route('**/config.js',cmsConfig);await page.route('**/api/public/staging/site',cmsFixture);await page.route('**/pricing-catalog.js',delayedPricing);
+      await page.goto(web+'/packages.html',{waitUntil:'domcontentloaded'});await page.locator('[data-experience-panel="glam"] .pricing-badge').filter({hasText:'Most Popular'}).waitFor();
+      await page.locator('[data-package-key="glam:signature"] .price').getByText('$899',{exact:true}).waitFor();
+      assert.equal(await page.locator('[data-package-key="glam:essential"]').isVisible(),true,'An early CMS response must not hide the restored cards');
+      assert.match(await page.locator('[data-package-key="glam:essential"] ul').textContent(),/Custom photo overlay designed for your event/,'An early CMS response must not replace approved feature copy');
+      assert.doesNotMatch(await page.locator('[data-package-key="glam:signature"] ul').textContent(),/CMS overwrite/);
+      await page.unroute('**/config.js',cmsConfig);await page.unroute('**/api/public/staging/site',cmsFixture);await page.unroute('**/pricing-catalog.js',delayedPricing);
       for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1,'Every standard experience retains its Custom card');
       const customLink=await page.locator('[data-experience-panel="glam"] [data-package-key="glam:custom"] a').getAttribute('href');
       await page.goto(new URL(customLink,web).href);await page.locator('[data-experience-package=glam]').waitFor();await page.locator('[data-booking-summary]').getByText('Custom quote',{exact:false}).waitFor();assert.equal(await page.locator('[name=eventCategory], [name=catalogKey]').count(),0);assert.equal(await page.locator('[data-booking-summary]').getByText('$0.00',{exact:true}).count(),0);
