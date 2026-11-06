@@ -14,3 +14,22 @@ export function proposalCatalogError(input, pack, addons) {
   }
   return null;
 }
+
+// Use catalog keys, not display names: similar names may represent extra units.
+export function proposalAddonStatus(addon, experiences, packages) {
+  const policy=addon?.pricing_policy;
+  if (!policy) return null;
+  const selected=experiences.flatMap(item=>item.packages||[])
+    .map(item=>packages.find(pkg=>pkg.id===item.package_id)).filter(Boolean);
+  const included=selected.find(pkg=>pkg.pricing_profile?.includedAddonKeys?.includes(policy.key)
+    && policy.experiences?.includes(pkg.pricing_profile.experience)
+    && (!policy.packageIds?.length||policy.packageIds.includes(pkg.id)));
+  if (included) return `Included in selected package: ${included.name}`;
+  if (policy.category==='PRINTS' && selected.some(pkg=>['glam','vogue'].includes(pkg.pricing_profile?.experience)))
+    return 'Select additional prints under Total physical prints in Package pricing review.';
+  return null;
+}
+export function removeIncludedProposalAddons(selected, experiences, packages, addons) {
+  const next=selected.filter(item=>!proposalAddonStatus(addons.find(addon=>addon.id===item.addon_id),experiences,packages));
+  return next.length===selected.length?selected:next;
+}

@@ -1,3 +1,4 @@
+import {proposalAddonStatus,removeIncludedProposalAddons} from '../../shared/proposal-catalog.js';
 import {withoutCampaignBundle,removeCampaignExperience} from '../../shared/campaign-selection.js';
 import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
 import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
@@ -137,11 +138,14 @@ export default function ProposalWizard(){
   }
 
   function chooseAddon(item){
+    if(proposalAddonStatus(item,selectedExperiences,packages))return;
     setSelectedAddons(current=>current.some(entry=>entry.addon_id===item.id)
       ?current.filter(entry=>entry.addon_id!==item.id)
       :[...current,{addon_id:item.id,description:item.name,quantity:1,unit_price:Number(item.price||0)}]
     );
   }
+
+  useEffect(()=>{setSelectedAddons(current=>removeIncludedProposalAddons(current,selectedExperiences,packages,addons));},[selectedExperiences,packages,addons,selectedAddons]);
 
   const pricing=useMemo(()=>{
     const services=selectedExperiences.reduce((sum,item)=>sum+(item.packages?.length?item.packages.reduce((s,p)=>s+Number(p.price||0),0):Number(item.price||0)),0);
@@ -331,7 +335,7 @@ export default function ProposalWizard(){
         </div>
       <div className="form-grid">{(item.packages||[]).map(pkg=><label key={pkg.campaign_id?pkg.campaign_id+pkg.campaign_offer_key:pkg.package_id}>Selected price — {pkg.name}<input type="number" min="0" step="0.01" readOnly={!!pkg.campaign_id} value={pkg.price} onChange={e=>setSelectedExperiences(current=>current.map(row=>row.experience_id===item.experience_id?{...row,packages:row.packages.map(p=>p.package_id===pkg.package_id?{...p,price:Number(e.target.value)}:p)}:row))}/></label>)}</div>
       </section>)}
-      {!!addons.length&&<section className="wizard-section"><h3>Add-ons <small>Optional</small></h3><div className="addon-choice-grid">{addons.map(item=><label key={item.id}><input type="checkbox" checked={selectedAddons.some(entry=>entry.addon_id===item.id)} onChange={()=>chooseAddon(item)}/><span>{item.name}</span><strong>{money(item.price||0)}</strong></label>)}</div></section>}
+      {!!addons.length&&<section className="wizard-section"><h3>Add-ons <small>Optional</small></h3><div className="addon-choice-grid">{addons.map(item=><label key={item.id}><input type="checkbox" disabled={Boolean(proposalAddonStatus(item,selectedExperiences,packages))} checked={!proposalAddonStatus(item,selectedExperiences,packages)&&selectedAddons.some(entry=>entry.addon_id===item.id)} onChange={()=>chooseAddon(item)}/><span>{item.name}</span><strong>{proposalAddonStatus(item,selectedExperiences,packages)||money(item.price||0)}</strong></label>)}</div></section>}
       {!!mappedProposalPhotos(selectedExperiences,photoAssets,()=>"preview").length&&<p role="status">Reviewed experience photos will be included in this proposal.</p>}
       {previewError&&<p role="alert" className="toast error">{previewError}</p>}
       <section className="wizard-pricing-summary">
