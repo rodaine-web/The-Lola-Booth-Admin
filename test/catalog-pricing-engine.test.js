@@ -94,3 +94,14 @@ test('360 can request a separately quoted still-photo station without ordinary p
  assert.equal(quote('360','ESSENTIAL',{addons:[{addonId:station.id}]}).status,'REVIEW_REQUIRED');
  assert.throws(()=>quote('360','ESSENTIAL',{prints:100}));
 });
+
+test('simple multi-experience requests may combine a standard package and reviewed Custom preference',()=>{
+ const standard=packages.find(p=>p.catalog_key==='STANDARD'&&p.pricing_profile.experience==='glam'&&p.tier_key==='SIGNATURE');
+ const custom=packages.find(p=>p.pricing_profile.quoteRequired&&p.pricing_profile.experience==='vogue');
+ for(const customerType of ['INDIVIDUAL','BUSINESS']){
+  const result=calculateCatalogQuote({version:'qa',eventCategory:customerType==='BUSINESS'?'COMPANY_CELEBRATION':'PRIVATE_CELEBRATION',customerType,selections:[{packageId:standard.id},{packageId:custom.id}],route:chicago},catalog);
+  assert.equal(result.status,'REVIEW_REQUIRED');assert.equal(result.entitlements.find(p=>p.packageId===custom.id).scopeApproved,false);assert.equal(result.lines.filter(l=>l.type==='PACKAGE').length,1);
+ }
+ const professional=packages.find(p=>p.catalog_key==='PROFESSIONAL');
+ assert.throws(()=>calculateCatalogQuote({version:'qa',eventCategory:'PRIVATE_CELEBRATION',selections:[{packageId:professional.id}],route:chicago},catalog),'Unreviewed cross-catalog fixed prices remain rejected');
+});

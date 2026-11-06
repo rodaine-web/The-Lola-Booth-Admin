@@ -6,7 +6,7 @@ import CatalogQuoteReview from '../components/CatalogQuoteReview.jsx';
 import {retainProposalPhotoSections} from "../../shared/proposal-photo-mapping.js";
 import {loadProposalCatalog as loadCatalog} from "../../shared/catalog-loading.js";
 import ProposalVisualEditor from "../components/ProposalVisualEditor.jsx";
-import {selectProposalPackage,selectProposalExperience} from '../../shared/proposal-catalog.js';
+import {proposalAddonStatus,removeIncludedProposalAddons,selectProposalPackage,selectProposalExperience} from '../../shared/proposal-catalog.js';
 import { ArrowDown, ArrowLeft, ArrowUp, FileUp, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -31,6 +31,7 @@ export default function ProposalEditor() {
   const [customLine, setCustomLine] = useState({ description: "", detail: "", quantity: 1, unit_price: "" });
   const [experienceOptions, setExperienceOptions] = useState([]);
   const [packageOptions, setPackageOptions] = useState([]);
+  const [addonOptions,setAddonOptions]=useState([]);
   const [upload, setUpload] = useState({ filename: "", pdf_base64: "" });
   const [inlineClientOpen,setInlineClientOpen]=useState(false);
   const [inlineEventOpen,setInlineEventOpen]=useState(false);
@@ -57,6 +58,8 @@ export default function ProposalEditor() {
     custom_line_items: [],
     sections: ["Introduction", "Event Details", "Proposed Experience", "Package Includes", "Investment Summary", "Next Steps", "Terms"].map((title, index) => section(title, index))
   });
+  useEffect(()=>{setForm(current=>{const next=removeIncludedProposalAddons(current.addons||[],current.selected_experiences||[],packageOptions,addonOptions);return next===current.addons?current:{...current,addons:next};});},[form.selected_experiences,packageOptions,addonOptions,form.addons]);
+  const addonStatus=proposalAddonStatus(addonOptions.find(item=>item.id===addon.addon_id),form.selected_experiences||[],packageOptions);
   const [error, setError] = useState("");
   const [originalRequest,setOriginalRequest]=useState(null);
   const [eventReferralCode,setEventReferralCode]=useState("");
@@ -70,10 +73,10 @@ export default function ProposalEditor() {
   useEffect(() => {
     let live=true;
     setCatalogError("");
-    Promise.allSettled(["experiences","packages"].map(resource=>loadCatalog(api.get,resource))).then(results=>{
+    Promise.allSettled(["experiences","packages","addons"].map(resource=>loadCatalog(api.get,resource))).then(results=>{
       if(!live)return;
-      const setters=[setExperienceOptions,setPackageOptions];
-      const labels=["experiences","packages"];
+      const setters=[setExperienceOptions,setPackageOptions,setAddonOptions];
+      const labels=["experiences","packages","add-ons"];
       const failures=[];
       results.forEach((result,index)=>{
         if(result.status==="fulfilled")setters[index](result.value);
@@ -446,8 +449,9 @@ export default function ProposalEditor() {
                 <RelationshipSelect resource="addons" value={addon.addon_id} placeholder="Add-on" onChange={(value,option) => setAddon((current) => ({ ...current, addon_id: value, description:option?.label, pricing_type:option?.pricing_type, unit_price:option?.pricing_type === "CUSTOM" ? "" : option?.price }))} />
                 {addon.pricing_type === "CUSTOM" && <input aria-label="Agreed add-on price" type="number" min="0.01" step="0.01" placeholder="Agreed price" value={addon.unit_price || ""} onChange={event=>setAddon(current=>({...current,unit_price:event.target.value}))}/> }
                 <input aria-label="Add-on quantity" type="number" min="1" value={addon.quantity} onChange={(event) => setAddon((current) => ({ ...current, quantity: event.target.value }))} />
-                <button type="button" className="primary-action" disabled={!addon.addon_id || (addon.pricing_type === "CUSTOM" && !(Number(addon.unit_price)>0))} onClick={() => { setForm((current) => ({ ...current, addons: [...current.addons, addon] })); setAddon({ addon_id: "", quantity: 1 }); }}><Plus size={16} />Add</button>
+                <button type="button" className="primary-action" disabled={Boolean(addonStatus) || !addon.addon_id || (addon.pricing_type === "CUSTOM" && !(Number(addon.unit_price)>0))} onClick={() => { setForm((current) => ({ ...current, addons: [...current.addons, addon] })); setAddon({ addon_id: "", quantity: 1 }); }}><Plus size={16} />Add</button>
               </div>
+              <p role="status">{addonStatus}</p>
               <div className="line-list">{form.addons.map((item, index) => <div key={`${item.addon_id}-${index}`}><span>{item.description || `Add-on ${index + 1}`} · Qty {item.quantity}</span><button type="button" aria-label="Remove add-on" onClick={() => setForm((current) => ({ ...current, addons: current.addons.filter((_, i) => i !== index) }))}><Trash2 size={14} /></button></div>)}</div>
               <div className="inline-form custom-line-form">
                 <input aria-label="Custom service" placeholder="Custom service" value={customLine.description} onChange={(event) => setCustomLine((current) => ({ ...current, description: event.target.value }))} />

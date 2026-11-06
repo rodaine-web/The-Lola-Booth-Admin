@@ -1,37 +1,73 @@
 (() => {
  'use strict';
+ const navigation=document.querySelector('[aria-label="Booking for"]');
+ if(!navigation)return;
+ // This page owns its approved card layout; the generic CMS renderer must not replace it.
+ window.lolaVersionedPricingActive=true;
  const base=String(window.LOLA_CONFIG?.apiBase||'').replace(/\/$/,'');
  const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=value=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(Number(value));
+ const offerings=[
+  {key:'glam',name:'The Glam',image:'assets/booking-glam.png',description:'Studio-quality portraits, flattering lighting and custom event design. A polished photo booth experience for your guests and your brand.'},
+  {key:'360',name:'The 360 Booth',image:'assets/booking-360.png',description:'Dynamic, shareable videos that put your guests at the center of the experience. Bring movement and energy to your next event.'},
+  {key:'vogue',name:'The Vogue',image:'assets/vogue.jpg',description:'A magazine-style photo experience with a customizable enclosure. Create editorial portraits and branded moments guests will remember.'},
+  {key:'audio',name:'The Audio Guest Book',image:'assets/audio.jpg',description:'Capture guest voices, messages and stories with a personalized audio experience. Create a lasting keepsake or a memorable brand interaction.'}
+ ];
+ const businessHref=key=>'availability.html?'+new URLSearchParams({customerType:'BUSINESS',...(key?{experience:key}:{})});
+ document.querySelector('[data-business-experiences]').innerHTML=offerings.map(item=>`<article class="business-experience-card"><img src="${item.image}" alt="${escape(item.name)}" width="600" height="400" loading="lazy"><div class="business-experience-copy"><h3>${escape(item.name)}</h3><p>${escape(item.description)}</p><a class="btn gold" href="${businessHref(item.key)}">Request a Quote →</a></div></article>`).join('');
+ function renderBusinessAddons(items){
+  document.querySelector('[data-business-addons]').innerHTML=items.map(item=>`<article class="addon-card"><img src="${window.lolaAddonImage(item)}" alt="${escape(item.name)} illustration" width="400" height="260" loading="lazy"><h4>${escape(item.name)}</h4>${item.description?`<p>${escape(item.description)}</p>`:''}</article>`).join('');
+ }
+ const fallbackAddons=new Map();
+ document.querySelectorAll('[data-experience-addons] .addon-card').forEach(card=>{const name=card.querySelector('h4')?.textContent;if(name&&!fallbackAddons.has(name))fallbackAddons.set(name,{name,description:card.querySelector('p')?.textContent});});
+ renderBusinessAddons([...fallbackAddons.values()]);
+ const bookingLinks=[...document.querySelectorAll('a[href="availability.html"]')].filter(link=>!link.closest('[data-audience-view]')).map(link=>{link.removeAttribute('data-cms-copy');return {link,href:link.getAttribute('href'),text:link.textContent};});
+ function selectAudience(audience){
+  navigation.querySelectorAll('button').forEach(button=>{const selected=button.dataset.packageAudience===audience;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));});
+  document.querySelectorAll('[data-audience-view]').forEach(section=>{section.hidden=section.dataset.audienceView!==audience;});
+  bookingLinks.forEach(({link,href,text})=>{link.setAttribute('href',audience==='BUSINESS'?businessHref():href);link.textContent=audience==='BUSINESS'?'Request a Quote →':text;});
+ }
+ navigation.addEventListener('click',event=>{const button=event.target.closest('[data-package-audience]');if(button)selectAudience(button.dataset.packageAudience);});
+ selectAudience(new URLSearchParams(location.search).get('customerType')==='BUSINESS'?'BUSINESS':'INDIVIDUAL');
  async function load(){
   try{
    const response=await fetch(base+'/api/public/pricing-catalog',{cache:'no-store'});
    if(response.status===404)return;
-   if(!response.ok)throw Error('Package pricing is temporarily unavailable. Please contact LOLA for a quote.');
-   const data=await response.json();window.lolaVersionedPricingActive=true;
-   const tabs=document.querySelector('.experience-tabs');if(!tabs)return;
-   const navigation=document.createElement('div');navigation.className='experience-tabs';navigation.setAttribute('aria-label','Package catalogs');
-   const catalogs=[['STANDARD','Private & company celebrations'],['PROFESSIONAL','Conferences & professional events'],['ACTIVATION','Brand activations & campaigns']];
-   navigation.innerHTML=catalogs.map(([key,label],i)=>`<button type="button" class="experience-tab ${i?'':'active'}" aria-pressed="${i?'false':'true'}" data-pricing-catalog="${key}">${label}</button>`).join('');tabs.before(navigation);
-   // Preserve the approved Custom card copy while the published catalog supplies priced tiers.
-   const customCards=new Map(Array.from(document.querySelectorAll('[data-experience-panel]')).map(panel=>[panel.dataset.experiencePanel,panel.querySelector('[data-package-key$=":custom"]')?.outerHTML]));
-   function customHref(experience,pkg){return 'availability.html?'+new URLSearchParams({eventCategory:'CUSTOM_PRODUCTION',experience,packageId:pkg.id});}
-   function render(key){
-    navigation.querySelectorAll('button').forEach(button=>{const active=button.dataset.pricingCatalog===key;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
-    document.querySelectorAll('[data-experience-panel]').forEach(panel=>{
-     const experience=panel.dataset.experiencePanel,grid=panel.querySelector('.pricing-grid');
-     const rows=data.packages.filter(p=>p.catalog_key===key&&p.pricing_profile.experience===experience);
-     grid.innerHTML=rows.filter(p=>!p.pricing_profile.quoteRequired).map(p=>{const x=p.pricing_profile;const features=[x.serviceHours?`${x.serviceHours} active service hours`:x.rentalHours?`Up to ${x.rentalHours} rental hours`:'Rental scope confirmed in your quote',...(experience==='audio'?[x.phones?`${x.phones} recording phone${x.phones>1?'s':''}`:'Recording deliverables as agreed','Custom greeting included']:['Unlimited digital sessions during service hours',`${x.prints} physical prints included`,`${x.designs} creative design${x.designs===1?'':'s'}`]),x.backdrop?`${x.backdrop==='PREMIUM'?'Premium':'Standard'} backdrop`:null,x.enclosure?'Magazine enclosure included':null,x.digitalSharing?'Digital sharing included':null,`Travel within Chicago${x.travelMinutes?` + ${x.travelMinutes} minutes beyond city limits`:''} included`,x.reporting?`${x.reporting.toLowerCase()} engagement reporting`:null].filter(Boolean);return `<article class="pricing-card${p.most_popular?' featured':''}">${p.most_popular?'<div class="pricing-badge">Most Popular</div>':''}<h3>${escape(x.tier)}</h3><div class="starting">${x.quoteRequired?'Approved quote required':x.startingAt?'Starting at':'Package price'}</div><div class="price">${p.starting_price===null?'Custom quote':money(p.starting_price)}</div><hr><ul>${features.map(text=>`<li>${escape(text)}</li>`).join('')}</ul>${x.deliveryApprovalRequired?'<p>Final delivery scope and timing require approval before booking.</p>':''}<p>Tax is calculated separately using your billing address. Travel outside coverage requires review.</p><a class="btn gold" href="${x.quoteRequired?customHref(experience,p):'availability.html'}">${x.startingAt||x.quoteRequired?'Request a quote':'Check availability'} →</a></article>`;}).join('');
-     {
-      const custom=data.packages.find(p=>p.active!==false&&p.pricing_profile.experience===experience&&p.pricing_profile.quoteRequired);
-      const markup=customCards.get(experience);
-      if(custom&&markup){const wrapper=document.createElement('div');wrapper.innerHTML=markup;wrapper.querySelectorAll('a').forEach(link=>link.setAttribute('href',customHref(experience,custom)));grid.append(wrapper.firstElementChild);}
-     }
+   if(!response.ok)throw Error('Package catalog unavailable');
+   const data=await response.json();
+   document.querySelectorAll('[data-package-key]').forEach(card=>{
+    const [experience,tier]=card.dataset.packageKey.split(':');
+    const pkg=data.packages.find(p=>p.pricing_profile.experience===experience&&(tier==='custom'?p.pricing_profile.quoteRequired:p.catalog_key==='STANDARD'&&p.tier_key===tier.toUpperCase()));
+    card.hidden=!pkg;if(!pkg)return;
+    const href='availability.html?'+new URLSearchParams({customerType:'INDIVIDUAL',experience,packageId:pkg.id,...(tier==='custom'?{eventCategory:'CUSTOM_PRODUCTION'}:{})});
+    card.querySelectorAll('a').forEach(link=>link.setAttribute('href',href));
+    if(tier==='custom')return;
+    card.querySelector('.price').textContent=pkg.starting_price==null?'Request a quote':money(pkg.starting_price);
+    card.classList.toggle('featured',!!pkg.most_popular);
+    let badge=card.querySelector('.pricing-badge');
+    if(pkg.most_popular&&!badge){badge=document.createElement('div');badge.className='pricing-badge';badge.textContent='Most Popular';card.prepend(badge);}
+    if(badge)badge.hidden=!pkg.most_popular;
+    // Preserve the original presentation, with the current approved service scope.
+    const profile=pkg.pricing_profile;
+    card.querySelectorAll('li').forEach(item=>{
+     if(profile.serviceHours&&/\d+ hours/i.test(item.textContent))item.textContent=item.textContent.replace(/(Up to )?\d+ hours/i,`${profile.serviceHours} hours`);
+     if(/on-site photo printing|\d+ physical (photo )?prints included/i.test(item.textContent))item.textContent=`${profile.prints} physical photo prints included`;
+     if(profile.backdrop&&/backdrop/i.test(item.textContent))item.textContent=profile.backdrop==='PREMIUM'?'Premium backdrop selection':'Standard backdrop';
     });
-   }
-   navigation.addEventListener('click',event=>{const button=event.target.closest('[data-pricing-catalog]');if(button)render(button.dataset.pricingCatalog);});render('STANDARD');
-   document.querySelectorAll('[data-experience-addons]').forEach(section=>{const key=section.dataset.experienceAddons;section.querySelector('.addons-grid').innerHTML=data.addons.filter(a=>a.pricing_policy.experiences.includes(key)&&a.pricing_policy.category!=='TRAVEL').map(a=>`<div class="addon-card"><h4>${escape(a.name)}</h4><p>${['FROM','CUSTOM','CALCULATED'].includes(a.pricing_policy.method)?'Requires a reviewed quote':money(a.price)}${a.pricing_policy.method==='PER_HOUR'?' / hour':''}</p></div>`).join('');});
-  }catch(error){const notice=document.createElement('p');notice.setAttribute('role','alert');notice.textContent=error.message;document.querySelector('.experience-tabs')?.before(notice);}
+    if(profile.rentalHours){const duration=document.createElement('li');duration.textContent=`Up to ${profile.rentalHours} hours of rental`;card.querySelector('ul').prepend(duration);}
+   });
+   document.querySelectorAll('[data-experience-addons] .addon-card').forEach(card=>{
+    const label=card.querySelector('h4')?.textContent.trim(),price=card.querySelector('.mini-script');if(!price)return;
+    const aliases={'Additional Booth Hour':'extra-glam-hour','Additional 360 Hour':'extra-360-hour','Additional Vogue Hour':'extra-vogue-hour','Red Carpet + Stanchions':'red-carpet','Red Carpet':'red-carpet','Extra Audio Phone':'audio-phone'};
+    const addon=data.addons.find(a=>a.name.toLowerCase()===label.toLowerCase()||a.pricing_policy?.key===aliases[label]);
+    const crossSell=label==='360 Video Booth'?'360':label==='Audio Guestbook'?'audio':null;
+    const entry=crossSell&&data.packages.find(p=>p.catalog_key==='STANDARD'&&p.tier_key==='ESSENTIAL'&&p.pricing_profile.experience===crossSell);
+    if(addon)price.textContent=['CUSTOM','CALCULATED'].includes(addon.pricing_policy?.method)?'Available upon request':`${addon.pricing_policy?.method==='FROM'?'Starting at ':''}${money(addon.price)}${addon.pricing_type==='PER_HOUR'?' / hour':''}`;
+    else if(entry)price.textContent='Starting at '+money(entry.starting_price);
+    else if(/\$/.test(price.textContent))price.textContent='Available upon request';
+   });
+   renderBusinessAddons(data.addons.filter(item=>item.active!==false&&item.pricing_policy?.category!=='TRAVEL'));
+  }catch(error){console.warn('LOLA package catalog unavailable; approved individual cards and business offerings remain available.',error);}
  }
  load();
 })();

@@ -44,22 +44,23 @@ export function travelPricing({allowanceMinutes,rules,route,extraTrips=false}){
   return {status:miles?'CHARGE':'INCLUDED',amountCents:Math.round(miles*integer(rules.mileageRateCents)),allowanceMinutes,excessOneWayMiles:miles,evidence:route};
 }
 
-export function calculateCatalogQuote({version,selections,eventCategory,customerType='INDIVIDUAL',catalogKey,discountCents=0,customItems=[],route,extraTrips=false,override},catalog,{admin=false}={}){
+export function calculateCatalogQuote({version,selections,eventCategory,customerType='INDIVIDUAL',catalogKey,discountCents=0,customItems=[],route,extraTrips=false,override},catalog,{admin=false,simpleAdmin=false}={}){
+  simpleAdmin=admin&&simpleAdmin;
   if(!['INDIVIDUAL','BUSINESS','ORGANIZATION'].includes(customerType))invalid('Choose a customer type.');
   const selectedCatalog=selectPricingCatalog(eventCategory,catalogKey,{admin,reason:override?.reason||''});
   if(!Array.isArray(selections)||!selections.length||selections.length>4)invalid('Choose one to four experiences.');
   const lines=[],seen=new Set(),entitlements=[],reasons=[];let allowance=0;
   for(const choice of selections){
-    const pkg=catalog.packages.find(p=>p.id===choice.packageId&&p.active&&(p.catalog_key===selectedCatalog||(selectedCatalog==='CUSTOM'&&p.pricing_profile?.quoteRequired)));
+    const pkg=catalog.packages.find(p=>p.id===choice.packageId&&p.active&&(p.catalog_key===selectedCatalog||p.pricing_profile?.quoteRequired));
     if(!pkg)invalid('Choose an active package in the selected catalog.');
     const profile=pkg.pricing_profile;if(!profile)invalid('Package pricing rules are missing.');
     if(seen.has(profile.experience))invalid('Select each experience once.');seen.add(profile.experience);
     const scopeApproval=override?.scopeApprovals?.find(item=>item.packageId===pkg.id);
     if(scopeApproval&&(!admin||!override.reason?.trim()||!scopeApproval.description?.trim()))invalid('Scope approval requires an Admin reason and an explicit description.');
     const priceOverride=override?.packagePrices?.find(item=>item.packageId===pkg.id);
-    if((pkg.pricing_mode==='CUSTOM'||profile.quoteRequired)&&(!scopeApproval||!priceOverride)){reasons.push('Custom production requires an approved scope and price.');entitlements.push({packageId:pkg.id,packageName:pkg.name,...profile,scopeApproved:false});continue;}
-    if((pkg.pricing_mode==='CUSTOM'||profile.quoteRequired)&&priceOverride.amountCents<=0)invalid('Enter a positive agreed custom-production price before approving this quote.');
-    if(priceOverride&&(!admin||!override.reason?.trim()))invalid('Package price overrides require Admin approval and a reason.');
+    if((pkg.pricing_mode==='CUSTOM'||profile.quoteRequired)&&!simpleAdmin&&(!scopeApproval||!priceOverride)){reasons.push('Custom production requires an approved scope and price.');entitlements.push({packageId:pkg.id,packageName:pkg.name,...profile,scopeApproved:false});continue;}
+    if((pkg.pricing_mode==='CUSTOM'||profile.quoteRequired)&&(priceOverride?.amountCents??(pkg.starting_price==null?0:minorUnits(pkg.starting_price)))<=0)invalid('Enter a positive agreed custom-production price before approving this quote.');
+    if(priceOverride&&(!admin||(!simpleAdmin&&!override.reason?.trim())))invalid('Package price overrides require Admin approval and a reason.');
     const base=priceOverride?moneyInteger(priceOverride.amountCents):minorUnits(pkg.starting_price);allowance=Math.max(allowance,profile.travelMinutes||0);
     const addLine=(type,description,quantity,unitCents)=>{const amount=integer(quantity,1,10000)*moneyInteger(unitCents);moneyInteger(amount);lines.push({type,description,quantity,unitPriceCents:unitCents,amountCents:amount,packageId:pkg.id,experience:profile.experience});};
     const experienceLabel={glam:'The LOLA Glam','360':'The LOLA 360',vogue:'The LOLA Vogue',audio:'Audio Guest Book'}[profile.experience];
@@ -72,9 +73,9 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
     integer(selected);if(selected<included)invalid('Selected prints cannot be less than the included allowance.');
     const customPrinting=unlimited||(['glam','vogue'].includes(profile.experience)&&selected>0&&catalog.rules.printPrices?.[profile.experience]?.[selected]==null);
     const printApproval=override?.printApprovals?.find(item=>item.packageId===pkg.id&&item.selectedPrints===selected&&Boolean(item.unlimitedPrints)===unlimited);
-    if(printApproval&&(!admin||!override.reason?.trim()))invalid('Print allowance overrides require an audited Admin approval.');
+    if(printApproval&&(!admin||(!simpleAdmin&&!override.reason?.trim())))invalid('Print allowance overrides require an audited Admin approval.');
     let upgrade;
-    if(customPrinting){if(printApproval)upgrade=moneyInteger(printApproval.amountCents);else {reasons.push('High-volume or unlimited printing requires an approved scope and print charge.');upgrade=0;}}
+    if(customPrinting){if(simpleAdmin&&!printApproval)invalid('Enter the additional price for this custom print allowance.');if(printApproval)upgrade=moneyInteger(printApproval.amountCents);else {reasons.push('High-volume or unlimited printing requires an approved scope and print charge.');upgrade=0;}}
     else upgrade=printUpgrade(profile.experience,included,selected,catalog.rules.printPrices);
     if(upgrade)addLine('PRINT_UPGRADE',`${unlimited?'Unlimited':selected} total physical prints (${included} included)`,1,upgrade);
     if(upgrade)lines[lines.length-1].stripeTaxCode='txcd_20090028'; // Owner-approved Printing classification, retained on invoice items.
@@ -87,34 +88,35 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
       if(!addon||!policy)invalid('Choose a configured add-on.');
       if(addonSeen.has('key:'+policy.key))invalid('This enhancement was already selected.');addonSeen.add('key:'+policy.key);
       if(!policy.experiences?.includes(profile.experience)||(policy.packageIds?.length&&!policy.packageIds.includes(pkg.id)))invalid('Add-on is incompatible with this package.');
-      if(['PRINTS','EXTRA_HOURS','TRAVEL'].includes(policy.category))invalid('Use the dedicated print, hours or travel selection.');
+      if((simpleAdmin?['PRINTS','TRAVEL']:['PRINTS','EXTRA_HOURS','TRAVEL']).includes(policy.category))invalid('Use the dedicated print, hours or travel selection.');
       if(profile.includedAddonKeys?.includes(policy.key))invalid('This enhancement is already included in the package.');
       const qty=integer(chosen.quantity??1,policy.minQuantity||1,policy.maxQuantity||1);
       const approval=override?.addonApprovals?.find(item=>item.addonId===addon.id&&item.packageId===pkg.id);
-      if(approval&&(!admin||!override.reason?.trim()||!approval.description?.trim()))invalid('Add-on scope and price require an audited Admin approval.');
-      if((['CUSTOM','FROM','CALCULATED'].includes(policy.method)||policy.approvalRequired)&&!approval){reasons.push(`${addon.name} requires an approved quote.`);continue;}
-      addLine('ADDON',approval?`${addon.name} — ${approval.description}`:addon.name,qty,approval?moneyInteger(approval.unitPriceCents):minorUnits(addon.price));
+      if(approval&&(!admin||(!simpleAdmin&&(!override.reason?.trim()||!approval.description?.trim()))))invalid('Add-on scope and price require an audited Admin approval.');
+      if(simpleAdmin&&!approval&&(addon.price==null||(policy.method==='CUSTOM'&&Number(addon.price)===0)))invalid(`Enter a price for ${addon.name}.`);
+      if(!simpleAdmin&&(['CUSTOM','FROM','CALCULATED'].includes(policy.method)||policy.approvalRequired)&&!approval){reasons.push(`${addon.name} requires an approved quote.`);continue;}
+      addLine('ADDON',approval?.description?`${addon.name} — ${approval.description}`:addon.name,qty,approval?moneyInteger(approval.unitPriceCents):minorUnits(addon.price));
       lines[lines.length-1].addonId=addon.id;
     }
-    if(profile.deliveryApprovalRequired&&!scopeApproval)reasons.push(`${pkg.name} has deliverables requiring Admin approval.`);
-    if(profile.startingAt&&!scopeApproval)reasons.push(`${pkg.name} is a starting price; scope requires review.`);
+    if(!simpleAdmin&&profile.deliveryApprovalRequired&&!scopeApproval)reasons.push(`${pkg.name} has deliverables requiring Admin approval.`);
+    if(!simpleAdmin&&profile.startingAt&&!scopeApproval)reasons.push(`${pkg.name} is a starting price; scope requires review.`);
     const sheets=unlimited?null:printFormat==='2X6'?Math.ceil(selected/2):selected;
     const printOperations=catalog.rules.printOperations||{};
-    if(sheets!=null&&printOperations.sheetsPerHour&&profile.serviceHours&&sheets/printOperations.sheetsPerHour>profile.serviceHours+hours&&!scopeApproval)reasons.push('Printing exceeds estimated single-printer capacity. Confirm the equipment and service plan.');
+    if(!simpleAdmin&&sheets!=null&&printOperations.sheetsPerHour&&profile.serviceHours&&sheets/printOperations.sheetsPerHour>profile.serviceHours+hours&&!scopeApproval)reasons.push('Printing exceeds estimated single-printer capacity. Confirm the equipment and service plan.');
     entitlements.push({packageId:pkg.id,packageName:pkg.name,...profile,selectedPrints:selected,unlimitedPrints:unlimited,printFormat,extraHours:hours,...(scopeApproval?{approvedScope:scopeApproval.description}: {}),printEstimate:{physicalPrints:unlimited?null:selected,sheets4x6:sheets,consumableCostCents:sheets==null||printOperations.costPerSheetCents==null?null:moneyInteger(sheets*moneyInteger(printOperations.costPerSheetCents)),printerHours:sheets==null||!printOperations.sheetsPerHour?null:sheets/printOperations.sheetsPerHour}});
   }
-  let travel=travelPricing({allowanceMinutes:allowance,rules:catalog.rules,route,extraTrips});
-  if(override?.travelAmountCents!==undefined){
+  let travel=simpleAdmin?{status:'MANUAL_ENTERED',amountCents:moneyInteger(override?.travelAmountCents??0),allowanceMinutes:allowance}:travelPricing({allowanceMinutes:allowance,rules:catalog.rules,route,extraTrips});
+  if(!simpleAdmin&&override?.travelAmountCents!==undefined){
     if(!admin||!override.reason?.trim())invalid('Travel overrides require Admin approval and a reason.');
     travel={status:'MANUAL_APPROVED',amountCents:moneyInteger(override.travelAmountCents),allowanceMinutes:allowance,reason:override.reason,original:travel};
   }
   if(travel.status==='REVIEW_REQUIRED')reasons.push(...travel.reasons);
   if(travel.amountCents)lines.push({type:'TRAVEL',description:'Travel & Logistics — Outside Included Coverage',quantity:1,unitPriceCents:travel.amountCents,amountCents:travel.amountCents});
   if(customItems.length){
-    if(!admin||!override?.reason?.trim())invalid('Custom charges require an audited Admin reason.');
+    if(!admin||(!simpleAdmin&&!override?.reason?.trim()))invalid('Custom charges require an audited Admin reason.');
     for(const item of customItems){if(!item.description?.trim())invalid('Describe each custom charge.');const quantity=integer(item.quantity,1,10000),unit=moneyInteger(item.unitPriceCents);lines.push({type:'CUSTOM',description:item.description,quantity,unitPriceCents:unit,amountCents:moneyInteger(quantity*unit)});}
   }
-  moneyInteger(discountCents);if(discountCents&&(!admin||!override?.reason?.trim()))invalid('Discounts require Admin approval and a reason.');
+  moneyInteger(discountCents);if(discountCents&&(!admin||(!simpleAdmin&&!override?.reason?.trim())))invalid('Discounts require Admin approval and a reason.');
   const subtotal=lines.reduce((sum,line)=>sum+line.amountCents,0);moneyInteger(subtotal);
   if(discountCents>subtotal)invalid('Discount exceeds the subtotal.');
   return {schemaVersion:1,catalogVersion:version,catalogKey:selectedCatalog,eventCategory,customerType,currency:'USD',lines,entitlements,travel,discountCents,subtotalCents:subtotal,serviceTotalCents:subtotal-discountCents,tax:{status:'CALCULATED_AT_PAYMENT',addressSource:'BILLING',amountCents:null},status:reasons.length?'REVIEW_REQUIRED':'PRICED',reviewReasons:[...new Set(reasons)],override:override&&admin?override:null};

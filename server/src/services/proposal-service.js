@@ -1,3 +1,4 @@
+import {proposalTaxNote} from '../../../shared/proposal-scenario.js';
 import {bookingSchedule} from '../../../shared/booking-payment-policy.js';
 import {packageEntitlementLabels} from '../../../shared/package-entitlements.js';
 import {pricingCatalogEnabled} from './pricing-catalog-service.js';
@@ -224,6 +225,8 @@ export async function buildProposalSnapshot(input) {
     lineItems: lines,
     pricing: {
       ...(catalogQuote?{catalog_quote:catalogQuote,pricing_quote_id:input.pricing_quote_id}:{}),
+      tax_note:proposalTaxNote,
+      tax_pending:Boolean(catalogQuote),
       subtotal: round(subtotal),
       discount: round(discount),
       tax_rate: round(taxRate),

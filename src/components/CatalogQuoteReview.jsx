@@ -1,41 +1,70 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {api} from '../api/client.js';
+import {proposalPricingCatalog,proposalPricingCategory} from '../../shared/proposal-pricing-review.js';
 const money=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
-export default function CatalogQuoteReview({experiences,addons,customLines=[],discount=0,otherFees=0,travelAmount,onTravelChange,initialQuote,onQuote}){
- const [knownPackages,setKnownPackages]=useState([]);
- const [enabled,setEnabled]=useState(false),[choices,setChoices]=useState(()=>Object.fromEntries((initialQuote?.entitlements||[]).map(item=>[item.packageId,{prints:item.selectedPrints,printFormat:item.printFormat||'4X6',unlimitedPrints:item.unlimitedPrints===true,extraHours:item.extraHours||0,scopeApproved:Boolean(item.approvedScope),scopeDescription:item.approvedScope||''}]))),[addonApproval,setAddonApproval]=useState(false),[addonScope,setAddonScope]=useState(''),[addonPrices,setAddonPrices]=useState({}),[category,setCategory]=useState(initialQuote?.eventCategory||'PRIVATE_CELEBRATION'),[customer,setCustomer]=useState(initialQuote?.customerType||'INDIVIDUAL'),[reason,setReason]=useState(initialQuote?.override?.reason||''),[quote,setQuote]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const travel=travelAmount??'';const setTravel=onTravelChange;
- const key=JSON.stringify([experiences,addons,customLines,discount,otherFees,choices,category,customer,travel,reason,addonApproval,addonScope,addonPrices]);
- useEffect(()=>{onQuote(null);},[key]);
- useEffect(()=>{let live=true;api.get('/public/pricing-catalog').then(published=>{if(live){setEnabled(true);setKnownPackages(published.packages);}}).catch(e=>{if(live&&e.status!==404){setEnabled(true);setError(e.message);}});return()=>{live=false;};},[]);
- const selected=experiences.flatMap(item=>item.packages||[]),current=quote?.key===key;
- function option(id,field,value){setChoices(previous=>({...previous,[id]:{...previous[id],[field]:field==='prints'&&value===''?undefined:Number(value)}}));}
- const packageProfile=pkg=>knownPackages.find(row=>row.id===pkg.package_id)?.pricing_profile;
- const photoPackage=pkg=>['glam','vogue'].includes(packageProfile(pkg)?.experience);
- async function calculate(){setBusy(true);setError('');try{
-  const published=await api.get('/public/pricing-catalog');
-  const packages=published.packages;
-  const selections=selected.map(pkg=>{const row=packages.find(p=>p.id===pkg.package_id);if(!row)throw Error('Choose configured catalog packages. Custom campaign bundles require a separate review.');return {packageId:row.id,prints:choices[row.id]?.prints??row.pricing_profile.prints,printFormat:choices[row.id]?.printFormat||'4X6',unlimitedPrints:choices[row.id]?.unlimitedPrints===true,extraHours:choices[row.id]?.extraHours??0,addons:[]};});
-  const available=published.addons;
-  for(const chosen of addons){const addon=available.find(a=>a.id===chosen.addon_id);const target=selections.find(item=>addon?.pricing_policy.experiences.includes(packages.find(p=>p.id===item.packageId).pricing_profile.experience));if(!target)throw Error('Review incompatible or unconfigured add-ons.');target.addons.push({addonId:chosen.addon_id,quantity:Number(chosen.quantity||1)});}
-  const packagePrices=selected.filter(pkg=>packages.find(p=>p.id===pkg.package_id).pricing_profile.quoteRequired||Number(pkg.price)!==Number(packages.find(p=>p.id===pkg.package_id).starting_price)).map(pkg=>({packageId:pkg.package_id,amountCents:Math.round(Number(pkg.price)*100)}));
-  if(selected.some(pkg=>choices[pkg.package_id]?.printApproved&&(choices[pkg.package_id]?.printCharge==null||choices[pkg.package_id]?.printCharge==='')))throw Error('Enter the reviewed additional print charge, including 0 for an approved waiver.');
-  const printApprovals=selected.filter(pkg=>choices[pkg.package_id]?.printApproved).map(pkg=>({packageId:pkg.package_id,selectedPrints:selections.find(item=>item.packageId===pkg.package_id).prints,unlimitedPrints:choices[pkg.package_id]?.unlimitedPrints===true,amountCents:Math.round(Number(choices[pkg.package_id].printCharge||0)*100)}));
-  const scopeApprovals=selected.filter(pkg=>choices[pkg.package_id]?.scopeApproved).map(pkg=>({packageId:pkg.package_id,description:choices[pkg.package_id].scopeDescription||''}));
-  if(addonApproval&&addons.some(item=>(addonPrices[item.addon_id]??item.unit_price)==null||(addonPrices[item.addon_id]??item.unit_price)===''))throw Error('Enter the reviewed unit price for each selected enhancement before approving it.');
-  const addonApprovals=addonApproval?addons.map(chosen=>({addonId:chosen.addon_id,packageId:selections.find(item=>item.addons.some(a=>a.addonId===chosen.addon_id)).packageId,unitPriceCents:Math.round(Number(addonPrices[chosen.addon_id]??chosen.unit_price)*100),description:addonScope})):[];
-  const customItems=customLines.map(line=>({description:line.description,quantity:Number(line.quantity||1),unitPriceCents:Math.round(Number(line.unit_price||0)*100)}));if(Number(otherFees))customItems.push({description:'Other agreed fees',quantity:1,unitPriceCents:Math.round(Number(otherFees)*100)});
-  if((packagePrices.length||customItems.length||Number(discount)||scopeApprovals.length||addonApprovals.length||printApprovals.length)&&reason.trim().length<3)throw Error('Enter an approval reason for negotiated prices, discounts or custom charges.');
-  const catalogKey=category==='CUSTOM_PRODUCTION'?'CUSTOM':packages.find(p=>p.id===selected[0]?.package_id)?.catalog_key;
-  const result=await api.post('/pricing/quotes',{catalogVersion:published.id,eventCategory:category,customerType:customer,catalogKey,selections,customItems,discountCents:Math.round(Number(discount)*100),...((travel!==''||packagePrices.length||customItems.length||Number(discount)||scopeApprovals.length||addonApprovals.length||printApprovals.length)?{override:{...(travel!==''?{travelAmountCents:Math.round(Number(travel)*100)}:{}),...(packagePrices.length?{packagePrices}:{}),scopeApprovals,addonApprovals,printApprovals,reason}}:{})});
-  setQuote({...result,key});onQuote(result);
- }catch(e){setError(e.message);}finally{setBusy(false);}}
- if(!enabled)return null;
- return <section className="wizard-section"><h3>Package pricing review</h3><p>Calculate package inclusions, printing and travel before creating the proposal. Manual service prices outside this review are not applied to a catalog quote.</p><div className="form-grid"><label>Customer type<select aria-label="Customer type" value={customer} onChange={e=>setCustomer(e.target.value)}><option value="INDIVIDUAL">Individual</option><option value="BUSINESS">Business</option><option value="ORGANIZATION">Organization / nonprofit</option></select></label><label>Event purpose<select aria-label="Event purpose" value={category} onChange={e=>setCategory(e.target.value)}><option value="PRIVATE_CELEBRATION">Private celebration</option><option value="COMPANY_CELEBRATION">Company celebration</option><option value="PROFESSIONAL">Conference / professional event</option><option value="ACTIVATION">Brand activation</option><option value="CUSTOM_PRODUCTION">Custom production</option></select></label>
- {selected.map(pkg=><div key={pkg.package_id}><strong>{pkg.name}</strong>{photoPackage(pkg)&&<><label>Total physical prints<select aria-label="Total physical prints" value={choices[pkg.package_id]?.prints??''} onChange={e=>option(pkg.package_id,'prints',e.target.value)}><option value="">Included allowance</option>{[0,100,200,250,500,1000].filter(n=>n>=(packageProfile(pkg)?.prints||0)).map(n=><option key={n} value={n}>{n}</option>)}</select></label><label><input type="checkbox" checked={Boolean(choices[pkg.package_id]?.unlimitedPrints)} onChange={e=>setChoices(current=>({...current,[pkg.package_id]:{...current[pkg.package_id],unlimitedPrints:e.target.checked}}))}/>Request unlimited printing — custom quote required</label>{(choices[pkg.package_id]?.unlimitedPrints||choices[pkg.package_id]?.prints>=1000)&&<div><label><input type="checkbox" checked={Boolean(choices[pkg.package_id]?.printApproved)} onChange={e=>setChoices(current=>({...current,[pkg.package_id]:{...current[pkg.package_id],printApproved:e.target.checked}}))}/>Approve custom print allowance</label><label>Reviewed additional print charge ($)<input type="number" min="0" step="0.01" value={choices[pkg.package_id]?.printCharge??''} onChange={e=>setChoices(current=>({...current,[pkg.package_id]:{...current[pkg.package_id],printCharge:e.target.value}}))}/></label></div>}<label>Print format<select aria-label="Print format" value={choices[pkg.package_id]?.printFormat||'4X6'} onChange={e=>setChoices(current=>({...current,[pkg.package_id]:{...current[pkg.package_id],printFormat:e.target.value}}))}><option value="4X6">4×6 photo</option><option value="2X6">2×6 strip — each strip counts as one print</option></select></label></>}{packageProfile(pkg)?.extraHourCents&&<label>Additional service hours<input type="number" min="0" max="24" value={choices[pkg.package_id]?.extraHours??0} onChange={e=>option(pkg.package_id,'extraHours',e.target.value)}/></label>}<label><input type="checkbox" checked={Boolean(choices[pkg.package_id]?.scopeApproved)} onChange={e=>setChoices(current=>({...current,[pkg.package_id]:{...current[pkg.package_id],scopeApproved:e.target.checked}}))}/>Scope and deliverables verified for this package</label>{choices[pkg.package_id]?.scopeApproved&&<label>Approved scope description *<textarea required minLength="3" maxLength="3000" value={choices[pkg.package_id]?.scopeDescription||''} onChange={e=>setChoices(current=>({...current,[pkg.package_id]:{...current[pkg.package_id],scopeDescription:e.target.value}}))}/></label>}</div>)}
- {addons.length>0&&<div><label><input type="checkbox" checked={addonApproval} onChange={e=>setAddonApproval(e.target.checked)}/>Approve selected enhancements at the reviewed unit prices</label>{addonApproval&&<>{addons.map(item=><label key={item.addon_id}>Reviewed unit price — {item.description||'enhancement'} ($) *<input required type="number" min="0" step="0.01" value={addonPrices[item.addon_id]??item.unit_price??''} onChange={e=>setAddonPrices(current=>({...current,[item.addon_id]:e.target.value}))}/></label>)}<label>Approved enhancement scope *<textarea required minLength="3" maxLength="1000" value={addonScope} onChange={e=>setAddonScope(e.target.value)}/></label></>}</div>}
- <label>Reviewed travel charge ($)<input type="number" min="0" step="0.01" value={travel} onChange={e=>setTravel(e.target.value)}/></label><label>Approval / travel review reason<input minLength="3" maxLength="1000" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Required for travel or price overrides"/></label></div>
- {error&&<p role="alert">{error}</p>}<button type="button" disabled={busy||!selected.length||(travel!==''&&reason.trim().length<3)} onClick={calculate}>{busy?'Calculating…':'Calculate reviewed package quote'}</button>
- {quote&&<div role="status">{!current&&<p>Selections changed. Recalculate before using this quote.</p>}<ul>{quote.lines.map((line,index)=><li key={index}>{line.description} — {money(line.amountCents)}</li>)}</ul><p>Service total: <strong>{money(quote.serviceTotalCents)}</strong>. Tax calculated by Stripe before payment.</p>{quote.entitlements.filter(item=>item.printEstimate?.physicalPrints>0).map(item=><p key={item.packageId}>{item.packageName}: estimated {item.printEstimate.sheets4x6} 4×6 sheets; consumable cost {item.printEstimate.consumableCostCents==null?'not configured':money(item.printEstimate.consumableCostCents)}{item.printEstimate.printerHours!=null?`; ${item.printEstimate.printerHours.toFixed(2)} printer hours`:''}.</p>)}{quote.reviewReasons.map(text=><p key={text}>{text}</p>)}</div>}
- </section>;
+export default function CatalogQuoteReview({experiences,addons,customLines=[],discount=0,otherFees=0,travelAmount,onTravelChange,initialQuote,requestContext,onQuote,onReviewChange}){
+ const [catalog,setCatalog]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[quote,setQuote]=useState(null);
+ const [choices,setChoices]=useState(()=>Object.fromEntries((initialQuote?.entitlements||[]).map(p=>[p.packageId,{prints:p.selectedPrints,printFormat:p.printFormat||'4X6',extraHours:p.extraHours||0,unlimitedPrints:p.unlimitedPrints===true,printCharge:initialQuote?.override?.printApprovals?.find(a=>a.packageId===p.packageId)?.amountCents==null?'':initialQuote.override.printApprovals.find(a=>a.packageId===p.packageId).amountCents/100}])));
+ const [addonPrices,setAddonPrices]=useState(()=>Object.fromEntries((initialQuote?.override?.addonApprovals||[]).map(item=>[item.addonId,item.unitPriceCents/100])));
+ const selected=experiences.flatMap(item=>item.packages||[]);
+ const campaignOnly=selected.length>0&&selected.every(p=>p.campaign_id);
+ const travel=travelAmount??'';
+ const key=JSON.stringify([experiences,addons,customLines,discount,otherFees,travel,choices,addonPrices,catalog?.id]);
+ const latestKey=useRef(key);latestKey.current=key;
+ const callbacks=useRef({onQuote,onReviewChange});callbacks.current={onQuote,onReviewChange};
+ useEffect(()=>{let live=true;api.get('/public/pricing-catalog').then(value=>{if(live)setCatalog(value);}).catch(e=>{if(live&&e.status!==404)setError(e.message);});return()=>{live=false;};},[]);
+ useEffect(()=>{
+  callbacks.current.onQuote(null);setError('');
+  if(!catalog||!selected.length||campaignOnly){setBusy(false);return;}
+  let active=true;setBusy(true);setError('');
+  const timer=setTimeout(async()=>{try{
+   const packages=catalog.packages,catalogKey=proposalPricingCatalog(selected,packages);
+   const customerType=initialQuote?.customerType||requestContext?.customerType||'INDIVIDUAL';
+   const eventCategory=proposalPricingCategory(catalogKey,initialQuote?.eventCategory||requestContext?.eventCategory,customerType);
+   const packagePrices=[];
+   const selections=selected.map(pkg=>{
+    const row=packages.find(p=>p.id===pkg.package_id);if(!row)throw Error('Choose a catalog package for each experience.');
+    if(pkg.price===''||pkg.price==null||!Number.isFinite(Number(pkg.price)))throw Error(`Enter a price for ${pkg.name}.`);
+    if(row.pricing_profile.quoteRequired||Number(pkg.price)!==Number(row.starting_price))packagePrices.push({packageId:row.id,amountCents:Math.round(Number(pkg.price)*100)});
+    return {packageId:row.id,prints:choices[row.id]?.prints??row.pricing_profile.prints,printFormat:choices[row.id]?.printFormat||'4X6',extraHours:Number(choices[row.id]?.extraHours||0),unlimitedPrints:choices[row.id]?.unlimitedPrints===true,addons:[]};
+   });
+   const addonApprovals=[];
+   for(const chosen of addons){
+    const row=catalog.addons.find(a=>a.id===chosen.addon_id),policy=row?.pricing_policy;
+    if(!policy)throw Error(`Choose a configured add-on for ${chosen.description||'this item'}.`);
+    if(policy.category==='TRAVEL')throw Error('Enter travel in the Travel charge field.');
+    const target=selections.find(s=>{const profile=packages.find(p=>p.id===s.packageId).pricing_profile;return policy.experiences?.includes(profile.experience)&&(!policy.packageIds?.length||policy.packageIds.includes(s.packageId))&&!profile.includedAddonKeys?.includes(policy.key);});
+    if(!target)throw Error(`${row.name} is not available with the selected packages.`);
+    const entered=addonPrices[row.id]??chosen.unit_price;
+    const missingCustom=policy.method==='CUSTOM'&&Number(row.price||0)===0&&addonPrices[row.id]==null&&!Number(chosen.unit_price);
+    const amount=missingCustom?'':entered??row.price;
+    if(amount===''||amount==null||!Number.isFinite(Number(amount)))throw Error(`Enter a price for ${row.name}.`);
+    target.addons.push({addonId:row.id,quantity:Number(chosen.quantity||1)});
+    if(entered!=null||Number(amount)!==Number(row.price))addonApprovals.push({addonId:row.id,packageId:target.packageId,unitPriceCents:Math.round(Number(amount)*100)});
+   }
+   const printApprovals=[];
+   for(const selection of selections){const profile=packages.find(p=>p.id===selection.packageId).pricing_profile;
+    if(selection.unlimitedPrints||(['glam','vogue'].includes(profile.experience)&&selection.prints>0&&catalog.printPrices?.[profile.experience]?.[selection.prints]==null)){
+     const charge=choices[selection.packageId]?.printCharge;if(charge==null||charge==='')throw Error('Enter the additional price for this custom print allowance.');
+     printApprovals.push({packageId:selection.packageId,selectedPrints:selection.prints,unlimitedPrints:selection.unlimitedPrints,amountCents:Math.round(Number(charge)*100)});
+    }
+   }
+   const customItems=customLines.map(line=>{if(!line.description?.trim()||line.unit_price===''||line.unit_price==null)throw Error('Enter a description and price for each custom item.');return {description:line.description,quantity:Number(line.quantity||1),unitPriceCents:Math.round(Number(line.unit_price)*100)};});
+   if(Number(otherFees))customItems.push({description:'Other fees',quantity:1,unitPriceCents:Math.round(Number(otherFees)*100)});
+   const result=await api.post('/pricing/quotes',{catalogVersion:catalog.id,eventCategory,customerType,catalogKey,selections,customItems,discountCents:Math.round(Number(discount)*100),override:{travelAmountCents:Math.round(Number(travel||0)*100),packagePrices,addonApprovals,printApprovals}});
+   if(active&&latestKey.current===key){setQuote({key,...result});callbacks.current.onQuote(result);}
+  }catch(e){if(active)setError(e.message);}finally{if(active)setBusy(false);}},350);
+  return()=>{active=false;clearTimeout(timer);};
+ },[key]);
+ const current=quote?.key===key;
+ useEffect(()=>{callbacks.current.onReviewChange?.({busy,error,needsReview:!current,reasons:current?quote.reviewReasons:[]});},[busy,error,current,quote]);
+ if(!catalog)return null;
+ if(campaignOnly)return <section className="wizard-section"><label>Travel charge ($)<input type="number" min="0" step="0.01" value={travel} placeholder="0.00" onChange={e=>onTravelChange(e.target.value)}/></label><p>Applicable sales tax on taxable products, including prints, is calculated before payment.</p></section>;
+ function change(id,field,value){setChoices(current=>({...current,[id]:{...current[id],[field]:value}}));}
+ return <section id="package-pricing-review" className="wizard-section"><h3>Pricing</h3><p>Totals update automatically. Saved package and add-on prices apply unless you change them.</p><div className="form-grid">
+ {selected.map(pkg=>{const profile=catalog.packages.find(p=>p.id===pkg.package_id)?.pricing_profile;if(!profile)return null;return <div key={pkg.package_id}><strong>{pkg.name}</strong>{['glam','vogue'].includes(profile.experience)&&<><label>Total physical prints<select aria-label="Total physical prints" value={choices[pkg.package_id]?.prints??profile.prints} onChange={e=>change(pkg.package_id,'prints',Number(e.target.value))}>{[...new Set([profile.prints,100,200,250,500,1000])].filter(n=>n>=profile.prints).sort((a,b)=>a-b).map(n=><option key={n} value={n}>{n}{n===profile.prints?' (included)':''}</option>)}</select></label><label><input type="checkbox" checked={choices[pkg.package_id]?.unlimitedPrints===true} onChange={e=>change(pkg.package_id,'unlimitedPrints',e.target.checked)}/>Unlimited prints</label>{(choices[pkg.package_id]?.unlimitedPrints||((choices[pkg.package_id]?.prints??profile.prints)>0&&catalog.printPrices?.[profile.experience]?.[choices[pkg.package_id]?.prints??profile.prints]==null))&&<label>Additional print price ($)<input type="number" min="0" step="0.01" value={choices[pkg.package_id]?.printCharge??''} onChange={e=>change(pkg.package_id,'printCharge',e.target.value)}/></label>}</>}{profile.extraHourCents&&<label>Additional service hours<input type="number" min="0" max="24" value={choices[pkg.package_id]?.extraHours??0} onChange={e=>change(pkg.package_id,'extraHours',Number(e.target.value))}/></label>}</div>;})}
+ {addons.map(item=>{const row=catalog.addons.find(a=>a.id===item.addon_id);return <label key={item.addon_id}>Add-on price — {item.description||row?.name} ($)<input type="number" min="0" step="0.01" value={addonPrices[item.addon_id]??(row?.pricing_policy?.method==='CUSTOM'&&!Number(row?.price)&&!Number(item.unit_price)?'':item.unit_price??row?.price??'')} onChange={e=>setAddonPrices(current=>({...current,[item.addon_id]:e.target.value}))}/></label>;})}
+ <label>Travel charge ($)<input type="number" min="0" step="0.01" value={travel} placeholder="0.00" onChange={e=>onTravelChange(e.target.value)}/></label></div>
+ {error&&<p role="alert">{error}</p>}{busy&&<p role="status">Updating total…</p>}{current&&!busy&&<p role="status">Service total: <strong>{money(quote.serviceTotalCents)}</strong></p>}
+ <p>Applicable sales tax on taxable products, including prints, is calculated before payment and is not included in this estimate.</p></section>;
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+export const businessEventTypes=['Corporate Event','Conference','Brand Activation','Product Launch','Trade Show','Company Celebration','Other Business Event'];
 const baseInquirySchema = z.object({
   eventName: z.string().trim().max(160).optional(),
   bookingVersion: z.literal(2).optional(),
@@ -6,7 +7,7 @@ const baseInquirySchema = z.object({
   eventCategory:z.enum(['PRIVATE_CELEBRATION','COMPANY_CELEBRATION','PROFESSIONAL','ACTIVATION','CUSTOM_PRODUCTION']).optional(),
   customerType:z.enum(['INDIVIDUAL','BUSINESS','ORGANIZATION']).optional(),
   catalogKey:z.enum(['STANDARD','PROFESSIONAL','ACTIVATION','CUSTOM']).optional(),
-  selections: z.array(z.object({experienceId:z.string().uuid(),packageId:z.string().uuid(),customNotes:z.string().trim().max(1500).optional(),prints:z.number().int().nonnegative().max(10000).optional(),printFormat:z.enum(['4X6','2X6']).optional(),unlimitedPrints:z.boolean().optional(),extraHours:z.number().int().nonnegative().max(24).optional()})).min(1).max(4).optional(),
+  selections: z.array(z.object({experienceId:z.string().uuid(),packageId:z.string().uuid().optional(),customNotes:z.string().trim().max(1500).optional(),prints:z.number().int().nonnegative().max(10000).optional(),printFormat:z.enum(['4X6','2X6']).optional(),unlimitedPrints:z.boolean().optional(),extraHours:z.number().int().nonnegative().max(24).optional()})).min(1).max(4).optional(),
   addons: z.array(z.object({addonId:z.string().uuid(),quantity:z.number().int().min(1).max(10000)})).max(40).optional(),
   formKind: z.enum(["CONTACT", "BOOKING"]).optional(),
   submissionId: z.string().uuid().optional(),
@@ -97,6 +98,8 @@ export const inquirySchema = baseInquirySchema
       if(value.phone && (value.phone.replace(/\D/g,'').length<7 || value.phone.replace(/\D/g,'').length>15))ctx.addIssue({code:'custom',path:['phone'],message:'Enter a valid phone number.'});
       if(value.guestCount>100000)ctx.addIssue({code:'custom',path:['guestCount'],message:'Guest count is too large.'});
     }
+    if(value.selections&&value.customerType!=='BUSINESS'&&value.selections.some(x=>!x.packageId))ctx.addIssue({code:'custom',path:['selections'],message:'Choose a package for each experience.'});
+    if(value.customerType==='BUSINESS'&&publicFormKind(value)==='BOOKING'&&!businessEventTypes.includes(value.eventType))ctx.addIssue({code:'custom',path:['eventType'],message:'Choose a business event type.'});
     for (const field of required)
       if (!value[field])
         ctx.addIssue({
