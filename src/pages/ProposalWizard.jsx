@@ -41,6 +41,7 @@ export default function ProposalWizard(){
   const [overrides,setOverrides]=useState({});
   const [customLines,setCustomLines]=useState([]);
   const [catalogQuote,setCatalogQuote]=useState(null);
+  const [pricingReview,setPricingReview]=useState({busy:false,error:"",needsReview:true,reasons:[]});
   const quoteSelectionKey=JSON.stringify([selectedExperiences,selectedAddons,customLines]);
   const [preview,setPreview]=useState(null);
   const [previewError,setPreviewError]=useState('');
@@ -177,6 +178,7 @@ export default function ProposalWizard(){
     if(step===2&&(catalogLoading||catalogError)){setError("Wait for the catalog to load, or retry the failed request.");return;}
     if(step===2&&!selectedExperiences.length){setError("Select at least one LOLA experience.");return;}
     if(step===2 && selectedExperiences.some(item=>!item.packages?.length)){setError("Choose a package for each selected experience.");return;}
+    if(step===2&&requiresCatalogQuote&&!hasCatalogQuote){setError(pricingReview.error||"Complete Package pricing review and calculate the quote below before continuing.");return;}
     setError("");setStep(current=>Math.min(3,current+1));
   }
 
@@ -246,12 +248,16 @@ export default function ProposalWizard(){
   }),[form,selectedExperiences,selectedAddons,customLines,overrides,photoAssets,catalogQuote,quoteSelectionKey]);
   const previewKey=JSON.stringify(previewPayload);
   const previewReady=preview?.key===previewKey;
+  const requiresCatalogQuote=selectedExperiences.flatMap(item=>item.packages||[]).some(item=>!item.campaign_id&&packages.some(pkg=>pkg.id===item.package_id&&pkg.catalog_key));
+  const hasCatalogQuote=catalogQuote?.selectionKey===quoteSelectionKey;
+  const investmentStatus=pricingReview.busy?'Calculating…':previewError||pricingReview.error?'Pricing needs attention':requiresCatalogQuote&&!hasCatalogQuote?'Review pricing below':'Updating preview…';
   useEffect(()=>{
     if(step<2||!selectedExperiences.length)return;
     let active=true;setPreviewError('');
+    if(requiresCatalogQuote&&!hasCatalogQuote){setPreview(null);return;}
     const timer=setTimeout(()=>api.post('/proposals/preview',previewPayload).then(result=>{if(active)setPreview({...result,key:previewKey});}).catch(err=>{if(active)setPreviewError(err.message);}),450);
     return()=>{active=false;clearTimeout(timer);};
-  },[step,previewKey]);
+  },[step,previewKey,requiresCatalogQuote,hasCatalogQuote]);
 
   async function submit(review=false,allowDuplicate=false){
     if(busy||!previewReady||!validateStepOne())return;
@@ -341,13 +347,15 @@ export default function ProposalWizard(){
       <section className="wizard-pricing-summary">
         <div><span>Selected services</span><strong>{money(pricing.services)}</strong></div>
         <div><span>Add-ons</span><strong>{money(pricing.addonTotal)}</strong></div>
-        <div className="total"><span>Estimated investment</span><strong>{previewReady?money(preview.pricing.total):"Calculating…"}</strong></div>
+        <div className="total"><span>Estimated investment</span><strong>{previewReady?money(preview.pricing.total):investmentStatus}</strong></div>
         <button className="button-link" onClick={()=>setAdvanced(v=>!v)}>{advanced?"Hide":"More"} options</button>
         {advanced&&<div className="form-grid advanced-pricing"><label>Discount<input type="number" min="0" value={form.discount} onChange={e=>setField("discount",e.target.value)}/></label><label>Travel<input type="number" min="0" value={form.travel} onChange={e=>setField("travel",e.target.value)}/></label><label>Other fees<input type="number" min="0" value={form.other_fees} onChange={e=>setField("other_fees",e.target.value)}/></label><label>Tax %<input type="number" min="0" value={form.tax_rate} onChange={e=>setField("tax_rate",e.target.value)} placeholder="Business default"/></label><label>Deposit type<select value={form.deposit_type} onChange={e=>setField("deposit_type",e.target.value)}><option value="PERCENTAGE">Percentage</option><option value="FIXED">Fixed amount</option></select></label><label>Deposit value<input type="number" min="0" value={form.deposit_value} onChange={e=>setField("deposit_value",e.target.value)} placeholder="Use default"/></label></div>}
         {advanced&&<div className="wizard-section"><h3>Selected add-ons</h3>{selectedAddons.map(item=><div className="form-grid" key={item.addon_id}><label>{item.description} — quantity<input type="number" min="1" value={item.quantity} onChange={e=>setSelectedAddons(current=>current.map(row=>row.addon_id===item.addon_id?{...row,quantity:Number(e.target.value)}:row))}/></label><label>Agreed unit price<input type="number" min="0" step="0.01" value={item.unit_price} onChange={e=>setSelectedAddons(current=>current.map(row=>row.addon_id===item.addon_id?{...row,unit_price:Number(e.target.value)}:row))}/></label></div>)}</div>}
         {advanced&&<div className="wizard-section"><h3>Custom line items</h3>{customLines.map((line,index)=><div className="form-grid" key={index}>{['description','detail','quantity','unit_price'].map(field=><label key={field}>{field.replaceAll('_',' ')}<input type={['quantity','unit_price'].includes(field)?'number':'text'} min={field==='quantity'?1:0} value={line[field]} onChange={e=>setCustomLines(current=>current.map((v,i)=>i===index?{...v,[field]:['quantity','unit_price'].includes(field)?Number(e.target.value):e.target.value}:v))}/></label>)}<button onClick={()=>setCustomLines(current=>current.filter((_,i)=>i!==index))}>Remove item</button></div>)}<button onClick={()=>setCustomLines(current=>[...current,{description:'',detail:'',quantity:1,unit_price:0}])}>Add line item</button></div>}
       </section>
-      <CatalogQuoteReview experiences={selectedExperiences} addons={selectedAddons} customLines={customLines} discount={Number(form.discount||0)} otherFees={Number(form.other_fees||0)} travelAmount={form.travel} onTravelChange={value=>setField('travel',value)} requestContext={lead?.source_details} initialQuote={lead?.source_details?.bookingInquiry?.pricingQuote} onQuote={quote=>setCatalogQuote(quote?{...quote,selectionKey:quoteSelectionKey}:null)}/>
+      <CatalogQuoteReview experiences={selectedExperiences} addons={selectedAddons} customLines={customLines} discount={Number(form.discount||0)} otherFees={Number(form.other_fees||0)} travelAmount={form.travel} onTravelChange={value=>setField('travel',value)} onReviewChange={setPricingReview} requestContext={lead?.source_details} initialQuote={lead?.source_details?.bookingInquiry?.pricingQuote} onQuote={quote=>setCatalogQuote(quote?{...quote,selectionKey:quoteSelectionKey}:null)}/>
+      {(pricingReview.error||pricingReview.reasons.length>0)&&<div role="alert" className="toast error">{pricingReview.error||pricingReview.reasons.join(' ')}</div>}
+      {requiresCatalogQuote&&!hasCatalogQuote&&!pricingReview.busy&&<p role="status"><a href="#package-pricing-review">Review package pricing, then click Calculate reviewed package quote.</a></p>}
       <div className="wizard-actions"><button onClick={()=>setStep(1)}><ArrowLeft size={15}/>Back</button><button className="primary-action" onClick={next}>Continue to Review <ArrowRight size={15}/></button></div>
     </section>}
 
@@ -356,8 +364,8 @@ export default function ProposalWizard(){
       <div className="review-grid">
         <Review title="Client Information" onEdit={()=>setStep(1)} rows={[["Name",form.first_name+" "+form.last_name],["Email",form.email],["Phone",form.phone]]}/>
         <Review title="Event Details" onEdit={()=>setStep(1)} rows={[["Event",eventTitle()],["Event Type",actualEventType()],["Date",form.event_date],["Guests",form.guest_count||"TBD"],["Venue",form.venue_name||form.venue_address||"TBD"]]}/>
-        <Review title="Selected Services" onEdit={()=>setStep(2)} rows={[...selectedExperiences.map(item=>[item.name,item.packages?.length?item.packages.map(pkg=>pkg.name).join(", "):money(item.price||0)]),["Add-ons",selectedAddons.length?selectedAddons.map(item=>item.description).join(", "):"None"],["Investment",previewReady?money(preview.pricing.total):"Calculating…"]]}/>
-        <Review title="Proposal Settings" rows={[["Investment",previewReady?money(preview.pricing.total):"Calculating…"],[preview?.pricing.full_payment_required?"Full payment required":"Booking retainer fee",previewReady?money(preview.pricing.deposit_amount):"Calculating…"],["Balance",previewReady?money(preview.pricing.balance):"Calculating…"],["Valid Until",preview?.scenario.variables.valid_through||"Business default"]]}/>
+        <Review title="Selected Services" onEdit={()=>setStep(2)} rows={[...selectedExperiences.map(item=>[item.name,item.packages?.length?item.packages.map(pkg=>pkg.name).join(", "):money(item.price||0)]),["Add-ons",selectedAddons.length?selectedAddons.map(item=>item.description).join(", "):"None"],["Investment",previewReady?money(preview.pricing.total):investmentStatus]]}/>
+        <Review title="Proposal Settings" rows={[["Investment",previewReady?money(preview.pricing.total):investmentStatus],[preview?.pricing.full_payment_required?"Full payment required":"Booking retainer fee",previewReady?money(preview.pricing.deposit_amount):investmentStatus],["Balance",previewReady?money(preview.pricing.balance):investmentStatus],["Valid Until",preview?.scenario.variables.valid_through||"Business default"]]}/>
       </div>
       {previewError&&<p className="toast error" role="alert">{previewError}</p>}
       <div className="form-grid"><label>Valid-through date<input type="date" value={form.valid_through||preview?.scenario.variables.valid_through||''} onChange={e=>setField('valid_through',e.target.value)}/></label><label>Client-facing notes (proposal and email)<textarea value={form.customer_notes} onChange={e=>setField('customer_notes',e.target.value)}/></label></div>
