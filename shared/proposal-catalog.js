@@ -20,7 +20,11 @@ export function proposalAddonStatus(addon, experiences, packages) {
   const policy=addon?.pricing_policy;
   if (!policy) return null;
   const selected=experiences.flatMap(item=>item.packages||[])
-    .map(item=>packages.find(pkg=>pkg.id===item.package_id)).filter(Boolean);
+    .map(item=>({...packages.find(pkg=>pkg.id===item.package_id),...item}));
+  if(policy.category==='TRAVEL')return 'Enter the amount in Travel charge.';
+  const normalize=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const campaign=selected.find(pkg=>pkg.campaign_id&&(pkg.features||[]).some(feature=>[normalize(addon.name),normalize(policy.key)].includes(normalize(typeof feature==='string'?feature:feature.label))));
+  if(campaign)return `Included in selected campaign: ${campaign.name}`;
   const included=selected.find(pkg=>pkg.pricing_profile?.includedAddonKeys?.includes(policy.key)
     && policy.experiences?.includes(pkg.pricing_profile.experience)
     && (!policy.packageIds?.length||policy.packageIds.includes(pkg.id)));
