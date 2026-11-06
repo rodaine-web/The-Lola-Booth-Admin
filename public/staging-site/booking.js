@@ -6,7 +6,7 @@
  const money=value=>value==null?'Custom quote':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(value));
  const definitions=[
   {key:'glam',name:'The LOLA Glam',category:'DSLR PHOTO BOOTH',image:'assets/booking-glam.png',description:'Our signature DSLR photo booth delivers beautiful, studio-quality photos with a polished editorial look. Perfect for weddings, birthdays, corporate events and brand activations.'},
-  {key:'360',name:'The LOLA 360',category:'360° VIDEO BOOTH',image:'assets/booking-360.png',description:'Our 360-degree video booth captures dynamic, shareable videos from every angle, bringing energy and excitement to your celebration.'},
+  {key:'360',name:'The LOLA 360',category:'360° VIDEO BOOTH',image:'assets/booth360.jpg',description:'Our 360-degree video booth captures dynamic, shareable videos from every angle, bringing energy and excitement to your celebration.'},
   {key:'vogue',name:'The LOLA Vogue',category:'CUSTOMIZABLE MAGAZINE PHOTO BOX',image:'assets/vogue.jpg',description:'Step into the spotlight with our customizable magazine-style photo box featuring a professional DSLR camera. Create editorial-inspired portraits and branded magazine moments.'},
   {key:'audio',name:'The LOLA Guestbook',category:'AUDIO GUESTBOOK',image:'assets/audio.jpg',description:'Capture the voices and memories of your guests. Friends and family leave personal recorded messages that become a keepsake long after the event.'}
  ];
