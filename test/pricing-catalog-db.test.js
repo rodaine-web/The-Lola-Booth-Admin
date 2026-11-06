@@ -124,7 +124,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
     try{await website.listen();webBrowser=await chromium.launch();const web='http://127.0.0.1:'+website.httpServer.address().port;const testEnv=(await import('../server/src/config/env.js')).env;testEnv.clientOrigin=web;testEnv.publicInquiryAllowedOrigins=[web];
      for(const width of [1440,390]){const page=await webBrowser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
       await page.route('https://**',route=>route.abort());await page.route('**/config.js',route=>route.fulfill({contentType:'application/javascript',body:'window.LOLA_CONFIG='+JSON.stringify({apiBase:web,environment:'staging',formsEnabled:true})}));
-      await page.goto(web+'/availability.html');await page.locator('[data-catalog-status]').getByText('Choose available catalog packages.',{exact:false}).waitFor();
+      await page.goto(web+'/availability.html');await page.locator('[data-catalog-status]').getByText(/Choose available catalog packages|Select experiences and optional add-ons/).waitFor();
       assert.equal(await page.locator('[name=customerType]').inputValue(),'INDIVIDUAL');
       assert.equal(await page.locator('[name=eventCategory], [name=catalogKey], [data-print-allowance], [data-print-format], [data-unlimited-prints], [data-extra-hours]').count(),0,'The initial form has no pricing configuration steps');
       await page.locator('[data-experience="glam"]').check();await page.locator('[data-experience-package="glam"]').selectOption(pkg.id);
@@ -175,7 +175,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
       const businessLinks=await business.locator('.business-experience-card a').evaluateAll(links=>links.map(a=>a.getAttribute('href')));
       for(const key of ['glam','360','vogue','audio'])assert.ok(businessLinks.some(h=>new URL(h,web).searchParams.get('experience')===key));
       await page.screenshot({path:'artifacts/pricing/website-packages-business-'+width+'.png',fullPage:true});
-      await page.goto(new URL(businessLinks[0],web).href);await page.locator('[data-catalog-status]').getByText('Choose available catalog packages.',{exact:false}).waitFor();
+      await page.goto(new URL(businessLinks[0],web).href);await page.locator('[data-catalog-status]').getByText(/Choose available catalog packages|Select experiences and optional add-ons/).waitFor();
       assert.equal(await page.locator('[name=customerType]').inputValue(),'BUSINESS');assert.equal(await page.locator('[data-experience="glam"]').isChecked(),true);await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();assert.doesNotMatch(await page.locator('[data-multi-booking]').textContent(),/\$[\d,]+/);
       await page.route('**/api/public/pricing-catalog',route=>route.fulfill({status:503,body:'Unavailable'}));await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Business',exact:true}).click();assert.equal(await page.locator('[data-business-experiences] a').count(),4,'Business quote path survives a catalog outage');
       assert.deepEqual(errors,[]);await page.close();
