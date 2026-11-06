@@ -64,9 +64,9 @@
     const tail=location.pathname.split('/').filter(Boolean).pop()?.replace(/\.html$/,'');
     const slug=!tail||tail==='index'||tail==='staging-site'?'home':tail;
     const copies=new Map((site.pageItems||[]).filter(x=>x.page_slug===slug).map(x=>[x.slot_key,x]));
-    qsa('[data-cms-copy]').forEach(n=>{const copy=copies.get(n.dataset.cmsCopy);n.hidden=!copy;if(!copy)return;n.innerHTML=safeCopy(copy.html);n.style.order=String(copy.display_order);if(n.tagName==='A'&&copy.href&&safeUrl(copy.href))n.href=copy.href;});
+    qsa('[data-cms-copy]').forEach(n=>{if(n.closest('[data-fixed-navigation]'))return;const copy=copies.get(n.dataset.cmsCopy);n.hidden=!copy;if(!copy)return;n.innerHTML=safeCopy(copy.html);n.style.order=String(copy.display_order);if(n.tagName==='A'&&copy.href&&safeUrl(copy.href))n.href=copy.href;});
     // Reorder managed siblings in their existing layout slots without moving unrelated markup.
-    const parents=new Set(qsa('[data-cms-copy]').map(n=>n.parentElement));
+    const parents=new Set(qsa('[data-cms-copy]').filter(n=>!n.closest('[data-fixed-navigation]')).map(n=>n.parentElement));
     for(const parent of parents){const nodes=[...parent.children].filter(n=>n.hasAttribute('data-cms-copy'));if(nodes.length<2)continue;const anchors=nodes.map(n=>{const marker=document.createComment('CMS slot');n.before(marker);return marker;});nodes.sort((a,b)=>(copies.get(a.dataset.cmsCopy)?.display_order??0)-(copies.get(b.dataset.cmsCopy)?.display_order??0));anchors.forEach((anchor,i)=>anchor.replaceWith(nodes[i]));}
     const page=site.content?.['page.'+slug];
     document.title=page?.title||'LOLA Staging';
