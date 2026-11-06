@@ -127,7 +127,38 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
      await revision.getByRole('button',{name:'Calculate reviewed package quote',exact:true}).click();await revision.getByText('Service total:',{exact:false}).waitFor();assert.match(await revision.innerText(),/1,124\.00/);
      await page.getByRole('button',{name:'Save Proposal',exact:true}).click();await page.waitForURL(/\/review$/);
      assert.equal(Number((await one('SELECT total FROM proposals WHERE id=$1',[createdId])).total),1124,'Reopening and saving must not duplicate the print upgrade');
-     await page.screenshot({path:'artifacts/pricing/proposal-'+width+'.png',fullPage:true});assert.deepEqual(errors,[]);await page.close();
+     await page.screenshot({path:'artifacts/pricing/proposal-'+width+'.png',fullPage:true});
+     // Reproduce a business website quote request, whose purpose initially says CUSTOM_PRODUCTION.
+     const eventGlam=v.snapshot.packages.find(p=>p.catalog_key==='PROFESSIONAL'&&p.pricing_profile.experience==='glam'&&p.tier_key==='EVENT');
+     const event360=v.snapshot.packages.find(p=>p.catalog_key==='PROFESSIONAL'&&p.pricing_profile.experience==='360'&&p.tier_key==='EVENT');
+     const request={customerType:'BUSINESS',eventCategory:'CUSTOM_PRODUCTION',bookingInquiry:{eventName:'Business calculation QA '+width,selections:[eventGlam,event360].map(p=>({experienceId:p.experience_id,requestOnly:true})),addons:[{addonId:originalAddon.id,name:'Original optional enhancement',quantity:1,unitPrice:125}]}};
+     const businessLead=await one("INSERT INTO leads(first_name,last_name,email,phone,event_type,event_date,company,source_details) VALUES('Business','Calculation QA',$1,'3125550100','Corporate Event','2030-12-15','QA Business',$2) RETURNING id",['business-calc-'+width+'@qa.invalid',JSON.stringify(request)]);
+     await page.goto(web+'/sales/proposals/new?leadId='+businessLead.id);
+     await page.getByRole('textbox',{name:/^Proposal name \*$/i}).waitFor();
+     await page.getByRole('button',{name:'Continue to Services',exact:true}).click();
+     let prematurePreviews=0;page.on('request',r=>{if(r.url().endsWith('/proposals/preview')&&!r.postDataJSON()?.pricing_quote_id)prematurePreviews++;});
+     for(const p of [eventGlam,event360])await page.locator('.package-card').filter({hasText:p.name}).first().click();
+     const businessReview=page.locator('#package-pricing-review');
+     assert.equal(await businessReview.getByLabel('Customer type',{exact:true}).inputValue(),'BUSINESS');
+     assert.equal(await businessReview.getByLabel('Event purpose',{exact:true}).inputValue(),'PROFESSIONAL','Requested custom production must follow the curated event packages');
+     await businessReview.getByRole('button',{name:'Calculate reviewed package quote',exact:true}).click();
+     await businessReview.getByText(/Estimated service total — review required/).waitFor();
+     assert.equal(prematurePreviews,0,'No proposal preview without a calculated quote');
+     assert.doesNotMatch(await page.locator('body').innerText(),/Choose an active package in the selected catalog|Calculate and review the catalog quote before preparing/);
+     await businessReview.getByLabel('Reviewed travel charge ($)',{exact:true}).fill('0');
+     await businessReview.getByLabel('Approval / travel review reason',{exact:true}).fill('QA verified Chicago travel, scope and enhancement');
+     for(const box of await businessReview.getByRole('checkbox',{name:'Scope and deliverables verified for this package',exact:true}).all())await box.check();
+     for(let scope=0;scope<2;scope++)await businessReview.locator('textarea').nth(scope).fill('QA agreed professional event coverage and deliverables');
+     await businessReview.getByRole('checkbox',{name:'Approve selected enhancements at the reviewed unit prices',exact:true}).check();
+     await businessReview.getByLabel('Approved enhancement scope *',{exact:true}).fill('QA agreed enhancement delivery');
+     await businessReview.getByRole('button',{name:'Calculate reviewed package quote',exact:true}).click();
+     await businessReview.getByText(/Service total:.*\$2,323\.00/).waitFor();
+     await businessReview.screenshot({path:'artifacts/pricing/business-calculation-'+width+'.png'});
+     await page.getByRole('button',{name:'Continue to Review',exact:false}).click();
+     await page.getByRole('button',{name:'Create as Draft',exact:true}).click();await page.waitForURL(/\/sales\/proposals\/[a-f0-9-]+$/);
+     const businessQuote=await one('SELECT q.snapshot FROM proposals p JOIN pricing_quotes q ON q.id=p.pricing_quote_id WHERE p.id=$1',[page.url().split('/').pop()]);
+     assert.equal(businessQuote.snapshot.status,'PRICED');assert.equal(businessQuote.snapshot.catalogKey,'PROFESSIONAL');assert.equal(businessQuote.snapshot.customerType,'BUSINESS');assert.equal(businessQuote.snapshot.serviceTotalCents,232300);
+     assert.deepEqual(errors,[]);await page.close();
     }
    }finally{await browser?.close();await vite.close();}
    {
