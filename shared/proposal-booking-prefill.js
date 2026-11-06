@@ -31,6 +31,7 @@ export function proposalBookingPrefill(lead, catalogExperiences = [], catalogPac
   const inquiry=lead.source_details?.bookingInquiry;
   const requested=inquiry?.selections?.map(item=>{
     const experience=catalogExperiences.find(x=>x.id===item.experienceId);
+    if(item.requestOnly)return {experience_id:item.experienceId,name:experience?.name||item.experienceName,description:experience?.description||'',price:0,packages:[]};
     const selectedPackage=catalogPackages.find(x=>x.id===item.packageId&&x.experience_id===item.experienceId);
     return {experience_id:item.experienceId,name:experience?.name||item.experienceName,description:experience?.description||'',price:item.pricingMode==='CUSTOM'?0:Number(selectedPackage?.starting_price??item.startingPrice??0),packages:[{package_id:item.packageId,name:selectedPackage?.name||item.packageName,price:item.pricingMode==='CUSTOM'?0:Number(selectedPackage?.starting_price??item.startingPrice??0),description:[selectedPackage?.description,item.customNotes].filter(Boolean).join('\n'),pricing_mode:item.pricingMode,included_hours:selectedPackage?.included_hours,duration:selectedPackage?.duration,features:selectedPackage?.items?.length?selectedPackage.items:selectedPackage?.website_features||[]}]};
   });

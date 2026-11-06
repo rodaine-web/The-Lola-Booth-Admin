@@ -133,18 +133,18 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
       const enhancement=page.locator('[data-addon="'+creative.id+'"]');await page.locator('[data-more-addons]').click();await enhancement.check();
       await page.screenshot({path:'artifacts/pricing/website-individual-'+width+'.png',fullPage:true});
       await page.locator('[name=customerType]').selectOption('BUSINESS');
-      assert.equal(await page.locator('[data-experience-package="glam"]').inputValue(),pkg.id,'Switching customer type retains preferences');
+      assert.equal(await page.locator('[data-experience-package]').count(),0,'Business requests have no package selection');assert.doesNotMatch(await page.locator('[name=eventType]').textContent(),/Wedding|Birthday|Shower|Graduation/);assert.equal(await page.locator('[data-experience=glam]').isChecked(),true);
       assert.equal(await enhancement.isChecked(),true);await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();
       assert.doesNotMatch(await page.locator('[data-multi-booking]').textContent(),/\$[\d,]+/,'Business options, details, add-ons and summary contain no prices, even in collapsed content');
       let previewCalls=0;page.on('request',r=>{if(r.url().endsWith('/pricing-quotes'))previewCalls++;});
-      for(const [name,value] of Object.entries({eventName:'Simple business QA '+width,eventType:'Wedding',eventDate:'2030-06-20',eventStartTime:'18:00',eventEndTime:'22:00',guestCount:'100',firstName:'Simple',lastName:'Business QA',email:'simple-business-'+width+'@qa.invalid',phone:'3125550100',city:'Chicago',state:'IL'})){
+      for(const [name,value] of Object.entries({company:'QA Business '+width,eventName:'Simple business QA '+width,eventType:'Corporate Event',eventDate:'2030-06-20',eventStartTime:'18:00',eventEndTime:'22:00',guestCount:'100',firstName:'Simple',lastName:'Business QA',email:'simple-business-'+width+'@qa.invalid',phone:'3125550100',city:'Chicago',state:'IL'})){
        const field=page.locator('[name="'+name+'"]');if(name==='eventType')await field.selectOption({label:value});else await field.fill(value);
       }
       await page.screenshot({path:'artifacts/pricing/website-business-'+width+'.png',fullPage:true});
       const response=page.waitForResponse(r=>r.url().endsWith('/api/public/inquiries')&&r.request().method()==='POST');
       await page.getByRole('button',{name:'Request a Quote →',exact:true}).click();const submitted=await response;assert.equal(submitted.status(),201,await submitted.text());
-      const lead=await one('SELECT source_details FROM leads WHERE email=$1',['simple-business-'+width+'@qa.invalid']);
-      assert.equal(lead.source_details.customerType,'BUSINESS');assert.equal(lead.source_details.bookingInquiry.selections[0].startingPrice,899);assert.equal(lead.source_details.bookingInquiry.addons[0].addonId,creative.id);assert.ok(lead.source_details.bookingInquiry.pricingQuote.id,'Authoritative pricing remains available internally for proposal review');assert.equal(previewCalls,0);
+      const lead=await one('SELECT * FROM leads WHERE email=$1',['simple-business-'+width+'@qa.invalid']);
+      assert.equal(lead.source_details.customerType,'BUSINESS');assert.equal(lead.source_details.bookingInquiry.selections[0].packageId,undefined);assert.equal(lead.source_details.bookingInquiry.selections[0].requestOnly,true);assert.equal(lead.source_details.bookingInquiry.addons[0].addonId,creative.id);assert.equal(lead.source_details.bookingInquiry.pricingQuote,undefined,'Business preferences must not select or price a package');const prefill=(await import('../shared/proposal-booking-prefill.js')).proposalBookingPrefill(lead,[],[]);assert.equal(prefill.fields.company,'QA Business '+width);assert.equal(prefill.fields.event_name,'Simple business QA '+width);assert.equal(prefill.selectedExperiences[0].packages.length,0);assert.equal(prefill.selectedAddons[0].addon_id,creative.id);assert.equal(previewCalls,0);
       await page.locator('[data-form-status]').getByText('Your Quote Request Has Been Submitted!',{exact:false}).waitFor();
       await page.screenshot({path:'artifacts/pricing/website-booking-'+width+'.png',fullPage:true});
       const cmsConfig=route=>route.fulfill({contentType:'application/javascript',body:'window.LOLA_CONFIG='+JSON.stringify({apiBase:web,environment:'staging',cmsChannel:'STAGING',formsEnabled:true})});

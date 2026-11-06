@@ -40,3 +40,16 @@ test('optional event referral code survives ingestion without changing proposal 
  assert.equal(b.source_details.eventReferralCode,'EVENT-10');
  assert.deepEqual(proposalBookingPrefill(a,catalog.experiences,catalog.packages),proposalBookingPrefill(b,catalog.experiences,catalog.packages));
 });
+
+test('business requests retain experiences and add-ons without choosing a package',()=>{
+ const result=validateBookingSelections({...request,customerType:'BUSINESS',selections:[{experienceId:ids[0]}]},catalog);
+ assert.equal(result.selections[0].packageId,undefined);assert.equal(result.selections[0].requestOnly,true);assert.equal(result.selections[0].startingPrice,null);
+ const prefill=proposalBookingPrefill({company:'QA Business',source_details:{bookingInquiry:result}},catalog.experiences,catalog.packages);
+ assert.equal(prefill.selectedExperiences[0].packages.length,0);assert.equal(prefill.fields.company,'QA Business');assert.equal(prefill.selectedAddons[0].quantity,2);
+ assert.throws(()=>validateBookingSelections({selections:[{experienceId:ids[0]}]},catalog));
+});
+
+test('business inquiry schema accepts experience-only preferences and rejects personal event types',()=>{
+ const input={customerType:'BUSINESS',bookingVersion:2,formKind:'BOOKING',submissionId:ids[0],firstName:'QA',lastName:'Contact',email:'qa@example.invalid',phone:'3125550100',eventName:'Product event',eventDate:'2030-06-20',eventStartTime:'18:00',eventEndTime:'22:00',guestCount:100,eventType:'Product Launch',city:'Chicago',state:'IL',selections:[{experienceId:ids[0]}]};
+ assert.equal(inquirySchema.safeParse(input).success,true);assert.equal(inquirySchema.safeParse({...input,eventType:'Wedding'}).success,false);assert.equal(inquirySchema.safeParse({...input,customerType:'INDIVIDUAL'}).success,false);
+});
