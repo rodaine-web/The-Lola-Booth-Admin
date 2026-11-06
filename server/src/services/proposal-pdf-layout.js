@@ -120,6 +120,7 @@ export function renderProposalPdf(doc, proposal, { brand, logo, experiences, fea
     text(label,42,y,370,10);text(`${label==='Discount'?'-':''}${money(value)}`,432,y,138,10);y+=28;
   }
   if(y+130>685)y=start('Investment','Your total investment.');
+  if(pricing.tax_note){text(pricing.tax_note,42,y,528,10);y+=46;}
   text('Total investment',42,y+10,370,20,'Times-Roman');text(money(pricing.total??proposal.total),432,y+10,138,20,'Times-Roman');y+=62;
   text(`${pricing.full_payment_required?"Full payment required":"Booking retainer fee"}: ${money(pricing.amount_due_now??pricing.deposit_amount??pricing.total??proposal.total)}`,42,y,528,12,'Helvetica-Bold',brand.gold);
   text('Booking requires the minimum payment, a signed agreement, availability and written LOLA confirmation.',42,y+28,528,10,'Helvetica',brand.muted);

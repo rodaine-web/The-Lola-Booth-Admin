@@ -178,7 +178,7 @@ export default function ProposalWizard(){
     if(step===2&&(catalogLoading||catalogError)){setError("Wait for the catalog to load, or retry the failed request.");return;}
     if(step===2&&!selectedExperiences.length){setError("Select at least one LOLA experience.");return;}
     if(step===2 && selectedExperiences.some(item=>!item.packages?.length)){setError("Choose a package for each selected experience.");return;}
-    if(step===2&&requiresCatalogQuote&&!hasCatalogQuote){setError(pricingReview.error||"Complete Package pricing review and calculate the quote below before continuing.");return;}
+    if(step===2&&requiresCatalogQuote&&!hasCatalogQuote){setError(pricingReview.error||"Wait for the total to update or complete the missing price below.");return;}
     setError("");setStep(current=>Math.min(3,current+1));
   }
 
@@ -250,7 +250,7 @@ export default function ProposalWizard(){
   const previewReady=preview?.key===previewKey;
   const requiresCatalogQuote=selectedExperiences.flatMap(item=>item.packages||[]).some(item=>!item.campaign_id&&packages.some(pkg=>pkg.id===item.package_id&&pkg.catalog_key));
   const hasCatalogQuote=catalogQuote?.selectionKey===quoteSelectionKey;
-  const investmentStatus=pricingReview.busy?'Calculating…':previewError||pricingReview.error?'Pricing needs attention':requiresCatalogQuote&&!hasCatalogQuote?'Review pricing below':'Updating preview…';
+  const investmentStatus=pricingReview.busy?'Calculating…':previewError||pricingReview.error?'Pricing needs attention':requiresCatalogQuote&&!hasCatalogQuote?'Updating total…':'Updating preview…';
   useEffect(()=>{
     if(step<2||!selectedExperiences.length)return;
     let active=true;setPreviewError('');
@@ -355,7 +355,7 @@ export default function ProposalWizard(){
       </section>
       <CatalogQuoteReview experiences={selectedExperiences} addons={selectedAddons} customLines={customLines} discount={Number(form.discount||0)} otherFees={Number(form.other_fees||0)} travelAmount={form.travel} onTravelChange={value=>setField('travel',value)} onReviewChange={setPricingReview} requestContext={lead?.source_details} initialQuote={lead?.source_details?.bookingInquiry?.pricingQuote} onQuote={quote=>setCatalogQuote(quote?{...quote,selectionKey:quoteSelectionKey}:null)}/>
       {(pricingReview.error||pricingReview.reasons.length>0)&&<div role="alert" className="toast error">{pricingReview.error||pricingReview.reasons.join(' ')}</div>}
-      {requiresCatalogQuote&&!hasCatalogQuote&&!pricingReview.busy&&<p role="status"><a href="#package-pricing-review">Review package pricing, then click Calculate reviewed package quote.</a></p>}
+      {requiresCatalogQuote&&!hasCatalogQuote&&!pricingReview.busy&&<p role="status"><a href="#package-pricing-review">Totals update automatically. Enter any missing prices below.</a></p>}
       <div className="wizard-actions"><button onClick={()=>setStep(1)}><ArrowLeft size={15}/>Back</button><button className="primary-action" onClick={next}>Continue to Review <ArrowRight size={15}/></button></div>
     </section>}
 

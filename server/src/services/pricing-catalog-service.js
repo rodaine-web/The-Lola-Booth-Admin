@@ -30,7 +30,7 @@ export async function createPricingQuote(input,req){
  return transaction(async()=>{
   const version=await currentPricingCatalog();
   if(input.catalogVersion&&input.catalogVersion!==version.id)throw new AppError('Pricing changed. Reload and review the current catalog.',409,'CATALOG_VERSION_CHANGED');
-  const snapshot=calculateCatalogQuote({...input,version:version.id},version.snapshot,{admin:!!req?.user});
+  const snapshot=calculateCatalogQuote({...input,version:version.id},version.snapshot,{admin:!!req?.user,simpleAdmin:!!req?.user});
   const saved=(await query('INSERT INTO pricing_quotes(catalog_version_id,snapshot,created_by) VALUES($1,$2,$3) RETURNING id,expires_at',[version.id,JSON.stringify(snapshot),req?.user?.id||null])).rows[0];
   if(input.override)await writeAudit({req,action:'pricing_override',entity:'pricing_quote',entityId:saved.id,after:{reason:input.override.reason,catalogKey:snapshot.catalogKey}});
   return {...snapshot,id:saved.id,expiresAt:saved.expires_at};

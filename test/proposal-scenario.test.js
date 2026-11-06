@@ -103,3 +103,9 @@ test('event imagery never falls back to a selected booth hero',async()=>{
  result.mediaImages={event:[{dataUri:'data:image/jpeg;base64,ZXZlbnQ='}]};
  assert.equal(scenarioImage(result,'cover'),'data:image/jpeg;base64,ZXZlbnQ=');
 });
+
+test('proposal HTML and PDF identify taxes on prints and pending tax without promising zero tax',async()=>{
+ const result=model('Corporate Event',[catalog[0]]);result.pricing.tax_pending=true;result.pricing.tax=0;
+ const record={content:{scenario:result}},html=proposalHtml(record),pages=await pdfPages(record),text=pages.flat().map(i=>i.str).join(' ');
+ for(const rendered of [html,text]){assert.match(rendered,/taxable products, including prints/);assert.match(rendered,/Pending/);assert.doesNotMatch(rendered,/Tax \(0%\)/);}
+});

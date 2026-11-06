@@ -69,6 +69,7 @@ export default function PublicProposal() {
         <h2>Ready to make it official?</h2>
         <div className="public-proposal-totals">
           <Metric label="Proposal Total" value={formatMoney(pricing.total || proposal.total || 0)} />
+          <p>{pricing.tax_note||"Applicable sales tax on taxable products, including prints, is calculated before payment."}</p>
           <Metric label="Due Today" value={formatMoney(proposal.payment_requirement?.fullPaymentRequired?(pricing.total||proposal.total):pricing.deposit_amount || 0)} />
           <Metric label="Remaining Balance" value={formatMoney(proposal.payment_requirement?.fullPaymentRequired?0:pricing.balance || 0)} />
         </div>
