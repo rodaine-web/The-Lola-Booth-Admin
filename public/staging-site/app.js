@@ -90,7 +90,7 @@
   function fillSelects(experiences,packages,eventTypes){
     qsa('[data-experience-select]').forEach(sel=>{ const current=sel.value; sel.innerHTML='<option value="">Not sure yet</option>'+experiences.map(x=>`<option value="${esc(x.id)}">${esc(x.website_name||x.name)}</option>`).join(''); sel.value=current; });
     qsa('[data-package-select]').forEach(sel=>{ const current=sel.value; sel.innerHTML='<option value="">Not sure yet</option>'+packages.map(x=>`<option value="${esc(x.id)}">${esc(x.website_key?x.website_key.split(':')[0].toUpperCase()+' — '+x.name:x.name)}</option>`).join(''); sel.value=current; });
-    qsa('[data-event-type-select]').forEach(sel=>{ sel.innerHTML='<option value="">Select event type</option>'+eventTypes.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')+'<option value="Other">Other</option>'; });
+    qsa('[data-event-type-select]:not([data-business-event-types])').forEach(sel=>{ sel.innerHTML='<option value="">Select event type</option>'+eventTypes.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')+'<option value="Other">Other</option>'; });
   }
 
   function renderExperiences(items,content={}){
@@ -110,7 +110,7 @@
     }
   }
   function renderPackages(items,showPrice=true){
-    if(window.lolaVersionedPricingActive)return;
+    if(window.lolaVersionedPricingActive||qs('[data-package-audience]'))return;
     const byKey=new Map(items.filter(x=>x.website_key).map(x=>[x.website_key,x]));
     // Legacy payloads have no experience relationship; do not overwrite approved fallback.
     if(items.length&&!byKey.size)throw new Error('CMS package migration is not available yet');

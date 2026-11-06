@@ -7,3 +7,5 @@ Business displays four experience cards and available add-ons, with no price amo
 The page owns its original presentation so asynchronous CMS package rendering cannot replace it. Individual Custom links remain supported, and standard package links now preselect the matching package in the simple form.
 
 Validation: desktop/mobile real API and PostgreSQL pricing journeys cover both audiences, restored descriptions and badges, no business prices/tiers, all four business experience links, correct form preselection, and catalog-unavailable fallback. Full local suite: 711 passed, 34 conditional skips, zero failures; build passed. Staging only; production remains unchanged.
+
+Hosted verification identified a CMS timing race when its response arrived before the audience script loaded. The generic renderer now checks the audience markup directly, so ownership is established before either response. The regression delays the audience script while delivering a conflicting CMS response first and verifies original cards and features survive.
