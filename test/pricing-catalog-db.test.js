@@ -94,6 +94,18 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
      await page.goto(web+'/sales/proposals/new?clientId='+customer.id+'&eventId='+event.id);
      await page.getByText('Creating a proposal for QA Pricing Customer',{exact:false}).waitFor();
      await page.getByRole('button',{name:'Continue to Services',exact:false}).click();
+     const threeSixty=page.locator('.experience-card').filter({hasText:/360/i}).first();
+     await threeSixty.click();
+     const redCarpet=page.getByRole('checkbox',{name:/Red carpet and stanchions/});
+     await redCarpet.check();
+     const luxe360=v.snapshot.packages.find(p=>p.pricing_profile.experience==='360'&&p.catalog_key==='STANDARD'&&p.tier_key==='LUXE');
+     await page.locator('.package-card').filter({hasText:luxe360.name}).first().click();
+     assert.equal(await redCarpet.isChecked(),false,'Included enhancement automatically deselected');
+     assert.equal(await redCarpet.isDisabled(),true,'Included enhancement cannot be charged again');
+     assert.match(await redCarpet.locator('..').innerText(),/Included in selected package/);
+     await threeSixty.click();
+     assert.equal(await redCarpet.isDisabled(),false,'Removing package makes enhancement available again');
+     assert.equal(await redCarpet.isChecked(),false,'Removed enhancement is not silently reselected');
      await page.locator('.experience-card').filter({hasText:/glam/i}).first().click();
      await page.locator('.package-card').filter({hasText:pkg.name}).first().click();
      const review=page.getByRole('heading',{name:'Package pricing review',exact:true}).locator('..');
