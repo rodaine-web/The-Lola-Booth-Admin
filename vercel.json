@@ -151,6 +151,16 @@
       "destination": "/staging-site/booking.css"
     },
     {
+      "source": "/addon-images.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/addon-images.js"
+    },
+    {
       "source": "/booking.js",
       "has": [
         {

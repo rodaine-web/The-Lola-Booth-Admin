@@ -9,3 +9,9 @@ test('all configured and legacy add-ons resolve to bundled illustrations',async(
   const src=context.window.lolaAddonImage(item);assert.match(src,/^assets\/[\w-]+\.jpg$/);assert.ok((await fs.stat('public/staging-site/'+src)).size>0,item.name);
  }
 });
+
+test('staging host routes the shared image resolver to its bundled script',async()=>{
+ const config=JSON.parse(await fs.readFile('vercel.json','utf8'));
+ const route=config.rewrites.find(r=>r.source==='/addon-images.js');
+ assert.equal(route.destination,'/staging-site/addon-images.js');assert.equal(route.has[0].value,'staging.thelolabooth.com');
+});
