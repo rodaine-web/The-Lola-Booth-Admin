@@ -134,7 +134,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
       await page.screenshot({path:'artifacts/pricing/website-individual-'+width+'.png',fullPage:true});
       await page.locator('[name=customerType]').selectOption('BUSINESS');
       assert.equal(await page.locator('[data-experience-package]').count(),0,'Business requests have no package selection');assert.doesNotMatch(await page.locator('[name=eventType]').textContent(),/Wedding|Birthday|Shower|Graduation/);assert.equal(await page.locator('[data-experience=glam]').isChecked(),true);
-      assert.equal(await enhancement.isChecked(),true);await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();
+      assert.equal(await enhancement.isChecked(),true);assert.equal(await page.locator('.booking-asset-pending').count(),0);assert.equal(await page.locator('.booking-addon-card img').count(),await page.locator('.booking-addon-card').count());await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();
       assert.doesNotMatch(await page.locator('[data-multi-booking]').textContent(),/\$[\d,]+/,'Business options, details, add-ons and summary contain no prices, even in collapsed content');
       let previewCalls=0;page.on('request',r=>{if(r.url().endsWith('/pricing-quotes'))previewCalls++;});
       for(const [name,value] of Object.entries({company:'QA Business '+width,eventName:'Simple business QA '+width,eventType:'Corporate Event',eventDate:'2030-06-20',eventStartTime:'18:00',eventEndTime:'22:00',guestCount:'100',firstName:'Simple',lastName:'Business QA',email:'simple-business-'+width+'@qa.invalid',phone:'3125550100',city:'Chicago',state:'IL'})){
@@ -155,7 +155,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
       await page.locator('[data-package-key="glam:signature"] .price').getByText('$899',{exact:true}).waitFor();
       assert.equal(await page.locator('[data-package-key="glam:essential"]').isVisible(),true,'An early CMS response must not hide the restored cards');
       assert.match(await page.locator('[data-package-key="glam:essential"] ul').textContent(),/Custom photo overlay designed for your event/,'An early CMS response must not replace approved feature copy');
-      assert.doesNotMatch(await page.locator('[data-package-key="glam:signature"] ul').textContent(),/CMS overwrite/);
+      assert.doesNotMatch(await page.locator('[data-package-key="glam:signature"] ul').textContent(),/CMS overwrite/);assert.deepEqual(await page.locator('header .navlinks a').allTextContents(),['Experiences','Packages','About','FAQ','Contact','Book Now →']);assert.equal(await page.locator('header .navlinks a[hidden]').count(),0);assert.equal(await page.locator('.mobile-menu a[href="index.html"]').count(),0);
       await page.unroute('**/config.js',cmsConfig);await page.unroute('**/api/public/staging/site',cmsFixture);await page.unroute('**/pricing-catalog.js',delayedPricing);
       for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1,'Every standard experience retains its Custom card');
       const customLink=await page.locator('[data-experience-panel="glam"] [data-package-key="glam:custom"] a').getAttribute('href');
@@ -171,7 +171,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
       assert.equal(await business.locator('.business-experience-card').count(),4);assert.ok(await business.locator('.addon-card').count()>0);
       assert.equal(await page.locator('.pricing-grid:visible').count(),0,'Business sees experiences and add-ons, never tier cards');
       assert.doesNotMatch(await page.locator('body').innerText(),/\$[\d,]+|THE ESSENTIAL|The Signature|Most Popular/);
-      assert.ok(await page.locator('[data-audience-cta]').getAttribute('href').then(h=>h.includes('customerType=BUSINESS')));assert.equal(await page.locator('header a.btn').textContent(),'Request a Quote →');
+      assert.ok(await page.locator('[data-audience-cta]').getAttribute('href').then(h=>h.includes('customerType=BUSINESS')));assert.equal(await page.locator('header a.btn').textContent(),'Request a Quote →');assert.equal(await page.locator('header .navlinks a:last-child').textContent(),'Request a Quote →');assert.equal(await page.locator('[data-business-addons] .addon-card img').count(),await page.locator('[data-business-addons] .addon-card').count());
       const businessLinks=await business.locator('.business-experience-card a').evaluateAll(links=>links.map(a=>a.getAttribute('href')));
       for(const key of ['glam','360','vogue','audio'])assert.ok(businessLinks.some(h=>new URL(h,web).searchParams.get('experience')===key));
       await page.screenshot({path:'artifacts/pricing/website-packages-business-'+width+'.png',fullPage:true});
