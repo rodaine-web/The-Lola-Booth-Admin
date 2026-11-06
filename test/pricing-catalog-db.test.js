@@ -145,6 +145,7 @@ await revision.getByText('Service total:',{exact:false}).waitFor();assert.match(
      await businessReview.getByText(/Service total:.*\$2,498\.00/).waitFor();
      await businessReview.getByLabel('Add-on price — Original optional enhancement ($)',{exact:true}).fill('100');
      await businessReview.getByText(/Service total:.*\$2,473\.00/).waitFor();
+     assert.match(await page.locator('.wizard-pricing-summary').innerText(),/Add-ons\s*\$100/,'Edited add-on price is reflected in summary');
      const branded=page.getByRole('checkbox',{name:/^Branded sharing screen/});await branded.check();
      const campaignPackages=['glam','360'].map(experience=>v.snapshot.packages.find(p=>p.catalog_key==='ACTIVATION'&&p.tier_key==='CAMPAIGN'&&p.pricing_profile.experience===experience));
      for(const pack of campaignPackages)await page.locator('.package-card').filter({hasText:pack.name}).first().click();
