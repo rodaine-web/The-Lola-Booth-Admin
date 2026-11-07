@@ -43,6 +43,14 @@ export function mergeDefaults(config={}) {
   return merge(proposalDefaults,config);
 }
 export function mergeVariables(value, variables) { return String(value??'').replace(/{{\s*([a-z_]+)\s*}}/gi,(_,key)=>String(variables[key]??'To be confirmed')); }
+// Catalog quoting also supplies its inclusions as package description text. That
+// generated copy must not become a second, uneditable list in a new proposal.
+function packageProse(description,features){
+  const normalize=value=>String(value??'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean).join('\n');
+  const inclusions=(features||[]).map(item=>typeof item==='string'?item:item.label).filter(Boolean).join('\n');
+  return normalize(description)&&normalize(description)===normalize(inclusions)?'':description;
+}
+const statesServiceHours=feature=>/\b\d+(?:\.\d+)?\s+(?:(?:active\s+)?service|rental|coverage)\s+hours?\b|\b\d+(?:\.\d+)?\s+hours?\s+of\s+(?:service|coverage|rental)\b/i.test(feature);
 const price=value=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(value||0));
 export function composeProposal({input={},client={},event:ev={},experiences=[],pricing={},lines=[],config={},templateVersion=1,settings={}}) {
   const defaults=mergeDefaults(config), type=normalizeScenarioEvent(input.event_type||input.event_details?.event_type||ev.event_type||input.proposal_type);
@@ -60,13 +68,16 @@ export function composeProposal({input={},client={},event:ev={},experiences=[],p
   const render=v=>Array.isArray(v)?v.map(render):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,item])=>[k,render(item)])):typeof v==='string'?mergeVariables(v,vars):v;
   const selected=experiences.map(item=>{
     const key=experienceKey(item), rule=defaults.experiences[key]||{}, override=overrides.experiences?.[item.experience_id||key]||{};
-    const pkgs=(item.packages||[]).map(pkg=>({...pkg,description:defaults.packages[pkg.package_id]?.description??pkg.description}));
+    const pkgs=(item.packages||[]).map(pkg=>({...pkg,description:packageProse(defaults.packages[pkg.package_id]?.description??pkg.description,pkg.features||pkg.items)}));
     // Never infer inclusions from a tier name. Catalog package items are the commercial source of truth.
     const features=item.features?.length?item.features:pkgs.flatMap(pkg=>pkg.features||pkg.items||[]).map(f=>typeof f==='string'?f:f.label).filter(Boolean);
-    const duration=pkgs.map(pkg=>pkg.included_hours?`${pkg.included_hours} hours`:'').filter(Boolean).join(' + ');
-    const local={...vars,experience_name:item.name,package_name:pkgs.map(p=>p.name).join(' + '),package_duration:duration||'As agreed',package_price:price(item.price)};
+    const selectedFeatures=[...new Set(override.features??features)];
+    const packageDuration=pkgs.map(pkg=>pkg.included_hours?`${pkg.included_hours} hours`:'').filter(Boolean).join(' + ');
+    // Editing presentation text does not change catalog hours or the agreed price.
+    const duration=selectedFeatures.some(statesServiceHours)?'':packageDuration;
+    const local={...vars,experience_name:item.name,package_name:pkgs.map(p=>p.name).join(' + '),package_duration:packageDuration||'As agreed',package_price:price(item.price)};
     const resolve=v=>mergeVariables(v,local);
-    return {...item,key,packages:pkgs.map(p=>({...p,description:mergeVariables(p.description,local)})),duration,...override,description:resolve(override.description??(rule[type]||rule[['Brand Activation','Corporate Event'].includes(type)?'business':'personal']||item.description)),features:[...new Set(override.features??features)].map(resolve),package_name:pkgs.map(p=>p.name).join(' + ')};
+    return {...item,key,packages:pkgs.map(p=>({...p,description:mergeVariables(p.description,local)})),duration,...override,description:resolve(override.description??(rule[type]||rule[['Brand Activation','Corporate Event'].includes(type)?'business':'personal']||item.description)),features:selectedFeatures.map(resolve),package_name:pkgs.map(p=>p.name).join(' + ')};
   });
   const optional=(overrides.optional_sections||[]).filter(s=>s.title&&s.body).map(render);
   const sections=[{kind:'cover',title:name,body:copy.intro},{kind:'event',title:'The Details',body:copy.event_intro},...selected.map((item,index)=>({kind:'experience',title:item.name,body:item.description,experience_id:item.experience_id,index})),...optional.map(s=>({kind:'optional',...s})),{kind:'investment',title:copy.investment_title,body:[copy.investment_intro,proposalTaxNote].filter(Boolean).join('\n\n')},{kind:'why',title:copy.why_us_title,body:copy.why_us_intro},{kind:'close',title:copy.close_title,body:copy.close_body}].map(render);
