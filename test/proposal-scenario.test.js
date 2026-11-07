@@ -109,3 +109,33 @@ test('proposal HTML and PDF identify taxes on prints and pending tax without pro
  const record={content:{scenario:result}},html=proposalHtml(record),pages=await pdfPages(record),text=pages.flat().map(i=>i.str).join(' ');
  for(const rendered of [html,text]){assert.match(rendered,/taxable products, including prints/);assert.match(rendered,/Pending/);assert.doesNotMatch(rendered,/Tax \(0%\)/);}
 });
+
+test('edited catalog inclusions render once in HTML/PDF and do not restore removed features or conflicting hours',async()=>{
+ const inclusions=['4 active service hours','Professional attendant included','Unlimited digital sessions during booked service hours','250 physical prints included in the selected allowance','2 creative designs','Premium backdrop','Digital sharing included','standard engagement reporting','Travel within Chicago + 30 minutes beyond city limits'];
+ const selected=[{...catalog[0],name:'Lola Glam',packages:[{...catalog[0].packages[0],name:'The LOLA Glam — Event Plus',included_hours:4,features:inclusions,description:inclusions.join('\n')}]}];
+ const untouched=structuredClone(selected),edited=['2.5 active service hours','Enclosed Photo Booth',...inclusions.slice(2,7)];
+ const result=model('Corporate Event',selected,{scenario_overrides:{experiences:{[selected[0].experience_id]:{features:edited}}}});
+ assert.deepEqual(result.experiences[0].features,edited);assert.equal(result.experiences[0].packages[0].description,'');assert.equal(result.experiences[0].duration,'');
+ assert.deepEqual(selected,untouched,'Composition must not mutate the source catalog or an existing snapshot');
+ assert.equal(result.experiences[0].packages[0].included_hours,4,'Copy edits do not modify pricing entitlements');assert.equal(result.pricing.total,1080);
+ const record={content:{scenario:result}},html=proposalHtml(record),pages=await pdfPages(record),text=pages.flat().map(i=>i.str).join(' ');
+ for(const output of [html,text]){
+  assert.equal((output.match(/250 physical prints included in the selected allowance/g)||[]).length,1);
+  assert.match(output,/2\.5 active service hours/);assert.match(output,/Enclosed Photo Booth/);
+  assert.doesNotMatch(output,/4 active service hours|4 hours of service|Professional attendant included|standard engagement reporting|Travel within Chicago/);
+ }
+});
+test('clearing inclusions stays empty, while genuine package prose remains in HTML/PDF',async()=>{
+ const features=['4 active service hours','Premium backdrop'];
+ const base={...catalog[0],packages:[{...catalog[0].packages[0],included_hours:4,features,description:features.join('\n')}]};
+ const cleared=model('Corporate Event',[base],{scenario_overrides:{experiences:{[base.experience_id]:{features:[]}}}});
+ assert.deepEqual(cleared.experiences[0].features,[]);assert.equal(cleared.experiences[0].packages[0].description,'');
+ const clearedHtml=proposalHtml({content:{scenario:cleared}}),clearedText=(await pdfPages({content:{scenario:cleared}})).flat().map(i=>i.str).join(' ');
+ for(const output of [clearedHtml,clearedText])assert.doesNotMatch(output,/Premium backdrop|4 active service hours/);
+ const custom=model('Corporate Event',[{...base,packages:[{...base.packages[0],description:'Confirmed production note: bring the custom welcome sign.'}]}]);
+ const html=proposalHtml({content:{scenario:custom}}),text=(await pdfPages({content:{scenario:custom}})).flat().map(i=>i.str).join(' ');
+ for(const output of [html,text])assert.match(output,/Confirmed production note: bring the custom welcome sign\./);
+ assert.equal(custom.experiences[0].duration,'','Catalog service hours already appear in the list');
+ const noHours=model('Corporate Event',[{...base,packages:[{...base.packages[0],features:['Digital sharing included'],description:'Separate setup instructions.'}]}]);
+ assert.equal(noHours.experiences[0].duration,'4 hours','Keep duration when no service-hours inclusion exists');
+});
