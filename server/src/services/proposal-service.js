@@ -440,11 +440,14 @@ export async function createUploadedProposal(req) {
 }
 
 export async function createProposalVersion(client, proposal, userId) {
+  // proposal_snapshot is the previous public offer when saving an unsent revision.
+  // The version itself already freezes every current field at its root.
+  const {proposal_snapshot: previousPublishedSnapshot, ...snapshot} = proposal;
   const next = await client.query("SELECT COALESCE(max(version_number),0)+1 AS version FROM proposal_versions WHERE proposal_id=$1", [proposal.id]);
   const result = await client.query(
     `INSERT INTO proposal_versions (proposal_id, version_number, snapshot, created_by)
      VALUES ($1,$2,$3,$4) RETURNING *`,
-    [proposal.id, next.rows[0].version, JSON.stringify(proposal), userId]
+    [proposal.id, next.rows[0].version, JSON.stringify(snapshot), userId]
   );
   return result.rows[0];
 }

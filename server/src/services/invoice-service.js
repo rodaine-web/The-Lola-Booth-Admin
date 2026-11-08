@@ -1,3 +1,4 @@
+import {acceptedProposalSnapshot} from '../../../shared/accepted-proposal-snapshot.js';
 import {queuePaidAgreement} from './booking-agreement-handoff-service.js';
 import {proposalInvoiceSnapshot} from "../../../shared/proposal-invoice-snapshot.js";
 import { secureDocumentUrl } from "../../../shared/document-access.js";
@@ -40,10 +41,18 @@ export async function createInvoice(req) {
   const invoice = await transaction(async (client) => {
     // Serialize invoice creation with acceptance and other requests for this proposal.
     if (req.body.proposal_id) {
-      const locked = (await client.query("SELECT status FROM proposals WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.body.proposal_id])).rows[0];
+      const locked = (await client.query("SELECT status,accepted_version_id FROM proposals WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [req.body.proposal_id])).rows[0];
       if (!locked || !["ACCEPTED", "CONVERTED"].includes(locked.status)) throw new AppError("Only an accepted proposal can be converted to an invoice.", 409, "PROPOSAL_NOT_ACCEPTED");
       const existing = await client.query("SELECT * FROM invoices WHERE proposal_id=$1 AND deleted_at IS NULL AND status NOT IN ('VOID','REFUNDED') ORDER BY created_at DESC LIMIT 1", [req.body.proposal_id]);
-      if (existing.rows[0]) return existing.rows[0];
+      if (existing.rows[0]) {
+        if(locked.accepted_version_id){
+          const version=(await client.query('SELECT snapshot FROM proposal_versions WHERE id=$1 AND proposal_id=$2',[locked.accepted_version_id,req.body.proposal_id])).rows[0];
+          const accepted=acceptedProposalSnapshot(version?.snapshot);
+          if(accepted?.total==null||!Number.isFinite(Number(accepted.total))||existing.rows[0].pricing_snapshot?.accepted_version_id!==locked.accepted_version_id||money(existing.rows[0].total)!==money(accepted.total))
+            throw new AppError('This invoice does not match the accepted proposal revision. Review and replace it before sending.',409,'ACCEPTED_INVOICE_MISMATCH',{retryable:false});
+        }
+        return existing.rows[0];
+      }
     }
     const settings = await client.query("SELECT * FROM business_settings LIMIT 1");
     let source = {};
@@ -60,7 +69,7 @@ export async function createInvoice(req) {
       if (source.accepted_version_id) {
         const version = (await client.query("SELECT snapshot FROM proposal_versions WHERE id=$1 AND proposal_id=$2", [source.accepted_version_id, source.id])).rows[0];
         if (!version) throw new AppError("The accepted proposal version is unavailable. Review this proposal before invoicing.", 409, "ACCEPTED_VERSION_UNAVAILABLE");
-        const agreed = version.snapshot.proposal_snapshot || version.snapshot;
+        const agreed = acceptedProposalSnapshot(version.snapshot);
         source = {...source, content: agreed.content, pricing_snapshot: agreed.pricing_snapshot,
           line_items_snapshot: agreed.line_items_snapshot, total: agreed.total};
       }
