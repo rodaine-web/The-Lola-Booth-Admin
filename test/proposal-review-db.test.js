@@ -45,6 +45,44 @@ test('proposal review: published prices, concurrent sends, read-only copies and 
   const viewer=jwt.sign({sub:user.id},process.env.JWT_SECRET);assert.equal((await fetch(`${origin}/api/proposals/${p.id}/send`,{method:'POST',headers:{'authorization':`Bearer ${viewer}`,'content-type':'application/json'},body:JSON.stringify(body)})).status,403,'Sales permission is enforced');
   await assert.rejects(acceptProposal(p.id,'Copy QA',{...req,params:{token:copyUrl}}),{code:'PROPOSAL_LINK_REPLACED'});
   await acceptProposal(p.id,'QA',{...req,params:{token:published.secure_token}});await assert.rejects(revision(p),{code:'PROPOSAL_NOT_EDITABLE'});
+  // Real resend sequence: 1500 sent, 1200 reviewed and resent, then accepted.
+  const reduced=await fixture();
+  const originalOffer={total:1500,pricing_snapshot:{total:1500,deposit_amount:450},line_items_snapshot:[{description:'Original 1500 offer',quantity:1,unit_price:1500}],content:{}};
+  await query('UPDATE proposals SET total=1500,pricing_snapshot=$2,line_items_snapshot=$3,proposal_snapshot=$4 WHERE id=$1',[reduced.id,originalOffer.pricing_snapshot,JSON.stringify(originalOffer.line_items_snapshot),originalOffer]);
+  await saveSentProposalRevision({...req,body:{client_id:client.id,custom_line_items:[{description:'Accepted revised experience',quantity:1,unit_price:1200}],valid_through:'2035-10-15'}},await getProposal(reduced.id));
+  const reducedDraft=await getProposal(reduced.id);
+  const savedRevision=(await row('SELECT snapshot FROM proposal_versions WHERE id=$1',[reducedDraft.review_version_id])).snapshot;
+  assert.equal(Number(savedRevision.total),1200);
+  assert.equal(Object.hasOwn(savedRevision,'proposal_snapshot'),false,'New versions must not embed a stale prior published offer');
+  // Simulate already-saved production revisions containing the old nested copy.
+  await query("UPDATE proposal_versions SET snapshot=jsonb_set(snapshot,'{proposal_snapshot}',$2::jsonb) WHERE id=$1",[reducedDraft.review_version_id,JSON.stringify(originalOffer)]);
+  await sendReviewedProposal({...req,body:{requestId:crypto.randomUUID(),versionId:reducedDraft.review_version_id,recipients:['primary@qa.invalid']}},reduced.id,{deliver});
+  const reducedPublished=await row('SELECT * FROM proposals WHERE id=$1',[reduced.id]);
+  assert.equal(Number((await getProposal(reducedPublished.secure_token,{publicView:true})).total),1200);
+  await acceptProposal(reduced.id,'QA',{...req,params:{token:reducedPublished.secure_token}});
+  assert.equal((await row('SELECT accepted_version_id FROM proposals WHERE id=$1',[reduced.id])).accepted_version_id,reducedDraft.review_version_id);
+  const {createInvoice,getInvoice}=await import('../server/src/services/invoice-service.js');
+  const invoice=await createInvoice({...req,body:{proposal_id:reduced.id,depositOnly:true}});
+  assert.equal(Number(invoice.total),1200,'Invoice must bill the accepted revised total');
+  assert.equal(invoice.pricing_snapshot.accepted_version_id,reducedDraft.review_version_id);
+  assert.equal(Number((await getInvoice(invoice.id)).items[0].unit_price),1200);
+  assert.equal((await createInvoice({...req,body:{proposal_id:reduced.id}})).id,invoice.id,'Repeated handoff reuses the accepted invoice');
+  const contracts=await import('../server/src/services/contract-service.js');
+  const agreement=await contracts.createContract(reduced.id,{title:'Revised booking agreement',terms:'Approved QA service agreement terms for the revised accepted proposal.'},req);
+  const issuedAgreement=await contracts.issueContract(agreement.id,req);
+  assert.equal(Number(issuedAgreement.snapshot.total),1200,'Agreement must show the accepted revised total');
+  assert.equal(Number(issuedAgreement.snapshot.items[0].unit_price),1200);
+  assert.equal(issuedAgreement.snapshot.accepted_version_id,reducedDraft.review_version_id);
+  // Existing incorrect records must be reviewed, never silently reused or resent.
+  await query('UPDATE invoices SET total=1500 WHERE id=$1',[invoice.id]);
+  await assert.rejects(createInvoice({...req,body:{proposal_id:reduced.id}}),{code:'ACCEPTED_INVOICE_MISMATCH'});
+  await query('UPDATE invoices SET total=1200 WHERE id=$1',[invoice.id]);
+  await query("UPDATE contracts SET snapshot=jsonb_set(snapshot,'{total}','1500'::jsonb) WHERE id=$1",[agreement.id]);
+  await assert.rejects(contracts.contractSigningUrl(agreement.id),{code:'AGREEMENT_TOTAL_MISMATCH'});
+  const agreementToken=issuedAgreement.signing_url.split('/').at(-1);
+  await assert.rejects(contracts.signContract(agreementToken,{name:'QA',email:'primary@qa.invalid',consent:true,documentHash:issuedAgreement.document_hash},req),{code:'AGREEMENT_TOTAL_MISMATCH'});
+
+  assert.equal(Number((await row('SELECT snapshot FROM proposal_versions WHERE id=$1',[reducedDraft.review_version_id])).snapshot.proposal_snapshot.total),1500,'Historical nested data is retained without being used for new billing');
   // The primary may accept the previously published offer while an unsent revision exists.
   const old=await fixture();await revision(old);await acceptProposal(old.id,'QA',{...req,params:{token:old.secure_token}});const accepted=await row('SELECT * FROM proposals WHERE id=$1',[old.id]);assert.equal(accepted.accepted_version_id,old.published_version_id);assert.equal(Number(accepted.total),1000);assert.equal(accepted.draft_version_id,null);
   // A failed copy retries alone, even after primary acceptance.

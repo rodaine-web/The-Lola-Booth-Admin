@@ -1,3 +1,4 @@
+import {acceptedProposalSnapshot} from '../../../shared/accepted-proposal-snapshot.js';
 import {closeProposalCheckouts} from './checkout-lifecycle-service.js';
 import {secureDocumentUrl} from '../../../shared/document-access.js';
 import {documentOrigin} from '../utils/public-document-url.js';
@@ -28,7 +29,7 @@ async function proposalSnapshot(id) {
   if (!proposal.client_email) fail('Add the client email before creating an agreement.');
   if (proposal.accepted_version_id) {
     if (!proposal.accepted_snapshot) fail('The accepted proposal version is unavailable. Review it before issuing an agreement.');
-    const accepted = proposal.accepted_snapshot.proposal_snapshot || proposal.accepted_snapshot;
+    const accepted = acceptedProposalSnapshot(proposal.accepted_snapshot);
     proposal.total = accepted.total ?? accepted.pricing_snapshot?.total;
     proposal.items = accepted.line_items_snapshot;
   }
@@ -141,6 +142,7 @@ export async function signContract(token,body,req) {
     if(decision.error) throw new AppError(decision.message,decision.error==='SIGNER_EMAIL_MISMATCH'||decision.error==='CONSENT_REQUIRED'?400:409,decision.error);
     if(decision.replay) {const {signing_grace_until,...signed}=visible(row);return signed;}
     if(row.signing_grace_until&&new Date(row.signing_grace_until)<=new Date())fail('This agreement needs LOLA review before signing. Contact us for help.','CONTRACT_SIGNING_REVIEW');
+    await assertAgreementAcceptedTotal(row);
     await assertAgreementPrerequisites(row.proposal_id,row.snapshot.accepted_version_id);
     const method=body.signatureMethod||'TYPED';
     if(method==='DRAWN'&&!validDrawnSignature(body.signatureStrokes))throw new AppError('Draw your signature or choose Type.',422,'SIGNATURE_REQUIRED');
@@ -180,6 +182,7 @@ export async function getContract(id) { const row=(await query('SELECT * FROM co
 export async function contractSigningUrl(id) {
  const row=await getContract(id);
  if(!['ISSUED','SIGNED'].includes(row.status)) fail('This agreement has no active signing link.');
+ if(row.status==='ISSUED') await assertAgreementAcceptedTotal(row);
  if(row.status==='ISSUED' && new Date(row.expires_at).getTime()<=Date.now()) throw new AppError('Agreement expired. Revoke it and create a new revision.',410,'CONTRACT_EXPIRED');
  const credential=(await query('SELECT token_ciphertext FROM contract_access_credentials WHERE contract_id=$1',[id])).rows[0];
  if(!credential) fail('This older agreement has no recoverable credential. Revoke it and create a new revision.','CONTRACT_ACCESS_UNAVAILABLE');
@@ -198,6 +201,15 @@ export async function extendSigningDeadline(id,body,req){
   await writeAudit({req,action:'contract_signing_extended',entity:'contract',entityId:id,before:{dueAt:before.signing_due_at},after:{dueAt:row.signing_due_at,reason:body.reason}});
   return visible(row);
  });
+}
+
+async function assertAgreementAcceptedTotal(row){
+ const versionId=row.snapshot.accepted_version_id;
+ if(!versionId)return;
+ const version=(await query('SELECT snapshot FROM proposal_versions WHERE id=$1 AND proposal_id=$2',[versionId,row.proposal_id])).rows[0];
+ const accepted=acceptedProposalSnapshot(version?.snapshot);
+ if(accepted?.total==null||row.snapshot.total==null||!Number.isFinite(Number(accepted.total))||Math.round(Number(row.snapshot.total)*100)!==Math.round(Number(accepted.total)*100))
+   fail('This agreement does not match the accepted proposal total. Review and replace it before sending or signing.','AGREEMENT_TOTAL_MISMATCH');
 }
 
 async function assertAgreementPrerequisites(proposalId,versionId){
