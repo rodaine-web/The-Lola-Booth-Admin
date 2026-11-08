@@ -62,6 +62,18 @@ test('V1.1 real API journey: agreement, workspace, development email, signing an
   const access=await api(`/proposals/${proposal.id}/workspace`,{method:'POST'});assert.equal(access.status,200);
   const workspaceToken=access.data.url.split('/').at(-1);
   const workspace=await api(`/public/workspaces/${workspaceToken}`,{token:null});assert.equal(workspace.status,200);assert.equal(workspace.data.agreements[0].status,'ISSUED');
+  assert.equal((await api(`/contracts/${id}/revise`,{method:'POST',token:viewerToken})).status,403);
+  // Validate recipient input at the HTTP boundary on a separate agreement.
+  const revisionProposal=(await pool.query("INSERT INTO proposals(proposal_number,client_id,status,total,line_items_snapshot) VALUES('V11-HTTP-REVISION',$1,'ACCEPTED',1099,'[]') RETURNING id",[client.id])).rows[0];
+  const revisionOriginal=await api(`/proposals/${revisionProposal.id}/contracts`,{method:'POST',body:{title:'Revision HTTP agreement',terms:'Approved terms to be revised in isolated testing.'}});
+  await api(`/contracts/${revisionOriginal.data.id}/issue`,{method:'POST'});
+  const replacement=await api(`/contracts/${revisionOriginal.data.id}/revise`,{method:'POST'});assert.equal(replacement.status,201);
+  const revisedBody={title:'Updated HTTP agreement',terms:'Updated approved service terms for revised HTTP test.',recipient:{client_name:'New Contact',client_email:'NEW@example.com',client_company:'QA Company',client_phone:'555-0100',client_address:'123 QA Street'}};
+  assert.equal((await api(`/contracts/${replacement.data.id}`,{method:'PATCH',body:{...revisedBody,recipient:{...revisedBody.recipient,client_email:'invalid'}}})).status,400);
+  assert.equal((await api(`/contracts/${replacement.data.id}`,{method:'PATCH',body:{...revisedBody,recipient:{...revisedBody.recipient,total:0}}})).status,400);
+  const saved=await api(`/contracts/${replacement.data.id}`,{method:'PATCH',body:revisedBody});assert.equal(saved.status,200);assert.equal(saved.data.snapshot.client_email,'new@example.com');
+  const replacementIssued=await api(`/contracts/${replacement.data.id}/issue`,{method:'POST'});assert.equal(replacementIssued.status,200);assert.equal(replacementIssued.data.snapshot.client_email,'new@example.com');
+  assert.equal((await api(`/contracts/${replacement.data.id}/send`,{method:'POST'})).data.status,'DEVELOPMENT_ONLY');
   const signature={name:'Demo Client',email:'demo@example.com',consent:true,documentHash:issued.data.document_hash};
   assert.equal((await api(`/public/contracts/${agreementToken}/sign`,{method:'POST',body:{...signature,consent:false},token:null})).status,400);
   const signed=await api(`/public/contracts/${agreementToken}/sign`,{method:'POST',body:signature,token:null});assert.equal(signed.data.status,'SIGNED');

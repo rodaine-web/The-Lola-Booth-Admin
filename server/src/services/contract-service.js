@@ -44,9 +44,31 @@ function visible(row) {
 export async function listContracts(proposalId) {
   return (await query(`SELECT c.*,COALESCE((SELECT json_agg(json_build_object('purpose',d.purpose,'status',d.status,'attempt_count',d.attempt_count,'failure_code',d.failure_code,'completed_at',d.completed_at)) FROM contract_deliveries d WHERE d.contract_id=c.id),'[]') AS deliveries FROM contracts c WHERE c.proposal_id=$1 ORDER BY c.revision DESC`,[proposalId])).rows.map(visible);
 }
+function recipientSnapshot(snapshot, recipient) {
+  if (!recipient) return snapshot;
+  return {...snapshot,...recipient,recipient_override:recipient};
+}
+export async function reviseContract(id, req) {
+  return transaction(async () => {
+    const old = await lockedContract(id);
+    const current = await proposalSnapshot(old.proposal_id);
+    const active = (await query("SELECT * FROM contracts WHERE proposal_id=$1 AND status IN ('DRAFT','ISSUED')",[old.proposal_id])).rows[0];
+    if (active?.status === 'DRAFT' && active.snapshot.replaces_contract_id === id) return visible(active);
+    if (!['ISSUED','SIGNED'].includes(old.status)) fail('Choose the current sent or signed agreement to create a revision.');
+    if (active && active.id !== id) fail('Finish or revoke the current agreement draft before creating another revision.');
+    if (old.status === 'ISSUED') await query("UPDATE contracts SET status='REVOKED',updated_at=now() WHERE id=$1",[id]);
+    const recipient=Object.fromEntries(['client_name','client_email','client_phone','client_company','client_address'].map(key=>[key,old.snapshot[key]||'']));
+    const snapshot={...recipientSnapshot(old.snapshot,recipient),accepted_version_id:current.accepted_version_id,replaces_contract_id:id};
+    const row=(await query(`INSERT INTO contracts(proposal_id,revision,title,terms,snapshot,created_by)
+      SELECT $1,COALESCE(MAX(revision),0)+1,$2,$3,$4,$5 FROM contracts WHERE proposal_id=$1 RETURNING *`,
+      [old.proposal_id,old.title,old.terms,snapshot,req.user.id])).rows[0];
+    await writeAudit({req,action:'contract_revision_created',entity:'contract',entityId:row.id,after:{revision:row.revision,replacesContractId:id,previousStatus:old.status}});
+    return visible(row);
+  });
+}
 export async function createContract(proposalId, body, req) {
   return transaction(async () => {
-    const snapshot = await proposalSnapshot(proposalId);
+    const snapshot = recipientSnapshot(await proposalSnapshot(proposalId),body.recipient);
     const active = (await query("SELECT * FROM contracts WHERE proposal_id=$1 AND status IN ('DRAFT','ISSUED')",[proposalId])).rows[0];
     if (active) return visible(active);
     const {rows} = await query(`INSERT INTO contracts(proposal_id,revision,title,terms,snapshot,created_by)
@@ -65,7 +87,7 @@ export async function updateContract(id, body, req) {
   return transaction(async () => {
     const old = await lockedContract(id);
     if (old.status !== 'DRAFT') fail('Only draft agreements can be edited. Create a new revision for changed terms.');
-    const row=(await query('UPDATE contracts SET title=$2,terms=$3,updated_at=now() WHERE id=$1 RETURNING *',[id,body.title,body.terms])).rows[0];
+    const row=(await query('UPDATE contracts SET title=$2,terms=$3,snapshot=$4,updated_at=now() WHERE id=$1 RETURNING *',[id,body.title,body.terms,recipientSnapshot(old.snapshot,body.recipient)])).rows[0];
     await writeAudit({req,action:'contract_edited',entity:'contract',entityId:id,after:{revision:row.revision}});
     return visible(row);
   });
@@ -74,7 +96,8 @@ export async function issueContract(id, req) {
   return transaction(async () => {
     const row = await lockedContract(id);
     if (row.status !== 'DRAFT') fail('This agreement is already issued. Revoke it before creating a replacement.');
-    const snapshot = await proposalSnapshot(row.proposal_id);
+    const snapshot = recipientSnapshot(await proposalSnapshot(row.proposal_id),row.snapshot.recipient_override);
+    if(row.snapshot.replaces_contract_id) snapshot.replaces_contract_id=row.snapshot.replaces_contract_id;
     await assertAgreementPrerequisites(row.proposal_id,snapshot.accepted_version_id);
     if(snapshot.payment_exception&&!row.terms.includes(snapshot.payment_exception.id))fail('Include the approved written payment exception in these agreement terms before issuing.','AGREEMENT_EXCEPTION_REVIEW');
     await closeProposalCheckouts(row.proposal_id);
