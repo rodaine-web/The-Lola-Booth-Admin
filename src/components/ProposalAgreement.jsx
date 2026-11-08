@@ -18,7 +18,7 @@ export default function ProposalAgreement({proposal}) {
     return()=>{current=false;};
   },[proposal.id]);
   useEffect(()=>{if(records&&window.location.hash==='#agreements')document.getElementById('agreements')?.scrollIntoView({block:'start'});},[records]);
-  async function act(fn){if(busy)return;setBusy(true);setError('');setNotice('');try{await fn();setRecords(await api.get(`/proposals/${proposal.id}/contracts`));}catch(err){setError(err.message);}finally{setBusy(false);}}
+  async function act(fn){if(busy)return;setBusy(true);setError('');setNotice('');try{await fn();}catch(err){setError(err.message);}finally{try{setRecords(await api.get(`/proposals/${proposal.id}/contracts`));}catch(err){setError(current=>current||err.message);}setBusy(false);}}
   if(!available)return null;
   const active=records?.find(r=>['DRAFT','ISSUED'].includes(r.status));
   return <section id="agreements" className="panel"><p className="eyebrow">Version 1.1 · Agreement</p><h2>Client agreement</h2>
