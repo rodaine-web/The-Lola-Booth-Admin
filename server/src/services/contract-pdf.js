@@ -43,7 +43,7 @@ export function renderContractPdf(row) {
   body(`Agreement ${row.snapshot.proposal_number}  |  Version ${row.revision}${row.issued_at?`  |  Issued ${date(row.issued_at)}`:''}`,{size:9,color:colors.muted});
   section('Your Event');
   const snapshot=row.snapshot;
-  const facts=[['Client',snapshot.client_name],['Email',snapshot.client_email],['Event',snapshot.event_name],['Event type',snapshot.event_type],['Event date',snapshot.event_date?date(snapshot.event_date):null],['Service time',snapshot.start_time||snapshot.end_time?`${time(snapshot.start_time)} - ${time(snapshot.end_time)}`:null],['Venue',snapshot.venue_name],['Total investment',snapshot.total!=null?money(snapshot.total):null]];
+  const facts=[['Client',snapshot.client_name],['Email',snapshot.client_email],['Company',snapshot.client_company||null],['Phone',snapshot.client_phone||null],['Address',snapshot.client_address||null],['Event',snapshot.event_name],['Event type',snapshot.event_type],['Event date',snapshot.event_date?date(snapshot.event_date):null],['Service time',snapshot.start_time||snapshot.end_time?`${time(snapshot.start_time)} - ${time(snapshot.end_time)}`:null],['Venue',snapshot.venue_name],['Total investment',snapshot.total!=null?money(snapshot.total):null]];
   for(const [label,value] of facts){
    if(value==null)continue;
    doc.font('Helvetica').fontSize(10);const h=Math.max(25,doc.heightOfString(String(value),{width:364,lineGap:3})+10);room(h);
