@@ -67,7 +67,7 @@ export default function ProposalWizard(){
         const labels=["experiences","packages","add-ons"];
         const failures=[];
         results.forEach((result,index)=>{
-          if(result.status==="fulfilled")setters[index](result.value.filter(item=>item.active!==false && (index!==0 || ["glam","360","vogue","audio"].includes(experienceKey(item)))));
+          if(result.status==="fulfilled")setters[index](result.value.filter(item=>item.active!==false && (index!==0 || ["glam","360","mirror","vogue","audio"].includes(experienceKey(item)))));
           else failures.push(labels[index]+": "+result.reason.message);
         });
         setCatalogError(failures.length?"Unable to load "+failures.join("; "):"");

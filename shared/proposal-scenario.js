@@ -32,7 +32,7 @@ export const proposalDefaults = {
     audio:{personal:'Give your guests a personal way to leave messages, stories and memories from the celebration.',Wedding:'Heartfelt, hilarious and unforgettable. Your guests leave voice messages, stories and well wishes you’ll treasure long after the event.',business:'An interactive voice experience for guest reactions, messages or event feedback.'}
   }, packages:{}
 };
-export function experienceKey(item={}) { const name=String(item.key||item.name||'').toLowerCase(); return name.includes('digital')?'digital':name.includes('360')?'360':name.includes('vogue')?'vogue':name.includes('audio')||name.includes('guestbook')?'audio':name.includes('glam')||name.includes('photo')?'glam':name; }
+export function experienceKey(item={}) { const name=String(item.key||item.name||'').toLowerCase(); return name.includes('mirror')?'mirror':name.includes('digital')?'digital':name.includes('360')?'360':name.includes('vogue')?'vogue':name.includes('audio')||name.includes('guestbook')?'audio':name.includes('glam')||name.includes('photo')?'glam':name; }
 export function normalizeScenarioEvent(value='') {
   const normalized=String(value).trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');
   const aliases={'weddings':'Wedding','birthdays':'Birthday','private event':'Private Party','private events':'Private Party','private parties':'Private Party','corporate':'Corporate Event','corporate events':'Corporate Event','brand activations':'Brand Activation','custom':'Other'};

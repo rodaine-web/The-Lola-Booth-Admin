@@ -1,5 +1,7 @@
+import {printableExperiences,primaryExperienceKeys} from './experience-catalog.js';
 export function packageEntitlementLabels(item){
- const photo=['glam','vogue'].includes(item.experience),hours=item.serviceHours==null?null:item.serviceHours+(item.extraHours||0);
+ const photo=printableExperiences.includes(item.experience),hours=item.serviceHours==null?null:item.serviceHours+(item.extraHours||0);
+ if(Array.isArray(item.featureLabels))return item.featureLabels.map(label=>label.replaceAll('{hours}',String(hours??item.rentalHours??'Flexible')).replaceAll('{prints}',String(item.selectedPrints??item.prints??0)));
  return [hours?`${hours} active service hours`:item.rentalHours?`Up to ${item.rentalHours} rental hours`:null,
   item.attendantIncluded?'Professional attendant included':null,
   item.digitalSessionsUnlimited?'Unlimited digital sessions during booked service hours':null,
@@ -21,7 +23,7 @@ export function packageEntitlementLabels(item){
 }
 
 export function orderedPricingPackages(rows){
- const catalogs=['STANDARD','PROFESSIONAL','ACTIVATION','CUSTOM'],experiences=['glam','360','vogue','audio'],tiers=['ESSENTIAL','SIGNATURE','LUXE','EVENT','EVENT_PLUS','EVENT_PREMIUM','ACTIVATION','CAMPAIGN','CUSTOM_PRODUCTION'];
+ const catalogs=['STANDARD','PROFESSIONAL','ACTIVATION','CUSTOM'],experiences=[...primaryExperienceKeys,'audio'],tiers=['ESSENTIAL','SIGNATURE','LUXE','EVENT','EVENT_PLUS','EVENT_PREMIUM','ACTIVATION','CAMPAIGN','CUSTOM_PRODUCTION'];
  const rank=(values,key)=>{const index=values.indexOf(key);return index<0?999:index;};
  return [...rows].sort((a,b)=>rank(catalogs,a.catalog_key)-rank(catalogs,b.catalog_key)||rank(experiences,a.pricing_profile?.experience)-rank(experiences,b.pricing_profile?.experience)||rank(tiers,a.tier_key)-rank(tiers,b.tier_key)||Number(a.display_order||0)-Number(b.display_order||0)||a.name.localeCompare(b.name));
 }
