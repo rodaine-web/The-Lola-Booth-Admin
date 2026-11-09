@@ -345,6 +345,7 @@ export async function acknowledgeAssignment(eventId, assignmentId, user, { statu
 export async function updateEquipmentLifecycle(eventId, assignmentId, action, body, user) {
   await assertEventAccess(user, eventId);
   return transaction(async()=>{
+  await query('SELECT pg_advisory_xact_lock(7811051)');
   const previous=(await query("SELECT * FROM equipment_assignments WHERE id=$1 AND event_id=$2 AND released_at IS NULL FOR UPDATE",[assignmentId,eventId])).rows[0];
   if(!previous)throw notFound("Equipment assignment");
   const map = {

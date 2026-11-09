@@ -81,6 +81,7 @@ CREATE FUNCTION recheck_audio_assignment() RETURNS trigger AS $$
 BEGIN
  IF TG_OP='UPDATE' AND NEW.released_at IS NOT NULL AND OLD.released_at IS NULL AND EXISTS(SELECT FROM audio_guestbook_fulfillments WHERE event_id=NEW.event_id AND equipment_id=NEW.equipment_id AND status NOT IN ('READY','CANCELLED')) AND NOT EXISTS(SELECT FROM events WHERE id=NEW.event_id AND (status='CANCELLED' OR deleted_at IS NOT NULL)) THEN
   RAISE EXCEPTION 'Cancel the Audio fulfillment or complete its return inspection before releasing this unit' USING ERRCODE='23514'; END IF;
+ IF TG_OP='UPDATE' AND NEW.event_id=OLD.event_id AND NEW.equipment_id=OLD.equipment_id AND NEW.released_at IS NOT DISTINCT FROM OLD.released_at AND NEW.lifecycle_status IN ('RETURNED','MAINTENANCE') AND OLD.lifecycle_status IN ('CHECKED_OUT','IN_TRANSIT','ON_SITE') THEN RETURN NEW;END IF;
  PERFORM assert_audio_guestbook_inventory(NEW.event_id);RETURN NEW;
 END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER audio_assignment_recheck AFTER INSERT OR UPDATE ON equipment_assignments FOR EACH ROW EXECUTE FUNCTION recheck_audio_assignment();
