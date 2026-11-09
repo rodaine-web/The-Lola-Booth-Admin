@@ -7,6 +7,7 @@ import {pricingPackageDefaults,defaultPricingRules} from '../server/src/services
 test('approved celebration prices, ordering, hours and decision-specific print inclusions',()=>{
  assert.deepEqual(primaryExperienceKeys,['glam','360','mirror','vogue']);assert.deepEqual(celebrationPrices.mirror,[799,1199,1999]);assert.equal(celebrationPrices['360'][2],1799);assert.equal(celebrationPrices.vogue[1],1399);
  const features=packageEntitlementLabels({experience:'mirror',serviceHours:4,prints:200,selectedPrints:500,featureLabels:celebrationFeatures('mirror',1)});
+ assert.ok(packageEntitlementLabels({experience:'mirror',serviceHours:4,prints:200,unlimitedPrints:true,featureLabels:celebrationFeatures('mirror',1)}).includes('On-site printing: Unlimited physical prints included'));
  assert.ok(features.includes('4 hours of service'));assert.ok(features.includes('On-site printing: 500 physical prints included'));assert.ok(features.includes('Custom mirror animations'));
  assert.ok(!celebrationFeatures('vogue',1).some(x=>x.includes('printing')));assert.ok(celebrationFeatures('vogue',2).some(x=>x.includes('printing')));
  const rows=primaryExperienceKeys.toReversed().map((key,i)=>({name:key,catalog_key:'STANDARD',tier_key:'ESSENTIAL',pricing_profile:{experience:key}}));assert.deepEqual(orderedPricingPackages(rows).map(x=>x.name),primaryExperienceKeys);

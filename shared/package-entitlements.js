@@ -1,7 +1,7 @@
 import {printableExperiences,primaryExperienceKeys} from './experience-catalog.js';
 export function packageEntitlementLabels(item){
  const photo=printableExperiences.includes(item.experience),hours=item.serviceHours==null?null:item.serviceHours+(item.extraHours||0);
- if(Array.isArray(item.featureLabels))return item.featureLabels.map(label=>label.replaceAll('{hours}',String(hours??item.rentalHours??'Flexible')).replaceAll('{prints}',String(item.selectedPrints??item.prints??0)));
+ if(Array.isArray(item.featureLabels))return item.featureLabels.map(label=>label.replaceAll('{hours}',String(hours??item.rentalHours??'Flexible')).replaceAll('{prints}',String(item.unlimitedPrints?'Unlimited':item.selectedPrints??item.prints??0)));
  return [hours?`${hours} active service hours`:item.rentalHours?`Up to ${item.rentalHours} rental hours`:null,
   item.attendantIncluded?'Professional attendant included':null,
   item.digitalSessionsUnlimited?'Unlimited digital sessions during booked service hours':null,
