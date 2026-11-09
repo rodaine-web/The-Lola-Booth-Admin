@@ -4,7 +4,7 @@ import {query,transaction} from '../db/pool.js';
 import {notFound,AppError} from '../utils/errors.js';
 import {writeAudit} from './audit-service.js';
 const schemas={
- equipment:z.object({name:z.string().trim().min(1),category:z.string().trim().min(1),asset_uid:z.string().trim().min(1).optional(),serial_number:z.string().nullable().optional(),status:z.enum(['AVAILABLE','RESERVED','IN_USE','MAINTENANCE','RETIRED']).default('AVAILABLE')}),
+ equipment:z.object({inventory_pool:z.enum(['AUDIO_GUESTBOOK']).nullable().optional(),name:z.string().trim().min(1),category:z.string().trim().min(1),asset_uid:z.string().trim().min(1).optional(),serial_number:z.string().nullable().optional(),status:z.enum(['AVAILABLE','RESERVED','IN_USE','MAINTENANCE','RETIRED']).default('AVAILABLE')}),
  staff:z.object({name:z.string().trim().min(1),email:z.string().email().nullable().optional(),phone:z.string().nullable().optional(),role:z.string().trim().min(1).default('ATTENDANT'),active:z.boolean().default(true),notes:z.string().nullable().optional(),user_id:z.string().uuid().nullable().optional(),availability:z.object({unavailable_dates:z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).default([])}).optional()})
 };
 const tables={equipment:'equipment',staff:'staff_profiles'};

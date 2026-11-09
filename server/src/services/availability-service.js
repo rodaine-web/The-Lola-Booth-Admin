@@ -23,7 +23,9 @@ export async function checkAvailability(raw){
   SELECT DISTINCT eq.id,eq.name,e.event_name FROM reservations a JOIN equipment eq ON eq.id=a.equipment_id JOIN events e ON e.id=a.event_id CROSS JOIN requested r
    WHERE e.deleted_at IS NULL AND e.status NOT IN ('CANCELLED','COMPLETED') AND ($2::uuid IS NULL OR e.id<>$2)
     AND event_unavailable_range(e.id)&&r.window`,params);
+ const audioConflicts=await query(`${requestedWindow} SELECT DISTINCT eq.id,eq.name,e.event_name FROM audio_guestbook_fulfillments f JOIN equipment eq ON eq.id=f.equipment_id JOIN events e ON e.id=f.event_id CROSS JOIN requested r WHERE ($2::uuid IS NULL OR f.event_id<>$2) AND audio_guestbook_range(f)&&r.window`,params);
  const conflicts=[];
+ if(audioConflicts.rows.length)conflicts.push({type:'EQUIPMENT_CONFLICT',severity:equipmentIds.some(id=>audioConflicts.rows.some(row=>row.id===id))?'critical':'warning',message:'Audio Guestbook is reserved through delivery, shipping, return and inspection.',records:audioConflicts.rows});
  if(eventConflicts.rows.length)conflicts.push({type:'EVENT_OVERLAP',severity:'warning',message:'Another event overlaps this setup-to-breakdown window.',records:eventConflicts.rows});
  if(equipmentConflicts.rows.length)conflicts.push({type:'EQUIPMENT_CONFLICT',severity:equipmentIds.some(id=>equipmentConflicts.rows.some(row=>row.id===id))?'critical':'warning',message:'These units have overlapping assignments or temporary holds.',records:equipmentConflicts.rows});
  if(equipmentIds.length){

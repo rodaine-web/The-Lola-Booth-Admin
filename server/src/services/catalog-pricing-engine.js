@@ -52,7 +52,7 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
   if(!Array.isArray(selections)||!selections.length||selections.length>4)invalid('Choose one to four experiences.');
   const lines=[],seen=new Set(),entitlements=[],reasons=[];let allowance=0;
   for(const choice of selections){
-    const pkg=catalog.packages.find(p=>p.id===choice.packageId&&p.active&&(p.catalog_key===selectedCatalog||p.pricing_profile?.quoteRequired));
+    const pkg=catalog.packages.find(p=>p.id===choice.packageId&&p.active&&(p.catalog_key===selectedCatalog||p.pricing_profile?.quoteRequired||(p.pricing_profile?.perEventRental&&p.pricing_profile.experience==='audio')));
     if(!pkg)invalid('Choose an active package in the selected catalog.');
     const profile=pkg.pricing_profile;if(!profile)invalid('Package pricing rules are missing.');
     if(seen.has(profile.experience))invalid('Select each experience once.');seen.add(profile.experience);
