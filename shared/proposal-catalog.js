@@ -29,7 +29,7 @@ export function proposalAddonStatus(addon, experiences, packages) {
     && policy.experiences?.includes(pkg.pricing_profile.experience)
     && (!policy.packageIds?.length||policy.packageIds.includes(pkg.id)));
   if (included) return `Included in selected package: ${included.name}`;
-  if (policy.category==='PRINTS' && selected.some(pkg=>['glam','vogue'].includes(pkg.pricing_profile?.experience)))
+  if (policy.category==='PRINTS' && selected.some(pkg=>['glam','mirror','vogue'].includes(pkg.pricing_profile?.experience)))
     return 'Select additional prints under Total physical prints in Package pricing review.';
   return null;
 }

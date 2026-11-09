@@ -1,3 +1,4 @@
+import {printableExperiences,experienceNames} from '../../../shared/experience-catalog.js';
 import {AppError} from '../utils/errors.js';
 
 function invalid(message) { throw new AppError(message,422,'PRICING_INVALID'); }
@@ -20,7 +21,7 @@ export function selectPricingCatalog(category,requested,{admin=false,reason=''}=
 }
 export function printUpgrade(experience,included,selected,matrix){
   integer(included);integer(selected);
-  if(!['glam','vogue'].includes(experience)){if(selected||included)invalid('Printing is available only for Glam and Vogue.');return 0;}
+  if(!printableExperiences.includes(experience)){if(selected||included)invalid('Printing is available only for Glam, Magic Mirror and Vogue.');return 0;}
   if(selected<included)invalid('Selected prints cannot be less than the included allowance.');
   const price=n=>n===0?0:matrix?.[experience]?.[n];
   if(price(included)==null||price(selected)==null)invalid('This print allowance requires an approved custom quote.');
@@ -63,15 +64,15 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
     if(priceOverride&&(!admin||(!simpleAdmin&&!override.reason?.trim())))invalid('Package price overrides require Admin approval and a reason.');
     const base=priceOverride?moneyInteger(priceOverride.amountCents):minorUnits(pkg.starting_price);allowance=Math.max(allowance,profile.travelMinutes||0);
     const addLine=(type,description,quantity,unitCents)=>{const amount=integer(quantity,1,10000)*moneyInteger(unitCents);moneyInteger(amount);lines.push({type,description,quantity,unitPriceCents:unitCents,amountCents:amount,packageId:pkg.id,experience:profile.experience});};
-    const experienceLabel={glam:'The LOLA Glam','360':'The LOLA 360',vogue:'The LOLA Vogue',audio:'Audio Guest Book'}[profile.experience];
+    const experienceLabel=experienceNames[profile.experience];
     addLine('PACKAGE',pkg.name.includes('—')?pkg.name:`${experienceLabel} — ${pkg.name}`,1,base);
     const included=profile.prints||0,selected=choice.prints??included;
     const printFormat=choice.printFormat||'4X6';
     if(!['4X6','2X6'].includes(printFormat))invalid('Choose a supported print format.');
     const unlimited=choice.unlimitedPrints===true;
-    if(unlimited&&!['glam','vogue'].includes(profile.experience))invalid('Printing is available only for Glam and Vogue.');
+    if(unlimited&&!printableExperiences.includes(profile.experience))invalid('Printing is available only for Glam, Magic Mirror and Vogue.');
     integer(selected);if(selected<included)invalid('Selected prints cannot be less than the included allowance.');
-    const customPrinting=unlimited||(['glam','vogue'].includes(profile.experience)&&selected>0&&catalog.rules.printPrices?.[profile.experience]?.[selected]==null);
+    const customPrinting=unlimited||(printableExperiences.includes(profile.experience)&&selected>0&&catalog.rules.printPrices?.[profile.experience]?.[selected]==null);
     const printApproval=override?.printApprovals?.find(item=>item.packageId===pkg.id&&item.selectedPrints===selected&&Boolean(item.unlimitedPrints)===unlimited);
     if(printApproval&&(!admin||(!simpleAdmin&&!override.reason?.trim())))invalid('Print allowance overrides require an audited Admin approval.');
     let upgrade;

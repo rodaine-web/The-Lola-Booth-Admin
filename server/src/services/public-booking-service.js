@@ -1,15 +1,18 @@
+import {experienceNames} from '../../../shared/experience-catalog.js';
+import {packageEntitlementLabels} from '../../../shared/package-entitlements.js';
 import crypto from 'node:crypto';
 import {query} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
 import {currentPricingCatalog,pricingCatalogEnabled,createPricingQuote,legacyPricingBaseline} from './pricing-catalog-service.js';
-const names={glam:'The LOLA Glam','360':'The LOLA 360',vogue:'The LOLA Vogue',audio:'The LOLA Guestbook'};
-export function bookingIdentity(item){const text=String(item.slug||item.website_name||item.name||'').toLowerCase();return /360/.test(text)?'360':/vogue/.test(text)?'vogue':/audio|guestbook/.test(text)?'audio':/glam/.test(text)?'glam':null;}
+const names=experienceNames;
+export function bookingIdentity(item){const text=String(item.slug||item.website_name||item.name||'').toLowerCase();return /mirror/.test(text)?'mirror':/360/.test(text)?'360':/vogue/.test(text)?'vogue':/audio|guestbook/.test(text)?'audio':/glam/.test(text)?'glam':null;}
 export function bookingAddonEligible(addon,experiences,requestOnly=false){
  const keys=experiences.map(bookingIdentity),label=String(addon.name).toLowerCase();
+ if(addon.pricing_policy?.key==='audio-guestbook'&&keys.includes('audio'))return false;
  if(addon.pricing_policy)return (requestOnly||!['PRINTS','EXTRA_HOURS','TRAVEL'].includes(addon.pricing_policy.category))&&addon.pricing_policy.experiences.some(key=>keys.includes(key));
  if(/audio.*guestbook/.test(label)&&keys.includes('audio'))return false;
  if(/print|guestbook/.test(label)&&!(/audio/.test(label))&&!keys.includes('glam'))return false;
- if(/backdrop/.test(label)&&!keys.some(x=>['glam','vogue'].includes(x)))return false;
+ if(/backdrop/.test(label)&&!keys.some(x=>['glam','mirror','vogue'].includes(x)))return false;
  return keys.length>0;
 }
 export async function publicBookingCatalog(){
@@ -20,7 +23,7 @@ export async function publicBookingCatalog(){
  ]);
  const version=pricingCatalogEnabled()?await currentPricingCatalog():null;
  const baseline=version?null:await legacyPricingBaseline();
- return {experiences:experiences.rows.filter(x=>bookingIdentity(x)).map(x=>({...x,key:bookingIdentity(x),name:names[bookingIdentity(x)]})),packages:version?version.snapshot.packages.filter(p=>p.active).map(({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration,pricing_mode,website_features,website_short_description,pricing_profile,most_popular})=>({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration:pricing_profile.rentalHours||pricing_profile.serviceHours,pricing_mode,website_features,website_short_description,pricing_profile,most_popular})):(baseline?baseline.packages.filter(row=>packages.rows.some(current=>current.id===row.id)):packages.rows),addons:version?version.snapshot.addons.filter(a=>a.active).map(({id,name,description,price,pricing_type,pricing_policy})=>({id,name,description,price,pricing_type,pricing_policy})):(baseline?baseline.addons.filter(row=>addons.rows.some(current=>current.id===row.id)):addons.rows),compatibilityPolicy:version?'structured-v2':'catalog-fallback-v1',...(version?{pricingVersion:version.id,printPrices:version.rules.printPrices}: {})};
+ return {experiences:experiences.rows.filter(x=>bookingIdentity(x)).map(x=>({...x,key:bookingIdentity(x),name:names[bookingIdentity(x)]})),packages:version?version.snapshot.packages.filter(p=>p.active).map(({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration,pricing_mode,website_features,website_short_description,pricing_profile,most_popular})=>({id,experience_id,name,catalog_key,tier_key,starting_price,currency,duration:pricing_profile.rentalHours||pricing_profile.serviceHours,pricing_mode,website_features:packageEntitlementLabels(pricing_profile),website_short_description,pricing_profile,most_popular})):(baseline?baseline.packages.filter(row=>packages.rows.some(current=>current.id===row.id)):packages.rows),addons:version?version.snapshot.addons.filter(a=>a.active).map(({id,name,description,price,pricing_type,pricing_policy})=>({id,name,description,price,pricing_type,pricing_policy})):(baseline?baseline.addons.filter(row=>addons.rows.some(current=>current.id===row.id)):addons.rows),compatibilityPolicy:version?'structured-v2':'catalog-fallback-v1',...(version?{pricingVersion:version.id,printPrices:version.rules.printPrices}: {})};
 }
 export function validateBookingSelections(input,catalog){
  const requestOnly=input.customerType==='BUSINESS';
