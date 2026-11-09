@@ -182,6 +182,7 @@ export const api = {
   blob: (path) => request(path, {}, true, "blob"),
   post: (path, body) => mutate("POST",path,body),
   patch: (path, body) => mutate("PATCH",path,body),
+  put: (path, body) => mutate("PUT",path,body),
   delete: (path) => request(path, { method: "DELETE" }),
   download,
   downloadPost,
