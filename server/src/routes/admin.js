@@ -1,6 +1,7 @@
+import {audioFulfillment,saveAudioFulfillment,transitionAudioFulfillment} from '../services/audio-fulfillment-service.js';
 import {eventCloseout,saveEventCloseout} from '../services/event-closeout-service.js';
 import {lockBookingReservations} from '../services/booking-hold-service.js';
-import {rescheduleWarnings} from '../services/event-operations-service.js';
+import {rescheduleWarnings,userCanAccessEvent} from '../services/event-operations-service.js';
 import {recordJourney} from '../services/record-journey-service.js';
 import {integrationMarketplace} from '../services/integration-marketplace-service.js';
 import {saveSentProposalRevision,sendReviewedProposal,latestProposalDelivery,proposalReviewEmail} from '../services/proposal-review-service.js';
@@ -1934,6 +1935,10 @@ adminRouter.post("/equipment/qr-labels.pdf", requirePermission("equipment.overri
   res.type("application/pdf").attachment("lola-equipment-qr-labels.pdf").send(buffer);
 }));
 
+const audioEventAccess=asyncHandler(async(req,res,next)=>{if(!await userCanAccessEvent(req.user,req.params.id))throw new AppError('You do not have access to this event.',403,'FORBIDDEN');next();});
+adminRouter.get('/events/:id/audio-fulfillment',requirePermission('read:events'),audioEventAccess,asyncHandler(async(req,res)=>res.json(await audioFulfillment(req.params.id))));
+adminRouter.put('/events/:id/audio-fulfillment',requirePermission('write:events'),audioEventAccess,asyncHandler(async(req,res)=>res.json(await saveAudioFulfillment(req.params.id,req.body,req))));
+adminRouter.post('/events/:id/audio-fulfillment/:fulfillmentId/:action',requirePermission('write:events'),audioEventAccess,asyncHandler(async(req,res)=>res.json(await transitionAudioFulfillment(req.params.id,req.params.fulfillmentId,req.params.action,req.body,req))));
 adminRouter.get("/equipment", ...listRoute("equipment", ["name", "category", "serial_number", "asset_uid", "status"], "read:events"));
 adminRouter.get("/tasks", ...listRoute("tasks", ["title", "description"], "read:tasks"));
 adminRouter.get("/files", ...listRoute("files", ["filename", "category"], "read:events"));
