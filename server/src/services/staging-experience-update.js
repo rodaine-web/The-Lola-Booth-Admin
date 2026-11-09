@@ -45,7 +45,7 @@ export async function updateStagingExperiences({apply=false,expectedVersion,req}
   const addonKeys=names=>before.addons.filter(x=>names.includes(x.name.toLowerCase())).map(x=>x.pricing_policy?.key).filter(Boolean);
   const savedPackages=[];
   for(const [experienceIndex,key] of primaryExperienceKeys.entries())for(const [index,tier] of ['ESSENTIAL','SIGNATURE','LUXE','CUSTOM'].entries()){
-   const custom=tier==='CUSTOM',existing=standard(key,tier)||before.packages.find(x=>x.experience_id===ids[key]&&x.website_key===key+':custom'&&x.catalog_key==='STANDARD');
+   const custom=tier==='CUSTOM',existing=standard(key,tier)||before.packages.find(x=>x.experience_id===ids[key]&&x.website_key===key+':custom'&&(x.catalog_key==='STANDARD'||x.catalog_key==null));
    const base=existing?.pricing_profile||standard('glam',custom?'ESSENTIAL':tier).pricing_profile;
    const prints=custom?0:summary.printAllowances[key]?.[index]||0;
    const included=new Set(base.includedAddonKeys||[]);
@@ -67,7 +67,7 @@ export async function updateStagingExperiences({apply=false,expectedVersion,req}
   const rental=standard('audio','ESSENTIAL');
   const audioFeatures=['Up to {hours} rental hours','One recording phone','Personalized audio greeting','Guest audio recordings','Rental from $299; logistics and delivery quoted separately'];
   await query("UPDATE packages SET name='Audio Guest Book — Standalone Rental',starting_price=299,most_popular=false,active=true,show_on_website=true,website_status='PUBLISHED',pricing_profile=$2,website_features=$3,description='Rental only. Logistics and delivery are quoted separately.',updated_at=now() WHERE id=$1",[rental.id,JSON.stringify({...rental.pricing_profile,startingAt:true,featureLabels:audioFeatures}),JSON.stringify(packageEntitlementLabels({...rental.pricing_profile,featureLabels:audioFeatures}))]);
-  await query("UPDATE packages SET active=false,show_on_website=false,website_status='ARCHIVED',updated_at=now() WHERE experience_id=$1 AND catalog_key='STANDARD' AND id<>$2",[audio.id,rental.id]);
+  await query("UPDATE packages SET active=false,show_on_website=false,website_status='ARCHIVED',updated_at=now() WHERE experience_id=$1 AND (catalog_key='STANDARD' OR catalog_key IS NULL) AND id<>$2",[audio.id,rental.id]);
   for(const old of before.cms.filter(x=>x.cms_type==='packages'&&(/audio/i.test(x.entity_key)||x.payload.experience_id===audio.id)))await saveStagingRecord('packages',{channel:'STAGING',entity_key:old.entity_key,payload:old.payload,status:'ARCHIVED',display_order:100},req.user,old.id);
   const audioAddon=before.addons.find(x=>/audio\s*guest\s*book/i.test(x.name)&&!/additional|extra|phone|styled/i.test(x.name));
   if(!audioAddon)throw new Error('Existing Audio Guest Book add-on not found; refusing to create duplicate.');

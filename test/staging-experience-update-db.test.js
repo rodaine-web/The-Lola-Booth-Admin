@@ -11,6 +11,7 @@ test('staging catalogue update preserves history, print allowances, unrelated CM
   const req={user:{...owner,permissions:['*']},headers:{}};
   const experienceIds={};for(const key of ['glam','360','vogue','audio'])experienceIds[key]=(await one("INSERT INTO experiences(name,slug,active,show_on_website,website_status) VALUES($1,$1,true,true,'PUBLISHED') RETURNING id",[key])).id;
   await query("INSERT INTO addons(name,price,pricing_type,active) VALUES('Audio Guestbook',299,'FIXED',true),('Existing keepsake',175,'FIXED',true)");
+  const legacyCustomIds={};for(const key of ['glam','360','vogue','audio'])legacyCustomIds[key]=(await one("INSERT INTO packages(name,experience_id,website_key,starting_price,pricing_mode,active,show_on_website,website_status) VALUES('Custom',$1,$2,NULL,'CUSTOM',true,true,'PUBLISHED') RETURNING id",[experienceIds[key],key+':custom'])).id;
   const service=await import('../server/src/services/pricing-catalog-service.js');const draft=await service.prepareStagingPricingCatalog(req);const published=await service.publishPricingVersion(draft.id,req);
   const originalSnapshot=JSON.stringify((await one('SELECT snapshot FROM pricing_catalog_versions WHERE id=$1',[published.id])).snapshot);
   const originalPrices=(await query('SELECT id,price FROM addons')).rows;
@@ -22,7 +23,7 @@ test('staging catalogue update preserves history, print allowances, unrelated CM
   await assert.rejects(updateStagingExperiences({apply:true,expectedVersion:crypto.randomUUID(),req}),{code:'CATALOG_VERSION_CHANGED'});
   const updated=await updateStagingExperiences({apply:true,expectedVersion:published.id,req});assert.equal(updated.versionNumber,2);assert.equal(updated.packageIds.length,16);
   assert.equal(JSON.stringify((await one('SELECT snapshot FROM pricing_catalog_versions WHERE id=$1',[published.id])).snapshot),originalSnapshot);
-  const now=(await query("SELECT * FROM packages WHERE catalog_key='STANDARD' AND active=true AND pricing_profile->>'experience'<>'audio'")).rows;assert.equal(now.length,16);
+  const now=(await query("SELECT * FROM packages WHERE catalog_key='STANDARD' AND active=true AND pricing_profile->>'experience'<>'audio'")).rows;assert.equal(now.length,16);for(const key of ['glam','360','vogue'])assert.equal(now.find(p=>p.website_key===key+':custom').id,legacyCustomIds[key]);assert.equal((await one('SELECT active FROM packages WHERE id=$1',[legacyCustomIds.audio])).active,false);
   for(const key of ['glam','360','mirror','vogue']){const tiers=now.filter(p=>p.pricing_profile.experience===key);assert.equal(tiers.length,4);assert.equal(tiers.filter(p=>p.most_popular).length,1);assert.equal(tiers.find(p=>p.most_popular).tier_key,'SIGNATURE');assert.equal(tiers.find(p=>p.tier_key==='CUSTOM').starting_price,null);}
   assert.equal(now.find(p=>p.pricing_profile.experience==='mirror'&&p.tier_key==='SIGNATURE').pricing_profile.prints,200);
   assert.equal(now.find(p=>p.pricing_profile.experience==='vogue'&&p.tier_key==='SIGNATURE').pricing_profile.prints,0);
