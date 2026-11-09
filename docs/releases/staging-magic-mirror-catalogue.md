@@ -11,9 +11,9 @@ Primary CMS order: The Lola Glam, The Lola 360, The Lola Magic Mirror, The Lola 
 | Magic Mirror | $799 | $1,199 | $1,999 |
 | Vogue | $899 | $1,399 | $2,299 |
 
-Existing Glam print allowances are preserved: Signature200/Luxe500. Mirror matches those allowances and the current Glam upgrade matrix. Vogue Luxe retains500; Signature has no included printing. Feature labels support current hours/selected-print substitution and remain editable under Pricing & travel.
+Existing Glam print allowances are preserved: Signature 200 / Luxe 500. Mirror matches those allowances and the current Glam upgrade matrix. Vogue Luxe retains 500; Signature has no included printing. Feature labels support current hours/selected-print substitution and remain editable under Pricing & travel.
 
-Audio Guest Book retains its existing experience ID for history and standalone booking. The base rental is from$299 with logistics/delivery excluded; its existing8-hour rental duration remains. Add-on price is$249 across the four primary experiences. Existing add-on IDs/count/prices are preserved except that explicitly authorized Audio price change. Applicable existing enhancements gain Mirror compatibility. Audio cannot be added again when the standalone Audio rental is already selected. Obsolete standard Audio Signature/Luxe offers are archived, not deleted. Other catalogues and historical commercial documents are preserved.
+Audio Guest Book retains its existing experience ID for history and standalone booking. The base rental is from $299 with logistics/delivery excluded; its existing 8-hour rental duration remains. Add-on price is $249 across the four primary experiences. Existing add-on IDs/count/prices are preserved except that explicitly authorized Audio price change. Applicable existing enhancements gain Mirror compatibility. Audio cannot be added again when the standalone Audio rental is already selected. Obsolete standard Audio Signature/Luxe offers are archived, not deleted. Other catalogues and historical commercial documents are preserved.
 
 ## Application and safeguards
 
@@ -23,8 +23,8 @@ A separately reviewed Magic Mirror equipment photo is still required for the web
 
 ## Validation before release
 
-- Full local Node test suite:730passed,35skipped,0failed.
-- Targeted pricing/identity/add-on tests:22passed.
+- Full local Node test suite:730 passed, 35 skipped, 0 failed.
+- Targeted pricing/identity/add-on tests:22 passed.
 - Two serial disposable local PostgreSQL integration suites passed, including atomic catalogue publication, prior snapshot immutability, exact existing add-on price preservation, unaffected FAQ content, order, standalone rental and production refusal.
 - Admin build and git diff whitespace check passed.
 - An initial rehearsal exposed an SQL integer/numeric inference conflict; explicit casts fixed it before hosted mutation. A parallel test attempt raced PostgreSQL extension creation; the serial run matches CI and passed.

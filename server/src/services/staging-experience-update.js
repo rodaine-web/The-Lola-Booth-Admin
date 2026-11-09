@@ -74,7 +74,7 @@ export async function updateStagingExperiences({apply=false,expectedVersion,req}
   for(const addon of before.addons){
    let policy={...addon.pricing_policy};
    if(!policy.key)throw new Error('An add-on is not configured; review first.');
-   if(policy.experiences?.some(k=>['glam','vogue'].includes(k))&&!policy.experiences.includes('mirror'))policy.experiences=[...policy.experiences,'mirror'];
+   if(policy.category!=='EXTRA_HOURS'&&policy.experiences?.some(k=>['glam','vogue'].includes(k))&&!policy.experiences.includes('mirror'))policy.experiences=[...policy.experiences,'mirror'];
    if(addon.id===audioAddon.id)policy={...policy,key:'audio-guestbook',method:'FIXED',category:'ENHANCEMENT',experiences:primaryExperienceKeys,minQuantity:1,maxQuantity:1,approvalRequired:false};
    await query('UPDATE addons SET pricing_policy=$2,price=$3,pricing_type=$4,name=$5,updated_at=now() WHERE id=$1',[addon.id,JSON.stringify(policy),addon.id===audioAddon.id?'249.00':addon.price,addon.id===audioAddon.id?'FIXED':addon.pricing_type,addon.id===audioAddon.id?'Audio Guest Book':addon.name]);
   }
