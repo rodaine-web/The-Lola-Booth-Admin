@@ -1,8 +1,8 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import crypto from 'node:crypto';import pg from 'pg';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import crypto from 'node:crypto';import pg from 'pg';import jwt from 'jsonwebtoken';import {once} from 'node:events';
 test('shared Audio inventory reserves transit/return/inspection and retains flat rental pricing',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async t=>{
- const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['localhost','127.0.0.1'].includes(url.hostname));assert.match(url.pathname,/qa|test/);const base=new pg.Pool({connectionString:String(url)}),schema='audio_qa_'+crypto.randomBytes(5).toString('hex');let pool;
+ const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['localhost','127.0.0.1'].includes(url.hostname));assert.match(url.pathname,/qa|test/);const base=new pg.Pool({connectionString:String(url)}),schema='audio_qa_'+crypto.randomBytes(5).toString('hex');let pool,server;
  try{
-  await base.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');Object.assign(process.env,{DATABASE_URL:String(url),APP_ENV:'test',NODE_ENV:'test',JWT_SECRET:'audio-local-qa-secret-only-32-characters',INTEGRATION_SECRET_KEY:'audio-local-encryption-test-only',EMAIL_PROVIDER:'development',PRICING_CATALOG_ENABLED:'true'});
+  await base.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');Object.assign(process.env,{DATABASE_URL:String(url),APP_ENV:'test',NODE_ENV:'test',JWT_SECRET:'audio-local-qa-secret-only-32-characters',INTEGRATION_SECRET_KEY:'audio-local-encryption-test-only',EMAIL_PROVIDER:'development',PORT:'0',PRICING_CATALOG_ENABLED:'true'});
   const db=await import('../server/src/db/pool.js');pool=db.pool;const {query,transaction}=db,one=async(s,a=[])=>(await query(s,a)).rows[0];
   for(const f of(await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(x=>x.endsWith('.sql')).sort())await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/'+f,import.meta.url),'utf8')));
   await query("INSERT INTO business_settings(business_name,timezone) VALUES('Audio QA','UTC')");const owner=await one("INSERT INTO users(name,email,password_hash) VALUES('Audio QA Owner','audio-owner@example.invalid','no-login') RETURNING id");const req={user:{...owner,permissions:['*']},headers:{}};
@@ -35,6 +35,17 @@ test('shared Audio inventory reserves transit/return/inspection and retains flat
   await assert.rejects(transitionAudioFulfillment(pastEvent,past.id,'inspect',{inspected:false},req),{code:'AUDIO_INSPECTION_REQUIRED'});await transitionAudioFulfillment(pastEvent,past.id,'inspect',{inspected:true},req);
   assert.equal((await one('SELECT status FROM audio_guestbook_fulfillments WHERE id=$1',[past.id])).status,'READY');await assert.rejects(query('DELETE FROM audio_guestbook_fulfillments WHERE id=$1',[past.id]),e=>e.code==='23514');
   const parallelUnit=await unit('Synthetic concurrency unit');await query("UPDATE equipment SET inventory_pool='AUDIO_GUESTBOOK' WHERE id=$1",[parallelUnit]);const c=await event('Concurrent standalone'),d=await event('Concurrent add-on');const parallel=await Promise.allSettled([saveAudioFulfillment(c,{...window,equipmentId:parallelUnit},req),saveAudioFulfillment(d,{...window,equipmentId:parallelUnit,bookingKind:'ADDON'},req)]);assert.equal(parallel.filter(x=>x.status==='fulfilled').length,1);assert.equal(parallel.filter(x=>x.status==='rejected').length,1);
+  await query("INSERT INTO permissions(key) VALUES('*'),('read:events') ON CONFLICT DO NOTHING");
+  await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[owner.id]);
+  const viewer=await one("INSERT INTO users(name,email,password_hash) VALUES('Unassigned reader','audio-reader@example.invalid','no-login') RETURNING id");
+  await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='read:events'",[viewer.id]);
+  ({server}=await import('../server/src/index.js'));if(!server.listening)await once(server,'listening');
+  const call=async(user,path,method='GET',body)=>{const r=await fetch('http://127.0.0.1:'+server.address().port+'/api/events/'+path,{method,headers:{Authorization:'Bearer '+jwt.sign({sub:user.id},process.env.JWT_SECRET),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()};};
+  assert.equal((await call(owner,a+'/audio-fulfillment')).status,200);
+  assert.equal((await call(viewer,a+'/audio-fulfillment')).status,403,'Unassigned readers cannot inspect another event fulfillment');
+  assert.equal((await call(viewer,a+'/audio-fulfillment','PUT',{})).status,403,'Read permission does not allow stock reservations');
+  const httpReservation=await call(owner,noDates+'/audio-fulfillment','PUT',{...window,equipmentId:unit1,dispatchAt:'2034-12-30T00:00:00Z',expectedReturnAt:'2035-01-02T00:00:00Z',readyAt:'2035-01-03T00:00:00Z'});assert.equal(httpReservation.status,200);
+  assert.equal((await call(owner,noDates+'/audio-fulfillment/'+httpReservation.body.id+'/cancel','POST',{})).status,200);
   const confirm=await event('Audio confirmation','2033-06-10','audio');await assert.rejects(query("UPDATE events SET status='CONFIRMED' WHERE id=$1",[confirm]),e=>e.code==='23514');
- }finally{if(pool)await pool.end();await base.query('DROP SCHEMA '+schema+' CASCADE');await base.end();}
+ }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await base.query('DROP SCHEMA '+schema+' CASCADE');await base.end();}
 });
