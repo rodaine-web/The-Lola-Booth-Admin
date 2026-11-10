@@ -54,5 +54,15 @@
     "mirror": "Built-in editor on owner photo: lift shadows, neutral color correction, extend dark event surroundings to landscape. Saved owner-mirror-guests-natural.jpg.",
     "logo": "Native SVG web lockup with larger THE and BOOTH for legibility.",
     "all_generated_photography": "Home mirror/vogue silver assets also edited with built-in editor: reduce artificial sheen, saturation and HDR contrast, preserve scenes. Shared restrained finish applied to photo slots and equipment cutouts."
+  },
+  "corporate_proposals_2026_11_10": {
+    "files": [
+      "public/brand/proposals/approved/corporate-glam.jpg",
+      "public/brand/proposals/approved/corporate-360.jpg",
+      "public/brand/proposals/approved/corporate-mirror.jpg",
+      "public/brand/proposals/approved/corporate-vogue.jpg"
+    ],
+    "prompt": "Edit each recognizable experience equipment scene to show diverse adult colleagues in business attire at a professional conference networking reception. Preserve equipment proportions; natural restrained colors and lighting, no company logos, no romantic or wedding styling.",
+    "celebration_images": "natural-*.jpg use owner-provided celebration photographs; corporate images only used on corporate event categories."
   }
 }

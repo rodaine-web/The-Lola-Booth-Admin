@@ -1,11 +1,12 @@
+import {approvedRedesignEnvironment} from './approved-redesign-release.js';
 import {query,transaction} from '../db/pool.js';
 import {assertDatabaseIdentity} from '../config/database-identity.js';
 import {currentPricingCatalog,publishPricingVersion} from './pricing-catalog-service.js';
 import {writeAudit} from '../middleware/audit.js';
 import {AppError} from '../utils/errors.js';
 const key='staging-audio-per-event-enclosures-2026-11-09';
-export async function updateStagingAudioRental({apply=false,expectedVersion,inventoryIds=[],req}){
- if(!['staging','test'].includes(process.env.APP_ENV))throw new AppError('Staging only.',403,'STAGING_ONLY');
+export async function updateStagingAudioRental({apply=false,expectedVersion,inventoryIds=[],req,productionApproval}){
+ if(!approvedRedesignEnvironment(productionApproval))throw new AppError('Staging only.',403,'STAGING_ONLY');
  return transaction(async client=>{
   await assertDatabaseIdentity(client);await query('SELECT pg_advisory_xact_lock(7811051)');
   const prior=(await query('SELECT after_json FROM audit_logs WHERE action=$1 ORDER BY created_at DESC LIMIT 1',[key])).rows[0];if(prior)return {alreadyApplied:true,...prior.after_json};
@@ -17,7 +18,7 @@ export async function updateStagingAudioRental({apply=false,expectedVersion,inve
   const inventory=(await query("SELECT id,name,category,status FROM equipment WHERE deleted_at IS NULL AND (inventory_pool='AUDIO_GUESTBOOK' OR name~*'audio.*phone|audio.*guest.*book') ORDER BY name")).rows;
   const result={expectedVersion:current.id,standalone:299,addon:249,pricingBasis:'PER_EVENT',enclosures:{inflatable:199,premium:299},inventory};
   if(!apply)return {dryRun:true,...result};
-  if(!inventoryIds.length||inventoryIds.some(id=>!inventory.some(x=>x.id===id)))throw Error('Choose reviewed existing Audio inventory units.');
+  if((!inventoryIds.length&&process.env.APP_ENV!=='production')||inventoryIds.some(id=>!inventory.some(x=>x.id===id)))throw Error('Choose reviewed existing Audio inventory units.');
   before.experience=(await query('SELECT * FROM experiences WHERE id=$1',[rental.experience_id])).rows[0];before.inventory=inventory;
   const profile={...rental.pricing_profile,tier:'Standalone Rental',perEventRental:true,inventoryPool:'AUDIO_GUESTBOOK',serviceHours:null,rentalHours:null,startingAt:false,quoteRequired:false,deliveryApprovalRequired:false,featureLabels:['Flat rental fee per event','One Audio Guestbook recording phone','Personalized audio greeting','Guest audio recordings','Local drop-off/pickup or shipping with return shipping','Delivery fees quoted separately when applicable']};
   await query("UPDATE packages SET name='Audio Guest Book — Standalone Rental',tier_key='RENTAL',pricing_profile=$2,starting_price=299,duration=NULL,included_hours=NULL,website_features=$3,description='Flat $299 per event. Local drop-off/pickup or shipping with return shipping. Delivery fees are quoted separately when applicable.',website_short_description='Flat $299 per event; delivery fees separate.',updated_at=now() WHERE id=$1",[rental.id,JSON.stringify(profile),JSON.stringify(profile.featureLabels)]);
@@ -32,7 +33,7 @@ export async function updateStagingAudioRental({apply=false,expectedVersion,inve
    else await query("INSERT INTO addons(name,price,description,pricing_type,pricing_policy,active) VALUES($1,$2,$3,'FIXED',$4,true)",[name,price,description,JSON.stringify(policy)]);
   }
   await query("UPDATE equipment SET inventory_pool='AUDIO_GUESTBOOK',updated_at=now() WHERE id=ANY($1::uuid[])",[inventoryIds]);
-  const draft=(await query('INSERT INTO pricing_catalog_versions(rules,created_by) VALUES($1,$2) RETURNING id',[JSON.stringify(current.rules),req.user.id])).rows[0];const version=await publishPricingVersion(draft.id,req);
+  const draft=(await query('INSERT INTO pricing_catalog_versions(rules,created_by) VALUES($1,$2) RETURNING id',[JSON.stringify(current.rules),req.user.id])).rows[0];const version=await publishPricingVersion(draft.id,req,(await query('SELECT transaction_timestamp() t')).rows[0].t);
   const after={...result,version:version.id,versionNumber:version.version_number,inventoryIds};await writeAudit({req,action:key,entity:'pricing_catalog_version',entityId:version.id,before,after});return after;
  });
 }

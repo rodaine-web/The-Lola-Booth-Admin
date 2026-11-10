@@ -1,3 +1,4 @@
+import {approvedRedesignEnvironment} from './approved-redesign-release.js';
 import {query,transaction} from '../db/pool.js';
 import {assertDatabaseIdentity} from '../config/database-identity.js';
 import {writeAudit} from '../middleware/audit.js';
@@ -8,8 +9,8 @@ import {packageEntitlementLabels} from '../../../shared/package-entitlements.js'
 import {AppError} from '../utils/errors.js';
 
 export const stagingExperienceUpdateKey='staging-experiences-magic-mirror-2026-11-09';
-export async function updateStagingExperiences({apply=false,expectedVersion,req}) {
- if(process.env.APP_ENV!=='staging'&&process.env.APP_ENV!=='test')throw new AppError('This catalogue update is staging-only.',403,'STAGING_ONLY');
+export async function updateStagingExperiences({apply=false,expectedVersion,req,productionApproval}) {
+ if(!approvedRedesignEnvironment(productionApproval))throw new AppError('This catalogue update is staging-only.',403,'STAGING_ONLY');
  return transaction(async client=>{
   await assertDatabaseIdentity(client);
   await query("SELECT pg_advisory_xact_lock(hashtext($1))",[stagingExperienceUpdateKey]);
@@ -82,7 +83,7 @@ export async function updateStagingExperiences({apply=false,expectedVersion,req}
   if(afterAddons.length!==before.addons.length||afterAddons.some(x=>x.id!==audioAddon.id&&String(x.price)!==String(before.addons.find(a=>a.id===x.id)?.price)))throw new Error('Unexpected change to existing add-ons.');
   const rules={...current.rules,printPrices:{...current.rules.printPrices,mirror:{...current.rules.printPrices.glam}}};
   const draft=(await query('INSERT INTO pricing_catalog_versions(rules,created_by) VALUES($1,$2) RETURNING *',[JSON.stringify(rules),req.user.id])).rows[0];
-  const published=await publishPricingVersion(draft.id,req);
+  const published=await publishPricingVersion(draft.id,req,(await query('SELECT transaction_timestamp() t')).rows[0].t);
   const result={...summary,version:published.id,versionNumber:published.version_number,experienceIds:ids,packageIds:savedPackages,audioAddonId:audioAddon.id};
   await writeAudit({req,action:stagingExperienceUpdateKey,entity:'pricing_catalog_version',entityId:published.id,before,after:result});
   return result;

@@ -312,7 +312,7 @@ export async function publicSitePayload({ preview = false } = {}) {
     query(`SELECT id,asset_key,media_id,display_order,status FROM website_media_mappings WHERE deleted_at IS NULL AND ${statusFilter} ORDER BY display_order,asset_key`),
     preview ? Promise.resolve({rows:[]}) : query("SELECT page_slug,slot_key FROM website_page_items WHERE deleted_at IS NOT NULL OR status <> 'PUBLISHED'")
   ]);
-  return {
+  const base = {
     pageItems: pageItems.rows,
     mediaMappings: mediaMappings.rows.map(row=>({...row,image:mediaUrl(row.media_id)})),
     defaults: websiteContentDefaults(),
@@ -326,6 +326,11 @@ export async function publicSitePayload({ preview = false } = {}) {
     testimonials: testimonials.rows.map(withPhotoUrl),
     faqs: faqs.rows
   };
+  const released=process.env.APP_ENV==='production'&&(await query("SELECT FROM audit_logs WHERE action='production-redesign-owner-release-2026-11-10' LIMIT 1")).rowCount;
+  if(!released)return base;
+  const {stagingSitePayload}=await import('./staging-cms-service.js');
+  const design=await stagingSitePayload();
+  return {...base,channel:'PUBLIC',cmsAuthoritative:true,settings:{...base.settings,...design.settings},content:{...base.content,...design.content},pageItems:[...base.pageItems,...design.pageItems],experiences:design.experiences,heroSlides:design.heroSlides,partners:design.partners};
 }
 
 export async function publicGallery({ category, featured } = {}) {

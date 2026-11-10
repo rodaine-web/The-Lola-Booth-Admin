@@ -1,3 +1,4 @@
+import {approvedRedesignEnvironment} from './approved-redesign-release.js';
 import {query,transaction} from '../db/pool.js';
 import {assertDatabaseIdentity} from '../config/database-identity.js';
 import {currentPricingCatalog,publishPricingVersion} from './pricing-catalog-service.js';
@@ -5,8 +6,8 @@ import {writeAudit} from '../middleware/audit.js';
 import {businessPackageDefinitions,businessDiscounts} from '../../../shared/business-plans.js';
 import {experienceNames} from '../../../shared/experience-catalog.js';
 const action='staging-approved-business-plans-2026-11-09';
-export async function updateStagingBusinessPlans({apply=false,expectedVersion,req}){
- if(!['staging','test'].includes(process.env.APP_ENV))throw Error('Staging only');
+export async function updateStagingBusinessPlans({apply=false,expectedVersion,req,productionApproval}){
+ if(!approvedRedesignEnvironment(productionApproval))throw Error('Staging only');
  return transaction(async client=>{
   await assertDatabaseIdentity(client);await query('SELECT pg_advisory_xact_lock(7811051)');
   const prior=(await query('SELECT after_json FROM audit_logs WHERE action=$1 ORDER BY created_at DESC LIMIT 1',[action])).rows[0];if(prior)return {alreadyApplied:true,...prior.after_json};
