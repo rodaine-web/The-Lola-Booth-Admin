@@ -19,7 +19,7 @@
       "payload": {
         "page_slug": "home",
         "slot_key": "redesign.home.hero.title",
-        "html": "Good People.<br>Better Photos.<sup>\u00ae</sup>"
+        "html": "Good People.<br>Better Photos."
       },
       "status": "PUBLISHED",
       "display_order": 1
