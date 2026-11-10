@@ -27,6 +27,7 @@ export const proposalDefaults = {
   },
   experiences: {
     glam:{personal:'Studio-quality, magazine-ready portraits for you and your guests.',business:'A polished branded photo experience designed to capture premium guest content and create shareable brand moments.'},
+    mirror:{personal:'An interactive, full-length mirror photo experience with personalized welcome screens and beautiful guest portraits.',business:'A full-length interactive mirror experience with branded creative, personalized welcome screens and shareable guest portraits.'},
     '360':{personal:'A dynamic slow-motion video experience that gets everyone into the celebration.',business:'A high-energy branded video activation that puts your audience at the center of the content.'},
     vogue:{personal:'A fashion-forward editorial experience inspired by magazine style, giving your guests a dramatic moment in the spotlight.',business:'An editorial-style branded content experience designed for striking visual moments and guest engagement.'},
     audio:{personal:'Give your guests a personal way to leave messages, stories and memories from the celebration.',Wedding:'Heartfelt, hilarious and unforgettable. Your guests leave voice messages, stories and well wishes you’ll treasure long after the event.',business:'An interactive voice experience for guest reactions, messages or event feedback.'}

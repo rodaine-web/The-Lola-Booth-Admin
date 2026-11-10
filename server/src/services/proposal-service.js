@@ -113,9 +113,9 @@ export async function buildProposalSnapshot(input) {
   const addonIds = (input.addons || []).map((item) => item.addon_id).filter(Boolean);
   if(catalogQuote)for(const experience of selectedExperiences)for(const pkg of experience.packages||[]){
     const agreed=catalogQuote.entitlements.find(item=>item.packageId===pkg.package_id);
-    if(agreed){pkg.description=packageEntitlementLabels(agreed).join('\n');pkg.features=packageEntitlementLabels(agreed);pkg.included_hours=agreed.serviceHours;pkg.duration=agreed.rentalHours||agreed.serviceHours;pkg.price=catalogQuote.lines.find(line=>line.type==='PACKAGE'&&line.packageId===pkg.package_id)?.amountCents/100||0;}
+    if(agreed){if(agreed.businessPlan)pkg.name=experience.name+' experience';pkg.description=packageEntitlementLabels(agreed).join('\n');pkg.features=packageEntitlementLabels(agreed);pkg.included_hours=agreed.serviceHours;pkg.duration=agreed.rentalHours||agreed.serviceHours;pkg.price=catalogQuote.lines.find(line=>line.type==='PACKAGE'&&line.packageId===pkg.package_id)?.amountCents/100||0;}
   }
-  if(catalogQuote)for(const experience of selectedExperiences)experience.price=(experience.packages||[]).reduce((sum,pkg)=>sum+pkg.price,0);
+  if(catalogQuote)for(const experience of selectedExperiences){experience.price=(experience.packages||[]).reduce((sum,pkg)=>sum+pkg.price,0);experience.package_name=(experience.packages||[]).map(p=>p.name).join(' + ');if(catalogQuote.businessPlan)experience.features=(experience.packages||[]).flatMap(p=>p.features||[]);}
   const addons = addonIds.length ? await query("SELECT * FROM addons WHERE id = ANY($1::uuid[])", [addonIds]) : { rows: [] };
   const catalogError = catalogQuote?null:proposalCatalogError(selectedExperiences.length ? {...input, package_amount:selectedExperiences.flatMap(item=>item.packages).find(item=>item.package_id===input.package_id)?.price} : input, pack, addons.rows);
   if (catalogError) throw new AppError(catalogError,422,"CATALOG_SELECTION_INVALID");
@@ -187,6 +187,7 @@ export async function buildProposalSnapshot(input) {
   const depositValue = schedule.fullPaymentRequired?100:money(input.deposit_value ?? s.default_deposit_percent ?? 30);
   const depositAmount = depositType === "FIXED" ? depositValue : total * (depositValue / 100);
   const selectedTemplate = documentTemplate.rows[0] || {};
+  if(catalogQuote?.businessPlan){pack.name='Selected Lola experiences';pack.description='Your agreed experiences, operating hours and deliverables.';pack.proposal_description=pack.description;}
   const editableSections = buildEditableProposalSections(selectedTemplate.sections || [], {
     client: customer,
     event: ev,
@@ -209,8 +210,8 @@ export async function buildProposalSnapshot(input) {
       introduction: input.introduction || s.proposal_default_intro,
       experienceName: input.experience_name || experience.name,
       experienceDescription: input.experience_description || experience.proposal_description || experience.description,
-      packageName: input.package_name || pack.name,
-      packageDescription: input.package_description || pack.proposal_description || pack.description,
+      packageName: catalogQuote?.businessPlan?pack.name:input.package_name || pack.name,
+      packageDescription: catalogQuote?.businessPlan?pack.description:input.package_description || pack.proposal_description || pack.description,
       packageMostPopular: Boolean(pack.most_popular),
       nextSteps: input.next_steps || s.proposal_default_next_steps,
       terms: input.terms || s.proposal_default_terms,

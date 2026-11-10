@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {loadCatalog} from '../shared/catalog-loading.js';
+import {loadCatalog,loadProposalCatalog} from '../shared/catalog-loading.js';
 import {paginationSchema} from '../server/src/utils/validation.js';
 
 test('catalog loading respects API pagination and includes packages beyond the first 100', async()=>{
@@ -28,4 +28,11 @@ test('catalog loading rejects an unexpected response instead of silently showing
 test('catalog loading handles empty catalogs and unpaginated arrays',async()=>{
   assert.deepEqual(await loadCatalog(async()=>({data:[],pagination:{total:0}}),'addons'),[]);
   assert.deepEqual(await loadCatalog(async()=>[{id:'one'}],'experiences'),[{id:'one'}]);
+});
+
+
+test('commercial editor loads internal business packages from the authenticated published catalogue',async()=>{
+ const calls=[],plans=[{id:'internal-business-plan',pricing_profile:{businessPlan:true}}];
+ const result=await loadProposalCatalog(async path=>{calls.push(path);assert.equal(path,'/pricing/current');return {packages:plans,addons:[]};},'packages');
+ assert.deepEqual(result,plans);assert.deepEqual(calls,['/pricing/current']);
 });

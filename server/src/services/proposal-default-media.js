@@ -11,7 +11,7 @@ export function freezeDefaultProposalMedia(scenario){
  for(const [slot,name] of Object.entries(slots))if(!scenario.mediaImages[slot]?.length)scenario.mediaImages[slot]=[photo(name)];
  for(const item of scenario.experiences){
   const slot='experience:'+item.experience_id;
-  if(!scenario.mediaImages[slot]?.length&&!item.visuals?.hero&&['glam','digital','360','vogue','audio'].includes(item.key))scenario.mediaImages[slot]=['vogue','audio'].includes(item.key)?[{dataUri:'data:image/jpeg;base64,'+fs.readFileSync(new URL(`../../../public/brand/proposals/${item.key}.jpg`,import.meta.url)).toString('base64'),source:'LOLA catalog illustration: '+item.key}]:[photo(item.key)];
+  if(!scenario.mediaImages[slot]?.length&&!item.visuals?.hero&&['glam','digital','360','mirror','vogue','audio'].includes(item.key))scenario.mediaImages[slot]=['360','mirror','vogue'].includes(item.key)?[photo('redesign-'+item.key)]:['audio'].includes(item.key)?[{dataUri:'data:image/jpeg;base64,'+fs.readFileSync(new URL(`../../../public/brand/proposals/${item.key}.jpg`,import.meta.url)).toString('base64'),source:'LOLA catalog illustration: '+item.key}]:[photo(item.key)];
  }
  return scenario;
 }

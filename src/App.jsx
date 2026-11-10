@@ -143,6 +143,7 @@ export default function App() {
         <Route path="website/packages" element={<WebsiteCms section="packages" />} />
         <Route path="website/experiences" element={<WebsiteCms section="experiences" />} />
         <Route path="website/events" element={<WebsiteCms section="events" />} />
+        <Route path="website/partners" element={<WebsiteCms section="partners" />} />
         <Route path="website/testimonials" element={<WebsiteCms section="testimonials" />} />
         <Route path="website/faq" element={<WebsiteCms section="faqs" />} />
         <Route path="website/media-library" element={<WebsiteCms section="media" />} />

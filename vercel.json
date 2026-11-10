@@ -87,6 +87,26 @@
   ],
   "rewrites": [
     {
+      "source": "/robots.txt",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/robots.txt"
+    },
+    {
+      "source": "/sitemap.xml",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/sitemap.xml"
+    },
+    {
       "source": "/customer-documents/:path*",
       "destination": "/:path*"
     },
@@ -169,6 +189,46 @@
         }
       ],
       "destination": "/staging-site/booking.js"
+    },
+    {
+      "source": "/design.css",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/design.css"
+    },
+    {
+      "source": "/design.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/design.js"
+    },
+    {
+      "source": "/design-packages.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/design-packages.js"
+    },
+    {
+      "source": "/design-icons.svg",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/design-icons.svg"
     },
     {
       "source": "/app.js",

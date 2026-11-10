@@ -19,10 +19,10 @@ import { dashboardGreeting } from "../utils/dashboard-greeting.js";
 
 const sourceColors=["#e5c7a8","#171717","#f9b8d5","#fb8fa6","#b5b7bd","#dfe1e7"];
 const experiences=[
-  ["Glam Photo Booth","Polished portraits. Timeless.","glam.jpg"],
-  ["360 Video Booth","Step in. Stand out.","360.jpg"],
-  ["Vogue Booth","A magazine moment.","vogue.jpg"],
-  ["Audio Guestbook","Voices that last forever.","audio.jpg"]
+  ["The Lola Glam","Polished portraits. Timeless.","glam.jpg"],
+  ["The Lola 360","Step in. Stand out.","approved/redesign-360.jpg"],
+  ["The Lola Magic Mirror","An interactive mirror experience.","approved/redesign-mirror.jpg"],
+  ["The Lola Vogue","A magazine moment.","approved/redesign-vogue.jpg"]
 ];
 const ranges = [["today","Today"],["week","This Week"],["mtd","Month To Date"],["ytd","Year To Date"]];
 

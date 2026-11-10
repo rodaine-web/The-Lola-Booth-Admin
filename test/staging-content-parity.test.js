@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import {load} from 'cheerio';
 import {projectStagingSite,validateStagingRecord} from '../server/src/services/staging-cms-service.js';
 const manifest=JSON.parse(fs.readFileSync('server/import-data/staging-website.json','utf8'));
-const site=projectStagingSite(manifest.records);
+const redesign=JSON.parse(fs.readFileSync('server/import-data/lola-redesign-copy.json','utf8'));
+const site=projectStagingSite([...manifest.records,...redesign.records]);
 test('each exported business copy and media slot has a published staging record',()=>{
  for(const entry of manifest.capturedPages){
   const $=load(fs.readFileSync('public/staging-site/'+entry.page,'utf8'));
