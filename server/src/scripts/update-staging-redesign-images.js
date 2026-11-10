@@ -19,7 +19,7 @@ try{
   const owner=(await query("SELECT u.id FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id WHERE u.active=true AND r.name='OWNER' ORDER BY u.created_at LIMIT 1")).rows[0];if(!owner)throw Error('Active staging Owner missing');
   const user={...owner,permissions:['*']},req={user,headers:{'user-agent':'Owner-requested clean booking image correction'}};
   for(const {old,image}of updates)await saveStagingRecord('experiences',{entity_key:old.entity_key,payload:{...old.payload,website_booking_image:image,website_booking_crop:null},status:old.status,display_order:old.display_order},user,old.id);
-  await writeAudit({req,action,entity:'website_channel',entityId:version.id,before:updates.map(x=>x.old),after:{cleanBookingImages:4,pricingVersionUnchanged:version.id}});
+  await writeAudit({req,action,entity:'website_channel',entityId:version.id,before:{records:updates.map(x=>x.old)},after:{cleanBookingImages:4,pricingVersionUnchanged:version.id}});
   return {updated:4,version:version.id};
  });console.log(JSON.stringify(result));
 }finally{await pool.end();}
