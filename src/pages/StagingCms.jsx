@@ -10,18 +10,19 @@ import {useDialogFocus} from '../utils/use-dialog-focus.js';
 const aliases={homepage:'content',events:'eventTypes',pageItems:'pageItems',mediaMappings:'media'};
 const fields={
  pageItems:[['page_slug','Page'],['slot_key','Page slot'],['html','Visible copy','textarea'],['href','Link']],
- hero:[['alt_text','Image description'],['caption','Caption'],['image','Image','image'],['fallback_image','Approved fallback','image']],
- experiences:[['name','Name'],['website_name','Website name'],['slug','Slug'],['website_heading','Heading'],['website_kicker','Supporting line'],['website_label','Label'],['website_short_description','Homepage description','textarea'],['website_long_description','Full description','textarea'],['features','Features (one per line)','lines'],['image','Image','image']],
+ hero:[['page_slug','Page (home, about, experiences, packages, faq, contact, availability)'],['experience_key','Experience (glam, 360, mirror, vogue)'],['alt_text','Image description'],['caption','Caption'],['image','Image','image'],['fallback_image','Approved fallback','image']],
+ experiences:[['name','Name'],['website_name','Website name'],['slug','Slug'],['website_heading','Heading'],['website_kicker','Supporting line'],['website_label','Label'],['website_short_description','Homepage description','textarea'],['website_long_description','Full description','textarea'],['features','Features (one per line)','lines'],['image','Equipment image','image'],['website_card_image','Homepage image','image'],['website_landscape_image','Experience page image','image'],['website_booking_image','Booking image','image'],['website_about_image','About page image','image']],
  packages:[['name','Name'],['website_key','Package identity'],['pricing_mode','Pricing mode','pricing'],['starting_price','Starting price','number'],['website_short_description','Description','textarea'],['website_home_description','Homepage description','textarea'],['website_custom_heading','Custom heading'],['website_features','Features (one per line)','lines'],['image','Image','image']],
  eventTypes:[['name','Name'],['slug','Slug'],['short_description','Description','textarea'],['home_description','Homepage description','textarea'],['image','Image','image']],
  gallery:[['title','Title'],['caption','Caption','textarea'],['alt_text','Image description'],['category','Category'],['image','Image','image'],['fallback_image','Approved fallback','image']],
+ partners:[['background_color','Card background (hex color, optional)'],['name','Partner name'],['image','Logo','image'],['url','Website URL'],['alt_text','Logo description']],
  testimonials:[['client_display_name','Client display name'],['event_type','Event type'],['quote','Quote','textarea'],['rating','Rating','number'],['client_photo','Photo','image']],
  faqs:[['question','Question'],['answer','Answer','textarea'],['category','Category']],
  content:[['content_key','Page key'],['title','Page title'],['seo_title','SEO title'],['seo_description','SEO description','textarea']],
  settings:[['value','Value','setting']],
  media:[['title','Title'],['alt_text','Image description'],['url','Approved asset URL'],['filename','Filename']]
 };
-const titles={pageItems:'Page Items',hero:'Hero Slides',experiences:'Experiences',packages:'Packages',eventTypes:'Event Types',gallery:'Gallery',testimonials:'Testimonials',faqs:'FAQs',content:'Page SEO',settings:'SEO & Site Settings',media:'Media Library'};
+const titles={pageItems:'Page Items',hero:'Hero Slides',experiences:'Experiences',packages:'Packages',eventTypes:'Event Types',gallery:'Gallery',testimonials:'Testimonials',partners:'Partners',faqs:'FAQs',content:'Page SEO',settings:'SEO & Site Settings',media:'Media Library'};
 export default function StagingCms({section}){
  const type=aliases[section]||section,{can}=useAuth();
  const [homeContent,setHomeContent]=useState({hero:[],events:[]}),[category,setCategory]=useState(""),[statusFilter,setStatusFilter]=useState(""),[rows,setRows]=useState(null),[media,setMedia]=useState([]),[editing,setEditing]=useState(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[search,setSearch]=useState(''),[busy,setBusy]=useState(false);

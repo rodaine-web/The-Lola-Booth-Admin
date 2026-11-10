@@ -3,7 +3,7 @@ import {publishedWebsitePricing} from './pricing-catalog-service.js';
 import {AppError} from '../utils/errors.js';
 import {websiteContentDefaults} from './website-cms-service.js';
 
-export const stagingCmsTypes=['pageItems','hero','experiences','packages','eventTypes','gallery','testimonials','faqs','content','settings','media'];
+export const stagingCmsTypes=['pageItems','hero','experiences','packages','eventTypes','gallery','testimonials','partners','faqs','content','settings','media'];
 export const publicSettingFields=['business_name','business_email','contact_email','phone','website','service_area','instagram_url','tiktok_url','facebook_url','pinterest_url','copyright_text','brand_line','site_title','default_meta_description','default_og_image_media_id','canonical_domain','social_share_title','social_share_description','show_starting_price'];
 export function assertStagingChannel(input={}) {
   if(input.channel!==undefined&&input.channel!=='STAGING')throw new AppError('Public content is read-only. Select STAGING.',409,'PUBLIC_CONTENT_FROZEN');
@@ -26,7 +26,7 @@ export function validateStagingRecord(type,input) {
   if(!['DRAFT','PUBLISHED','ARCHIVED'].includes(status))throw new AppError('Invalid publication state.',422,'CMS_STATUS_INVALID');
   if(!Number.isInteger(Number(display_order))||Math.abs(Number(display_order))>100000)throw new AppError('Invalid sort order.',422,'CMS_ORDER_INVALID');
   const clean={...payload};for(const key of ['id','channel','status','display_order','created_by','updated_by','created_at','updated_at','storage_key','storage_provider','mime_type','__proto__','constructor','prototype'])delete clean[key];
-  for(const key of ['image','fallback_image','client_photo','url'])if(clean[key]&&!approvedStagingImage(clean[key]))throw new AppError('Choose an approved staging asset or uploaded staging image.',422,'CMS_IMAGE_INVALID');
+  for(const key of ['image','fallback_image','client_photo','url'])if(clean[key]&&!(type==='partners'&&key==='url'?/^https?:\/\//.test(clean[key]):approvedStagingImage(clean[key])))throw new AppError('Choose an approved staging asset or uploaded staging image.',422,'CMS_IMAGE_INVALID');
   return {entity_key:entity_key.trim(),payload:clean,status,display_order:Number(display_order)};
 }
 export function approvedStagingImage(value) {
@@ -58,7 +58,7 @@ export function projectStagingSite(rows) {
   const settings=Object.fromEntries(typed('settings').map(r=>[r.entity_key,r.value]));
   const content=Object.fromEntries(typed('content').map(r=>[r.content_key||r.entity_key,r]));
   const packages=typed('packages').map(r=>({...r,website_display_order:r.display_order,display_price:r.pricing_mode==='CUSTOM'?'Request Pricing':r.starting_price}));
-  return {channel:'STAGING',cmsAuthoritative:true,defaults:websiteContentDefaults(),settings,content,pageItems:typed('pageItems'),heroSlides:typed('hero'),experiences:typed('experiences'),packages,eventTypes:typed('eventTypes'),gallery:typed('gallery'),testimonials:typed('testimonials'),faqs:typed('faqs'),media:typed('media')};
+  return {channel:'STAGING',cmsAuthoritative:true,defaults:websiteContentDefaults(),settings,content,pageItems:typed('pageItems'),heroSlides:typed('hero'),experiences:typed('experiences'),packages,eventTypes:typed('eventTypes'),gallery:typed('gallery'),testimonials:typed('testimonials'),partners:typed('partners'),faqs:typed('faqs'),media:typed('media')};
 }
 export async function stagingSitePayload() {
   const site=projectStagingSite((await query("SELECT * FROM website_channel_records WHERE channel='STAGING' AND status='PUBLISHED' ORDER BY display_order,entity_key")).rows);

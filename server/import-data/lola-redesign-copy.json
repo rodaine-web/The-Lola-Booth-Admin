@@ -1,0 +1,1204 @@
+{
+  "records": [
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.hero.eyebrow",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.hero.eyebrow",
+        "html": "Premium event photo experiences"
+      },
+      "status": "PUBLISHED",
+      "display_order": 0
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.hero.title",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.hero.title",
+        "html": "Good People.<br>Better Photos.<sup>\u00ae</sup>"
+      },
+      "status": "PUBLISHED",
+      "display_order": 1
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.hero.description",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.hero.description",
+        "html": "Modern, stylish and interactive photo experiences for weddings, celebrations, corporate events and brand activations."
+      },
+      "status": "PUBLISHED",
+      "display_order": 2
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.feature.3",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.feature.3",
+        "html": "Premium<br>Equipment"
+      },
+      "status": "PUBLISHED",
+      "display_order": 3
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.feature.4",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.feature.4",
+        "html": "Exceptional<br>Service"
+      },
+      "status": "PUBLISHED",
+      "display_order": 4
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.feature.5",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.feature.5",
+        "html": "Any Event<br>Any Size"
+      },
+      "status": "PUBLISHED",
+      "display_order": 5
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.feature.6",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.feature.6",
+        "html": "Curated<br>Experiences"
+      },
+      "status": "PUBLISHED",
+      "display_order": 6
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.feature.7",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.feature.7",
+        "html": "Memories<br>That Last"
+      },
+      "status": "PUBLISHED",
+      "display_order": 7
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.heading.8",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.heading.8",
+        "html": "Our Signature Experiences"
+      },
+      "status": "PUBLISHED",
+      "display_order": 8
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.signature.intro",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.signature.intro",
+        "html": "Four unique experiences. One unforgettable event."
+      },
+      "status": "PUBLISHED",
+      "display_order": 9
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.audio.eyebrow",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.audio.eyebrow",
+        "html": "Add-on or standalone"
+      },
+      "status": "PUBLISHED",
+      "display_order": 10
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.audio.title",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.audio.title",
+        "html": "The Lola Audio Guestbook"
+      },
+      "status": "PUBLISHED",
+      "display_order": 11
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.audio.description",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.audio.description",
+        "html": "Capture heartfelt messages, stories and well wishes from your guests."
+      },
+      "status": "PUBLISHED",
+      "display_order": 12
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.heading.13",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.heading.13",
+        "html": "Why Choose The Lola Booth"
+      },
+      "status": "PUBLISHED",
+      "display_order": 13
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.why.camera",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.why.camera",
+        "html": "Premium Experiences"
+      },
+      "status": "PUBLISHED",
+      "display_order": 14
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.why.camera.description",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.why.camera.description",
+        "html": "Professional-grade equipment and stunning results."
+      },
+      "status": "PUBLISHED",
+      "display_order": 15
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.why.star",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.why.star",
+        "html": "Styled for Any Event"
+      },
+      "status": "PUBLISHED",
+      "display_order": 16
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.why.star.description",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.why.star.description",
+        "html": "From intimate celebrations to large-scale activations."
+      },
+      "status": "PUBLISHED",
+      "display_order": 17
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.why.people",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.why.people",
+        "html": "A Seamless Experience"
+      },
+      "status": "PUBLISHED",
+      "display_order": 18
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.why.people.description",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.why.people.description",
+        "html": "Reliable, friendly and professional service."
+      },
+      "status": "PUBLISHED",
+      "display_order": 19
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.why.diamond",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.why.diamond",
+        "html": "Memories That Last"
+      },
+      "status": "PUBLISHED",
+      "display_order": 20
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.why.diamond.description",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.why.diamond.description",
+        "html": "Beautiful photos and videos your guests will love to share."
+      },
+      "status": "PUBLISHED",
+      "display_order": 21
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.heading.22",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.heading.22",
+        "html": "Brands & Partners"
+      },
+      "status": "PUBLISHED",
+      "display_order": 22
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.partners.intro",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.partners.intro",
+        "html": "Good company makes good events better."
+      },
+      "status": "PUBLISHED",
+      "display_order": 23
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.home.heading.24",
+      "payload": {
+        "page_slug": "home",
+        "slot_key": "redesign.home.heading.24",
+        "html": "Kind Words. Lasting Memories."
+      },
+      "status": "PUBLISHED",
+      "display_order": 24
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.experiences.hero.eyebrow",
+      "payload": {
+        "page_slug": "experiences",
+        "slot_key": "redesign.experiences.hero.eyebrow",
+        "html": "Our experiences"
+      },
+      "status": "PUBLISHED",
+      "display_order": 25
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.experiences.hero.title",
+      "payload": {
+        "page_slug": "experiences",
+        "slot_key": "redesign.experiences.hero.title",
+        "html": "Four Unique<br>Photo Experiences"
+      },
+      "status": "PUBLISHED",
+      "display_order": 26
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.experiences.hero.description",
+      "payload": {
+        "page_slug": "experiences",
+        "slot_key": "redesign.experiences.hero.description",
+        "html": "From timeless portraits to immersive video and editorial moments, discover the perfect experience for your event."
+      },
+      "status": "PUBLISHED",
+      "display_order": 27
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.experiences.audio.eyebrow",
+      "payload": {
+        "page_slug": "experiences",
+        "slot_key": "redesign.experiences.audio.eyebrow",
+        "html": "Add-on or standalone"
+      },
+      "status": "PUBLISHED",
+      "display_order": 28
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.experiences.audio.title",
+      "payload": {
+        "page_slug": "experiences",
+        "slot_key": "redesign.experiences.audio.title",
+        "html": "The Lola Audio Guestbook"
+      },
+      "status": "PUBLISHED",
+      "display_order": 29
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.experiences.audio.description",
+      "payload": {
+        "page_slug": "experiences",
+        "slot_key": "redesign.experiences.audio.description",
+        "html": "Capture heartfelt messages, stories and well wishes from your guests."
+      },
+      "status": "PUBLISHED",
+      "display_order": 30
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.hero.eyebrow",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.hero.eyebrow",
+        "html": "About Lola"
+      },
+      "status": "PUBLISHED",
+      "display_order": 31
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.hero.title",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.hero.title",
+        "html": "About LOLA"
+      },
+      "status": "PUBLISHED",
+      "display_order": 32
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.hero.description",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.hero.description",
+        "html": "We like good events and<br>even better photos."
+      },
+      "status": "PUBLISHED",
+      "display_order": 33
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.belief",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.belief",
+        "html": "The LOLA Booth was built around a simple idea: the best event experiences feel effortless in the moment and unforgettable afterward."
+      },
+      "status": "PUBLISHED",
+      "display_order": 34
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.intro.heading",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.intro.heading",
+        "html": "More than a booth in the corner."
+      },
+      "status": "PUBLISHED",
+      "display_order": 35
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.intro.description",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.intro.description",
+        "html": "LOLA is a modern photo experience that brings together photography, design, entertainment and hospitality to create something your guests will genuinely enjoy \u2014 and you\u2019ll be proud to share. Whether it\u2019s a wedding, celebration, corporate event or brand activation, we\u2019re here to help you capture the people, energy and story that make your event special."
+      },
+      "status": "PUBLISHED",
+      "display_order": 36
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.value.people",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.value.people",
+        "html": "People First"
+      },
+      "status": "PUBLISHED",
+      "display_order": 37
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.value.people.description",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.value.people.description",
+        "html": "We create a welcoming, fun experience that brings people together and keeps the energy high."
+      },
+      "status": "PUBLISHED",
+      "display_order": 38
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.value.sparkles",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.value.sparkles",
+        "html": "Beautifully Curated"
+      },
+      "status": "PUBLISHED",
+      "display_order": 39
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.value.sparkles.description",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.value.sparkles.description",
+        "html": "From our equipment to our designs and backdrops, every detail is intentional and on brand."
+      },
+      "status": "PUBLISHED",
+      "display_order": 40
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.value.calendar",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.value.calendar",
+        "html": "Easy From Start to Finish"
+      },
+      "status": "PUBLISHED",
+      "display_order": 41
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.value.calendar.description",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.value.calendar.description",
+        "html": "A seamless process \u2014 from booking and planning to setup, management, and event day."
+      },
+      "status": "PUBLISHED",
+      "display_order": 42
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.value.gallery",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.value.gallery",
+        "html": "Worth Keeping"
+      },
+      "status": "PUBLISHED",
+      "display_order": 43
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.value.gallery.description",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.value.gallery.description",
+        "html": "High-quality photos, videos and digital memories your guests will share and cherish long after the event."
+      },
+      "status": "PUBLISHED",
+      "display_order": 44
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.heading.45",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.heading.45",
+        "html": "The Lola Standard"
+      },
+      "status": "PUBLISHED",
+      "display_order": 45
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.46",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.46",
+        "html": "A setup that<br>belongs in the room."
+      },
+      "status": "PUBLISHED",
+      "display_order": 46
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.47",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.47",
+        "html": "Flattering,<br>intentional lighting."
+      },
+      "status": "PUBLISHED",
+      "display_order": 47
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.48",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.48",
+        "html": "Attendants who<br>understand hospitality."
+      },
+      "status": "PUBLISHED",
+      "display_order": 48
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.49",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.49",
+        "html": "Creative that<br>feels personal."
+      },
+      "status": "PUBLISHED",
+      "display_order": 49
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.50",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.50",
+        "html": "A clean handoff<br>after the event."
+      },
+      "status": "PUBLISHED",
+      "display_order": 50
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.heading.51",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.heading.51",
+        "html": "Different ways to create the moment."
+      },
+      "status": "PUBLISHED",
+      "display_order": 51
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.audio.eyebrow",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.audio.eyebrow",
+        "html": "Add-on or standalone"
+      },
+      "status": "PUBLISHED",
+      "display_order": 52
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.audio.title",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.audio.title",
+        "html": "The Lola Audio Guestbook"
+      },
+      "status": "PUBLISHED",
+      "display_order": 53
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.audio.description",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.audio.description",
+        "html": "Capture heartfelt messages, stories and well wishes from your guests."
+      },
+      "status": "PUBLISHED",
+      "display_order": 54
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.behind.heading",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.behind.heading",
+        "html": "Behind the Experience"
+      },
+      "status": "PUBLISHED",
+      "display_order": 55
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.behind.description",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.behind.description",
+        "html": "There\u2019s a lot that happens behind the scenes to make your experience seamless \u2014 thoughtful planning, a professional setup, attentive attendants and instant sharing options that get your photos and videos in front of your guests right away."
+      },
+      "status": "PUBLISHED",
+      "display_order": 56
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.serve.heading",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.serve.heading",
+        "html": "Who We Serve"
+      },
+      "status": "PUBLISHED",
+      "display_order": 57
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.58",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.58",
+        "html": "Weddings"
+      },
+      "status": "PUBLISHED",
+      "display_order": 58
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.59",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.59",
+        "html": "Celebrations"
+      },
+      "status": "PUBLISHED",
+      "display_order": 59
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.60",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.60",
+        "html": "Corporate Events"
+      },
+      "status": "PUBLISHED",
+      "display_order": 60
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.about.feature.61",
+      "payload": {
+        "page_slug": "about",
+        "slot_key": "redesign.about.feature.61",
+        "html": "Brands"
+      },
+      "status": "PUBLISHED",
+      "display_order": 61
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.faq.hero.eyebrow",
+      "payload": {
+        "page_slug": "faq",
+        "slot_key": "redesign.faq.hero.eyebrow",
+        "html": "FAQ"
+      },
+      "status": "PUBLISHED",
+      "display_order": 62
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.faq.hero.title",
+      "payload": {
+        "page_slug": "faq",
+        "slot_key": "redesign.faq.hero.title",
+        "html": "Frequently Asked<br>Questions"
+      },
+      "status": "PUBLISHED",
+      "display_order": 63
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.faq.hero.description",
+      "payload": {
+        "page_slug": "faq",
+        "slot_key": "redesign.faq.hero.description",
+        "html": "Everything you need to know before<br>your Lola experience."
+      },
+      "status": "PUBLISHED",
+      "display_order": 64
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.faq.intro.heading",
+      "payload": {
+        "page_slug": "faq",
+        "slot_key": "redesign.faq.intro.heading",
+        "html": "Got questions? We\u2019ve got you covered."
+      },
+      "status": "PUBLISHED",
+      "display_order": 65
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.faq.intro.description",
+      "payload": {
+        "page_slug": "faq",
+        "slot_key": "redesign.faq.intro.description",
+        "html": "Find answers to common questions about our experiences, booking, customization, what to expect on event day and more."
+      },
+      "status": "PUBLISHED",
+      "display_order": 66
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.faq.help.heading",
+      "payload": {
+        "page_slug": "faq",
+        "slot_key": "redesign.faq.help.heading",
+        "html": "Still have questions?"
+      },
+      "status": "PUBLISHED",
+      "display_order": 67
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.faq.help.description",
+      "payload": {
+        "page_slug": "faq",
+        "slot_key": "redesign.faq.help.description",
+        "html": "We\u2019re here to help. Reach out and we\u2019ll get back to you shortly with the information you need."
+      },
+      "status": "PUBLISHED",
+      "display_order": 68
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.hero.eyebrow",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.hero.eyebrow",
+        "html": "Contact us"
+      },
+      "status": "PUBLISHED",
+      "display_order": 69
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.hero.title",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.hero.title",
+        "html": "Tell us what you\u2019re<br>planning."
+      },
+      "status": "PUBLISHED",
+      "display_order": 70
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.hero.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.hero.description",
+        "html": "Have a question, need a quote, or ready to book? We\u2019re here to help you create an unforgettable experience."
+      },
+      "status": "PUBLISHED",
+      "display_order": 71
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.action.message",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.action.message",
+        "html": "General Question"
+      },
+      "status": "PUBLISHED",
+      "display_order": 72
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.action.message.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.action.message.description",
+        "html": "Have a quick question about our experiences, packages or services? We\u2019re happy to help."
+      },
+      "status": "PUBLISHED",
+      "display_order": 73
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.action.calendar",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.action.calendar",
+        "html": "Ready to Book?"
+      },
+      "status": "PUBLISHED",
+      "display_order": 74
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.action.calendar.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.action.calendar.description",
+        "html": "Know your date or event details? Send us the information and we\u2019ll check availability and next steps."
+      },
+      "status": "PUBLISHED",
+      "display_order": 75
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.action.business",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.action.business",
+        "html": "Corporate or<br>Brand Activation"
+      },
+      "status": "PUBLISHED",
+      "display_order": 76
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.action.business.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.action.business.description",
+        "html": "Planning a company event, conference or branded experience? Let\u2019s talk about a custom solution for your brand."
+      },
+      "status": "PUBLISHED",
+      "display_order": 77
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.conversation.heading",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.conversation.heading",
+        "html": "Start the conversation"
+      },
+      "status": "PUBLISHED",
+      "display_order": 78
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.conversation.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.conversation.description",
+        "html": "Reach out anytime \u2014 we\u2019d love to hear about your event."
+      },
+      "status": "PUBLISHED",
+      "display_order": 79
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.form.heading",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.form.heading",
+        "html": "How can we help?"
+      },
+      "status": "PUBLISHED",
+      "display_order": 80
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.heading.81",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.heading.81",
+        "html": "What Happens Next"
+      },
+      "status": "PUBLISHED",
+      "display_order": 81
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.next.0",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.next.0",
+        "html": "You send the details."
+      },
+      "status": "PUBLISHED",
+      "display_order": 82
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.next.0.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.next.0.description",
+        "html": "Share a few details about your event and what you\u2019re looking for."
+      },
+      "status": "PUBLISHED",
+      "display_order": 83
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.next.1",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.next.1",
+        "html": "We review availability."
+      },
+      "status": "PUBLISHED",
+      "display_order": 84
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.next.1.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.next.1.description",
+        "html": "Our team will review your request and check availability for your date."
+      },
+      "status": "PUBLISHED",
+      "display_order": 85
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.next.2",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.next.2",
+        "html": "You receive next steps."
+      },
+      "status": "PUBLISHED",
+      "display_order": 86
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.next.2.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.next.2.description",
+        "html": "We\u2019ll follow up with options, pricing (if applicable) and recommendations."
+      },
+      "status": "PUBLISHED",
+      "display_order": 87
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.next.3",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.next.3",
+        "html": "Your date gets secured."
+      },
+      "status": "PUBLISHED",
+      "display_order": 88
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.next.3.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.next.3.description",
+        "html": "When you\u2019re ready, we\u2019ll confirm the details and get everything on the calendar."
+      },
+      "status": "PUBLISHED",
+      "display_order": 89
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.custom.heading",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.custom.heading",
+        "html": "Need more than a standard booth package?"
+      },
+      "status": "PUBLISHED",
+      "display_order": 90
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.contact.custom.description",
+      "payload": {
+        "page_slug": "contact",
+        "slot_key": "redesign.contact.custom.description",
+        "html": "From brand activations to multi-day events, we create custom experiences that engage your audience and bring your brand to life."
+      },
+      "status": "PUBLISHED",
+      "display_order": 91
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.availability.hero.eyebrow",
+      "payload": {
+        "page_slug": "availability",
+        "slot_key": "redesign.availability.hero.eyebrow",
+        "html": "Book your experience"
+      },
+      "status": "PUBLISHED",
+      "display_order": 92
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.availability.hero.title",
+      "payload": {
+        "page_slug": "availability",
+        "slot_key": "redesign.availability.hero.title",
+        "html": "Plan Your<br>Lola Experience"
+      },
+      "status": "PUBLISHED",
+      "display_order": 93
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.availability.hero.description",
+      "payload": {
+        "page_slug": "availability",
+        "slot_key": "redesign.availability.hero.description",
+        "html": "Tell us about your event, choose your experience(s)<br>and let\u2019s bring it to life."
+      },
+      "status": "PUBLISHED",
+      "display_order": 94
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.packages.business.cta",
+      "payload": {
+        "page_slug": "packages",
+        "slot_key": "redesign.packages.business.cta",
+        "html": "Request a Custom Quote"
+      },
+      "status": "PUBLISHED",
+      "display_order": 95
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.packages.business.description",
+      "payload": {
+        "page_slug": "packages",
+        "slot_key": "redesign.packages.business.description",
+        "html": "Tell us about your event and vision, and we\u2019ll create a tailored experience for your business."
+      },
+      "status": "PUBLISHED",
+      "display_order": 96
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.packages.feature.97",
+      "payload": {
+        "page_slug": "packages",
+        "slot_key": "redesign.packages.feature.97",
+        "html": "Brand Engagement"
+      },
+      "status": "PUBLISHED",
+      "display_order": 97
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.packages.feature.98",
+      "payload": {
+        "page_slug": "packages",
+        "slot_key": "redesign.packages.feature.98",
+        "html": "Audience Impact"
+      },
+      "status": "PUBLISHED",
+      "display_order": 98
+    },
+    {
+      "channel": "STAGING",
+      "cms_type": "pageItems",
+      "entity_key": "redesign.packages.feature.99",
+      "payload": {
+        "page_slug": "packages",
+        "slot_key": "redesign.packages.feature.99",
+        "html": "Fully Customizable"
+      },
+      "status": "PUBLISHED",
+      "display_order": 99
+    }
+  ]
+}

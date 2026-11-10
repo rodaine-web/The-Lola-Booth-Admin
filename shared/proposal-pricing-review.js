@@ -10,3 +10,12 @@ export function proposalPricingCategory(catalog,current,customer){
  if(catalog==='STANDARD'&&['PRIVATE_CELEBRATION','COMPANY_CELEBRATION'].includes(current))return current;
  return catalog==='STANDARD'&&customer==='BUSINESS'?'COMPANY_CELEBRATION':categories[catalog]||current;
 }
+
+// Saved proposals store net additional-experience prices. Requoting must not
+// discount that net amount for a second time.
+export function proposalBusinessBaseCents(selection,row,previousQuote){
+ const entered=Math.round(Number(selection.price)*100);
+ if(!row.pricing_profile?.businessPlan||selection.priceIsBaseRate)return entered;
+ const saved=previousQuote?.lines?.find(l=>l.type==='PACKAGE'&&l.packageId===row.id);
+ return saved&&saved.amountCents===entered?(saved.originalUnitPriceCents??saved.unitPriceCents):entered;
+}

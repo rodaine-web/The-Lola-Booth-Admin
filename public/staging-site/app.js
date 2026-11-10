@@ -32,7 +32,7 @@
   }
   initHero();
 
-  function experienceIdentity(item){ return ['glam','360','vogue','audio'].find(k=>String(item.website_name||item.name||item.slug||'').toLowerCase().includes(k))||''; }
+  function experienceIdentity(item){ return ['glam','360','mirror','vogue','audio'].find(k=>String(item.website_name||item.name||item.slug||'').toLowerCase().includes(k))||''; }
   function safeUrl(value){ try{const u=new URL(value,location.href);return ['https:','http:','mailto:','tel:'].includes(u.protocol)?value:null;}catch{return null;} }
   function safeCopy(value){
     const t=document.createElement('template');t.innerHTML=String(value||'');
@@ -222,6 +222,7 @@
       renderFaqs(site.faqs||[]);
       fillSelects(site.experiences||[],site.packages||[],site.eventTypes||[]);
       document.documentElement.dataset.lolaCms='connected';
+      window.dispatchEvent(new CustomEvent('lola:site-ready',{detail:site}));
     } catch(e){ const rendering=document.documentElement.dataset.lolaCms==='rendering';console.warn(rendering?'LOLA staging render failed.':'LOLA CMS unavailable; approved static fallback remains active.',e);document.documentElement.dataset.lolaCms=rendering?'render-error':'fallback';
       // even without API, keep existing event options and inject static experience/package options with no UUIDs omitted at submit
     }

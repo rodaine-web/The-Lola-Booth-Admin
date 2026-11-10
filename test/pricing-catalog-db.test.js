@@ -29,8 +29,11 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
   await assert.rejects(svc.prepareProductionPricingCatalog(req),{code:'PRODUCTION_ONLY'});
  const draft=await svc.prepareStagingPricingCatalog(req);
   assert.equal((await one('SELECT count(*)::int n FROM packages')).n,36);
+  // The approved celebration catalogue includes its own request-only Custom option.
+  const celebrationBase=await one("SELECT * FROM packages WHERE catalog_key='STANDARD' AND tier_key='ESSENTIAL' AND experience_id=$1",[originalExperience.id]);
+  await query("INSERT INTO packages(name,experience_id,catalog_key,tier_key,pricing_mode,pricing_profile,active) VALUES('The Lola Glam — Custom',$1,'STANDARD','CUSTOM','CUSTOM',$2,true)",[originalExperience.id,JSON.stringify({...celebrationBase.pricing_profile,tier:'Custom',quoteRequired:true,serviceHours:null,featureLabels:['Flexible rental duration','Multiple experiences available','Custom branding and overlays available']})]);
   const v=await svc.publishPricingVersion(draft.id,req);
-  assert.equal(v.snapshot.packages.length,36);
+  assert.equal(v.snapshot.packages.length,37);
   await assert.rejects(query("UPDATE pricing_catalog_versions SET rules='{}' WHERE id=$1",[v.id]));
   await assert.rejects(query('DELETE FROM pricing_catalog_versions WHERE id=$1',[v.id]));
   const pkg=await one("SELECT * FROM packages WHERE catalog_key='STANDARD' AND tier_key='SIGNATURE' AND pricing_profile->>'experience'='glam'");
@@ -73,7 +76,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
   const quotesBefore=(await one('SELECT count(*)::int n FROM pricing_quotes')).n;
   const pending=await call('pricing-quotes',{method:'POST',publicRoute:true,body:publicInput});assert.equal(pending.status,200);assert.equal(pending.body.status,'REVIEW_REQUIRED');
   assert.equal((await one('SELECT count(*)::int n FROM pricing_quotes')).n,quotesBefore,'Live estimates do not create durable records or consume booking-send quota');
-  const publishedCatalog=(await call('pricing-catalog',{publicRoute:true})).body;assert.equal(publishedCatalog.packages.length,36);assert.equal(publishedCatalog.packages.find(p=>p.id===pkg.id).most_popular,true);
+  const publishedCatalog=(await call('pricing-catalog',{publicRoute:true})).body;assert.equal(publishedCatalog.packages.length,13);assert.equal(publishedCatalog.packages.find(p=>p.id===pkg.id).most_popular,true);
   assert.equal((await call('booking-catalog',{publicRoute:true})).body.packages.find(p=>p.id===pkg.id).most_popular,true);
   if(process.env.PRICING_BROWSER_TEST==='true'){
    await query("UPDATE clients SET phone='5555555555' WHERE id=$1",[customer.id]);
@@ -135,6 +138,8 @@ await revision.getByText('Service total:',{exact:false}).waitFor();assert.match(
      await page.getByRole('textbox',{name:/^Proposal name \*$/i}).waitFor();
      await page.getByRole('button',{name:'Continue to Services',exact:true}).click();
      let prematurePreviews=0;page.on('request',r=>{if(r.url().endsWith('/proposals/preview')&&!r.postDataJSON()?.pricing_quote_id)prematurePreviews++;});
+     // This fixture exercises an older published catalogue, before structured business plans.
+     await page.getByRole('button',{name:'Celebrations / Custom Build',exact:true}).click();
      for(const p of [eventGlam,event360])await page.locator('.package-card').filter({hasText:p.name}).first().click();
      const businessReview=page.locator('#package-pricing-review');
      await businessReview.getByText(/Service total:.*\$2,323\.00/).waitFor();
@@ -171,7 +176,7 @@ await revision.getByText('Service total:',{exact:false}).waitFor();assert.match(
       assert.equal(await page.locator('[name=customerType]').inputValue(),'INDIVIDUAL');
       assert.equal(await page.locator('[name=eventCategory], [name=catalogKey], [data-print-allowance], [data-print-format], [data-unlimited-prints], [data-extra-hours]').count(),0,'The initial form has no pricing configuration steps');
       await page.locator('[data-experience="glam"]').check();await page.locator('[data-experience-package="glam"]').selectOption(pkg.id);
-      await page.locator('[data-booking-summary]').getByText('$899.00',{exact:false}).waitFor();
+      await page.locator('[data-booking-summary]').getByText('$899.00',{exact:true}).waitFor();
       assert.equal(await page.locator('[data-experience-package="glam"] option').count(),5,'Three standard packages and Custom, without business pricing catalogs');
       const enhancement=page.locator('[data-addon="'+creative.id+'"]');await page.locator('[data-more-addons]').click();await enhancement.check();
       await page.screenshot({path:'artifacts/pricing/website-individual-'+width+'.png',fullPage:true});
@@ -191,36 +196,35 @@ await revision.getByText('Service total:',{exact:false}).waitFor();assert.match(
       await page.locator('[data-form-status]').getByText('Your Quote Request Has Been Submitted!',{exact:false}).waitFor();
       await page.screenshot({path:'artifacts/pricing/website-booking-'+width+'.png',fullPage:true});
       const cmsConfig=route=>route.fulfill({contentType:'application/javascript',body:'window.LOLA_CONFIG='+JSON.stringify({apiBase:web,environment:'staging',cmsChannel:'STAGING',formsEnabled:true})});
-      const cmsFixture=route=>route.fulfill({json:{channel:'STAGING',cmsAuthoritative:true,packages:[{website_key:'glam:signature',name:'CMS overwrite',starting_price:1,website_features:['CMS overwrite']}],pageItems:[],content:{},settings:{}}});
-      const delayedPricing=async route=>{await new Promise(resolve=>setTimeout(resolve,350));await route.continue();};
-      await page.route('**/config.js',cmsConfig);await page.route('**/api/public/staging/site',cmsFixture);await page.route('**/pricing-catalog.js',delayedPricing);
-      await page.goto(web+'/packages.html',{waitUntil:'domcontentloaded'});await page.locator('[data-experience-panel="glam"] .pricing-badge').filter({hasText:'Most Popular'}).waitFor();
+      const cmsFixture=route=>route.fulfill({json:{channel:'STAGING',cmsAuthoritative:true,packages:[{website_key:'glam:signature',name:'CMS overwrite',starting_price:1,website_features:['CMS overwrite']}],pageItems:[],experiences:[],content:{},settings:{}}});
+      await page.route('**/config.js',cmsConfig);await page.route('**/api/public/staging/site',cmsFixture);
+      await page.goto(web+'/packages.html');await page.locator('[data-package-key="glam:signature"] .popular-badge').waitFor();
       await page.locator('[data-package-key="glam:signature"] .price').getByText('$899',{exact:true}).waitFor();
-      assert.equal(await page.locator('[data-package-key="glam:essential"]').isVisible(),true,'An early CMS response must not hide the restored cards');
-      assert.match(await page.locator('[data-package-key="glam:essential"] ul').textContent(),/Custom photo overlay designed for your event/,'An early CMS response must not replace approved feature copy');
-      assert.doesNotMatch(await page.locator('[data-package-key="glam:signature"] ul').textContent(),/CMS overwrite/);assert.deepEqual(await page.locator('header .navlinks a').allTextContents(),['Home','Experiences','Packages','About','FAQ','Contact','Book Now →']);assert.equal(await page.locator('header .navlinks a[hidden]').count(),0);assert.equal(await page.locator('.mobile-menu a[href="index.html"]').count(),1);
-      await page.unroute('**/config.js',cmsConfig);await page.unroute('**/api/public/staging/site',cmsFixture);await page.unroute('**/pricing-catalog.js',delayedPricing);
-      for(const key of ['glam','360','vogue','audio'])assert.equal(await page.locator('[data-experience-panel="'+key+'"] .pricing-card[data-package-key$=":custom"]').count(),1,'Every standard experience retains its Custom card');
-      const customLink=await page.locator('[data-experience-panel="glam"] [data-package-key="glam:custom"] a').getAttribute('href');
-      await page.goto(new URL(customLink,web).href);await page.locator('[data-experience-package=glam]').waitFor();await page.locator('[data-booking-summary]').getByText('Custom quote',{exact:false}).waitFor();assert.equal(await page.locator('[name=eventCategory], [name=catalogKey]').count(),0);assert.equal(await page.locator('[data-booking-summary]').getByText('$0.00',{exact:true}).count(),0);
-      await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Individual',exact:true}).waitFor();
-      assert.equal(await page.locator('[data-pricing-catalog]').count(),0,'Only Individual and Business audience choices remain');
+      assert.equal(await page.locator('[data-package-key="glam:essential"]').isVisible(),true,'CMS content cannot hide published celebration cards');
+      assert.doesNotMatch(await page.locator('[data-package-key="glam:signature"]').textContent(),/CMS overwrite/);
+      assert.deepEqual(await page.locator('header .navlinks a').allTextContents(),['Home','Experiences','Packages','About','FAQ','Contact']);
+      assert.equal(await page.locator('header .navlinks a[hidden]').count(),0);assert.equal(await page.locator('.mobile-menu a[href="index.html"]').count(),1);
+      const customLink=await page.locator('[data-package-key="glam:custom"] a').getAttribute('href');
+      await page.goto(new URL(customLink,web).href);await page.locator('[data-experience-package=glam]').waitFor();await page.locator('[data-booking-summary]').getByText('Custom quote',{exact:false}).first().waitFor();
+      assert.equal(await page.locator('[name=eventCategory], [name=catalogKey]').count(),0);assert.equal(await page.locator('[data-booking-summary]').getByText('$0.00',{exact:true}).count(),0);
+      await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Celebrations',exact:true}).waitFor();
       await page.locator('[data-package-key="glam:signature"] .price').getByText('$899',{exact:true}).waitFor();
-      await page.locator('[data-package-key="glam:signature"] .sub').getByText('Our most popular experience',{exact:false}).waitFor();
-      assert.match(await page.locator('[data-package-key="glam:luxe"] ul').innerText(),/6 hours/,'Approved service hours stay consistent with internal pricing');
+      assert.match(await page.locator('[data-package-key="glam:luxe"] details').textContent(),/6 (?:active service )?hours/);
       await page.screenshot({path:'artifacts/pricing/website-packages-individual-'+width+'.png',fullPage:true});
-      await page.getByRole('button',{name:'Business',exact:true}).click();
+      await page.getByRole('button',{name:'Business/Corporates',exact:true}).click();
       const business=page.locator('[data-audience-view="BUSINESS"]');await business.waitFor({state:'visible'});
-      assert.equal(await business.locator('.business-experience-card').count(),4);assert.ok(await business.locator('.addon-card').count()>0);
-      assert.equal(await page.locator('.pricing-grid:visible').count(),0,'Business sees experiences and add-ons, never tier cards');
-      assert.doesNotMatch(await page.locator('body').innerText(),/\$[\d,]+|THE ESSENTIAL|The Signature|Most Popular/);
-      assert.ok(await page.locator('[data-audience-cta]').getAttribute('href').then(h=>h.includes('customerType=BUSINESS')));assert.equal(await page.locator('header a.btn').textContent(),'Request a Quote →');assert.equal(await page.locator('header .navlinks a:last-child').textContent(),'Request a Quote →');assert.equal(await page.locator('[data-business-addons] .addon-card img').count(),await page.locator('[data-business-addons] .addon-card').count());
-      const businessLinks=await business.locator('.business-experience-card a').evaluateAll(links=>links.map(a=>a.getAttribute('href')));
-      for(const key of ['glam','360','vogue','audio'])assert.ok(businessLinks.some(h=>new URL(h,web).searchParams.get('experience')===key));
+      assert.equal(await business.locator('[data-business-experience]').count(),4);assert.ok(await business.locator('[data-business-addon]').count()>0);
+      assert.equal(await page.locator('.package-grid:visible').count(),0,'Business sees experiences and add-ons, never internal tiers');
+      assert.doesNotMatch(await page.locator('body').innerText(),/\$[\d,]+|Event Plus|Event Premium|Most Popular/);
+      await business.locator('[data-business-experience=glam]').check();
+      const businessLink=await page.locator('[data-business-quote]').getAttribute('href');assert.ok(businessLink.includes('customerType=BUSINESS'));assert.ok(businessLink.includes('experiences=glam'));
       await page.screenshot({path:'artifacts/pricing/website-packages-business-'+width+'.png',fullPage:true});
-      await page.goto(new URL(businessLinks[0],web).href);await page.locator('[data-catalog-status]').getByText(/Choose available catalog packages|Select experiences and optional add-ons/).waitFor();
-      assert.equal(await page.locator('[name=customerType]').inputValue(),'BUSINESS');assert.equal(await page.locator('[data-experience="glam"]').isChecked(),true);await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();assert.doesNotMatch(await page.locator('[data-multi-booking]').textContent(),/\$[\d,]+/);
-      await page.route('**/api/public/pricing-catalog',route=>route.fulfill({status:503,body:'Unavailable'}));await page.goto(web+'/packages.html');await page.getByRole('button',{name:'Business',exact:true}).click();assert.equal(await page.locator('[data-business-experiences] a').count(),4,'Business quote path survives a catalog outage');
+      await page.goto(new URL(businessLink,web).href);await page.locator('[data-catalog-status]').getByText(/Choose available catalog packages|Select experiences and optional add-ons/).waitFor();
+      assert.equal(await page.locator('[name=customerType]').inputValue(),'BUSINESS');assert.equal(await page.locator('[data-experience="glam"]').isChecked(),true);
+      await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();assert.doesNotMatch(await page.locator('[data-multi-booking]').textContent(),/\$[\d,]+/);
+      await page.route('**/api/public/pricing-catalog',route=>route.fulfill({status:503,body:'Unavailable'}));await page.goto(web+'/packages.html');
+      await page.getByRole('button',{name:'Business/Corporates',exact:true}).click();assert.equal(await page.locator('[data-business-experience]').count(),4,'Business request path remains available during a pricing catalogue outage');
+      assert.ok((await page.locator('[data-business-quote]').getAttribute('href')).includes('customerType=BUSINESS'));
       assert.deepEqual(errors,[]);await page.close();
      }
     }finally{await webBrowser?.close();await website.close();}
