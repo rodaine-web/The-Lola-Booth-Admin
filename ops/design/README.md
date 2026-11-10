@@ -35,3 +35,9 @@ The local visual preview `node ops/design/preview-redesign.mjs` uses ignored rea
 - Local screenshots are ignored under `.qa/redesign/`. Generated asset provenance and final prompt descriptions are in `generated-assets.json`.
 
 Hosting verification must be completed after the reviewed staging deployment; local results alone do not establish a hosted pass.
+
+## Owner-approved production promotion — 2026-11-10
+
+The owner explicitly requested the redesigned website and Admin updates be released to production. `release-production-redesign.js` requires production database identity, an exact reviewed published catalogue version, no open pricing draft and an active Owner. Its single transaction uses existing production experience/package identities, records before-images through the component audit entries, leaves issued financial snapshots untouched and enables the CMS projection only after completion. Physical Audio inventory is never fabricated; existing units alone are assigned to the shared pool.
+
+The separate `The-Lola-Booth-Website` production repository receives only the approved public files. It retains its production API origin, image proxy, analytics, indexing, payment pages and legal content. Staging remains isolated. The public projection retains production FAQs, testimonials and gallery content and draws redesigned slots from CMS records in the production database.

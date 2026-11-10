@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const API_BASE = String(window.LOLA_CONFIG?.apiBase || "").replace(/\/$/, "");
-  const stagingApiReady = window.LOLA_CONFIG?.environment==='staging' && window.LOLA_CONFIG?.cmsChannel==='STAGING' && (/^https:\/\//.test(API_BASE)||(/^http:\/\/(localhost|127\.0\.0\.1):[0-9]+$/.test(API_BASE)&&new URL(API_BASE).origin===location.origin));
+  const stagingApiReady = (['staging','production'].includes(window.LOLA_CONFIG?.environment)) && ['STAGING','PUBLIC'].includes(window.LOLA_CONFIG?.cmsChannel) && (/^https:\/\//.test(API_BASE)||(/^http:\/\/(localhost|127\.0\.0\.1):[0-9]+$/.test(API_BASE)&&new URL(API_BASE).origin===location.origin));
   const qs=(s,r=document)=>r.querySelector(s), qsa=(s,r=document)=>[...r.querySelectorAll(s)];
   const apiAsset=(p)=>{
     if(!p)return null;
@@ -200,7 +200,7 @@
     if(!stagingApiReady || window.LOLA_CONFIG?.formsEnabled !== true){if(status){status.className='form-status';status.textContent='Staging preview: submissions are disabled until the staging API is connected.';}return;}
     if(!form.reportValidity())return;
     const btn=qs('button[type="submit"]',form), original=btn?.textContent; if(btn){btn.disabled=true;btn.textContent='Sending…'}; if(status){status.className='form-status';status.textContent='';}
-    try{ const r=await fetch(API_BASE+'/api/public/inquiries',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(formPayload(form))}); const data=await r.json().catch(()=>({})); if(!r.ok){if([400,422].includes(r.status)&&data.error?.details?.fieldErrors)showFieldErrors(form,data.error.details.fieldErrors); throw new Error(friendlyInquiryError(r.status,data));} if(status){status.className='form-status success';status.textContent=(data.code==='POSSIBLE_DUPLICATE')?'Thanks, we already have a recent inquiry from you. The LOLA team will follow up soon.':(data.message||'Thank you. Your inquiry was received and the LOLA team will be in touch soon.');} form.reset(); delete form.dataset.submissionId; status?.scrollIntoView({behavior:'smooth',block:'nearest'});
+    try{ const r=await fetch(API_BASE+'/api/public/inquiries',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(formPayload(form))}); const data=await r.json().catch(()=>({})); if(!r.ok){if([400,422].includes(r.status)&&data.error?.details?.fieldErrors)showFieldErrors(form,data.error.details.fieldErrors); throw new Error(friendlyInquiryError(r.status,data));} window.lolaTrackLeadConversion?.(data,form.dataset.submissionId); if(status){status.className='form-status success';status.textContent=(data.code==='POSSIBLE_DUPLICATE')?'Thanks, we already have a recent inquiry from you. The LOLA team will follow up soon.':(data.message||'Thank you. Your inquiry was received and the LOLA team will be in touch soon.');} form.reset(); delete form.dataset.submissionId; status?.scrollIntoView({behavior:'smooth',block:'nearest'});
     }catch(err){if(status){status.className='form-status error';status.textContent=err.message||'We couldn’t send your inquiry right now. Please try again.';}}
     finally{if(btn){btn.disabled=false;btn.textContent=original;}}
   }));
@@ -208,8 +208,8 @@
   async function load(){
     if(!stagingApiReady){document.documentElement.dataset.lolaCms="staging-preview";return;}
     try{
-      const site=await get('/api/public/staging/site');
-      if(site.channel!=='STAGING'||site.cmsAuthoritative!==true)throw new Error('Staging channel response required');
+      const site=await get(window.LOLA_CONFIG?.cmsChannel==='PUBLIC'?'/api/public/site':'/api/public/staging/site');
+      if(site.channel!==(window.LOLA_CONFIG?.cmsChannel||'STAGING')||site.cmsAuthoritative!==true)throw new Error('Staging channel response required');
       document.documentElement.dataset.lolaCms='rendering';
       renderPackages(site.packages||[],site.settings?.show_starting_price!==false);
       renderPageContent(site);
