@@ -1,3 +1,4 @@
+import BusinessPlanPicker from '../components/BusinessPlanPicker.jsx';
 import {proposalAddonStatus,removeIncludedProposalAddons} from '../../shared/proposal-catalog.js';
 import {withoutCampaignBundle,removeCampaignExperience} from '../../shared/campaign-selection.js';
 import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
@@ -35,6 +36,7 @@ export default function ProposalWizard(){
   const [photoAssets,setPhotoAssets]=useState([]);
   useEffect(()=>{let live=true;api.get("/proposal-assets").then(result=>{if(live)setPhotoAssets(result.data||[]);}).catch(()=>{});return()=>{live=false;};},[]);
   const [selectedExperiences,setSelectedExperiences]=useState([]);
+  const [businessMode,setBusinessMode]=useState(false);
   const [selectedAddons,setSelectedAddons]=useState([]);
   const [advanced,setAdvanced]=useState(false);
   const [busy,setBusy]=useState(false);
@@ -67,7 +69,7 @@ export default function ProposalWizard(){
         const labels=["experiences","packages","add-ons"];
         const failures=[];
         results.forEach((result,index)=>{
-          if(result.status==="fulfilled")setters[index](result.value.filter(item=>item.active!==false && (index!==0 || ["glam","360","vogue","audio"].includes(experienceKey(item)))));
+          if(result.status==="fulfilled")setters[index](result.value.filter(item=>item.active!==false && (index!==0 || ["glam","360","mirror","vogue","audio"].includes(experienceKey(item)))));
           else failures.push(labels[index]+": "+result.reason.message);
         });
         setCatalogError(failures.length?"Unable to load "+failures.join("; "):"");
@@ -112,6 +114,7 @@ export default function ProposalWizard(){
       if(!isCurrent())return;
       const prefill=proposalBookingPrefill(record,experiences,packages);
       setLead(record);
+      if(record.source_details?.customerType==='BUSINESS')setBusinessMode(true);
       setSelectedAddons(prefill.selectedAddons||[]);
       setForm(current=>({...current,...prefill.fields}));
       if(params.get('campaignId')&&params.get('offerKey')){const campaigns=await api.get('/campaigns/offers-for-proposals');if(!isCurrent())return;const offer=campaigns.data?.find(c=>c.id===params.get('campaignId'))?.offers.find(o=>o.key===params.get('offerKey'));if(offer)setSelectedExperiences(offer.selections);else setError('The campaign offer is unavailable. Choose another package.');}else setSelectedExperiences(prefill.selectedExperiences);
@@ -330,8 +333,9 @@ export default function ProposalWizard(){
       {catalogLoading&&<p role="status">Loading experiences and packages…</p>}
       {catalogError&&<div className="toast error" role="alert">{catalogError} <button onClick={()=>setCatalogAttempt(value=>value+1)}>Retry catalog</button></div>}
       {!catalogLoading&&!catalogError&&!experiences.length&&<p role="status">No active experiences are available. Add an experience in the catalog before creating a proposal.</p>}
-      <div className="experience-card-grid">
-        {experiences.map(item=>{const selected=selectedExperiences.some(entry=>entry.experience_id===item.id);return <button key={item.id} className={selected?"experience-card selected":"experience-card"} onClick={()=>chooseExperience(item)}><img className="wizard-experience-photo" src={item.image_url || item.image || experienceImage(item.name)} alt=""/><span className="experience-select">{selected?<Check size={15}/>:<Plus size={15}/>}</span><strong>{item.website_name||item.name}</strong><small>{item.website_short_description||item.description||"LOLA experience"}</small>{item.base_price!=null&&<b>Starting at {money(item.base_price)}</b>}</button>;})}
+      <BusinessPlanPicker experiences={experiences} packages={packages} selected={selectedExperiences} onChange={setSelectedExperiences} active={businessMode} onModeChange={setBusinessMode}/>
+      <div hidden={businessMode}><div className="experience-card-grid">
+        {experiences.map(item=>{const selected=selectedExperiences.some(entry=>entry.experience_id===item.id);return <button key={item.id} className={selected?"experience-card selected":"experience-card"} onClick={()=>chooseExperience(item)}><img className="wizard-experience-photo" src={experienceImage(item.name,actualEventType())} alt=""/><span className="experience-select">{selected?<Check size={15}/>:<Plus size={15}/>}</span><strong>{item.website_name||item.name}</strong><small>{item.website_short_description||item.description||"LOLA experience"}</small>{item.base_price!=null&&<b>Starting at {money(item.base_price)}</b>}</button>;})}
       </div>
       {selectedExperiences.map(item=><section className="wizard-section package-picker" key={item.experience_id}>
         <div><h3>{item.name} Packages</h3><p>Choose the package that best fits this event.</p></div>
@@ -342,6 +346,7 @@ export default function ProposalWizard(){
         </div>
       <div className="form-grid">{(item.packages||[]).map(pkg=><label key={pkg.campaign_id?pkg.campaign_id+pkg.campaign_offer_key:pkg.package_id}>Selected price — {pkg.name}<input type="number" min="0" step="0.01" readOnly={!!pkg.campaign_id} value={pkg.price} onChange={e=>setSelectedExperiences(current=>current.map(row=>row.experience_id===item.experience_id?{...row,packages:row.packages.map(p=>p.package_id===pkg.package_id?{...p,price:Number(e.target.value)}:p)}:row))}/></label>)}</div>
       </section>)}
+      </div>
       {!!addons.length&&<section className="wizard-section"><h3>Add-ons <small>Optional</small></h3><div className="addon-choice-grid">{addons.map(item=><label key={item.id}><input type="checkbox" disabled={Boolean(proposalAddonStatus(item,selectedExperiences,packages))} checked={!proposalAddonStatus(item,selectedExperiences,packages)&&selectedAddons.some(entry=>entry.addon_id===item.id)} onChange={()=>chooseAddon(item)}/><span>{item.name}</span><strong>{proposalAddonStatus(item,selectedExperiences,packages)||money(item.price||0)}</strong></label>)}</div></section>}
       {!!mappedProposalPhotos(selectedExperiences,photoAssets,()=>"preview").length&&<p role="status">Reviewed experience photos will be included in this proposal.</p>}
       {previewError&&<p role="alert" className="toast error">{previewError}</p>}
@@ -383,7 +388,7 @@ function Review({title,rows,onEdit}){return <article className="review-card"><di
 function packageSelection(pkg){return{package_id:pkg.id,name:pkg.name,price:Number(pkg.starting_price||0),description:pkg.proposal_description||pkg.description||""};}
 function section(title,body,display_order){return{id:title.toLowerCase().replace(/[^a-z0-9]+/g,"_"),title,body,items:[],display_order};}
 function clean(value){return Object.fromEntries(Object.entries(value).filter(([,v])=>v!==undefined&&v!==""));}
-function money(value){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(Number(value||0));}
+function money(value){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:Number(value||0)%1?2:0}).format(Number(value||0));}
 function initials(name=""){return name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()).join("")||"LO";}
 function dateOnly(value){return value?String(value).slice(0,10):"";}
 function proposalEventName(lead){return [lead.event_type,[lead.first_name,lead.last_name].filter(Boolean).join(" ")].filter(Boolean).join(" · ");}

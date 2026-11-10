@@ -520,6 +520,7 @@ function proposalSelectedExperiences(proposal) {
 
 function selectedExperienceKey(item={}) {
   const value=String(item.key||item.name||"").toLowerCase();
+  if(value.includes("mirror")) return "mirror";
   if(value.includes("360")) return "360";
   if(value.includes("vogue")) return "vogue";
   if(value.includes("audio")) return "audio";

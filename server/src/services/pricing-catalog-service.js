@@ -18,7 +18,7 @@ export async function currentPricingCatalog(){
 export async function publishedWebsitePricing(rows){
  const enabled=pricingCatalogEnabled(),source=enabled?(await currentPricingCatalog()).snapshot:await legacyPricingBaseline();
  if(!source)return rows;
- return rows.map(row=>{
+ return rows.filter(row=>!source.packages.some(pkg=>pkg.id===(row.source_catalog_id||row.id)&&pkg.catalog_key&&pkg.catalog_key!=='STANDARD')).map(row=>{
   const agreed=source.packages.find(pkg=>pkg.id===(row.source_catalog_id||row.id));
   if(!agreed)return row;
   if(!enabled)return {...row,starting_price:agreed.starting_price,display_price:agreed.pricing_mode==='CUSTOM'?'Request Pricing':Number(agreed.starting_price),pricing_mode:agreed.pricing_mode,website_features:agreed.website_features};
@@ -40,6 +40,7 @@ export async function previewPricingQuote(input){
  if(!pricingCatalogEnabled())throw new AppError('The new pricing catalog is not active.',409,'CATALOG_DISABLED');
  const version=await currentPricingCatalog();
  if(input.catalogVersion&&input.catalogVersion!==version.id)throw new AppError('Pricing changed. Reload and review the current catalog.',409,'CATALOG_VERSION_CHANGED');
+ if(input.selections?.some(s=>version.snapshot.packages.some(p=>p.id===s.packageId&&p.catalog_key!=='STANDARD')))throw new AppError('Request a quote for business experiences.',422,'BUSINESS_QUOTE_REQUIRED');
  return calculateCatalogQuote({...input,version:version.id},version.snapshot);
 }
 export async function publishPricingVersion(id,req,effectiveAt){

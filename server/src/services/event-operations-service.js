@@ -1,3 +1,4 @@
+import {syncAudioEquipmentLifecycle} from './audio-fulfillment-service.js';
 import { eventFinanceSummary, requiredDepositPaid } from "./event-finance-summary.js";
 import {renderRunSheetPdf} from "./run-sheet-pdf.js";
 import {env} from "../config/env.js";
@@ -344,6 +345,7 @@ export async function acknowledgeAssignment(eventId, assignmentId, user, { statu
 export async function updateEquipmentLifecycle(eventId, assignmentId, action, body, user) {
   await assertEventAccess(user, eventId);
   return transaction(async()=>{
+  await query('SELECT pg_advisory_xact_lock(7811051)');
   const previous=(await query("SELECT * FROM equipment_assignments WHERE id=$1 AND event_id=$2 AND released_at IS NULL FOR UPDATE",[assignmentId,eventId])).rows[0];
   if(!previous)throw notFound("Equipment assignment");
   const map = {
@@ -371,6 +373,7 @@ export async function updateEquipmentLifecycle(eventId, assignmentId, action, bo
     await query("INSERT INTO tasks (title, description, due_date, event_id, status, priority) VALUES ('Equipment maintenance needed', $1, current_date + interval '1 day', $2, 'OPEN', 'HIGH')", [body.notes || body.missing_accessories || "Condition requires service.", eventId]);
     await createNotification({ target: { roleTarget: "MANAGERS" }, category: "EQUIPMENT", severity: "HIGH", title: "Equipment needs attention", body: body.notes || body.missing_accessories || "Condition requires service.", entityType: "event", entityId: eventId, actionUrl: `/events/events/${eventId}` });
   }
+  await syncAudioEquipmentLifecycle(result.rows[0],action,user);
   await recordActivity({ actorUserId: user?.id, entityType: "event", entityId: eventId, action: `equipment_${action}`, summary: `Equipment ${action}` });
   return result.rows[0];
   });

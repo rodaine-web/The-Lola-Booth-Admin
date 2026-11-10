@@ -1,3 +1,4 @@
+import BusinessPlanPicker from '../components/BusinessPlanPicker.jsx';
 import {withoutCampaignBundle,removeCampaignExperience} from '../../shared/campaign-selection.js';
 import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
 import {proposalBookingPrefill} from '../../shared/proposal-booking-prefill.js';
@@ -29,6 +30,7 @@ export default function ProposalEditor() {
   const [mode, setMode] = useState("create");
   const [addon, setAddon] = useState({ addon_id: "", quantity: 1 });
   const [customLine, setCustomLine] = useState({ description: "", detail: "", quantity: 1, unit_price: "" });
+  const [businessMode,setBusinessMode]=useState(false);
   const [experienceOptions, setExperienceOptions] = useState([]);
   const [packageOptions, setPackageOptions] = useState([]);
   const [addonOptions,setAddonOptions]=useState([]);
@@ -67,7 +69,7 @@ export default function ProposalEditor() {
   const [saving,setSaving]=useState(false);
   const [hydratingSource,setHydratingSource]=useState(false);
 
-  useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
+  useEffect(() => { if (id) api.get(`/proposals/${id}`).then(proposal => { setForm(proposal.editable_input); setBusinessMode(Boolean(proposal.editable_input.content?.catalog_quote?.businessPlan)); setLoaded(true); }).catch(err => setError(err.message)); }, [id]);
   const [catalogAttempt,setCatalogAttempt]=useState(0);
   const [catalogError,setCatalogError]=useState("");
   useEffect(() => {
@@ -388,7 +390,8 @@ export default function ProposalEditor() {
             <section className="panel">
               <h2>Selected Experiences</h2>
               <p className="lede">Every selected experience becomes its own visual section in the client proposal.</p>
-              <div className="proposal-experience-picker">
+              <BusinessPlanPicker experiences={experienceOptions} packages={packageOptions} selected={form.selected_experiences||[]} onChange={value=>setField("selected_experiences",value)} active={businessMode} onModeChange={setBusinessMode} initialQuote={form.content?.catalog_quote}/>
+              <div hidden={businessMode}><div className="proposal-experience-picker">
                 {experienceOptions.map((experience) => {
                   const selected = (form.selected_experiences || []).some((item) => item.experience_id === experience.id);
                   return <button type="button" key={experience.id} className={selected ? "proposal-experience-choice selected" : "proposal-experience-choice"} onClick={() => toggleExperience(experience)}>
@@ -428,6 +431,7 @@ export default function ProposalEditor() {
                     </div>
                   </article>
                 ))}
+              </div>
               </div>
             </section>
 

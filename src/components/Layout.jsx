@@ -141,6 +141,8 @@ const navGroups = [{
     permission: 'read:website',
     cms: true
   }, {
+    label: 'Partners', to:'/website/partners', permission:'read:website', cms:true
+  }, {
     label: 'Testimonials',
     to: '/website/testimonials',
     permission: 'read:website',

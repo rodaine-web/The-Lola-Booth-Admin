@@ -27,15 +27,16 @@ export const proposalDefaults = {
   },
   experiences: {
     glam:{personal:'Studio-quality, magazine-ready portraits for you and your guests.',business:'A polished branded photo experience designed to capture premium guest content and create shareable brand moments.'},
+    mirror:{personal:'An interactive, full-length mirror photo experience with personalized welcome screens and beautiful guest portraits.',business:'A full-length interactive mirror experience with branded creative, personalized welcome screens and shareable guest portraits.'},
     '360':{personal:'A dynamic slow-motion video experience that gets everyone into the celebration.',business:'A high-energy branded video activation that puts your audience at the center of the content.'},
     vogue:{personal:'A fashion-forward editorial experience inspired by magazine style, giving your guests a dramatic moment in the spotlight.',business:'An editorial-style branded content experience designed for striking visual moments and guest engagement.'},
     audio:{personal:'Give your guests a personal way to leave messages, stories and memories from the celebration.',Wedding:'Heartfelt, hilarious and unforgettable. Your guests leave voice messages, stories and well wishes you’ll treasure long after the event.',business:'An interactive voice experience for guest reactions, messages or event feedback.'}
   }, packages:{}
 };
-export function experienceKey(item={}) { const name=String(item.key||item.name||'').toLowerCase(); return name.includes('digital')?'digital':name.includes('360')?'360':name.includes('vogue')?'vogue':name.includes('audio')||name.includes('guestbook')?'audio':name.includes('glam')||name.includes('photo')?'glam':name; }
+export function experienceKey(item={}) { const name=String(item.key||item.name||'').toLowerCase(); return name.includes('mirror')?'mirror':name.includes('digital')?'digital':name.includes('360')?'360':name.includes('vogue')?'vogue':name.includes('audio')||name.includes('guestbook')?'audio':name.includes('glam')||name.includes('photo')?'glam':name; }
 export function normalizeScenarioEvent(value='') {
   const normalized=String(value).trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');
-  const aliases={'weddings':'Wedding','birthdays':'Birthday','private event':'Private Party','private events':'Private Party','private parties':'Private Party','corporate':'Corporate Event','corporate events':'Corporate Event','brand activations':'Brand Activation','custom':'Other'};
+  const aliases={'weddings':'Wedding','birthdays':'Birthday','private event':'Private Party','private events':'Private Party','private parties':'Private Party','corporate':'Corporate Event','corporate events':'Corporate Event','brand activations':'Brand Activation','conference':'Corporate Event','trade show':'Corporate Event','product launch':'Brand Activation','company celebration':'Corporate Event','other business event':'Corporate Event','custom':'Other'};
   return proposalEventTypes.find(type=>type.toLowerCase()===normalized)||aliases[normalized]||'Other';
 }
 export function mergeDefaults(config={}) {

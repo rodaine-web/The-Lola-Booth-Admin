@@ -16,7 +16,7 @@ export async function loadCatalog(get, resource) {
 // Commercial editors use published prices; Catalog screens keep editing draft rows.
 export async function loadProposalCatalog(get,resource){
  if(['packages','addons'].includes(resource)){
-  try{return (await get('/public/pricing-catalog'))[resource];}
+  try{return (await get('/pricing/current'))[resource];}
   catch(error){if(error.status!==404)throw error;}
  }
  return loadCatalog(get,resource);
