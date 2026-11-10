@@ -2,18 +2,56 @@
   "tool": "Built-in image_gen.imagegen (not CLI)",
   "usage": "Owner-authorized website imagery and background removal. Original owner files and generated originals are preserved. JPEG delivery conversions and PNG downsampling preserve the selected scene or alpha; circles are CSS.",
   "assets": [
-    {"file":"public/staging-site/assets/redesign-glam-guests.jpg","prompt":"Retain the champagne gala guests, attendant and lighting. Replace the incorrect oval ring-light booth with the exact white box DSLR booth from the mockup: square white camera housing, black camera lens, slim white column, square white printer base, white umbrella and black studio flash. Keep equipment fully visible and preserve the event scene; no website UI or added text."},
-    {"file":"public/staging-site/assets/redesign-360-guests.jpg","prompt":"Photorealistic 3:2 luxury gala scene with two elegantly dressed adult guests enjoying the exact circular black platform, white base ring and angled smartphone arm shown in the supplied 360 device photo. Warm ivory and gold, silver shimmer backdrop, natural hands and poses. Quiet dark left space for live heading. No baked-in text, UI or watermarks."},
-    {"file":"public/staging-site/assets/redesign-mirror-guests.jpg","prompt":"Photorealistic 3:2 champagne-and-gold reception with two adult guests interacting with the exact ornate gold full-length Magic Mirror, black floor case and round studio flash. Preserve corresponding natural reflections and equipment proportions, warm bokeh and quiet left heading space. No text overlays, logos, UI or watermark."},
-    {"file":"public/staging-site/assets/redesign-vogue-guests.jpg","prompt":"Photorealistic 3:2 champagne gala scene with two evening-dressed guests posing inside the exact black framed illuminated cream Vogue magazine enclosure. Preserve the VOGUE masthead, architecture and LED perimeter. Warm flowers and gold lighting with dark left heading space. No additional text, UI or watermark."},
-    {"file":"public/staging-site/assets/redesign-male-studios-visible.jpg","prompt":"Make the existing dark charcoal MALE STUDIOS emblem and exact lettering bright ivory white against pure black for small website-card legibility. Preserve emblem, spacing, proportions and spelling. Do not redesign or add marks."},
-    {"file":"public/staging-site/assets/equipment-cutout-glam.png","prompt":"Extract ONLY the exact DSLR booth from the upper-right Glam section of the supplied Experiences mockup: white square camera housing, slim pedestal, white printer base, black flash and white umbrella. Remove the website, text, photos, beige circle, floor and scene to genuine transparent alpha. Preserve full equipment, no cropped edges, no oval ring-light substitute. Small transparent margin; beige circle is added separately in CSS."},
-    {"file":"public/staging-site/assets/equipment-cutout-360.png","prompt":"Remove the white background and ground from the exact supplied 360 device photo to true transparent alpha. Preserve the complete black platform, white base ring, angled camera arm and smartphone, their proportions and colors. Tight full-equipment framing with a small transparent margin. No beige circle, scene, added equipment or text."},
-    {"file":"public/staging-site/assets/equipment-cutout-mirror.png","prompt":"Remove the geometric wall, floor and environment from the exact supplied Magic Mirror product photo to genuine transparent alpha. Preserve the complete ornate gold frame, neutral reflective glass, black rear case and round white studio flash. The glass remains opaque, not a transparent hole. Full-length equipment, modest clear margin, no beige circle or added scene."},
-    {"file":"public/staging-site/assets/equipment-cutout-vogue.png","prompt":"Remove only the external room, drapes, flowers, floor and background from the exact supplied Vogue enclosure photo to transparent alpha. Preserve the complete black booth frame, illuminated cream interior, LED perimeter and existing VOGUE lettering/design. No people or architecture changes. Full equipment in its three-quarter perspective; no beige circle or surrounding scene."},
-    {"file":"public/staging-site/assets/home-mirror-silver.jpg","prompt":"Edit the Magic Mirror guest scene into a portrait homepage card with the full-length interactive mirror and happy adult guests. Replace champagne/gold styling with cool silver, pearl white, charcoal and soft gray, silver shimmer curtain and neutral evening wear, matching the Glam/360 silver card treatment. The ornate mirror reads as antique silver; preserve its shape, flash and realistic reflection. No overlays, UI, collage, watermark or warm gold decor."},
-    {"file":"public/staging-site/assets/home-vogue-silver.jpg","prompt":"Edit the Vogue guest scene into a portrait homepage card with the recognizable walk-in black magazine enclosure, VOGUE masthead and guests posing inside. Replace warm gold styling with silver, pearl white, charcoal and soft gray, cool white LED lighting and neutral silver/black attire. Preserve architecture and people clearly at card size. No added overlay text, UI, collage, watermark or warm golden lighting."}
+    {
+      "file": "public/staging-site/assets/redesign-glam-guests.jpg",
+      "prompt": "Retain the champagne gala guests, attendant and lighting. Replace the incorrect oval ring-light booth with the exact white box DSLR booth from the mockup: square white camera housing, black camera lens, slim white column, square white printer base, white umbrella and black studio flash. Keep equipment fully visible and preserve the event scene; no website UI or added text."
+    },
+    {
+      "file": "public/staging-site/assets/redesign-360-guests.jpg",
+      "prompt": "Photorealistic 3:2 luxury gala scene with two elegantly dressed adult guests enjoying the exact circular black platform, white base ring and angled smartphone arm shown in the supplied 360 device photo. Warm ivory and gold, silver shimmer backdrop, natural hands and poses. Quiet dark left space for live heading. No baked-in text, UI or watermarks."
+    },
+    {
+      "file": "public/staging-site/assets/redesign-mirror-guests.jpg",
+      "prompt": "Photorealistic 3:2 champagne-and-gold reception with two adult guests interacting with the exact ornate gold full-length Magic Mirror, black floor case and round studio flash. Preserve corresponding natural reflections and equipment proportions, warm bokeh and quiet left heading space. No text overlays, logos, UI or watermark."
+    },
+    {
+      "file": "public/staging-site/assets/redesign-vogue-guests.jpg",
+      "prompt": "Photorealistic 3:2 champagne gala scene with two evening-dressed guests posing inside the exact black framed illuminated cream Vogue magazine enclosure. Preserve the VOGUE masthead, architecture and LED perimeter. Warm flowers and gold lighting with dark left heading space. No additional text, UI or watermark."
+    },
+    {
+      "file": "public/staging-site/assets/redesign-male-studios-visible.jpg",
+      "prompt": "Make the existing dark charcoal MALE STUDIOS emblem and exact lettering bright ivory white against pure black for small website-card legibility. Preserve emblem, spacing, proportions and spelling. Do not redesign or add marks."
+    },
+    {
+      "file": "public/staging-site/assets/equipment-cutout-glam.png",
+      "prompt": "Extract ONLY the exact DSLR booth from the upper-right Glam section of the supplied Experiences mockup: white square camera housing, slim pedestal, white printer base, black flash and white umbrella. Remove the website, text, photos, beige circle, floor and scene to genuine transparent alpha. Preserve full equipment, no cropped edges, no oval ring-light substitute. Small transparent margin; beige circle is added separately in CSS."
+    },
+    {
+      "file": "public/staging-site/assets/equipment-cutout-360.png",
+      "prompt": "Remove the white background and ground from the exact supplied 360 device photo to true transparent alpha. Preserve the complete black platform, white base ring, angled camera arm and smartphone, their proportions and colors. Tight full-equipment framing with a small transparent margin. No beige circle, scene, added equipment or text."
+    },
+    {
+      "file": "public/staging-site/assets/equipment-cutout-mirror.png",
+      "prompt": "Remove the geometric wall, floor and environment from the exact supplied Magic Mirror product photo to genuine transparent alpha. Preserve the complete ornate gold frame, neutral reflective glass, black rear case and round white studio flash. The glass remains opaque, not a transparent hole. Full-length equipment, modest clear margin, no beige circle or added scene."
+    },
+    {
+      "file": "public/staging-site/assets/equipment-cutout-vogue.png",
+      "prompt": "Remove only the external room, drapes, flowers, floor and background from the exact supplied Vogue enclosure photo to transparent alpha. Preserve the complete black booth frame, illuminated cream interior, LED perimeter and existing VOGUE lettering/design. No people or architecture changes. Full equipment in its three-quarter perspective; no beige circle or surrounding scene."
+    },
+    {
+      "file": "public/staging-site/assets/home-mirror-silver.jpg",
+      "prompt": "Edit the Magic Mirror guest scene into a portrait homepage card with the full-length interactive mirror and happy adult guests. Replace champagne/gold styling with cool silver, pearl white, charcoal and soft gray, silver shimmer curtain and neutral evening wear, matching the Glam/360 silver card treatment. The ornate mirror reads as antique silver; preserve its shape, flash and realistic reflection. No overlays, UI, collage, watermark or warm gold decor."
+    },
+    {
+      "file": "public/staging-site/assets/home-vogue-silver.jpg",
+      "prompt": "Edit the Vogue guest scene into a portrait homepage card with the recognizable walk-in black magazine enclosure, VOGUE masthead and guests posing inside. Replace warm gold styling with silver, pearl white, charcoal and soft gray, cool white LED lighting and neutral silver/black attire. Preserve architecture and people clearly at card size. No added overlay text, UI, collage, watermark or warm golden lighting."
+    }
   ],
   "owner_supplied": "owner-*.jpg are delivery conversions of the six owner-supplied photos; reference-*.jpg retain the approved mockups for CSS image-region presentation. Homepage silver imagery is an illustrative color treatment; operational equipment defaults retain the gold-frame mirror identity.",
-  "social_vectors": "Instagram and TikTok brand paths retrieved from https://github.com/simple-icons/simple-icons; used in design-icons.svg."
+  "social_vectors": "Instagram and TikTok brand paths retrieved from https://github.com/simple-icons/simple-icons; used in design-icons.svg.",
+  "refinements_2026_11_10": {
+    "hero": "Built-in image editor: restrained neutral champagne tones, reduced orange saturation and HDR contrast, composition preserved. Replaced four redesign-*-guests.jpg delivery assets.",
+    "mirror": "Built-in editor on owner photo: lift shadows, neutral color correction, extend dark event surroundings to landscape. Saved owner-mirror-guests-natural.jpg.",
+    "logo": "Native SVG web lockup with larger THE and BOOTH for legibility."
+  }
 }
