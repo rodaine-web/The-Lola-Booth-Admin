@@ -55,3 +55,5 @@ html{overflow-x:clip}.design-footer{overflow:hidden}
 .business-selection [data-business-experiences]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .business-selection [data-business-addons]{max-height:none;overflow:visible;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
 @media(max-width:720px){.business-selection{display:flex;flex-direction:column}.business-selection>section,.business-selection>.custom-quote-card{width:100%}.business-selection [data-business-addons]{grid-template-columns:1fr}}
+/* Consistent restrained photographic finish, including mockup-derived photos. */
+.hero-art img,.experience-tile>img,.experience-tile>.crop-picture img,.experience-landscape img,.audio-art img,.about-split>img,.equipment-cutout{filter:saturate(.82) contrast(.96)}
