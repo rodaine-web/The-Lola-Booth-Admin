@@ -40,3 +40,8 @@ html{overflow-x:clip}.design-footer{overflow:hidden}
 .design-hero.photo-only-hero .hero-art .crop-picture{position:absolute;left:auto;right:0;top:0}
 
 .experience-landscape{width:100%;min-width:0;aspect-ratio:auto}.design-hero.photo-only-hero .hero-art .crop-picture{width:max(75%,calc(340px * var(--crop-ratio)));min-height:0}@media(max-width:720px){.design-hero.photo-only-hero .hero-art .crop-picture{width:max(100%,calc(460px * var(--crop-ratio)));right:0}.experience-detail{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+
+/* Keep real photo elements in the same fixed slot as cropped reference art. */
+.signature-section .experience-tile{display:flex;flex-direction:column}.signature-section .experience-tile>.normal-picture,.signature-section .experience-tile>.crop-picture{width:100%;height:auto;aspect-ratio:235/292;object-fit:cover;flex:none}.signature-section .experience-tile-copy{flex:1;min-height:145px}.contact-social-mark{width:32px;height:32px;color:#191715;fill:currentColor;stroke:none}
+.booking-experience-card>.normal-picture{width:100%;height:auto;aspect-ratio:150/122;object-fit:contain;padding:6px;border-radius:8px;background:radial-gradient(circle at center,#ead0b2 0 51%,#fff6eb 52%)}
+@media(max-width:720px){.signature-section .experience-tile-copy{min-height:140px}.booking-experience-card>.normal-picture{aspect-ratio:150/122}}
