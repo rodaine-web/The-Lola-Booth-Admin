@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import QRCode from "qrcode";
+import {gallerySurveyEnabled} from '../../../shared/features.js';
+import {reconcileSurveyFilename} from './fiesta-survey-service.js';
 import { query, transaction } from "../db/pool.js";
 import { env } from "../config/env.js";
 import { documentOrigin } from "../utils/public-document-url.js";
@@ -224,7 +226,7 @@ export async function adminGalleryAlbum(id) {
   } catch {
     storage = { provider: "unconfigured", configured: false };
   }
-  return { album, media, people, keys, activity, storage };
+  return { album, media, people, keys, activity, storage, surveyImportEnabled: gallerySurveyEnabled(process.env) };
 }
 export async function updateGalleryAlbum(id, input, user) {
  return transaction(async()=>{
@@ -456,6 +458,7 @@ export async function uploadGalleryMedia(albumId, input) {
     )
   ).rows[0];
   await reconcileFiestaShares(albumId);
+  await reconcileSurveyFilename(albumId,input.filename);
   return result;
  });
 }

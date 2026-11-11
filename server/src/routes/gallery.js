@@ -18,6 +18,7 @@ import {verifiedGalleryBytes} from '../services/gallery-media-delivery.js';
 import {dropboxGalleryStatus,saveDropboxGallerySource,pauseDropboxGallerySource,syncDropboxGallerySource} from '../services/dropbox-gallery-service.js';
 import {startDropboxGalleryOAuth,finishDropboxGalleryOAuth,disconnectDropboxGallery} from '../services/dropbox-gallery-connection.js';
 import {env} from '../config/env.js';
+import {previewFiestaSurvey,importFiestaSurvey,listSurveyImports,surveyResponseDetail,reviewSurveyResponse} from '../services/fiesta-survey-service.js';
 const id = z.string().uuid(),
   date = z.string().datetime({ offset: true }).nullable().optional();
 const noCache = (_req, res, next) => {
@@ -174,6 +175,30 @@ galleryAdminRouter.use(
   requirePermission("read:events"),
 );
 const write = requirePermission("write:operations");
+const surveyInput=z.object({
+ csv:z.string().min(1).max(1024*1024),
+ eventCode:z.string().regex(/^[A-Za-z0-9_-]+$/).max(100),
+ mapping:z.record(z.string().max(40),z.string().min(1).max(200)),
+ affirmative:z.object({mailingPreference:z.array(z.string().min(1).max(200)).max(10).optional(),consent:z.array(z.string().min(1).max(200)).max(10).optional()}).strict().optional()
+}).strict();
+galleryAdminRouter.post('/albums/:id/survey/preview',write,asyncHandler(async(req,res)=>{
+ id.parse(req.params.id);
+ res.json(await previewFiestaSurvey(surveyInput.parse(req.body)));
+}));
+galleryAdminRouter.post('/albums/:id/survey/import',write,rateLimit({windowMs:60000,limit:3,standardHeaders:true,legacyHeaders:false}),asyncHandler(async(req,res)=>{
+ res.json(await importFiestaSurvey(id.parse(req.params.id),surveyInput.parse(req.body),req.user));
+}));
+galleryAdminRouter.get('/albums/:id/survey',write,asyncHandler(async(req,res)=>{
+ const offset=z.coerce.number().int().min(0).max(100000).default(0).parse(req.query.offset);
+ res.json(await listSurveyImports(id.parse(req.params.id),offset));
+}));
+galleryAdminRouter.get('/albums/:id/survey/:responseId',write,asyncHandler(async(req,res)=>{
+ res.json(await surveyResponseDetail(id.parse(req.params.id),id.parse(req.params.responseId)));
+}));
+galleryAdminRouter.post('/albums/:id/survey/:responseId/review',write,asyncHandler(async(req,res)=>{
+ const input=z.object({decision:z.enum(['CONFIRMED','EXCLUDED']),mediaId:id.nullable().optional(),reason:z.string().trim().min(3).max(1000)}).strict().parse(req.body);
+ res.json(await reviewSurveyResponse(id.parse(req.params.id),id.parse(req.params.responseId),input,req.user));
+}));
 const dropboxCookie={httpOnly:true,secure:['staging','production'].includes(process.env.APP_ENV),sameSite:'lax',path:'/api/integrations/dropbox-gallery/callback',maxAge:600000};
 galleryAdminRouter.post('/albums/:id/dropbox/connect',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{
   const result=await startDropboxGalleryOAuth(id.parse(req.params.id),req);res.cookie('lola_dropbox_gallery_oauth',result.browser,dropboxCookie);res.json({url:result.url});

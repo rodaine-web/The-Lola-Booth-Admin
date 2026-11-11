@@ -1,5 +1,6 @@
 import DropboxGalleryImport from '../components/DropboxGalleryImport.jsx';
 import FiestaGalleryImport from '../components/FiestaGalleryImport.jsx';
+import FiestaSurveyWorkspace from '../components/FiestaSurveyWorkspace.jsx';
 import "../styles/record-workspace.css";
 import GalleryOverview from "../components/GalleryOverview.jsx";
 import GalleryImports from "../components/GalleryImports.jsx";
@@ -333,6 +334,7 @@ export default function GalleryAdmin() {
                 "Overview",
                 "Photos",
                 "People",
+                ...(data.surveyImportEnabled ? ["Fiesta Survey"] : []),
                 "Access",
                 "Activity",
                 "Settings",
@@ -794,6 +796,7 @@ export default function GalleryAdmin() {
               </div>
             </section>
           )}
+          {tab === "Fiesta Survey" && data.surveyImportEnabled && <FiestaSurveyWorkspace key={data.album.id} album={data.album} media={data.media} onImported={load}/>}
           {tab === "Settings" && <FiestaGalleryImport album={data.album} onImported={load}/>}
           {tab === "Settings" && <DropboxGalleryImport key={data.album.id} album={data.album} onImported={load}/>}
           {tab === "Settings" && (
