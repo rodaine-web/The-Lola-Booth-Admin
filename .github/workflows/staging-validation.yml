@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -85,7 +85,12 @@ jobs:
         run: npm run build
 
       - name: Install browser for customer journey
-        run: npx playwright install --with-deps chromium
+        # The pinned GitHub image includes Chrome's system libraries. Avoid an
+        # apt upgrade/download dependency; smoke-test the actual browser before
+        # running every existing browser journey below.
+        run: |
+          npx playwright install chromium
+          node --input-type=module -e "const {chromium}=await import('playwright');const browser=await chromium.launch();console.log('Chromium ready:',await browser.version());await browser.close();"
 
       - name: Contacts desktop and mobile browser qualification
         env:

@@ -1,0 +1,77 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import pg from 'pg';
+import jwt from 'jsonwebtoken';
+import {once} from 'node:events';
+
+test('survey import preserves encrypted evidence, requires review, prevents replays and isolates the API',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async()=>{
+ const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);
+ assert.ok(['127.0.0.1','localhost'].includes(url.hostname));assert.match(url.pathname,/lola_.*qa/);
+ const bootstrap=new pg.Pool({connectionString:url.toString()}),schema='survey_qa_'+crypto.randomBytes(6).toString('hex'),root=await fs.mkdtemp(path.join(os.tmpdir(),'survey-qa-'));
+ let pool,server;
+ try {
+  await bootstrap.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');
+  Object.assign(process.env,{DATABASE_URL:url.toString(),APP_ENV:'test',NODE_ENV:'test',PORT:'0',JWT_SECRET:'synthetic-survey-gallery-test-only-secret',INTEGRATION_SECRET_KEY:'synthetic-survey-test-only-encryption-key',GALLERY_V2_ENABLED:'true',GALLERY_STORAGE_PROVIDER:'local',GALLERY_LOCAL_ROOT:root,EMAIL_PROVIDER:'development'});
+  const db=await import('../server/src/db/pool.js');pool=db.pool;const {query,transaction}=db;
+  for(const file of(await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(f=>f.endsWith('.sql')).sort())await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/'+file,import.meta.url),'utf8')));
+  const one=async(sql,args=[])=>(await query(sql,args)).rows[0];
+  const service=await import('../server/src/services/fiesta-survey-service.js'),g=await import('../server/src/services/private-gallery-service.js');
+  const {decryptSecretJson}=await import('../server/src/services/integration-secrets.js');
+  assert.throws(()=>service.assertSurveyImportEnabled({APP_ENV:'production',GALLERY_ENABLED:'true',GALLERY_V2_ENABLED:'true'}),{code:'GALLERY_V2_DISABLED'});
+  assert.throws(()=>service.assertSurveyImportEnabled({APP_ENV:'staging',GALLERY_V2_ENABLED:'false'}),{code:'GALLERY_V2_DISABLED'});
+  const user=await one("INSERT INTO users(name,email,password_hash) VALUES('Survey QA','survey-admin@example.invalid','not-a-login') RETURNING id"),event=await one("INSERT INTO events(event_name,event_type,event_date,status) VALUES('SURVEY QA ONLY','Corporate Event','2035-10-15','CONFIRMED') RETURNING id");
+  const album=await g.createGalleryAlbum(event.id,null,user);
+  await query("UPDATE gallery_albums SET source_provider='FIESTA',external_event_id='SYNTHETIC' WHERE id=$1",[album.id]);
+  const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII=';
+  const photo=await g.uploadGalleryMedia(album.id,{filename:'PHOTO1.png',mime_type:'image/png',base64:png});
+  const input={eventCode:'SYNTHETIC',csv:'Guest,Street,City,State,ZIP,Country,Photo,Postcard,Permission\nSynthetic Guest,100 Synthetic Ave,Chicago,IL,60601,US,PHOTO1.png,Yes,I agree\nSecond Guest,200 Test St,Chicago,IL,60602,US,MISSING.png,No,No',mapping:{name:'Guest',address1:'Street',city:'City',state:'State',postalCode:'ZIP',country:'Country',filename:'Photo',mailingPreference:'Postcard',consent:'Permission'},affirmative:{mailingPreference:['Yes'],consent:['I agree']}};
+  const preview=await service.previewFiestaSurvey(input);assert.equal(preview.rows,2);assert.equal(preview.unconfirmedConsent,1);assert.equal(preview.mailingAuthorized,false);assert.ok(!JSON.stringify(preview).includes('Synthetic Guest'));
+  const result=await service.importFiestaSurvey(album.id,input,user);assert.equal(result.matched,1);assert.equal(result.pending,1);assert.equal(result.reviewRequired,2);assert.equal(result.mailingAuthorized,false);
+  const rows=(await query('SELECT * FROM gallery_survey_responses ORDER BY source_row')).rows;
+  assert.equal(rows[0].media_id,photo.id);assert.equal(rows[0].review_status,'NEEDS_REVIEW');assert.equal(rows[1].media_id,null);assert.ok(rows[1].issues.includes('PHOTO_MATCH_UNRESOLVED'));assert.ok(rows[1].issues.includes('CONSENT_UNCONFIRMED'));
+  assert.ok(!JSON.stringify(rows).includes('Synthetic Guest'));assert.ok(!JSON.stringify(rows).includes('100 Synthetic Ave'));
+  const stored=await one('SELECT * FROM gallery_survey_imports');assert.equal(decryptSecretJson(stored.source_ciphertext).csv,input.csv);assert.equal(decryptSecretJson(rows[0].response_ciphertext).data.address1,'100 Synthetic Ave');
+  assert.equal((await service.importFiestaSurvey(album.id,input,user)).replayed,true);assert.equal((await one('SELECT count(*)::int n FROM gallery_survey_responses')).n,2);
+  await assert.rejects(service.importFiestaSurvey(album.id,{...input,affirmative:{...input.affirmative,consent:['Changed answer']}},user),{code:'SURVEY_MAPPING_CONFLICT'});
+  await assert.rejects(service.importFiestaSurvey(album.id,{...input,eventCode:'ANOTHER_EVENT'},user),{code:'GALLERY_EVENT_CONFLICT'});
+  const audit=await one("SELECT after_json FROM audit_logs WHERE action='gallery_survey_imported'");assert.ok(!JSON.stringify(audit).includes('100 Synthetic Ave'));
+  assert.equal((await one('SELECT status FROM gallery_albums WHERE id=$1',[album.id])).status,'DRAFT');
+  const listing=await service.listSurveyImports(album.id);assert.equal(listing.counts.needs_review,2);assert.ok(!JSON.stringify(listing).includes('Synthetic Guest'));
+  assert.equal((await service.surveyResponseDetail(album.id,rows[0].id)).data.address1,'100 Synthetic Ave');
+  await assert.rejects(service.surveyResponseDetail(crypto.randomUUID(),rows[0].id),{code:'NOT_FOUND'});
+  const otherEvent=await one("INSERT INTO events(event_name,event_type,event_date) VALUES('OTHER SURVEY QA','Corporate Event','2035-10-16') RETURNING id"),other=await g.createGalleryAlbum(otherEvent.id,null,user);
+  const otherPhoto=await g.uploadGalleryMedia(other.id,{filename:'OTHER.png',mime_type:'image/png',base64:png});
+  await assert.rejects(service.reviewSurveyResponse(album.id,rows[0].id,{decision:'CONFIRMED',mediaId:otherPhoto.id,reason:'Cross-event photo must fail'},user),{code:'SURVEY_PHOTO_INVALID'});
+  const late=await g.uploadGalleryMedia(album.id,{filename:'MISSING.png',mime_type:'image/png',base64:png});
+  const reconciled=await one('SELECT * FROM gallery_survey_responses WHERE id=$1',[rows[1].id]);assert.equal(reconciled.media_id,late.id);assert.ok(!reconciled.issues.includes('PHOTO_MATCH_UNRESOLVED'));assert.ok(reconciled.issues.includes('CONSENT_UNCONFIRMED'));assert.equal(reconciled.review_status,'NEEDS_REVIEW');
+  const review=await service.reviewSurveyResponse(album.id,rows[0].id,{decision:'CONFIRMED',mediaId:photo.id,reason:'Verified synthetic session with staff record'},user);assert.equal(review.mailingAuthorized,false);
+  const reviewed=await one('SELECT * FROM gallery_survey_responses WHERE id=$1',[rows[0].id]);assert.equal(reviewed.review_status,'CONFIRMED');assert.ok(!JSON.stringify(reviewed).includes('Verified synthetic session'));
+  assert.equal((await service.surveyResponseDetail(album.id,rows[0].id)).review_reason,'Verified synthetic session with staff record');
+  await service.reviewSurveyResponse(album.id,rows[1].id,{decision:'EXCLUDED',reason:'Guest declined mailing'},user);
+  await service.reconcileSurveyFilename(album.id,'MISSING.png');
+  assert.equal((await one('SELECT media_id FROM gallery_survey_responses WHERE id=$1',[rows[1].id])).media_id,null,'late reconciliation preserves exclusion');
+  // Exercise real HTTP authorization and count-only preview responses.
+  await query("INSERT INTO permissions(key) VALUES('*'),('read:events') ON CONFLICT(key) DO NOTHING");
+  await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[user.id]);
+  const viewer=await one("INSERT INTO users(name,email,password_hash) VALUES('Viewer','survey-viewer@example.invalid','not-a-login') RETURNING id");
+  await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='read:events'",[viewer.id]);
+  delete process.env.APP_ENV;
+  ({server}=await import('../server/src/index.js'));if(!server.listening)await once(server,'listening');
+  const endpoint='http://127.0.0.1:'+server.address().port+'/api/gallery-admin/albums/'+album.id+'/survey/preview';
+  const request=token=>fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(input)});
+  assert.equal((await request()).status,401);
+  assert.equal((await request(jwt.sign({sub:viewer.id},process.env.JWT_SECRET))).status,403);
+  const response=await request(jwt.sign({sub:user.id},process.env.JWT_SECRET));assert.equal(response.status,200);assert.equal((await response.json()).mailingAuthorized,false);
+  const detailEndpoint=endpoint.replace('/preview','/'+rows[0].id);
+  const restricted=await fetch(detailEndpoint,{headers:{Authorization:'Bearer '+jwt.sign({sub:viewer.id},process.env.JWT_SECRET)}});assert.equal(restricted.status,403);
+  await query("UPDATE gallery_albums SET status='PUBLISHED',published_at=now() WHERE id=$1",[album.id]);
+  await assert.rejects(service.importFiestaSurvey(album.id,input,user),{code:'GALLERY_SURVEY_LOCKED'});
+ }finally {
+  if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();
+  await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();await fs.rm(root,{recursive:true,force:true});
+ }
+});

@@ -1,0 +1,17 @@
+.fiesta-survey-workspace{display:grid;gap:20px;min-width:0}
+.fiesta-survey-workspace form,.survey-preview,.survey-review-detail{display:grid;gap:16px}
+.fiesta-survey-workspace details{margin:12px 0}
+.fiesta-survey-workspace summary{cursor:pointer;font-weight:600}
+.survey-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fiesta-survey-workspace label{display:grid;gap:7px;min-width:0}
+.fiesta-survey-workspace input,.fiesta-survey-workspace select,.fiesta-survey-workspace textarea{max-width:100%;min-width:0;width:100%;box-sizing:border-box}
+.survey-response-list{display:grid;gap:12px}
+.survey-response-list article{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid var(--border,#e6ded3);border-radius:12px;padding:16px;min-width:0}
+.survey-response-list article p{margin:6px 0;overflow-wrap:anywhere}
+.survey-response-list article button{flex-shrink:0}
+.survey-pagination,.survey-review-actions,.survey-review-heading{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.survey-review-detail dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.survey-review-detail dl div{min-width:0}.survey-review-detail dt{font-weight:600}.survey-review-detail dd{margin:6px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.survey-preview{padding:18px;border:1px solid var(--border,#e6ded3);border-radius:12px;background:var(--surface-subtle,#faf7f2)}
+.survey-photo-preview{background:var(--taupe,#e8ddd0);border-radius:12px;padding:12px;text-align:center}.survey-photo-preview img{display:block;width:100%;height:280px;object-fit:contain}
+@media(max-width:600px){.survey-field-grid,.survey-review-detail dl{grid-template-columns:minmax(0,1fr)}.survey-response-list article{align-items:stretch;flex-direction:column}.survey-pagination{align-items:stretch;flex-direction:column}.survey-review-actions>button{width:100%}}
