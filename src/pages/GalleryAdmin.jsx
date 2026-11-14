@@ -2,6 +2,9 @@ import DropboxGalleryImport from '../components/DropboxGalleryImport.jsx';
 import FiestaGalleryImport from '../components/FiestaGalleryImport.jsx';
 import "../styles/record-workspace.css";
 import GalleryOverview from "../components/GalleryOverview.jsx";
+import GalleryPostcards from "../components/GalleryPostcards.jsx";
+import "../styles/gallery-postcards.css";
+import Gallery20Review from "../components/Gallery20Review.jsx";
 import GalleryImports from "../components/GalleryImports.jsx";
 import { useEffect, useState, useRef } from "react";
 import {
@@ -335,6 +338,8 @@ export default function GalleryAdmin() {
                 "People",
                 "Access",
                 "Activity",
+                "Postcards",
+                "Match Review",
                 "Settings",
               ].map((t) => (
                 <button
@@ -794,6 +799,8 @@ export default function GalleryAdmin() {
               </div>
             </section>
           )}
+          {tab === "Match Review" && <Gallery20Review albumId={data.album.id} onUpdated={load}/>}
+          {tab === "Postcards" && <GalleryPostcards album={data.album} data={data} />}
           {tab === "Settings" && <FiestaGalleryImport album={data.album} onImported={load}/>}
           {tab === "Settings" && <DropboxGalleryImport key={data.album.id} album={data.album} onImported={load}/>}
           {tab === "Settings" && (

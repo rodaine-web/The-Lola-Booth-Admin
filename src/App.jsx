@@ -1,3 +1,4 @@
+// ppar-client-profile-parity-v1
 import { GALLERY_ENABLED } from "./utils/features.js";
 import DataReview from "./pages/DataReview.jsx";
 import InvoiceLookup from "./pages/InvoiceLookup.jsx";
@@ -20,10 +21,15 @@ const LeadDetail = lazy(() => import("./pages/LeadDetail.jsx"));
 const Contacts = lazy(() => import("./pages/Contacts.jsx"));
 const ContactDetail = lazy(() => import("./pages/ContactDetail.jsx"));
 const Partners = lazy(() => import('./pages/Partners.jsx'));
+const PartnerDirectory = lazy(() => import('./pages/PartnerDirectory.jsx'));
+const PartnerProfile = lazy(() => import('./pages/PartnerProfile.jsx'));
+const PartnerClient360 = lazy(() => import('./pages/PartnerClient360.jsx'));
+const PartnerWorkspacePublic = lazy(() => import('./pages/PartnerWorkspacePublic.jsx'));
 const Clients = lazy(() => import("./pages/Clients.jsx"));
 const Events = lazy(() => import("./pages/Events.jsx"));
 const EventDetail = lazy(() => import("./pages/EventDetail.jsx"));
 const ClientDetail = lazy(() => import("./pages/ClientDetail.jsx"));
+const Client360 = lazy(() => import("./pages/Client360.jsx"));
 const Calendar = lazy(() => import("./pages/Calendar.jsx"));
 const Analytics = lazy(() => import("./pages/Analytics.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
@@ -98,6 +104,7 @@ export default function App() {
       {GALLERY_ENABLED && <><Route path="/gallery" element={<PublicGallery />} />
       <Route path="/gallery/:type/:token" element={<PublicGallery />} /></>}
       <Route path="/delivery/:token" element={<PublicDelivery />} />
+      <Route path="/partner-workspace" element={<PartnerWorkspacePublic />} />
       <Route path="/my-events" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
       <Route path="/my-events/:eventId" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
       <Route path="/scan" element={<PrivateRoute><Scan /></PrivateRoute>} />
@@ -108,10 +115,13 @@ export default function App() {
         <Route path="sales/leads/:id" element={<LeadDetail />} />
         <Route path="sales/contacts" element={<Contacts />} />
         <Route path="sales/contacts/:id" element={<ContactDetail />} />
-        <Route path="sales/partners" element={<Partners />} />
-        <Route path="sales/partners/:id" element={<Partners />} />
+        <Route path="sales/partners" element={<PartnerDirectory />} />
+        <Route path="sales/partners/:id" element={<PartnerProfile />} />
+        <Route path="sales/partners/:id/record" element={<Partners />} />
+        <Route path="sales/partners/:id/workspace" element={<PartnerClient360 />} />
         <Route path="sales/clients" element={<Clients />} />
         <Route path="sales/clients/:id" element={<ClientDetail />} />
+        <Route path="sales/clients/:id/workspace" element={<Client360 />} />
         <Route path="sales/agreements" element={<Agreements />} />
         <Route path="sales/proposals" element={<Proposals />} />
         <Route path="communications/campaigns" element={<Campaigns/>}/>

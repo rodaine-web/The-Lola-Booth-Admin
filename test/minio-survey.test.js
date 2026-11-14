@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {parseFiestaPostalAnswers as parse} from '../shared/fiesta-postal-survey.js';
+const combined='I agree to have my event photograph printed and mailed to the address provided. I understand my mailing information will be used to fulfill this request.';
+const base=[['First Name','Synthetic'],['Last Name','Guest'],['Street Address','100 QA Ave'],['City','Chicago'],['State','IL'],['Zip code','60601'],[combined,'Yes']];
+test('combined request, explicit US context and immutable answers',()=>{const before=JSON.stringify(base),p=parse(base,{defaultCountry:'US'});assert.equal(p.complete,true);assert.equal(p.consent,true);assert.equal(p.countrySource,'ADMIN_US_ONLY_IMPORT');assert.equal(JSON.stringify(base),before);assert.match(p.consentSource,/printed and mailed/);});
+test('strict default requires country',()=>{assert.equal(parse(base).complete,false);assert.ok(parse(base).issues.includes('US_COUNTRY_REQUIRED'));});
+test('explicit No preference wins',()=>{assert.equal(parse([...base,['Mailing preference','No']],{defaultCountry:'US'}).consent,false);});
+test('foreign countries and invalid state remain blocked',()=>{assert.equal(parse([...base,['Country','Canada']],{defaultCountry:'US'}).complete,false);assert.equal(parse(base.map(([q,a])=>[q,q==='State'?'ZZ':a]),{defaultCountry:'US'}).complete,false);});
+test('conflicting permissions remain blocked',()=>{assert.equal(parse([...base,['Physical mail consent','No']],{defaultCountry:'US'}).consent,false);});
