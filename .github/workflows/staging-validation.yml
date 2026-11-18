@@ -82,6 +82,8 @@ jobs:
           node --test --test-concurrency=1
 
       - name: Production build
+        env:
+          VITE_GALLERY_ENABLED: "true"
         run: npm run build
 
       - name: Install browser for customer journey
