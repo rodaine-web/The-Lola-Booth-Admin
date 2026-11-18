@@ -1,7 +1,11 @@
+import {useAuth} from '../context/AuthContext.jsx';
 import DropboxGalleryImport from '../components/DropboxGalleryImport.jsx';
 import FiestaGalleryImport from '../components/FiestaGalleryImport.jsx';
 import "../styles/record-workspace.css";
 import GalleryOverview from "../components/GalleryOverview.jsx";
+import GalleryPostcards from "../components/GalleryPostcards.jsx";
+import "../styles/gallery-postcards.css";
+import Gallery20Review from "../components/Gallery20Review.jsx";
 import GalleryImports from "../components/GalleryImports.jsx";
 import { useEffect, useState, useRef } from "react";
 import {
@@ -37,6 +41,8 @@ const readFile = (file) =>
     r.readAsDataURL(file);
   });
 export default function GalleryAdmin() {
+  const {can}=useAuth();
+  const canWrite=can("write:operations");
   const { id } = useParams(),
     navigate = useNavigate(),
     [params] = useSearchParams();
@@ -128,6 +134,23 @@ export default function GalleryAdmin() {
       setCreating(false);
       navigate(`/operations/galleries/${a.id}`);
     }, "Gallery created.");
+  }
+  async function removeAlbum(album,reset=false) {
+    if(busy||!window.confirm(reset
+      ? `Reset “${album.title}”? All photos, people, access links, activity, test postcards and import settings will be deleted. A new empty draft gallery will be created for the same event. This cannot be undone.`
+      : `Delete “${album.title}” and all its photos, people, access links, activity, test postcards and import settings? This cannot be undone.`))return;
+    setBusy(true);setError('');setNotice('');
+    try {
+      const result=reset?await api.post(`${base}/albums/${album.id}/reset`,{}):await api.delete(`${base}/albums/${album.id}`);
+      setSelected([]);setAccess(null);setTab('Overview');
+      if(reset){navigate(`/operations/galleries/${result.album.id}`);setNotice('Gallery reset. Add the real Fiesta and Dropbox information in Settings.');}
+      else if(id)navigate('/operations/galleries');
+      else {await load();setNotice('Album deleted.');}
+    }catch(e){setError(e.message);}finally{setBusy(false);}
+  }
+  async function removePhotos(ids) {
+    if(!ids.length||!window.confirm(`Delete ${ids.length} photo${ids.length===1?'':'s'} from this album? Guest access and assignments to these photos will stop. Dropbox imports will pause. This cannot be undone.`))return;
+    await action(async()=>{await api.post(`${base}/albums/${id}/media/delete`,{media_ids:ids});setSelected([]);},'Photos deleted. Dropbox imports paused.');
   }
   async function upload(files) {
     await action(async () => {
@@ -250,11 +273,8 @@ export default function GalleryAdmin() {
       {!id && (
         <div className="album-admin-grid">
           {albums.map((a) => (
-            <Link
-              className="album-admin-card"
-              key={a.id}
-              to={`/operations/galleries/${a.id}`}
-            >
+            <article className="album-admin-card" key={a.id}>
+            <Link to={`/operations/galleries/${a.id}`} style={{color:'inherit',textDecoration:'none',display:'block'}}>
               <div className="album-cover">
                 {a.cover_media_id ? (
                   <GalleryThumbnail id={a.cover_media_id} />
@@ -274,6 +294,8 @@ export default function GalleryAdmin() {
                 </p>
               </div>
             </Link>
+            {canWrite&&<button disabled={busy} onClick={()=>removeAlbum(a)} aria-label={`Delete album ${a.title}`}>Delete album</button>}
+            </article>
           ))}
           {!albums.length && (
             <section className="gallery-empty">
@@ -335,6 +357,8 @@ export default function GalleryAdmin() {
                 "People",
                 "Access",
                 "Activity",
+                "Postcards",
+                "Match Review",
                 "Settings",
               ].map((t) => (
                 <button
@@ -394,6 +418,7 @@ export default function GalleryAdmin() {
                     ? `${selected.length} selected`
                     : "Curate the moments."}
                 </span>
+                {canWrite&&data.media.length>0&&<button disabled={busy} onClick={()=>setSelected(data.media.map(m=>m.id))}>Select all photos</button>}
                 <label className="secondary-action upload-button">
                   <ImagePlus size={16} />
                   {busy ? "Uploading…" : "Upload photos"}
@@ -446,6 +471,7 @@ export default function GalleryAdmin() {
                       {a}
                     </button>
                   ))}
+                  {canWrite&&<button disabled={busy} onClick={()=>removePhotos(selected)}>Delete selected photos</button>}
                   <button onClick={() => setSelected([])}>Clear</button>
                 </div>
               )}
@@ -514,6 +540,7 @@ export default function GalleryAdmin() {
                         >
                           Set cover
                         </button>
+                        {canWrite&&<button disabled={busy} onClick={()=>removePhotos([m.id])} aria-label={`Delete photo ${index+1}`}>Delete photo</button>}
                       </div>
                     </div>
                   </article>
@@ -794,11 +821,14 @@ export default function GalleryAdmin() {
               </div>
             </section>
           )}
+          {tab === "Match Review" && <Gallery20Review albumId={data.album.id} onUpdated={load}/>}
+          {tab === "Postcards" && <GalleryPostcards album={data.album} data={data} />}
           {tab === "Settings" && <FiestaGalleryImport album={data.album} onImported={load}/>}
           {tab === "Settings" && <DropboxGalleryImport key={data.album.id} album={data.album} onImported={load}/>}
           {tab === "Settings" && (
             <section className="panel gallery-settings">
               <h2>Gallery settings</h2>
+              {canWrite&&<section aria-label="Delete or reset gallery"><h3>Delete or start over</h3><p>Remove the album, photos, people, access links, gallery activity, test postcards and import settings. Dropbox originals stay in Dropbox. Live mailing records must be resolved first.</p><div className="quick-actions"><button disabled={busy} onClick={()=>removeAlbum(data.album)}>Delete album</button><button disabled={busy} onClick={()=>removeAlbum(data.album,true)}>Reset and recreate gallery</button></div></section>}
               <label>
                 Gallery title
                 <input

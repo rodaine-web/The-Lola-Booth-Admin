@@ -75,6 +75,11 @@ export async function listCreativeApprovals(filters = {}, user = null) {
 
 export async function createCreativeApproval(input = {}, user = {}) {
   return transaction(async () => {
+  const name = input.metadata?.design_name;
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > 120 || /[\u0000-\u001f\u007f]/.test(name)) {
+    throw new AppError('Enter a design name of up to 120 characters.',422,'CREATIVE_NAME_INVALID');
+  }
+  input = {...input, metadata:{...input.metadata, design_name:name.trim()}};
   const clientId = await validateProof(input,user);
   const result = await query(
     `INSERT INTO creative_approvals (
@@ -122,7 +127,7 @@ export async function createApprovalRevision(id, input = {}, user = {}) {
     if (!input.proof_document_id && !input.proof_url) throw new AppError("Upload or select the new proof before creating a revision.",422,"APPROVAL_PROOF_REQUIRED");
     const nextVersion = Number(approval.version || 1) + 1;
     await query("UPDATE event_planning SET status='CREATIVE_IN_PROGRESS',updated_at=now() WHERE event_id=$1 AND submitted_at IS NOT NULL",[approval.event_id]);
-    const approvalSnapshot = snapshot({ ...approval, ...input, version: nextVersion });
+    const approvalSnapshot = snapshot({ ...approval, ...input, metadata: approval.metadata || {}, version: nextVersion });
     const updated = await client.query(
       `UPDATE creative_approvals
        SET version=$1, status='DRAFT', proof_document_id=$2, proof_url=$3, revision_notes=$4,
@@ -182,7 +187,7 @@ export async function publicCreativeApproval(token) {
       await recordActivity({ entityType: "event", entityId: approval.event_id, action: "approval_viewed", summary: `Creative approval version ${approval.version} viewed` });
       approval.status = "VIEWED";
     }
-    return { approval: publicCreativeView(approval) };
+    return { approval: {...publicCreativeView(approval),design_name:approval.metadata?.design_name || null} };
   });
 }
 
@@ -208,7 +213,7 @@ export async function respondToCreativeApproval(token, input = {}, req = {header
     await query("UPDATE event_planning SET status=$1,updated_at=now() WHERE event_id=$2 AND submitted_at IS NOT NULL",[status==='APPROVED'?'CLIENT_REVIEW':'CHANGES_REQUESTED',approval.event_id]);
     if(status==='APPROVED')await query("UPDATE event_planning SET status='APPROVED',updated_at=now() WHERE event_id=$1 AND submitted_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM creative_approvals WHERE event_id=$1 AND deleted_at IS NULL AND status NOT IN ('APPROVED','REVOKED','CANCELLED','SUPERSEDED'))",[approval.event_id]);
     await createNotification({roleTarget:"EVENT_MANAGER",category:"EVENTS",title:status==="APPROVED"?"Creative approved":"Creative changes requested",body:`Version ${input.version}: ${response.notes || "Approved for production"}`,entityType:"event",entityId:approval.event_id,actionUrl:`/events/events/${approval.event_id}`,metadata:{approvalId:approval.id,version:input.version}});
-    return {approval:publicCreativeView(updated)};
+    return {approval:{...publicCreativeView(updated),design_name:updated.metadata?.design_name || null}};
   });
 }
 
@@ -234,4 +239,26 @@ export async function revokeCreativeApproval(id,req){
   await writeAudit({req,action:'approval_access_revoked',entity:'creative_approval',entityId:id,after:{version:approval.version}});
   return {revoked:true};
  });
+}
+
+// Changing a label does not create a new artwork revision, revoke a link,
+// or change existing approval decisions. Historical revision snapshots remain intact.
+export async function renameCreativeApproval(id,input={},req={}) {
+  const name=input.design_name;
+  if(typeof name!=="string"||!name.trim()||name.trim().length>120||/[\u0000-\u001f\u007f]/.test(name))
+    throw new AppError("Enter a design name of up to 120 characters.",422,"CREATIVE_NAME_INVALID");
+  return transaction(async(client)=>{
+    const original=(await client.query("SELECT id,event_id,metadata,version,status FROM creative_approvals WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",[id])).rows[0];
+    if(!original)throw new AppError("Approval not found.",404,"APPROVAL_NOT_FOUND");
+    if(!req.user||!await userCanAccessEvent(req.user,original.event_id))
+      throw new AppError("You do not have access to this event.",403,"FORBIDDEN");
+    const previous=original.metadata?.design_name||null;
+    const next=name.trim();
+    if(previous===next)return {...original,unchanged:true};
+    const updated=(await client.query(
+      "UPDATE creative_approvals SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{design_name}',to_jsonb($2::text),true),updated_at=now() WHERE id=$1 RETURNING id,event_id,metadata,version,status",
+      [id,next])).rows[0];
+    await writeAudit({req,action:"creative_design_renamed",entity:"creative_approval",entityId:id,before:{design_name:previous},after:{design_name:next}});
+    return updated;
+  });
 }

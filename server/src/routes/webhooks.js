@@ -1,3 +1,5 @@
+import {receiveLiveLobEvent} from '../services/gallery-live-mailing-service.js';
+import {receiveLobEvent} from '../services/gallery-mailing-service.js';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import {receiveExternalWebhook,validateMailchimpSecret} from '../services/external-webhooks-service.js';
@@ -8,6 +10,8 @@ import { handlePaypalWebhook, handleStripeWebhook } from "../services/payment-se
 import { processProviderWebhook } from "../services/social-lead-service.js";
 
 export const webhookRouter = Router();
+webhookRouter.post('/lob/live',asyncHandler(async(req,res)=>res.json(await receiveLiveLobEvent(req.body,req.headers))));
+webhookRouter.post('/lob',asyncHandler(async(req,res)=>res.json(await receiveLobEvent(req.body,req.headers))));
 const socialLimit=rateLimit({windowMs:60000,limit:300,standardHeaders:'draft-7',legacyHeaders:false});
 
 webhookRouter.post("/stripe", asyncHandler(async (req, res) => {

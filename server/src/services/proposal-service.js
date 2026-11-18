@@ -42,6 +42,10 @@ export async function nextNumber(client, column, prefixColumn, fallbackPrefix) {
 }
 
 export async function buildProposalSnapshot(input) {
+  const mailingQuantity=Number(input.postcard_mailing_quantity||0);
+  if(!Number.isSafeInteger(mailingQuantity)||mailingQuantity<0||mailingQuantity>10000)throw new AppError('Postcard allowance must be between 0 and 10,000.',422,'POSTCARD_ALLOWANCE_INVALID');
+  const notes=String(input.customer_notes||'').replace(/^Postcard mailing allowance:.*$/gm,'').trim();
+  input={...input,customer_notes:[notes,mailingQuantity?`Postcard mailing allowance: up to ${mailingQuantity} US 4×6 postcards, subject to guest mailing consent, valid addresses and approved artwork.`:''].filter(Boolean).join('\n\n')};
   const catalogQuote=input.pricing_quote_id?(await query('SELECT snapshot FROM pricing_quotes WHERE id=$1 AND expires_at>now()',[input.pricing_quote_id])).rows[0]?.snapshot:null;
   if(input.pricing_quote_id&&!catalogQuote)throw new AppError('This pricing review has expired. Generate and review a fresh quote.',409,'PRICING_QUOTE_EXPIRED');
   const chosenPackageIds=[...(input.selected_experiences||[]).flatMap(item=>(item.packages||[]).map(p=>p.package_id)),...(!input.selected_experiences?.length&&input.package_id?[input.package_id]:[])].filter(Boolean);
@@ -206,6 +210,7 @@ export async function buildProposalSnapshot(input) {
     package: pack,
     experience,
     content: {
+      postcard_mailing:{quantity:mailingQuantity},
       ...(catalogQuote?{catalog_quote:catalogQuote}:{}),
       introduction: input.introduction || s.proposal_default_intro,
       experienceName: input.experience_name || experience.name,

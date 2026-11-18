@@ -17,6 +17,7 @@ test('Dropbox ingestion persists exact mappings and survives retries without pub
   for(const file of(await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(f=>f.endsWith('.sql')).sort())await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/'+file,import.meta.url),'utf8')));
   const g=await import('../server/src/services/private-gallery-service.js'),sync=await import('../server/src/services/dropbox-gallery-service.js'),{importFiestaShares}=await import('../server/src/services/fiesta-gallery-service.js');
   const user=await one("INSERT INTO users(name,email,password_hash) VALUES('Dropbox QA','dropbox-qa@example.invalid','not-a-login') RETURNING id"),viewer=await one("INSERT INTO users(name,email,password_hash) VALUES('Viewer QA','dropbox-viewer@example.invalid','not-a-login') RETURNING id");
+  user.permissions=['*'];user.roles=[];
   await query("INSERT INTO permissions(key) VALUES('*') ON CONFLICT DO NOTHING");await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[user.id]);
   const event=await one("INSERT INTO events(event_name,event_type,event_date) VALUES('DROPBOX QA ONLY','Wedding','2035-10-15') RETURNING id"),album=await g.createGalleryAlbum(event.id,null,user);
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII=','base64');
@@ -30,6 +31,13 @@ test('Dropbox ingestion persists exact mappings and survives retries without pub
   const first=await sync.syncDropboxGallerySource(album.id,{connect,user});assert.equal(first.imported,1);assert.equal(first.messagesSent,0);
   assert.equal((await one('SELECT count(*)::int n FROM gallery_media_people')).n,1);assert.equal((await one('SELECT status FROM gallery_albums WHERE id=$1',[album.id])).status,'DRAFT');
   assert.equal((await sync.syncDropboxGallerySource(album.id,{connect,user})).replayed,1);assert.equal(downloads,1);
+  const alternate=async()=>({...await connect(),folder:async()=>({'.tag':'folder',id:'id:new-folder',path_lower:'/fiesta/new'})});
+  await sync.saveDropboxGallerySource(album.id,{folderPath:'/fiesta/new',enabled:true},user,{connect:alternate});
+  const changed=await one('SELECT folder_id,enabled,cursor_ciphertext FROM gallery_dropbox_sources WHERE album_id=$1',[album.id]);
+  assert.equal(changed.folder_id,'id:new-folder');assert.equal(changed.enabled,false);assert.equal(changed.cursor_ciphertext,null);
+  assert.equal((await one('SELECT count(*)::int n FROM gallery_media WHERE album_id=$1',[album.id])).n,1,'changing folders retains existing photos');
+  await sync.saveDropboxGallerySource(album.id,{folderPath:'/fiesta/qa',enabled:false},user,{connect});
+  await sync.saveDropboxGallerySource(album.id,{folderPath:'/fiesta/qa',enabled:true},user,{connect});
   // Production polling must dispatch eligible sources only with both explicit flags.
   Object.assign(process.env,{APP_ENV:'production',GALLERY_ENABLED:'true'});
   await query("UPDATE gallery_dropbox_sources SET next_sync_at=now()-interval '1 minute' WHERE album_id=$1",[album.id]);

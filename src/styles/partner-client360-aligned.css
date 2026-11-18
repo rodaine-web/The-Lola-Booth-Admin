@@ -1,0 +1,24 @@
+/* Scoped partner presentation reuses the Client 360 design system. */
+.c360-partner-page .c360-content,.c360-partner-page .c360-layout,.c360-partner-page .c360-context-controls{min-width:0}
+.c360-partner-page .p360-contact{font-size:17px;overflow-wrap:anywhere}
+.c360-partner-page .p360-status{font-size:19px}
+.c360-partner-page .p360-event-row{display:flex;align-items:center;justify-content:space-between;gap:15px;width:100%;border:0;border-bottom:1px solid #eee;background:none;text-align:left;padding:15px 4px;color:inherit;text-decoration:none;font:inherit;cursor:pointer}
+.c360-partner-page .p360-event-row>span,.c360-partner-page .p360-event-detail>div:first-child{display:grid;gap:5px;min-width:0}
+.c360-partner-page .p360-event-row strong,.c360-partner-page .p360-event-detail strong{font-size:13px}
+.c360-partner-page .p360-event-row small,.c360-partner-page .p360-event-detail small{font-size:11px;color:#858994}
+.c360-partner-page .p360-event-row>span:last-child{display:flex;align-items:center;gap:8px;white-space:nowrap;color:#997443;font-size:11px}
+.c360-partner-page .p360-action-stack{display:grid;gap:9px}
+.c360-partner-page .p360-action-stack>*{display:flex;align-items:center;gap:10px;padding:14px;border:1px solid #ebe6dd;border-radius:9px;background:#fcfaf7;text-decoration:none;color:#4e5259;font:inherit;font-size:12px;cursor:pointer}
+.c360-partner-page .p360-action-stack>* svg:last-child{margin-left:auto;color:#987343}
+.c360-partner-page .p360-event-detail{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:16px 0;border-bottom:1px solid #eee}
+.c360-partner-page .p360-event-detail>div:last-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.c360-partner-page .p360-event-detail a,.c360-partner-page .p360-event-detail button{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid #e1dbd0;border-radius:8px;background:#fff;color:#805a32;text-decoration:none;font:inherit;font-size:11px;cursor:pointer}
+.c360-partner-page .p360-readonly,.c360-partner-page .p360-notice{display:flex;align-items:center;gap:8px;color:#766846;font-size:12px;line-height:1.5}
+.c360-partner-page .partner-workspace-management{min-width:0;border:1px solid #e6e7e9;border-radius:12px;background:#fff;padding:20px}
+.c360-partner-page .partner-workspace-management .page-heading{padding:0;margin:0 0 16px}
+.c360-partner-page .partner-workspace-management h2{font-size:16px}
+.c360-partner-page .partner-workspace-management .check-row{display:flex;align-items:center;gap:9px;margin-bottom:10px;font-size:12px}
+@media(max-width:690px){.c360-partner-page .p360-event-detail{align-items:flex-start;flex-direction:column}.c360-partner-page .c360-header-actions{flex-wrap:wrap}.c360-partner-page .partner-workspace-management{padding:14px}}
+
+.p360-directory-intro{display:flex;align-items:center;justify-content:space-between;gap:24px;border:1px solid #e8e2d7;border-radius:13px;background:linear-gradient(115deg,#fffefa,#faf5ed);padding:24px;margin:18px 0}.p360-directory-intro h2{font-size:24px;letter-spacing:-.03em;margin:2px 0 7px}.p360-directory-intro p{margin:0;color:#7b7f86;font-size:12px}.p360-directory-stats{display:flex;gap:12px}.p360-directory-stats span{display:grid;gap:5px;min-width:130px;padding:12px 17px;background:#fff;border:1px solid #e9e7e2;border-radius:10px;font-size:11px;color:#7d8087}.p360-directory-stats strong{font-size:21px;color:#232830}
+@media(max-width:690px){.p360-directory-intro{flex-direction:column;align-items:flex-start}.p360-directory-stats{width:100%}.p360-directory-stats span{flex:1;min-width:0}}

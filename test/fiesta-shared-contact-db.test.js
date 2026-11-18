@@ -1,0 +1,44 @@
+import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';import fs from 'node:fs/promises';import pg from 'pg';
+test('reviewed placeholder-contact guests remain distinct on reimport without overriding another guest opt-out',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async()=>{
+ const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['127.0.0.1','localhost'].includes(url.hostname));assert.match(url.pathname,/_qa$/);const bootstrap=new pg.Pool({connectionString:url.toString()}),schema='override_qa_'+crypto.randomBytes(6).toString('hex');let db;
+ try{
+  await bootstrap.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');Object.assign(process.env,{DATABASE_URL:url.toString(),APP_ENV:'test',NODE_ENV:'test',JWT_SECRET:'synthetic-override-only-jwt-secret',INTEGRATION_SECRET_KEY:'synthetic-override-only-encryption-key'});
+  db=await import('../server/src/db/pool.js');const one=async(s,p=[])=>(await db.query(s,p)).rows[0];for(const f of(await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(f=>/^\d{3}_.*\.sql$/.test(f)).sort())await db.transaction(()=>fs.readFile(new URL('../server/migrations/'+f,import.meta.url),'utf8').then(s=>db.query(s)));
+  const user=await one("INSERT INTO users(name,email,password_hash) VALUES('Synthetic override admin','override@example.invalid','not-a-login') RETURNING id");await db.query("INSERT INTO roles(name) VALUES('ADMIN') ON CONFLICT(name) DO NOTHING");await db.query("INSERT INTO user_roles(user_id,role_id) SELECT $1,id FROM roles WHERE name='ADMIN'",[user.id]);
+  const reader=await one("INSERT INTO users(name,email,password_hash) VALUES('Synthetic reader','reader@example.invalid','not-a-login') RETURNING id");
+  const event=await one("INSERT INTO events(event_name,event_type,event_date) VALUES('QA Override','CORPORATE','2035-11-18') RETURNING id"),album=await one("INSERT INTO gallery_albums(event_id,title) VALUES($1,'QA Override') RETURNING id",[event.id]);
+  const pairs=[['First Name','Synthetic'],['Last Name','Guest'],['Street Address','100 QA Ave'],['City','Chicago'],['State','IL'],['Zip Code','60601'],['Mailing preference',''],['Physical mail consent','']];const quote=v=>'"'+v.replaceAll('"','""')+'"';
+  const header=['Shared via','Email Address','Phone Number','Content Link','File Name','Share Time',...pairs.flatMap((_,i)=>[i?'Question '+(i+1):'Question',i?'Answer '+(i+1):'Answer'])];
+  const csv=[header.map(quote).join(','),...[['valid','60601',''],['incomplete','1234',''],['optout','60601','No']].map(([n,zip,no])=>['E-mail','shared@example.invalid','','https://boothpics.com/QA/'+n,n+'.jpeg','2026-11-18 10:00 CST',...pairs.flatMap(([q,a])=>[q,q==='Zip Code'?zip:q==='Physical mail consent'?no:a])].map(quote).join(','))].join('\n');
+  const {importFiestaShares}=await import('../server/src/services/fiesta-gallery-service.js'),{authorizeCurrentFiestaBatch}=await import('./helpers/manual-postal-override.js');
+  await importFiestaShares(album.id,csv,'QA',{...user,roles:['ADMIN'],permissions:['*']},{defaultCountry:'US'});
+  await db.query("INSERT INTO gallery_media(album_id,storage_provider,storage_key,filename,mime_type,size_bytes,checksum) SELECT $1,'local',gen_random_uuid()::text,filename,'image/jpeg',1,'synthetic' FROM fiesta_gallery_shares WHERE album_id=$1",[album.id]);
+  const {reconcileFiestaShares}=await import('../server/src/services/fiesta-gallery-service.js');await reconcileFiestaShares(album.id);
+  const source=await one('SELECT id,source_sha256 FROM gallery_fiesta_survey_batches WHERE album_id=$1 ORDER BY created_at DESC LIMIT 1',[album.id]);const input={sourceBatchId:source.id,sourceSha256:source.source_sha256,reason:'Owner explicitly requested manual authorization for this event.'};
+  await assert.rejects(authorizeCurrentFiestaBatch(album.id,input,reader),{statusCode:403});await assert.rejects(authorizeCurrentFiestaBatch(album.id,{...input,sourceSha256:'0'.repeat(64)},user));
+  await db.query("UPDATE gallery_albums SET status='PUBLISHED',published_at=now() WHERE id=$1",[album.id]);
+  const result=await authorizeCurrentFiestaBatch(album.id,input,user);assert.equal(result.authorized,1);assert.equal(result.held,2);assert.equal(result.explicitOptOuts,1);
+  const recipient=await one('SELECT consent,consent_source FROM gallery_postcard_recipients WHERE album_id=$1',[album.id]);assert.equal(recipient.consent,true);const record=JSON.parse(recipient.consent_source);assert.equal(record.type,'ADMIN_OVERRIDE');assert.equal(record.guestConsentRecorded,false);assert.equal(record.originalGuestAnswers.mailingPreference,null);assert.equal(record.originalGuestAnswers.physicalMailConsent,null);
+  const {decryptSecretJson}=await import('../server/src/services/integration-secrets.js');const preserved=await one('SELECT source_ciphertext FROM gallery_fiesta_survey_batches WHERE id=$1',[source.id]);assert.equal(decryptSecretJson(preserved.source_ciphertext).csv,csv);
+  assert.equal((await one("SELECT count(*)::int n FROM audit_logs WHERE action='gallery_postal_admin_override'")).n,1);
+  const shared='shared@example.invalid',fingerprint=crypto.createHmac('sha256',process.env.INTEGRATION_SECRET_KEY).update(JSON.stringify(['valid.jpeg','EMAIL',shared])).digest('hex');
+  const previous=(await one("SELECT person_id FROM fiesta_gallery_shares WHERE album_id=$1 AND filename='valid.jpeg'",[album.id])).person_id;
+  const reviewed=await one("INSERT INTO gallery_people(album_id,display_name,external_ref) VALUES($1,'Reviewed distinct guest',$2) RETURNING id",[album.id,'fiesta-reviewed:'+fingerprint]);
+  await importFiestaShares(album.id,csv,'QA',{...user,roles:['ADMIN'],permissions:['*']},{defaultCountry:'US'});
+  assert.equal((await one("SELECT person_id FROM gallery_postcard_recipients WHERE album_id=$1 AND filename='valid.jpeg'",[album.id])).person_id,previous,'an unaudited external ref cannot change identity');
+  await db.query("UPDATE fiesta_gallery_shares SET person_id=$3 WHERE album_id=$1 AND person_id=$2 AND filename='valid.jpeg'",[album.id,previous,reviewed.id]);
+  await db.query("UPDATE gallery_media_people SET person_id=$3 WHERE album_id=$1 AND person_id=$2 AND media_id IN(SELECT id FROM gallery_media WHERE album_id=$1 AND filename='valid.jpeg')",[album.id,previous,reviewed.id]);
+  const {writeAudit}=await import('../server/src/services/audit-service.js');
+  await writeAudit({req:{user},action:'fiesta_shared_contact_separated',entity:'gallery_album',entityId:album.id,after:{type:'USER_CONFIRMED_DISTINCT_GUESTS',confirmedBy:user.id,reason:'Owner confirmed these are different guests using a placeholder contact.',records:[{fingerprint,personId:reviewed.id,externalRef:'fiesta-reviewed:'+fingerprint}]}});
+  for(let i=0;i<2;i++)await importFiestaShares(album.id,csv,'QA',{...user,roles:['ADMIN'],permissions:['*']},{defaultCountry:'US'});
+  const assigned=await one("SELECT person_id FROM gallery_postcard_recipients WHERE album_id=$1 AND filename='valid.jpeg'",[album.id]);assert.equal(assigned.person_id,reviewed.id);
+  const latest=(await db.query('SELECT DISTINCT ON(fingerprint) filename,person_id,status,answers_ciphertext FROM gallery_fiesta_survey_rows WHERE album_id=$1 ORDER BY fingerprint,sequence DESC',[album.id])).rows;
+  assert.equal(latest.find(r=>r.filename==='valid.jpeg').person_id,reviewed.id);assert.equal(latest.find(r=>r.filename==='valid.jpeg').status,'IMPORTED');
+  const no=latest.find(r=>r.filename==='optout.jpeg');assert.equal(no.person_id,previous);assert.equal(decryptSecretJson(no.answers_ciphertext).postal.physicalMailConsent,false);
+  assert.equal((await one('SELECT count(*)::int n FROM fiesta_gallery_shares WHERE album_id=$1',[album.id])).n,3,'reimports must not duplicate sharing identities');
+  await db.query("UPDATE gallery_people SET status='ARCHIVED' WHERE id=$1",[reviewed.id]);
+  await importFiestaShares(album.id,csv,'QA',{...user,roles:['ADMIN'],permissions:['*']},{defaultCountry:'US'});
+  const archived=await one("SELECT person_id,status FROM gallery_fiesta_survey_rows WHERE album_id=$1 AND filename='valid.jpeg' ORDER BY sequence DESC LIMIT 1",[album.id]);assert.equal(archived.person_id,reviewed.id);assert.equal(archived.status,'NEEDS_REVIEW','an archived reviewed guest must never fall back to the active placeholder identity');
+  for(const t of ['gallery_postcards','gallery_mailing_jobs','gallery_live_mailing_jobs'])assert.equal((await one(`SELECT count(*)::int n FROM ${t}`)).n,0);
+ }finally{if(db)await db.pool.end();await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();}
+});
