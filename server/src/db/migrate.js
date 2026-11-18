@@ -18,7 +18,10 @@ async function migrate() {
     )
   `);
 
-  const files = (await fs.readdir(migrationsDir)).filter((file) => file.endsWith(".sql")).sort();
+  const files = (await fs.readdir(migrationsDir))
+    // LOLA_AUTO_MIGRATIONS_NUMERIC_ONLY_V1: never apply manual/local-only SQL on staging.
+    .filter((file) => /^\d{3}_[a-zA-Z0-9_-]+\.sql$/.test(file))
+    .sort();
   const applied = await pool.query("SELECT filename FROM schema_migrations");
   const appliedSet = new Set(applied.rows.map((row) => row.filename));
 

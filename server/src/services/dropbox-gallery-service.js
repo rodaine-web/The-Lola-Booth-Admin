@@ -28,11 +28,13 @@ export async function saveDropboxGallerySource(albumId,input,user,{connect=conne
   if(album.source_provider!=='FIESTA'||!album.external_event_id)throw fail('Import the Fiesta sharing CSV before linking its delivery folder.','DROPBOX_FIESTA_MAPPING_REQUIRED');
   const prior=(await query('SELECT * FROM gallery_dropbox_sources WHERE album_id=$1 FOR UPDATE',[albumId])).rows[0];
   if(prior?.lease_until&&new Date(prior.lease_until)>new Date())throw fail('Wait for the running import before changing this folder.','DROPBOX_SYNC_BUSY');
-  if(prior&&(prior.folder_id!==folder.id||prior.account_id!==client.accountId))throw fail('This gallery is already bound to a different Dropbox folder. Review its imports before changing the source.','DROPBOX_FOLDER_CONFLICT');
+  const changed=prior&&(prior.folder_id!==folder.id||prior.account_id!==client.accountId);
   const conflict=(await query('SELECT 1 FROM gallery_dropbox_sources WHERE account_id=$1 AND folder_id=$2 AND album_id<>$3',[client.accountId,folder.id,albumId])).rowCount;
   if(conflict)throw fail('This Dropbox folder is already linked to another event.','DROPBOX_FOLDER_CONFLICT');
   await query(`INSERT INTO gallery_dropbox_sources(album_id,account_id,folder_id,folder_path,created_by,enabled) VALUES($1,$2,$3,$4,$5,$6)
-  ON CONFLICT(album_id) DO UPDATE SET folder_path=EXCLUDED.folder_path,enabled=EXCLUDED.enabled,created_by=EXCLUDED.created_by,next_sync_at=now(),updated_at=now()`,[albumId,client.accountId,folder.id,folder.path_lower,user.id,input.enabled===true]);
+  ON CONFLICT(album_id) DO UPDATE SET folder_path=EXCLUDED.folder_path,folder_id=EXCLUDED.folder_id,account_id=EXCLUDED.account_id,enabled=EXCLUDED.enabled,created_by=EXCLUDED.created_by,
+  cursor_ciphertext=CASE WHEN gallery_dropbox_sources.folder_id<>EXCLUDED.folder_id OR gallery_dropbox_sources.account_id<>EXCLUDED.account_id THEN NULL ELSE gallery_dropbox_sources.cursor_ciphertext END,
+  last_error_code=NULL,next_sync_at=now(),updated_at=now()`,[albumId,client.accountId,folder.id,folder.path_lower,user.id,!changed&&input.enabled===true]);
   await writeAudit({req:{user},action:'gallery_dropbox_source_saved',entity:'gallery_album',entityId:albumId,after:{enabled:input.enabled===true}});
   return dropboxGalleryStatus(albumId);
  });

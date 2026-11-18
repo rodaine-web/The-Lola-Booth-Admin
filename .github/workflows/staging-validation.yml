@@ -87,6 +87,12 @@ jobs:
       - name: Install browser for customer journey
         run: npx playwright install --with-deps chromium
 
+      - name: Gallery controls and address editor desktop/mobile
+        env:
+          GALLERY_CONTROLS_BROWSER_TEST: "true"
+          FIESTA_ADDRESS_BROWSER_TEST: "true"
+        run: node --test --test-concurrency=1 test/gallery-controls-browser.test.js test/fiesta-address-editor-browser.test.js
+
       - name: Contacts desktop and mobile browser qualification
         env:
           V11_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_v11_test

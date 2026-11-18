@@ -2054,3 +2054,6 @@ input:focus,select:focus,textarea:focus{border-color:#c59d61;box-shadow:0 0 0 3p
 .integration-filters {display:flex;gap:10px;flex-wrap:wrap;align-items:end;}
 .integration-filters label {max-width:180px;display:grid;gap:5px;}
 .website-analytics .table-wrap {overflow-x:auto;}
+
+/* Album actions are siblings of the gallery link for keyboard access. */
+.album-admin-card>a>div:last-child{padding:14px}.album-admin-card>button{margin:0 14px 14px;justify-self:start;color:#9b2525}

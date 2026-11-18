@@ -1,3 +1,4 @@
+import {clientMailingView,requestClientMailing} from '../services/gallery-mailing-service.js';
 import {publicCreativeApproval,publicCreativeProof,respondToCreativeApproval} from '../services/creative-approval-service.js';
 import {listCustomerEventFiles,downloadCustomerEventFile} from '../services/customer-event-files-service.js';
 import {publicPlanning,savePlanning,submitPlanning,selectPlanningBackdrop,planningUpload,planningFile} from '../services/event-planning-service.js';
@@ -29,6 +30,8 @@ clientSessionRouter.post('/sign-in',validate(z.object({email:z.string().trim().e
 clientSessionRouter.get('/session',asyncHandler(async(req,res)=>{const session=await authenticateClient(req);res.json({email:session.email,csrfToken:session.csrfToken,events:await clientEvents(session)});}));
 clientSessionRouter.post('/logout',asyncHandler(async(req,res)=>{await endClientSession(req);clearClientCookie(res);res.sendStatus(204);}));
 const event=validate(z.object({eventId:uuid}),'params');
+clientSessionRouter.get('/events/:eventId/postcards',event,asyncHandler(async(req,res)=>res.json(await clientMailingView(await authenticateClient(req),req.params.eventId))));
+clientSessionRouter.post('/events/:eventId/postcards',event,validate(z.object({quantity:z.number().int().min(1).max(10000),notes:z.string().trim().max(2000).default(''),return_address:z.object({name:z.string().trim().min(1).max(120),address_line1:z.string().trim().min(1).max(200),address_line2:z.string().trim().max(200).default(''),address_city:z.string().trim().min(1).max(100),address_state:z.string().trim().length(2),address_zip:z.string().trim().regex(/^\d{5}(-\d{4})?$/),address_country:z.literal('US')}).strict()}).strict()),asyncHandler(async(req,res)=>res.json(await requestClientMailing(await authenticateClient(req,{mutation:true}),req.params.eventId,req.body))));
 clientSessionRouter.get('/events/:eventId/gallery',event,asyncHandler(async(req,res)=>res.json(await customerGalleryView(await authenticateClient(req),req.params.eventId))));
 async function clientCapture(req,res,download){
  const session=await authenticateClient(req,{fresh:download}),media=await customerGalleryMedia(session,req.params.eventId,req.params.mediaId,download);

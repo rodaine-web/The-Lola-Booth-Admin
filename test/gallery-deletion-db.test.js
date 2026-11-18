@@ -1,0 +1,76 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import pg from 'pg';
+
+test('gallery deletion is scoped, transactional, fences imports and permits clean recreation',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL},async()=>{
+ const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['127.0.0.1','localhost'].includes(url.hostname));assert.match(url.pathname,/_qa$/);
+ const bootstrap=new pg.Pool({connectionString:url.toString()}),schema='delete_qa_'+crypto.randomBytes(6).toString('hex');let db;
+ try {
+  await bootstrap.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');
+  Object.assign(process.env,{DATABASE_URL:url.toString(),APP_ENV:'test',NODE_ENV:'test',JWT_SECRET:'synthetic-gallery-deletion-test-secret',INTEGRATION_SECRET_KEY:'synthetic-gallery-deletion-encryption',GALLERY_STORAGE_PROVIDER:'local'});
+  db=await import('../server/src/db/pool.js');const {query,transaction}=db,one=async(sql,args=[])=>(await query(sql,args)).rows[0];
+  for(const file of(await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(f=>f.endsWith('.sql')).sort())await transaction(async()=>query(await fs.readFile(new URL('../server/migrations/'+file,import.meta.url),'utf8')));
+  const {deleteGalleryAlbum,deleteGalleryPhotos}=await import('../server/src/services/gallery-deletion-service.js');
+  const g=await import('../server/src/services/private-gallery-service.js');
+  const user=await one("INSERT INTO users(name,email,password_hash) VALUES('Synthetic','delete@example.invalid','not-a-login') RETURNING id");
+  const event=await one("INSERT INTO events(event_name,event_type,event_date) VALUES('QA MinIO','CORPORATE','2035-11-18') RETURNING id");
+  const otherEvent=await one("INSERT INTO events(event_name,event_type,event_date) VALUES('QA Preserve','CORPORATE','2035-11-18') RETURNING id");
+  const album=await g.createGalleryAlbum(event.id,null,user),other=await g.createGalleryAlbum(otherEvent.id,null,user);
+  const photo=async(album)=>one("INSERT INTO gallery_media(album_id,storage_provider,storage_key,filename,mime_type,size_bytes,checksum) VALUES($1,'local',$2,$3,'image/png',1,'synthetic') RETURNING id",[album,crypto.randomUUID(),crypto.randomUUID()+'.png']);
+  await query("INSERT INTO permissions(key) VALUES('*') ON CONFLICT DO NOTHING");
+  await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[user.id]);
+  const {default:express}=await import('express'),{default:jwt}=await import('jsonwebtoken');
+  const {galleryAdminRouter}=await import('../server/src/routes/gallery.js'),{errorHandler}=await import('../server/src/middleware/error-handler.js');
+  const app=express();app.use(express.json());app.use('/api/gallery-admin',galleryAdminRouter);app.use(errorHandler);
+  const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+  const base=`http://127.0.0.1:${server.address().port}/api/gallery-admin/albums/${other.id}`;
+  const headers={authorization:'Bearer '+jwt.sign({sub:user.id},process.env.JWT_SECRET),'content-type':'application/json'};
+  try{
+   assert.equal((await fetch(base,{method:'DELETE'})).status,401);
+   const reader=await one("INSERT INTO users(name,email,password_hash) VALUES('Reader','reader-delete@example.invalid','not-a-login') RETURNING id");
+   await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='read:events'",[reader.id]);
+   assert.equal((await fetch(base,{method:'DELETE',headers:{authorization:'Bearer '+jwt.sign({sub:reader.id},process.env.JWT_SECRET)}})).status,403);
+   assert.equal((await fetch(base+'/media/delete',{method:'POST',headers,body:JSON.stringify({media_ids:[]})})).status,422);
+   const result=await fetch(base+'/reset',{method:'POST',headers,body:'{}'});assert.equal(result.status,200);
+   other.id=(await result.json()).album.id;
+  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+  const m=await photo(album.id),foreign=await photo(other.id);
+  await query('UPDATE gallery_albums SET cover_media_id=$2 WHERE id=$1',[album.id,m.id]);
+  await query("INSERT INTO gallery_dropbox_sources(album_id,account_id,folder_id,folder_path,created_by,enabled,lease_token,lease_until) VALUES($1,'qa','qa-folder','/qa',$2,true,gen_random_uuid(),now()+interval '5 minutes')",[album.id,user.id]);
+  await query("INSERT INTO gallery_dropbox_imports(album_id,file_id,revision,content_hash,media_id) VALUES($1,'file-qa','rev-qa','hash-qa',$2)",[album.id,m.id]);
+  const person=await g.createGalleryPerson(album.id,'Synthetic');
+  await query('INSERT INTO gallery_media_people(album_id,media_id,person_id) VALUES($1,$2,$3)',[album.id,m.id,person.id]);
+  await query("INSERT INTO gallery_activity(album_id,media_id,action) VALUES($1,$2,'PHOTO_VIEWED')",[album.id,m.id]);
+  await assert.rejects(deleteGalleryPhotos(album.id,[m.id,foreign.id],user),{code:'GALLERY_MEDIA_MISMATCH'});
+  assert.equal((await one('SELECT enabled FROM gallery_dropbox_sources WHERE album_id=$1',[album.id])).enabled,true,'failed deletion rolls back its pause');
+  await deleteGalleryPhotos(album.id,[m.id],user);
+  assert.equal((await one('SELECT media_id FROM gallery_dropbox_imports WHERE album_id=$1',[album.id])).media_id,null,'revision retained to prevent reimport');
+  assert.equal((await one('SELECT cover_media_id FROM gallery_albums WHERE id=$1',[album.id])).cover_media_id,null);
+  assert.equal((await one('SELECT enabled FROM gallery_dropbox_sources WHERE album_id=$1',[album.id])).enabled,false);
+  assert.equal((await one('SELECT count(*)::int n FROM gallery_activity WHERE album_id=$1',[album.id])).n,0);
+  const postcardMedia=await photo(album.id);
+  await query("INSERT INTO gallery_postcards(album_id,person_id,media_id,recipient_ciphertext,recipient_label,consent_at,consent_source,front_url,back_url,created_by) VALUES($1,$2,$3,'{}','Synthetic',now(),'QA','internal','internal',$4)",[album.id,person.id,postcardMedia.id,user.id]);
+  await assert.rejects(deleteGalleryPhotos(album.id,[postcardMedia.id],user),{code:'GALLERY_PHOTO_IN_USE'});
+  const postcard=await one('SELECT id FROM gallery_postcards WHERE album_id=$1',[album.id]);
+  const batch=await one("INSERT INTO gallery_live_mailing_batches(album_id,quantity,cost_limit_cents,unit_cost_cents,price_source,created_by) VALUES($1,1,100,100,'Synthetic QA',$2) RETURNING id",[album.id,user.id]);
+  const live=await one("INSERT INTO gallery_live_mailing_jobs(batch_id,album_id,postcard_id,revision,recipient_label,recipient_key,recipient_ciphertext,sender_ciphertext,sender_hash,proof_hash,test_postcard_id,cost_cents) VALUES($1,$2,$3,1,'QA',$4,'{}','{}',$4,$4,'synthetic-test',100) RETURNING id",[batch.id,album.id,postcard.id,'0'.repeat(64)]);
+  await assert.rejects(deleteGalleryAlbum(album.id,user,{recreate:true}),{code:'GALLERY_LIVE_MAILING_EXISTS'});
+  assert.equal((await one('SELECT id FROM gallery_albums WHERE id=$1',[album.id])).id,album.id);
+  await query("UPDATE gallery_live_mailing_jobs SET status='CANCELLED' WHERE id=$1",[live.id]);
+  const survey=await one("INSERT INTO gallery_fiesta_survey_batches(album_id,event_code,source_sha256,source_ciphertext,created_by) VALUES($1,'QA',$2,'{}',$3) RETURNING id",[album.id,'0'.repeat(64),user.id]);
+  await query("INSERT INTO gallery_fiesta_survey_rows(album_id,batch_id,fingerprint,filename,source_row,person_id,status,answers_ciphertext) VALUES($1,$2,$3,'qa.png',2,$4,'IMPORTED','{}')",[album.id,survey.id,'0'.repeat(64),person.id]);
+  const key=await g.createGalleryKey(album.id,'ALBUM',null,null,user);
+  const result=await deleteGalleryAlbum(album.id,user,{recreate:true});
+  assert.notEqual(result.album.id,album.id);assert.equal(result.album.status,'DRAFT');assert.equal(result.album.event_id,event.id);
+  assert.equal((await one('SELECT count(*)::int n FROM gallery_media WHERE album_id=$1',[result.album.id])).n,0);
+  assert.equal((await one('SELECT count(*)::int n FROM gallery_postcards WHERE album_id=$1',[album.id])).n,0);
+  await assert.rejects(g.resolveGalleryCode(key.code));
+  assert.equal((await one('SELECT id FROM gallery_media WHERE id=$1',[foreign.id])).id,foreign.id);
+  assert.equal((await one('SELECT count(*)::int n FROM events WHERE id=$1',[event.id])).n,1);
+  await deleteGalleryAlbum(result.album.id,user);
+  assert.equal((await g.createGalleryAlbum(event.id,null,user)).event_id,event.id);
+  assert.ok((await one("SELECT count(*)::int n FROM audit_logs WHERE action='gallery_album_reset'")).n>0);
+ }finally{if(db)await db.pool.end();await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();}
+});

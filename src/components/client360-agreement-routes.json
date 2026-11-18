@@ -1,0 +1,13 @@
+{
+  "list": "/contracts?clientId=:id",
+  "listScoped": true,
+  "pdf": "/contracts/:id/pdf",
+  "send": "/contracts/:id/send",
+  "issue": "/contracts/:id/issue",
+  "revise": "/contracts/:id/revise",
+  "revoke": "/contracts/:id/revoke",
+  "extend": "/contracts/:id/signing-extension",
+  "remind": null,
+  "detail": null,
+  "note": "The connected component builds scoped query parameters and uses no unverified GET /contracts/:id or reminder route."
+}
