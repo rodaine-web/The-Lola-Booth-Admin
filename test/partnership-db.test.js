@@ -87,8 +87,9 @@ test('partnership conversion, events, permission gates and isolated gallery deli
     for(const width of [1440,390]){const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
      await page.addInitScript(token=>localStorage.setItem('lola_access_token',token),jwt.sign({sub:owner.id},process.env.JWT_SECRET));
      await page.goto(web+'/sales/partners');await page.getByRole('heading',{name:'Partners',exact:true,level:1}).waitFor();
-     await page.getByRole('button',{name:'New partner',exact:true}).click();await page.getByLabel('Organization / partner name *',{exact:true}).fill('QA Browser Partner '+width);await page.getByRole('button',{name:'Save Changes',exact:true}).click();
+     await page.getByRole('button',{name:'New Partner',exact:true}).click();await page.getByLabel('Organization / partner name *',{exact:true}).fill('QA Browser Partner '+width);await page.getByRole('button',{name:'Save Changes',exact:true}).click();
      await page.getByRole('heading',{name:'QA Browser Partner '+width,exact:true}).waitFor();
+     await page.getByRole('link',{name:'Create partnership event',exact:true}).click();
      await page.getByRole('button',{name:'Create partnership event',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Create partnership event',exact:true});
      await dialog.getByLabel('Event name *',{exact:true}).fill('QA Browser Event '+width);await dialog.getByLabel('Event date *',{exact:true}).fill('2026-10-31');await dialog.getByRole('combobox',{name:'Partnership event status',exact:true}).selectOption('COMPLETED');await dialog.getByRole('button',{name:'Create partnership event',exact:true}).click();
      await page.getByRole('heading',{name:'QA Browser Event '+width,exact:true}).waitFor();await page.getByRole('heading',{name:'Partnership · partners & gallery access',exact:true}).waitFor();
