@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {pool,query,transaction} from '../db/pool.js';
 import {assertDatabaseIdentity} from '../config/database-identity.js';
 import {currentPricingCatalog} from '../services/pricing-catalog-service.js';
@@ -25,9 +26,12 @@ try{
   const req={user:{...owner,permissions:['*']},headers:{'user-agent':'Owner approved production redesign release'}},productionApproval='LOLA_REDESIGN_OWNER_APPROVED_2026_11_10';
   const run=async fn=>fn({apply:true,expectedVersion:(await currentPricingCatalog()).id,req,productionApproval,inventoryIds:inventory});
   await run(updateStagingExperiences);await run(updateStagingAudioRental);await run(updateStagingBusinessPlans);await run(updateStagingWebsiteRedesign);
+  const testimonialBefore=(await query('SELECT count(*)::int n FROM testimonials WHERE deleted_at IS NULL')).rows[0].n;
+  if(!testimonialBefore){const approved=JSON.parse(fs.readFileSync(new URL('../../import-data/lola-approved-testimonials.json',import.meta.url),'utf8'));for(const t of approved)await query("INSERT INTO testimonials(client_name,client_display_name,event_type,quote,rating,status,is_featured) VALUES($1,$1,$2,$3,$4,'PUBLISHED',true)",[t.client_display_name,t.event_type,t.quote,t.rating||5]);}
+
   for(const item of redesignExperienceContent){const old=(await query("SELECT * FROM website_channel_records WHERE channel='STAGING' AND cms_type='experiences' AND payload->>'slug' LIKE $1",['%'+item.key+'%'])).rows[0];if(!old)throw Error('CMS experience missing');await saveStagingRecord('experiences',{entity_key:old.entity_key,payload:{...old.payload,website_booking_image:item.website_booking_image,website_booking_crop:null},status:'PUBLISHED',display_order:old.display_order},req.user,old.id);}
   if(JSON.stringify(await historical())!==JSON.stringify(historicalBefore))throw Error('Historical document verification failed');
-  const after={historicalCounts:Object.fromEntries(Object.entries(historicalBefore).map(([k,v])=>[k,v.count])),version:(await currentPricingCatalog()).id,plans:20,experiences:4,audioInventoryUnits:inventory.length,historicalDocumentsUnchanged:true};
+  const after={historicalCounts:Object.fromEntries(Object.entries(historicalBefore).map(([k,v])=>[k,v.count])),version:(await currentPricingCatalog()).id,plans:20,experiences:4,audioInventoryUnits:inventory.length,testimonialsBefore:testimonialBefore,historicalDocumentsUnchanged:true};
   await writeAudit({req,action,entity:'website_release',entityId:current.id,before:{pricingVersion:current.id},after});if(rehearse){const e=Error('Production rehearsal rollback');e.rehearsalResult=after;throw e;}return after;
  });}catch(e){if(!e.rehearsalResult)throw e;result={rehearsal:true,rolledBack:true,...e.rehearsalResult};}console.log(JSON.stringify(result));
 }finally{await pool.end();}
