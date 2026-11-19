@@ -40,7 +40,7 @@ export async function fulfillmentData(albumId){
   const live=jobs.rows.filter(j=>j.postcard_id===card?.id).at(-1);
   const contact=s?.contact_ciphertext?decryptSecretJson(s.contact_ciphertext).recipient:'';
   const source=s?sources.get(s.batch_id):null,sourceRow=source?.grid[s.source_row-1];
-  const row={id:s?.id||r.id,survey_row_id:s?.id||null,recipient_id:r?.id||null,filename:s?.filename||r.filename,
+  const row={id:s?.id||r.id,survey_row_id:s?.id||null,source_batch_id:s?.batch_id||null,source_row:s?.source_row||null,recipient_id:r?.id||null,filename:s?.filename||r.filename,
    person_id:r?.person_id||s?.person_id,media_id:media?.id||null,width:media?.width,height:media?.height,
    recipient,email:(sourceRow?.[source.email]||'').trim()||(s?.channel==='EMAIL'?contact:''),phone:(sourceRow?.[source.phone]||'').trim()||(s?.channel==='SMS'?contact:''),
    consent:r?.consent??postal?.consent??false,permissionSource:postal?.administrativeAuthorization?'Administrator authorization':'Guest survey',
