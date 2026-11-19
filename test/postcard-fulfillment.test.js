@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
+import {XMLParser,XMLValidator} from 'fast-xml-parser';
 import {postcardResult,fulfillmentSummary} from '../shared/postcard-fulfillment.js';
 import {providerMilestones} from '../shared/postcard-provider-status.js';
 import {buildPostcardWorkbook} from '../server/src/services/postcard-report-workbook.js';
@@ -30,4 +31,21 @@ test('Excel report keeps literal strings, ZIP zeros, dates, links, native chart 
  assert.match(detail,/01234/);assert.match(detail,/HYPERLINK\(&quot;/);assert.doesNotMatch(detail,/<x:f>/);assert.match(detail,/<x:autoFilter ref="A7:R10"/);assert.match(detail,/r="N8" s="8" t="n"/);assert.match(detail,/r="O8" s="8"\//);assert.match(summary,/Synthetic Event &amp; Gallery/);assert.match(summary,/<x:c r="B15" s="6" t="n"><x:v>1<\/x:v>/);assert.match(summary,/Not yet submitted/);
  assert.ok(Object.keys(files).some(p=>/charts\/chart1.xml$/.test(p)));assert.match(strFromU8(files['xl/worksheets/_rels/sheet2.xml.rels']),/gallery\/photo\//);
  const text=Object.keys(files).filter(p=>p.endsWith('.xml')).map(p=>strFromU8(files[p])).join('');assert.doesNotMatch(text,/\b(budget|cost_limit|price_source|margin|unit_cost)\b|Sample\.jpg|PLACEHOLDER/i);
+});
+test('Excel detail sheet preserves all recipient rows and valid worksheet element order',async()=>{
+ const rows=Array.from({length:87},(_,i)=>({filename:`photo-${i}.jpg`,name:`Synthetic recipient ${i}`,address:{address_zip:'01234'},photoUrl:`https://gallery.thelolabooth.com/gallery/photo/synthetic-${i}`,status:i<69?'SUBMITTED':'HELD',reason:i<69?'Accepted for printing.':'Address needs review.'}));
+ const files=unzipSync(await buildPostcardWorkbook({eventName:'Synthetic compatibility check',createdAt:'2035-11-19T12:00:00Z',summary:{images:85,combinations:87,successful:69,held:18},rows}));
+ const detail=strFromU8(files['xl/worksheets/sheet2.xml']);assert.equal(XMLValidator.validate(detail),true);
+ const parser=new XMLParser({ignoreAttributes:false}),sheet=parser.parse(detail)['x:worksheet'];
+ assert.equal(sheet['x:sheetData']['x:row'].length,94);
+ const dataRows=sheet['x:sheetData']['x:row'].slice(7);
+ assert.deepEqual(dataRows.map(r=>r['x:c'][0]['x:is']['x:t']['#text']),rows.map(r=>r.filename));
+ assert.equal(sheet['x:hyperlinks']['x:hyperlink'].length,87);
+ assert.equal(sheet['x:conditionalFormatting']['@_sqref'],'L8:L94');
+ assert.ok(sheet['x:conditionalFormatting']['x:cfRule'].every(r=>r['x:formula']));
+ // ISO/IEC 29500 CT_Worksheet sequence: hyperlinks precede pageMargins,
+ // but follow conditionalFormatting. Lenient XML readers don't enforce this.
+ const ordered=new XMLParser({preserveOrder:true}).parse(detail).find(n=>n['x:worksheet'])['x:worksheet'].map(n=>Object.keys(n)[0]);
+ assert.ok(ordered.indexOf('x:conditionalFormatting')<ordered.indexOf('x:hyperlinks'));
+ assert.ok(ordered.indexOf('x:hyperlinks')<ordered.indexOf('x:pageMargins'));
 });

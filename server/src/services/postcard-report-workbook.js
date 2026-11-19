@@ -36,9 +36,12 @@ export async function buildPostcardWorkbook(report){
  }).join('');
  second=second.replace(/<x:sheetData>[\s\S]*?<\/x:sheetData>/,`<x:sheetData>${header}${body}</x:sheetData>`);
  const last=Math.max(8,report.rows.length+7);
- second=second.replace(/sqref="L8"/g,`sqref="L8:L${last}"`);
+ second=second.replace(/sqref="L8(?::L8)?"/g,`sqref="L8:L${last}"`);
+ second=second.replace(/<x:cfRule([^>]*\btext="([A-Z_]+)"[^>]*)\s*\/>/g,(_,attributes,text)=>`<x:cfRule${attributes}><x:formula>NOT(ISERROR(SEARCH("${text}",L8)))</x:formula></x:cfRule>`);
  second=second.replace('</x:sheetData>',`</x:sheetData><x:autoFilter ref="A7:R${last}"/>`);
- if(links.length){second=second.replace('</x:worksheet>',`<x:hyperlinks>${links.map((l,i)=>`<x:hyperlink ref="B${l.row}" r:id="photo${i}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>`).join('')}</x:hyperlinks></x:worksheet>`);files['xl/worksheets/_rels/sheet2.xml.rels']=strToU8(`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${links.map((l,i)=>`<Relationship Id="photo${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escape(l.url)}" TargetMode="External"/>`).join('')}</Relationships>`);}
+ // SpreadsheetML requires hyperlinks after conditionalFormatting and before
+ // pageMargins. Appending them at the worksheet end makes Excel repair it.
+ if(links.length){second=second.replace('<x:pageMargins',`<x:hyperlinks>${links.map((l,i)=>`<x:hyperlink ref="B${l.row}" r:id="photo${i}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>`).join('')}</x:hyperlinks><x:pageMargins`);files['xl/worksheets/_rels/sheet2.xml.rels']=strToU8(`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${links.map((l,i)=>`<Relationship Id="photo${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escape(l.url)}" TargetMode="External"/>`).join('')}</Relationships>`);}
  files['xl/worksheets/sheet2.xml']=strToU8(second);
  const path=Object.keys(files).find(p=>/\/charts\/chart1.xml$/.test(p));
  let chart=strFromU8(files[path]);
