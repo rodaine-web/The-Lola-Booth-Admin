@@ -19,7 +19,8 @@ export async function buildPostcardWorkbook(report){
  const files=unzipSync(await fs.readFile(new URL('../../templates/postcard-client-report.xlsx',import.meta.url)));
  const summary=report.summary,keys=['images','processedImages','combinations','successful','failed','held','excluded','pending','mailed','delivered'];
  let first=strFromU8(files['xl/worksheets/sheet1.xml']);
- for(let i=0;i<keys.length;i++)first=replaceCell(first,`B${8+i}`,summary[keys[i]]||0,6);
+ for(let i=0;i<keys.length;i++)first=replaceCell(first,`B${8+i}`,keys[i]==='pending'?(summary.pending||0)+(summary.ready||0):summary[keys[i]]||0,6);
+ first=replaceCell(first,'A15','Not yet submitted');
  const generated=serial(report.createdAt);
  first=replaceCell(replaceCell(first,'B4',report.eventName),'B5',generated,8);
  files['xl/worksheets/sheet1.xml']=strToU8(first);
@@ -41,7 +42,7 @@ export async function buildPostcardWorkbook(report){
  files['xl/worksheets/sheet2.xml']=strToU8(second);
  const path=Object.keys(files).find(p=>/\/charts\/chart1.xml$/.test(p));
  let chart=strFromU8(files[path]);
- const names=['Successfully submitted','Failed','Held / needs review','Excluded','Pending production'],counts=keys.slice(3,8).map(key=>summary[key]||0);
+ const names=['Successfully submitted','Failed','Held / needs review','Excluded','Not yet submitted'],counts=keys.slice(3,8).map(key=>key==='pending'?(summary.pending||0)+(summary.ready||0):summary[key]||0);
  chart=chart.replace(/<c:strCache>[\s\S]*?<\/c:strCache>/,`<c:strCache><c:ptCount val="5"/>${names.map((v,i)=>`<c:pt idx="${i}"><c:v>${escape(v)}</c:v></c:pt>`).join('')}</c:strCache>`).replace(/<c:numCache>[\s\S]*?<\/c:numCache>/,`<c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="5"/>${counts.map((v,i)=>`<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}</c:numCache>`);
  const palette=['4C7B3C','B83E32','D2A148','AAA49C','D4B977'];
  chart=chart.replace('</c:tx>','</c:tx>'+palette.map((color,i)=>`<c:dPt><c:idx val="${i}"/><c:spPr><a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:srgbClr val="${color}"/></a:solidFill></c:spPr></c:dPt>`).join(''));
