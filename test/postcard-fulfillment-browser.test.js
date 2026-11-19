@@ -29,7 +29,7 @@ test('guided postcard workspace supports drilldowns, address review, test separa
    }if(url.origin!==origin)return route.abort();return route.continue();
   });
   await page.goto(origin+`/operations/galleries/${album.id}?tab=Postcards`);
-  await page.getByRole('heading',{name:'Postcard Fulfillment',exact:true}).waitFor();await page.getByRole('button',{name:/Ready to prepare/}).click();
+  await page.getByRole('heading',{name:'Postcard Fulfillment',exact:true}).waitFor();await page.getByRole('button',{name:'Upload postcard back',exact:true}).click();await page.getByLabel('Event back artwork',{exact:true}).waitFor();await page.getByRole('navigation',{name:'Postcard workflow'}).getByRole('button',{name:'Overview',exact:false}).click();await page.getByRole('button',{name:/Ready to prepare/}).click();
   await page.getByText('Recipients & Validation',{exact:true}).waitFor();assert.equal(await page.getByLabel('Filter postcard status').inputValue(),'READY');
   await page.getByLabel('Search postcard records').fill('QA_0001.jpg');await page.getByRole('button',{name:'Review',exact:true}).click();
   await page.getByRole('dialog').waitFor();await page.getByRole('button',{name:'Edit mailing address',exact:true}).click();await page.getByLabel('ZIP code',{exact:true}).waitFor();assert.equal(await page.getByLabel('ZIP code',{exact:true}).inputValue(),'01234');await page.getByRole('button',{name:'Cancel address edit'}).click();await page.getByRole('button',{name:'Close recipient details'}).click();
