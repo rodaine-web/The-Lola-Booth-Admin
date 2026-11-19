@@ -4,6 +4,7 @@ import {assertFiestaReviewAccess} from './fiesta-survey-review-service.js';
 import {postcardResult,fulfillmentSummary} from '../../../shared/postcard-fulfillment.js';
 import {mailingHistory} from './gallery-mailing-service.js';
 import {AppError} from '../utils/errors.js';
+import {parseFiestaCsvGrid} from '../../../shared/fiesta-gallery.js';
 
 // No financial fields leave this read model. All private reads require event scope.
 export async function fulfillmentData(albumId){
@@ -20,6 +21,14 @@ export async function fulfillmentData(albumId){
   query('SELECT id,batch_id,created_at FROM gallery_postcard_reports WHERE album_id=$1 ORDER BY created_at DESC LIMIT 30',[albumId]),
   query('SELECT id,batch_id,report_id,status,last_error,created_at,sent_at FROM gallery_postcard_notifications WHERE album_id=$1 ORDER BY created_at DESC LIMIT 30',[albumId])]);
  if(!album.rows[0])throw new AppError('Gallery unavailable.',404,'NOT_FOUND');
+ // Sharing delivery stores one channel. The original row can contain both
+ // contact fields; preserve those details without treating them as identities.
+ const batchIds=[...new Set(surveys.rows.map(s=>s.batch_id))];
+ const sources=new Map();
+ if(batchIds.length){
+  const batches=await query('SELECT id,source_ciphertext FROM gallery_fiesta_survey_batches WHERE album_id=$1 AND id=ANY($2::uuid[])',[albumId,batchIds]);
+  for(const b of batches.rows){const grid=parseFiestaCsvGrid(decryptSecretJson(b.source_ciphertext).csv);const header=grid[0]||[];sources.set(b.id,{grid,email:header.indexOf('Email Address'),phone:header.indexOf('Phone Number')});}
+ }
  const used=new Set(),rows=[];
  function append(s,r){
   if(r)used.add(r.id);
@@ -30,9 +39,10 @@ export async function fulfillmentData(albumId){
   const card=cards.rows.find(p=>p.id===r?.postcard_id);
   const live=jobs.rows.filter(j=>j.postcard_id===card?.id).at(-1);
   const contact=s?.contact_ciphertext?decryptSecretJson(s.contact_ciphertext).recipient:'';
+  const source=s?sources.get(s.batch_id):null,sourceRow=source?.grid[s.source_row-1];
   const row={id:s?.id||r.id,survey_row_id:s?.id||null,recipient_id:r?.id||null,filename:s?.filename||r.filename,
    person_id:r?.person_id||s?.person_id,media_id:media?.id||null,width:media?.width,height:media?.height,
-   recipient,email:s?.channel==='EMAIL'?contact:'',phone:s?.channel==='SMS'?contact:'',
+   recipient,email:(sourceRow?.[source.email]||'').trim()||(s?.channel==='EMAIL'?contact:''),phone:(sourceRow?.[source.phone]||'').trim()||(s?.channel==='SMS'?contact:''),
    consent:r?.consent??postal?.consent??false,permissionSource:postal?.administrativeAuthorization?'Administrator authorization':'Guest survey',
    match_status:r?.status||'UNMATCHED',survey_status:s?.status,issues:s?.issues||[],exclusion_reason:s?.exclusion_reason||null,
    postcard_id:card?.id||null,card_status:card?.status||null,test_render_status:card?.provider_render_status||null,test_provider_status:card?.lob_status||null,test_error:card?.last_error||null,
