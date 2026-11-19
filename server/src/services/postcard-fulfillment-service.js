@@ -17,7 +17,7 @@ export async function fulfillmentData(albumId){
   query('SELECT * FROM gallery_postcard_recipients WHERE album_id=$1',[albumId]),
   query("SELECT id,filename,width,height FROM gallery_media WHERE album_id=$1 AND status='VISIBLE' AND media_type='IMAGE'",[albumId]),
   query('SELECT id,person_id,media_id,status,provider_render_status,lob_status,last_error,revision,proof_approved_at FROM gallery_postcards WHERE album_id=$1',[albumId]),
-  query(`SELECT id,postcard_id,status AS live_status,lob_status AS live_provider_status,provider_render_status,submitted_at,scheduled_release_at,mailed_at,delivered_at,expected_delivery_date,finished_at FROM gallery_live_mailing_jobs WHERE album_id=$1 AND status<>'CANCELLED' ORDER BY created_at`,[albumId]),
+  query(`SELECT id,postcard_id,status AS live_status,lob_status AS live_provider_status,provider_render_status,COALESCE(submitted_at,CASE WHEN status='SUBMITTED' THEN finished_at END) AS submitted_at,scheduled_release_at,mailed_at,delivered_at,expected_delivery_date,finished_at FROM gallery_live_mailing_jobs WHERE album_id=$1 AND status<>'CANCELLED' ORDER BY created_at`,[albumId]),
   query('SELECT id,batch_id,created_at FROM gallery_postcard_reports WHERE album_id=$1 ORDER BY created_at DESC LIMIT 30',[albumId]),
   query('SELECT id,batch_id,report_id,status,last_error,created_at,sent_at FROM gallery_postcard_notifications WHERE album_id=$1 ORDER BY created_at DESC LIMIT 30',[albumId])]);
  if(!album.rows[0])throw new AppError('Gallery unavailable.',404,'NOT_FOUND');
