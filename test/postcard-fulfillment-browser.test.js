@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs/promises';
 import {chromium} from 'playwright';
 test('guided postcard workspace supports drilldowns, address review, test separation and reports on desktop/mobile',{skip:process.env.POSTCARD_BROWSER_TEST!=='true',timeout:90000},async()=>{
@@ -34,7 +35,7 @@ test('guided postcard workspace supports drilldowns, address review, test separa
   await page.getByRole('dialog').waitFor();await page.getByRole('button',{name:'Edit mailing address',exact:true}).click();await page.getByLabel('ZIP code',{exact:true}).waitFor();assert.equal(await page.getByLabel('ZIP code',{exact:true}).inputValue(),'01234');await page.getByRole('button',{name:'Cancel address edit'}).click();await page.getByRole('button',{name:'Close recipient details'}).click();
   await page.getByRole('navigation',{name:'Postcard workflow'}).getByRole('button',{name:'Lob Test',exact:false}).click();await page.getByRole('heading',{name:'Lob Test & Validation',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Push selected to Lob Test'}).isDisabled(),true);
   await page.getByRole('navigation',{name:'Postcard workflow'}).getByRole('button',{name:'Tracking & Reports',exact:false}).click();await page.getByRole('button',{name:'Generate latest report'}).click();await page.getByRole('button',{name:'Download Excel'}).waitFor();assert.ok(mutations.some(p=>p.endsWith('/postcard-reports')));assert.ok(!mutations.some(p=>p.includes('/authorize')));
-  await page.getByRole('navigation',{name:'Postcard workflow'}).getByRole('button',{name:'Overview',exact:false}).click();await page.getByRole('heading',{name:'Recipient readiness'}).waitFor();await page.evaluate(()=>document.fonts.ready);await fs.mkdir('/private/tmp/lola-postcard-redesign/screens',{recursive:true});await page.screenshot({path:`/private/tmp/lola-postcard-redesign/screens/overview-${width}.png`,fullPage:true});
+  await page.getByRole('navigation',{name:'Postcard workflow'}).getByRole('button',{name:'Overview',exact:false}).click();await page.getByRole('heading',{name:'Recipient readiness'}).waitFor();await page.evaluate(()=>{window.scrollTo(0,0);document.activeElement?.blur();return document.fonts.ready;});const evidence=path.join(os.tmpdir(),'lola-postcard-redesign','screens');await fs.mkdir(evidence,{recursive:true});await page.screenshot({path:path.join(evidence,`overview-${width}.png`),fullPage:true});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+2));assert.deepEqual(errors,[]);await page.close();
  }}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
