@@ -1,5 +1,5 @@
 import cors from 'cors';
-import {originAllowed,galleryOriginAllowed} from '../../../shared/environment-isolation.js';
+import {originAllowed,galleryOriginAllowed,galleryOrigins} from '../../../shared/environment-isolation.js';
 import {AppError} from '../utils/errors.js';
 
 export function environmentCors(environment, fallbackOrigins=[]) {
@@ -8,7 +8,8 @@ export function environmentCors(environment, fallbackOrigins=[]) {
     const currentEnvironment=typeof environment==='function'?environment():environment;
     const currentOrigins=typeof fallbackOrigins==='function'?fallbackOrigins():fallbackOrigins;
     const publicGallery=galleryOriginAllowed(currentEnvironment,origin,req.path);
-    if (!publicGallery && !originAllowed(currentEnvironment,origin,currentOrigins))
+    const businessGallery=origin===galleryOrigins[currentEnvironment]&&req.path.startsWith('/api/public/client/');
+    if (!publicGallery && !businessGallery && !originAllowed(currentEnvironment,origin,currentOrigins))
       return callback(new AppError('Requests are not allowed from this origin.',403,'CORS_REJECTED'));
     callback(null,{origin:true,credentials:!publicGallery});
   });

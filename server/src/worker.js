@@ -1,3 +1,6 @@
+import {processLiveMailingQueue} from './services/gallery-live-mailing-service.js';
+import {processPostcardNotifications} from './services/postcard-report-service.js';
+import {processMailingQueue} from './services/gallery-mailing-service.js';
 import {queueEventCloseouts} from './services/event-closeout-service.js';
 import {expireStaleBookingCheckouts} from './services/checkout-lifecycle-service.js';
 import {queueTaskNotifications} from './services/task-notification-service.js';
@@ -46,6 +49,9 @@ async function tick() {
     const campaigns=await processCampaignJobs({limit:25});
     if(campaigns.processed.length)await recordWorkerProcessingResult("automation-worker",{success:campaigns.processed.every(item=>item.status==='SENT_TO_PROVIDER'),processed:campaigns.processed.length,campaignsOnly:true});
     if(!isStaging()||process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true')await queuePeriodicOutlook();
+    await processMailingQueue();
+    await processLiveMailingQueue();
+    await processPostcardNotifications();
     const galleryImports=await processDropboxGallerySources();
     if(galleryImports.length)logger.info({results:galleryImports},'Dropbox gallery import results');
     if(stagingJobsPaused()){if(isStaging()&&process.env.STAGING_EXTERNAL_INTEGRATIONS_ENABLED==='true'){await queueDueExternalMaintenance();await processIntegrationJobs({limit:25,externalOnly:true});}const result=await processStagingQualificationJobs();if(result.processed.length)await recordWorkerProcessingResult("automation-worker",{success:result.processed.every(item=>item.status!=='FAILED'),processed:result.processed.length,qualificationOnly:true});return;}

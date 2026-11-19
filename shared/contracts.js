@@ -2,7 +2,8 @@ export const CONTRACT_CONSENT = 'I have reviewed this agreement and agree to its
 export function contractsEnabled(config = {}) {
   return config.APP_ENV === 'staging'
     || (config.APP_ENV === 'production' && config.V11_CLIENT_WORKFLOW_ENABLED === 'true')
-    || (!config.APP_ENV && config.NODE_ENV !== 'production');
+    || (!config.APP_ENV && config.NODE_ENV !== 'production')
+    || (['development', 'local', 'dev'].includes(config.APP_ENV) && config.NODE_ENV !== 'production');
 }
 export function proposalAllowsAgreement(status) {
   return status === 'ACCEPTED' || status === 'CONVERTED';

@@ -5,6 +5,7 @@ export function proposalEditInput(proposal) {
   return {
     ...proposal,
     ...proposal.pricing_snapshot,
+    postcard_mailing_quantity: content.postcard_mailing?.quantity||0,
     scenario_enabled: Boolean(content.scenario),
     scenario_overrides: content.scenario_overrides || {},
     event_type: content.scenario?.eventType,

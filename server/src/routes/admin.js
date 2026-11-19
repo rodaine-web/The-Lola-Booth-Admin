@@ -115,6 +115,7 @@ import {
   createApprovalRevision,
   createCreativeApproval,
   getCreativeApproval,
+  renameCreativeApproval,
   listCreativeApprovals,
   revokeCreativeApproval,
   sendCreativeApprovalRequest
@@ -178,6 +179,7 @@ import {
   assertCanPublish,
 } from "../services/website-cms-service.js";
 import { getStorageProvider } from "../services/storage-service.js";
+import { client360FileRouter } from "./client360-files.js";
 import { sendEmail } from "../services/email-service.js";
 import { cancelSystemJob, getSystemHealth, listSystemJobs, retrySelectedSystemJobs, retrySystemJob } from "../services/system-health-service.js";
 
@@ -515,6 +517,7 @@ async function pickerRows(search, sql) {
 }
 
 const proposalSchema = z.object({
+  postcard_mailing_quantity:z.coerce.number().int().min(0).max(10000).optional(),
   pricing_quote_id:uuid.optional().nullable(),
   customer_notes:z.string().max(10000).optional().nullable(),
   scenario_enabled:z.boolean().optional(),
@@ -1047,7 +1050,13 @@ adminRouter.get("/clients/:id", requirePermission("read:sales"), asyncHandler(as
     query(`SELECT count(e.id)::int AS total_events, COALESCE(sum(b.total),0)::text AS lifetime_value, COALESCE(sum(b.balance_due),0)::text AS outstanding_balance
       FROM clients c LEFT JOIN events e ON e.client_id=c.id AND e.deleted_at IS NULL AND e.sales_closed_at IS NULL LEFT JOIN bookings b ON b.event_id=e.id AND b.deleted_at IS NULL WHERE c.id=$1`, [req.params.id])
   ]);
-  res.json({ ...client.rows[0], summary: summary.rows[0], events: await Promise.all(events.rows.map(event=>recordJourney(event))), journey: events.rows.length?null:await recordJourney({id:null},req.params.id), proposals: proposals.rows, invoices: invoices.rows.map(normalizeInvoice), payments: payments.rows, tasks: tasks.rows, files: files.rows.map(eventFileSummary), communications: communications.rows, activity: activity.rows });
+  // LOLA_CLIENT_FINANCE_RBAC_V2: sales users do not inherit finance records merely by reading a client.
+  const mayReadFinance = req.user?.permissions?.includes('*') || req.user?.permissions?.includes('read:finance');
+  const publicSummary = mayReadFinance ? summary.rows[0] : {
+    total_events: summary.rows[0]?.total_events ?? events.rowCount,
+    lifetime_value: null, outstanding_balance: null
+  };
+  res.json({ ...client.rows[0], summary: publicSummary, events: await Promise.all(events.rows.map(event=>recordJourney(event))), journey: events.rows.length?null:await recordJourney({id:null},req.params.id), proposals: proposals.rows, invoices: mayReadFinance ? invoices.rows.map(normalizeInvoice) : [], payments: mayReadFinance ? payments.rows : [], tasks: tasks.rows, files: files.rows.map(eventFileSummary), communications: communications.rows, activity: activity.rows });
 }));
 
 adminRouter.get("/clients/:id/duplicates", requirePermission("read:sales"), asyncHandler(async (req, res) => {
@@ -1943,6 +1952,7 @@ adminRouter.get("/equipment", ...listRoute("equipment", ["name", "category", "se
 adminRouter.get("/tasks", ...listRoute("tasks", ["title", "description"], "read:tasks"));
 adminRouter.get("/files", ...listRoute("files", ["filename", "category"], "read:events"));
 adminRouter.get("/galleries", ...listRoute("galleries", ["gallery_name", "gallery_url", "status"], "read:tasks"));
+adminRouter.use("/client360-files", client360FileRouter);
 adminRouter.get("/users", requirePermission("view:users"), asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT u.id, u.name, u.email, u.active, u.first_name, u.last_name, u.phone, u.business_role, u.invitation_status, u.invited_at, u.invitation_delivery_status, u.invitation_delivery_attempted_at, u.invitation_delivery_error_code, u.invitation_delivery_provider, u.invitation_delivery_message_id, u.disabled_at, u.created_at,
@@ -2544,6 +2554,10 @@ adminRouter.post("/creative-approvals", requireAnyPermission("approvals.manage",
 
 adminRouter.get("/creative-approvals/:id", requireAnyPermission("read:events", "approvals.manage", "write:operations"), asyncHandler(async (req, res) => {
   res.json(await getCreativeApproval(req.params.id, req.user));
+}));
+
+adminRouter.patch("/creative-approvals/:id/name", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req,res) => {
+  res.json(await renameCreativeApproval(req.params.id,req.body,req));
 }));
 
 adminRouter.post("/creative-approvals/:id/revisions", requireAnyPermission("approvals.manage", "write:operations"), asyncHandler(async (req, res) => {

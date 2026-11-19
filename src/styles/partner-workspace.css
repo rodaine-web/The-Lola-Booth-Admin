@@ -1,0 +1,9 @@
+/* Additive scoped styles for optional partner workspaces; existing Client 360 styles remain intact. */
+.partner-c360-page{max-width:none;min-width:0}
+.partner-c360-page .c360-row-link{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.partner-c360-page .c360-metric strong{overflow-wrap:anywhere}
+.partner-workspace-management{min-width:0}
+.partner-workspace-management .check-row{display:flex;align-items:center;gap:10px;margin:12px 0;cursor:pointer}
+.partner-workspace-management .button-row{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+.partner-workspace-management .note-text{max-width:800px}
+@media(max-width:700px){.partner-c360-page .c360-row-link{align-items:flex-start}.partner-c360-page .c360-metrics{grid-template-columns:1fr}}

@@ -8,6 +8,7 @@ import {sendEmail} from './email-service.js';
 import {stagingEmailPolicy} from '../config/staging-safety.js';
 import {writeAudit} from './audit-service.js';
 import {contractDeliveryFailure} from '../../../shared/contract-delivery.js';
+import {environments,galleryOrigins} from '../../../shared/environment-isolation.js';
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const hosted=()=>['staging','production'].includes(process.env.APP_ENV);
 export const clientCookieName=()=>hosted()?'__Host-lola_client':'lola_client';
@@ -18,7 +19,8 @@ export const workspaceHandoffEnabled=()=>process.env.BOOKING_WORKSPACE_HANDOFF_E
 const unavailable=()=>new AppError('This sign-in link is unavailable or expired. Request a new link.',401,'CLIENT_ACCESS_UNAVAILABLE');
 export function assertClientOrigin(req){
  const expected=new URL(env.clientOrigin).origin;
- if(req.headers.origin!==expected)throw new AppError('Request a new sign-in link from The Client Workspace.',403,'CLIENT_ORIGIN_REJECTED');
+ const allowed=new Set([expected,...(environments[process.env.APP_ENV]?.origins||[]),galleryOrigins[process.env.APP_ENV]].filter(Boolean));
+ if(!allowed.has(req.headers.origin))throw new AppError('Request a new sign-in link from The Client Workspace.',403,'CLIENT_ORIGIN_REJECTED');
 }
 export function setClientCookie(res,token){res.cookie(clientCookieName(),token,{httpOnly:true,secure:hosted(),sameSite:'strict',path:'/',maxAge:24*60*60*1000});}
 export function clearClientCookie(res){res.clearCookie(clientCookieName(),{httpOnly:true,secure:hosted(),sameSite:'strict',path:'/'});}

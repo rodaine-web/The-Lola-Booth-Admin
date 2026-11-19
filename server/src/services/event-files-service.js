@@ -9,7 +9,7 @@ import {logger} from '../config/logger.js';
 import {validPlanningUpload} from '../../../shared/event-planning.js';
 import {EVENT_FILE_MAX_BYTES,eventFileName,managesEventFiles,customerShareableEventFile} from '../../../shared/event-files.js';
 
-const fields='id,filename,category,mime_type,size_bytes,visibility,uploaded_by,created_at,customer_shared_at';
+const fields='id,client_id,event_id,filename,category,mime_type,size_bytes,visibility,uploaded_by,created_at,customer_shared_at';
 const digest=buffer=>crypto.createHash('sha256').update(buffer).digest('hex');
 const restricted=user=>!managesEventFiles(user);
 export function eventFileSummary(row){
