@@ -73,6 +73,8 @@ export async function prepareBulkPostcards(albumId,artId,recipientIds,user){
  if(rows.rowCount!==recipientIds.length)bad('Some selected recipients are missing.');
  const prepared=[];const errors=[];
  for(const row of rows.rows){
+  const exclusion=await query(`SELECT 1 FROM gallery_postcard_exclusions x JOIN gallery_fiesta_survey_rows s ON s.fingerprint=x.fingerprint AND s.album_id=x.album_id WHERE s.album_id=$1 AND s.filename=$2 AND s.person_id=$3 AND NOT EXISTS(SELECT 1 FROM gallery_fiesta_survey_rows n WHERE n.album_id=s.album_id AND n.fingerprint=s.fingerprint AND n.sequence>s.sequence)`,[albumId,row.filename,row.person_id]);
+  if(exclusion.rowCount){errors.push({id:row.id,reason:'Recipient excluded from mailing.'});continue;}
   if(row.status!=='MATCHED'||!row.consent||row.postcard_id||!row.person_id||!row.media_id){errors.push({id:row.id,reason:'Recipient is not eligible or is already prepared.'});continue;}
   const to=decryptSecretJson(row.recipient_ciphertext);
   if(!to?.name||!to.address_line1||!to.address_city||!to.address_state||!/^\d{5}(-\d{4})?$/.test(to.address_zip||'')||to.address_country!=='US'){errors.push({id:row.id,reason:'Incomplete US mailing address.'});continue;}

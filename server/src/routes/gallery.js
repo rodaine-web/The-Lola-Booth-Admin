@@ -1,4 +1,7 @@
 import {deleteGalleryAlbum,deleteGalleryPhotos} from '../services/gallery-deletion-service.js';
+import {photoLink,photoLinkView,resolvePhotoLink} from '../services/gallery-photo-link-service.js';
+import {fulfillmentWorkspace,excludeRecipient} from '../services/postcard-fulfillment-service.js';
+import {createPostcardReport,adminReportDownload,requestPostcardNotification} from '../services/postcard-report-service.js';
 import {query as scopeQuery} from '../db/pool.js';
 import {assertFiestaReviewAccess} from '../services/fiesta-survey-review-service.js';
 import {fiestaAddressForReview,updateFiestaAddress} from '../services/fiesta-address-correction-service.js';
@@ -50,7 +53,7 @@ const gate = (_req, _res, next) => {
   }
 };
 const parseGrant = (req) =>
-  gallery.resolveGalleryToken(
+  req.params.type==='photo' ? resolvePhotoLink(req.params.token).then(r=>r.grant) : gallery.resolveGalleryToken(
     req.params.type === "a"
       ? "ALBUM"
       : req.params.type === "p"
@@ -100,26 +103,27 @@ galleryPublicRouter.post(
 galleryPublicRouter.get(
   "/access/:type/:token",
   asyncHandler(async (req, res) =>
-    res.json(await gallery.publicGalleryView(await parseGrant(req))),
+    res.json(req.params.type==='photo'?await photoLinkView(req.params.token):await gallery.publicGalleryView(await parseGrant(req))),
   ),
 );
 galleryPublicRouter.get(
   "/access/:type/:token/refresh",
   asyncHandler(async (req, res) =>
-    res.json(await gallery.publicGalleryView(await parseGrant(req), false)),
+    res.json(req.params.type==='photo'?await photoLinkView(req.params.token):await gallery.publicGalleryView(await parseGrant(req), false)),
   ),
 );
 galleryPublicRouter.post(
   "/access/:type/:token/media/:id/download",
-  asyncHandler(async (req, res) =>
+  asyncHandler(async (req, res) => {
+    if(req.params.type==='photo'&&(await resolvePhotoLink(req.params.token)).mediaId!==id.parse(req.params.id))throw unavailable();
     res.json(
       await gallery.mediaTicket(
         await parseGrant(req),
         id.parse(req.params.id),
         "download",
       ),
-    ),
-  ),
+    );
+  }),
 );
 galleryPublicRouter.get(
   "/access/:type/:token/zip",
@@ -130,6 +134,7 @@ galleryPublicRouter.get(
     legacyHeaders: false,
   }),
   asyncHandler(async (req, res) => {
+    if(req.params.type==='photo')throw unavailable();
     const grant = await parseGrant(req);
     if (!downloadAllowed(grant, true)) throw unavailable();
     const media = await gallery.allowedMedia(grant);
@@ -189,6 +194,22 @@ galleryAdminRouter.use(
 const write = requirePermission("write:operations");
 galleryAdminRouter.use('/albums/:id',asyncHandler(async(req,_res,next)=>{await assertFiestaReviewAccess(id.parse(req.params.id),req.user);next();}));
 galleryAdminRouter.use('/events/:eventId',asyncHandler(async(req,_res,next)=>{if(!await mailingEventAccess(req.user,id.parse(req.params.eventId)))throw new AppError('Event access denied.',403,'FORBIDDEN');next();}));
+galleryAdminRouter.get('/albums/:id/postcard-workspace',write,asyncHandler(async(req,res)=>res.json(await fulfillmentWorkspace(id.parse(req.params.id),req.user))));
+galleryAdminRouter.post('/albums/:id/postcard-reports',write,asyncHandler(async(req,res)=>{
+ const report=await createPostcardReport(id.parse(req.params.id),req.user);res.status(201).json({id:report.id,created_at:report.created_at});
+}));
+galleryAdminRouter.post('/albums/:id/postcard-notifications',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await requestPostcardNotification(id.parse(req.params.id),req.user))));
+galleryAdminRouter.get('/albums/:id/postcard-reports/:reportId/download',write,asyncHandler(async(req,res)=>{
+ res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').attachment('Postcard_Mailing_Report.xlsx').send(await adminReportDownload(id.parse(req.params.id),id.parse(req.params.reportId),req.user));
+}));
+galleryAdminRouter.post('/albums/:id/postcard-status/refresh',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{
+ await liveMailing.refreshLiveMailings(id.parse(req.params.id));res.json({refreshed:true});
+}));
+galleryAdminRouter.post('/albums/:id/media/:mediaId/photo-link',write,asyncHandler(async(req,res)=>res.json(await photoLink(id.parse(req.params.id),id.parse(req.params.mediaId)))));
+galleryAdminRouter.put('/albums/:id/postcard-exclusions/:rowId',write,asyncHandler(async(req,res)=>{
+ const input=z.object({reason:z.string().trim().min(10).max(2000),excluded:z.boolean().default(true)}).strict().parse(req.body);
+ res.json(await excludeRecipient(id.parse(req.params.id),id.parse(req.params.rowId),input.reason,req.user,input.excluded));
+}));
 
 galleryAdminRouter.use(['/imports','/analytics'],write);
 for(const [route,table]of [['/media/:id','gallery_media'],['/keys/:id','gallery_access_keys'],['/people/:id','gallery_people']])galleryAdminRouter.use(route,asyncHandler(async(req,_res,next)=>{const row=(await scopeQuery(`SELECT album_id FROM ${table} WHERE id=$1`,[id.parse(req.params.id)])).rows[0];if(!row)throw new AppError('Gallery record unavailable.',404,'NOT_FOUND');await assertFiestaReviewAccess(row.album_id,req.user);next();}));

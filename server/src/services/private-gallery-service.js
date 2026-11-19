@@ -36,7 +36,7 @@ export async function galleryActivity(grant, action, mediaId = null) {
     [grant?.album_id || null, grant?.id || null, mediaId, action],
   );
 }
-async function usable(grant) {
+export async function usableGalleryGrant(grant) {
   if (!grantUsable(grant)) {
     await galleryActivity(
       grant,
@@ -51,6 +51,7 @@ async function usable(grant) {
   }
   return grant;
 }
+const usable = usableGalleryGrant;
 export async function resolveGalleryToken(type, token) {
   assertGalleryEnvironment();
   if (
@@ -118,6 +119,7 @@ export async function publicGalleryView(grant, recordOpen = true) {
     cover: media.find((m) => m.id === grant.cover_media_id)?.id || media[0]?.id,
     media: media.map((m) => ({
       id: m.id,
+      filename: m.filename,
       mimeType: m.mime_type,
       mediaType: m.media_type,
       width: m.width,

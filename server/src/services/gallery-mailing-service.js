@@ -101,6 +101,7 @@ export async function enqueueMailing(albumId,id,user,extraReason=''){
  await assertFiestaReviewAccess(albumId,user);
  return transaction(async()=>{
   await query('SELECT id FROM gallery_albums WHERE id=$1 FOR UPDATE',[albumId]);
+  await assertPostcardSurveyClear(albumId,[id]);
   const scope=await context(albumId),policy=(await query('SELECT * FROM gallery_mailing_policies WHERE album_id=$1',[albumId])).rows[0];
   if(scope.album.event_status==='CANCELLED'||scope.album.event_deleted_at||scope.album.sales_closed_at||['ARCHIVED','EXPIRED'].includes(scope.album.status))fail('Mailing is unavailable for a closed or cancelled event/gallery.');
   if(!policy||policy.proposal_id!==(scope.proposal?.id||null)||policy.version_id!==(scope.proposal?.accepted_version_id||null))fail('Review mailing limits against the current accepted proposal first.');
