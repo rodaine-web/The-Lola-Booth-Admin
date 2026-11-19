@@ -43,6 +43,11 @@ export async function fiestaSurveyEvidence(albumId,batchId,user){
 
 // Private Fiesta postcards cannot be approved while this guest has unresolved survey records.
 export async function assertPostcardSurveyClear(albumId,postcardIds){
+ const excluded=await query(`SELECT 1 FROM gallery_postcards p JOIN (SELECT DISTINCT ON(fingerprint) * FROM gallery_fiesta_survey_rows WHERE album_id=$1 ORDER BY fingerprint,sequence DESC) s ON s.album_id=p.album_id AND s.person_id=p.person_id
+ JOIN gallery_postcard_exclusions x ON x.album_id=s.album_id AND x.fingerprint=s.fingerprint
+ JOIN gallery_media m ON m.id=p.media_id AND m.filename=s.filename
+ WHERE p.album_id=$1 AND p.id=ANY($2::uuid[]) LIMIT 1`,[albumId,postcardIds]);
+ if(excluded.rowCount)throw new AppError('This recipient has been excluded. Review the exclusion before approving or releasing.',409,'POSTCARD_EXCLUDED');
  const held=await query(`SELECT 1 FROM gallery_postcards p WHERE p.album_id=$1 AND p.id=ANY($2::uuid[]) AND p.front_url='gallery-media:'||p.media_id::text AND EXISTS(SELECT 1 FROM (SELECT DISTINCT ON(fingerprint) person_id,status FROM gallery_fiesta_survey_rows WHERE album_id=$1 ORDER BY fingerprint,sequence DESC) s WHERE s.person_id=p.person_id AND s.status IN('NEEDS_REVIEW','NO_CONSENT','PREPARED_LOCKED')) LIMIT 1`,[albumId,postcardIds]);
  if(held.rowCount)throw new AppError('Resolve the guest mailing address or survey review before approving this postcard.',409,'POSTCARD_SURVEY_REVIEW');
 }

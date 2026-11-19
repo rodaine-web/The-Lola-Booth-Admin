@@ -1,4 +1,5 @@
 import {assertPostcardSurveyClear} from './fiesta-survey-review-service.js';
+import {lobProofReady} from '../../../shared/lob-proof-policy.js';
 import {postcardPreparationEnabled} from '../../../shared/postcard-print-policy.js';
 import crypto from 'node:crypto';
 import {query,transaction} from '../db/pool.js';
@@ -100,7 +101,7 @@ export async function refreshTestStatus(albumId,postcardId,user){
  try{response=await fetch(`https://api.lob.com/v1/postcards/${encodeURIComponent(row.lob_postcard_id)}`,{headers:{Authorization:`Basic ${Buffer.from(key+':').toString('base64')}`},signal:controller.signal});}catch{fail('Unable to retrieve Lob test status.',502)}finally{clearTimeout(timer)}
  if(!response.ok)fail(`Lob status request failed (${response.status}).`,502);
  const payload=await response.json();if(payload.id!==row.lob_postcard_id)fail('Unexpected Lob identifier.',502);
- const status=String(payload.status||'unknown').slice(0,80);
+ const status=lobProofReady(payload,postcardId)?'rendered':String(payload.status||'unknown').slice(0,80);
  await query(`UPDATE gallery_postcards SET provider_render_status=$3,lob_status=CASE WHEN provider_updated_at IS NULL THEN $3 ELSE lob_status END,last_status_checked_at=now(),updated_at=now() WHERE album_id=$1 AND id=$2 AND status='SUBMITTED_TEST'`,[albumId,postcardId,status]);
  await (await import('./gallery-mailing-service.js')).mailingHistory(albumId,postcardId,'PROVIDER_STATUS_REFRESHED',user,{status});
  await writeAudit({req:{user},action:'gallery_postcard_test_status_refreshed',entity:'gallery_album',entityId:albumId,after:{postcardId,lob_status:status}});

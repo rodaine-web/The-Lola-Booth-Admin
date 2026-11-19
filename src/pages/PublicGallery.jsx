@@ -66,7 +66,7 @@ export default function PublicGallery() {
   const load = () => {
     setError("");
     request(access)
-      .then(setData)
+      .then(value=>{setData(value);if(type==='photo')setActive(0);})
       .catch((e) => setError(e.message));
   };
   useEffect(() => {
@@ -186,6 +186,7 @@ export default function PublicGallery() {
             <br />A Gallery QR opens your photos directly.
           </p>
         </div>
+        <a href="/client">Business client sign in</a>
         <footer>GOOD PEOPLE. BETTER PHOTOS.</footer>
       </main>
     );
@@ -352,10 +353,12 @@ export default function PublicGallery() {
           </button>
           <footer>
             <span>
+              {type==='photo'&&selected.filename?selected.filename+' · ':''}
               {String(active + 1).padStart(2, "0")} /{" "}
               {String(data.media.length).padStart(2, "0")}
             </span>
             <div>
+              {type==='photo'&&<button onClick={async()=>{try{await navigator.clipboard.writeText(window.location.href);}catch{setError('Copy the photo URL from your browser address bar.');}}}>Copy Photo Link</button>}
               <button
                 aria-label="Favorite this photo"
                 aria-pressed={favorites.has(selected.id)}

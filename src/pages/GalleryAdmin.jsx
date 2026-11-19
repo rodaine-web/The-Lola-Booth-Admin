@@ -48,7 +48,7 @@ export default function GalleryAdmin() {
     [params] = useSearchParams();
   const [albums, setAlbums] = useState([]),
     [data, setData] = useState(null),
-    [tab, setTab] = useState("Overview"),
+    [tab, setTab] = useState(params.get('tab')==='Postcards'?'Postcards':'Overview'),
     [selected, setSelected] = useState([]),
     [person, setPerson] = useState(""),
     [error, setError] = useState(""),
@@ -500,6 +500,7 @@ export default function GalleryAdmin() {
                     </div>
                     <div className="admin-photo-meta">
                       <span>Photo {String(index + 1).padStart(3, "0")}</span>
+                      {canWrite&&m.mime_type.startsWith('image/')&&<button disabled={busy} onClick={()=>action(async()=>{const result=await api.post(`${base}/albums/${id}/media/${m.id}/photo-link`,{});await navigator.clipboard.writeText(result.url);},'Secure photo link copied. Gallery access rules still apply.')}>Copy Photo Link</button>}
                       <StatusBadge status={m.status} />
                       <small>
                         {m.mime_type.split("/")[1].toUpperCase()} ·{" "}
@@ -822,7 +823,7 @@ export default function GalleryAdmin() {
             </section>
           )}
           {tab === "Match Review" && <Gallery20Review albumId={data.album.id} onUpdated={load}/>}
-          {tab === "Postcards" && <GalleryPostcards album={data.album} data={data} />}
+          {tab === "Postcards" && <GalleryPostcards key={data.album.id} album={data.album} data={data} />}
           {tab === "Settings" && <FiestaGalleryImport album={data.album} onImported={load}/>}
           {tab === "Settings" && <DropboxGalleryImport key={data.album.id} album={data.album} onImported={load}/>}
           {tab === "Settings" && (

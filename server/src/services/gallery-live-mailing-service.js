@@ -1,10 +1,11 @@
 import {lobProofReady} from '../../../shared/lob-proof-policy.js';
+import {providerMilestones} from '../../../shared/postcard-provider-status.js';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
 import {query,transaction} from '../db/pool.js';
 import {env} from '../config/env.js';
 import {AppError} from '../utils/errors.js';
-import {assertFiestaReviewAccess} from './fiesta-survey-review-service.js';
+import {assertFiestaReviewAccess,assertPostcardSurveyClear} from './fiesta-survey-review-service.js';
 import {encryptSecretJson,decryptSecretJson} from './integration-secrets.js';
 import {renderPostcardProof} from './lob-print-ready-service.js';
 import {mailingHistory} from './gallery-mailing-service.js';
@@ -19,6 +20,7 @@ async function scope(albumId){
  return {album,proposal};
 }
 async function freshProof(albumId,postcardId){
+ await assertPostcardSurveyClear(albumId,[postcardId]);
  const proof=await renderPostcardProof(albumId,postcardId),p=proof.postcard;
  if(p.status!=='SUBMITTED_TEST'||p.provider_render_status!=='rendered'||!p.lob_postcard_id||!p.proof_approved_at||p.proof_hash!==proof.hash)fail('Only successfully rendered, unchanged and reviewed test postcards can enter a live batch.');
  const survey=await query(`SELECT 1 FROM (SELECT DISTINCT ON(fingerprint) person_id,status FROM gallery_fiesta_survey_rows WHERE album_id=$1 ORDER BY fingerprint,sequence DESC) r WHERE person_id=$2 AND status IN('NEEDS_REVIEW','NO_CONSENT','PREPARED_LOCKED')`,[albumId,p.person_id]);
@@ -130,6 +132,8 @@ export async function processLiveMailingQueue({limit=5,transport=fetch,batchId=n
    const value=await response.json().catch(()=>({}));
    if(!response.ok||!/^psc_[A-Za-z0-9]+$/.test(value.id||''))fail('Provider did not confirm creation. Inspect Lob before any retry.');
    await query("UPDATE gallery_live_mailing_jobs SET status='SUBMITTED',lob_postcard_id=$2,lob_status=$3,provider_render_status=$3,finished_at=now(),last_error=NULL WHERE id=$1",[job.id,value.id,String(value.status||'processed')]);
+   await query('UPDATE gallery_live_mailing_jobs SET submitted_at=now() WHERE id=$1',[job.id]);
+   await saveLiveMilestones(job.id,value);
    await mailingHistory(job.album_id,job.postcard_id,'LIVE_PROVIDER_ACCEPTED',null,{jobId:job.id,batchId:job.batch_id,lobId:value.id});results.push({id:job.id,status:'SUBMITTED'});
   }catch{
    await query("UPDATE gallery_live_mailing_jobs SET status='NEEDS_REVIEW',last_error='Live submission not confirmed. Reconcile Lob history before retrying.',finished_at=now() WHERE id=$1",[job.id]);
@@ -152,16 +156,24 @@ export async function receiveLiveLobEvent(raw,headers){
 export async function applyLiveLobEvents(){
  await transaction(async()=>{
   const rows=(await query('SELECT e.*,j.id AS job_id,j.album_id,j.postcard_id FROM gallery_live_lob_events e JOIN gallery_live_mailing_jobs j ON j.lob_postcard_id=e.postcard_reference WHERE e.processed_at IS NULL ORDER BY e.provider_created_at,e.event_id FOR UPDATE OF e SKIP LOCKED LIMIT 100')).rows;
-  for(const e of rows){await query('UPDATE gallery_live_mailing_jobs SET lob_status=$2,provider_updated_at=$3 WHERE id=$1 AND (provider_updated_at IS NULL OR provider_updated_at<=$3)',[e.job_id,e.event_type.slice(9),e.provider_created_at]);await query('UPDATE gallery_live_lob_events SET processed_at=now() WHERE event_id=$1',[e.event_id]);await mailingHistory(e.album_id,e.postcard_id,'LIVE_LOB_'+e.event_type.toUpperCase(),null,{jobId:e.job_id,eventId:e.event_id});}
+  for(const e of rows){await query('UPDATE gallery_live_mailing_jobs SET lob_status=$2,provider_updated_at=$3 WHERE id=$1 AND (provider_updated_at IS NULL OR provider_updated_at<=$3)',[e.job_id,e.event_type.slice(9),e.provider_created_at]);const event=decryptSecretJson(e.payload_ciphertext);await saveLiveMilestones(e.job_id,event.body||{},event);await query('UPDATE gallery_live_lob_events SET processed_at=now() WHERE event_id=$1',[e.event_id]);await mailingHistory(e.album_id,e.postcard_id,'LIVE_LOB_'+e.event_type.toUpperCase(),null,{jobId:e.job_id,eventId:e.event_id});}
  });
 }
-export async function refreshLiveMailings(){
- if(!enabled('POLLING'))return;
- const jobs=(await query("SELECT id,lob_postcard_id FROM gallery_live_mailing_jobs WHERE status='SUBMITTED' AND (last_status_checked_at IS NULL OR last_status_checked_at<now()-interval '2 minutes') ORDER BY created_at LIMIT 25")).rows;
+export async function refreshLiveMailings(albumId=null){
+ if(process.env.APP_ENV!=='production'||!process.env.LOB_LIVE_API_KEY?.startsWith('live_'))return;
+ const jobs=(await query("SELECT id,lob_postcard_id FROM gallery_live_mailing_jobs WHERE status='SUBMITTED' AND ($1::uuid IS NULL OR album_id=$1) AND (last_status_checked_at IS NULL OR last_status_checked_at<now()-interval '2 minutes') ORDER BY last_status_checked_at NULLS FIRST,created_at LIMIT 25",[albumId])).rows;
  for(const job of jobs){await query('UPDATE gallery_live_mailing_jobs SET last_status_checked_at=now() WHERE id=$1',[job.id]);try{
   const response=await fetch('https://api.lob.com/v1/postcards/'+job.lob_postcard_id,{headers:{Authorization:'Basic '+Buffer.from(process.env.LOB_LIVE_API_KEY+':').toString('base64')},signal:AbortSignal.timeout(15000)});if(!response.ok)continue;const value=await response.json();if(value.id!==job.lob_postcard_id)continue;
   await query('UPDATE gallery_live_mailing_jobs SET provider_render_status=$2,lob_status=CASE WHEN provider_updated_at IS NULL THEN $2 ELSE lob_status END WHERE id=$1',[job.id,String(value.status||'processed')]);
+  await saveLiveMilestones(job.id,value);
  }catch{/* A status polling failure never resubmits mail. */}}
+}
+
+async function saveLiveMilestones(jobId,value,event=null){
+ const result=providerMilestones(value,event);
+ await query(`UPDATE gallery_live_mailing_jobs SET scheduled_release_at=COALESCE($2,scheduled_release_at),
+ expected_delivery_date=COALESCE($3,expected_delivery_date),mailed_at=COALESCE(mailed_at,$4),delivered_at=COALESCE(delivered_at,$5),
+ lob_status=CASE WHEN $7::timestamptz IS NOT NULL AND provider_updated_at>$7 THEN lob_status WHEN $6 IN('returned_to_sender','rejected','failed','cancelled','canceled') THEN $6 WHEN $5::timestamptz IS NOT NULL THEN 'delivered' WHEN delivered_at IS NOT NULL THEN lob_status ELSE COALESCE($6,lob_status) END WHERE id=$1`,[jobId,result.scheduled,result.expected,result.mailed,result.delivered,result.tracking,result.trackingAt]);
 }
 
 export async function liveBatchTestProof(albumId,postcardId,user){

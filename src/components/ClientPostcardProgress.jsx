@@ -1,0 +1,7 @@
+import {useEffect,useState} from 'react';
+import {Download,Mail,CheckCircle,Image} from 'lucide-react';
+export default function ClientPostcardProgress({eventId,request,onDownload}){
+ const [data,setData]=useState(null),[error,setError]=useState('');
+ useEffect(()=>{let active=true;request(`/events/${eventId}/postcard-reports`).then(r=>active&&setData(r)).catch(e=>active&&setError(e.message));return()=>{active=false;};},[eventId]);
+ return <div className="client-postcard-progress"><div className="client-postcard-metrics">{[[Mail,'Submitted',data?.progress.submitted],[Image,'Confirmed mailed',data?.progress.mailed],[CheckCircle,'Confirmed delivered',data?.progress.delivered]].map(([Icon,title,count])=><div key={title}><Icon size={21}/><span>{title}<strong>{count??'—'}</strong></span></div>)}</div><p>Submission confirms acceptance for printing and mailing. Delivery updates appear when the provider supplies them.</p><h3>Mailing reports</h3>{!data&&!error&&<p role="status">Loading postcard progress…</p>}{data?.reports.length===0&&<p>Your downloadable Excel report will appear after production submission.</p>}{data?.reports.map(r=><article className="client-postcard-report" key={r.id}><div><strong>Postcard mailing report</strong><p>{new Date(r.created_at).toLocaleString()}</p></div><button onClick={()=>onDownload(`/postcard-reports/${r.id}/download`,'Postcard_Mailing_Report.xlsx')}><Download size={16}/> Download Excel</button></article>)}{error&&<p role="alert">{error}</p>}<a href="#gallery">View your event gallery →</a></div>;
+}
