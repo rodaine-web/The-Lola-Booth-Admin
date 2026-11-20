@@ -2,7 +2,7 @@ import {businessIncludedCount,businessDiscounts,businessPlanTiers} from '../../.
 import {AppError} from '../utils/errors.js';
 const invalid=message=>{throw new AppError(message,422,'BUSINESS_PLAN_INVALID');};
 export function businessPlanPricing(input,catalog,{admin=false}={}){
- const packages=input.selections.map(s=>catalog.packages.find(p=>p.id===s.packageId));
+ const packages=input.selections.map(s=>catalog.packages.find(p=>p.id===s.packageId)).filter(p=>p?.pricing_profile.experience!=='virtual');
  if(!packages.some(p=>p?.pricing_profile?.businessPlan))return null;
  if(!admin)invalid('Business packages are available through an Admin quotation only.');
  if(packages.some(p=>!p?.active||!p.pricing_profile?.businessPlan))invalid('Choose one business plan for all selected experiences, or use Custom Build.');

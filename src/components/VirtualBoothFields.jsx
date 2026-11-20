@@ -1,0 +1,12 @@
+import {virtualDurations} from '../../shared/virtual-booth.js';
+export default function VirtualBoothFields({value,onChange}){
+ if(!value)return null;
+ const set=(key,v)=>onChange({...value,[key]:v});
+ return <fieldset><legend>Virtual Booth — {virtualDurations[value.duration]}</legend><p>Confirm these allowances and service requirements before issuing a proposal. No Fiesta platform limits are assumed.</p><div className="pricing-grid">
+ {[["participantAllowance","Participant/session allowance"],["activeExperiences","Active branded experiences"],["customTemplates","Custom templates"]].map(([key,label])=><label key={key}>{label}<input type="number" min={key==='customTemplates'?0:1} value={value[key]??''} onChange={e=>set(key,e.target.value===''?null:Number(e.target.value))}/></label>)}
+ {[['branding','Branding requirements'],['creativeWork','Additional creative work'],['support','Support requirements']].map(([key,label])=><label key={key}>{label}<textarea maxLength={2000} value={value[key]} onChange={e=>set(key,e.target.value)}/></label>)}
+ <label>Additional usage charge ($)<input type="number" min="0" step="0.01" value={value.additionalUsageCents==null?'':value.additionalUsageCents/100} onChange={e=>set('additionalUsageCents',e.target.value===''?null:Math.round(Number(e.target.value)*100))}/></label><label>Usage unit<input maxLength={100} value={value.usageUnit} onChange={e=>set('usageUnit',e.target.value)}/></label>
+ <label>Start date<input type="date" value={value.startDate||''} onChange={e=>set('startDate',e.target.value||null)}/></label>
+ {value.duration==='MONTHLY'&&<><label>One-time setup fee ($)<input type="number" min="0" step="0.01" value={value.setupFeeCents/100} onChange={e=>set('setupFeeCents',Math.round(Number(e.target.value)*100))}/></label><label>Minimum commitment (months)<input type="number" min="1" value={value.minimumMonths} onChange={e=>set('minimumMonths',Number(e.target.value))}/></label><label>Renewal date<input type="date" value={value.renewalDate||''} onChange={e=>set('renewalDate',e.target.value||null)}/></label><label><input type="checkbox" checked={value.minimumIsProposed} onChange={e=>set('minimumIsProposed',e.target.checked)}/>Minimum commitment is proposed; confirm in the contract</label><p>Monthly recurring service terms are recorded in the proposal. This catalog does not start billing or create a subscription.</p></>}
+ </div></fieldset>;
+}
