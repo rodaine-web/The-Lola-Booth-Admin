@@ -1,6 +1,6 @@
 // Primary website order is separate from the standalone Audio Guest Book rental.
 export const primaryExperienceKeys = ['glam', '360', 'mirror', 'vogue'];
-export const experienceNames = {glam:'The Lola Glam', '360':'The Lola 360', mirror:'The Lola Magic Mirror', vogue:'The Lola Vogue', audio:'Audio Guest Book'};
+export const experienceNames = {glam:'The Lola Glam', '360':'The Lola 360', mirror:'The Lola Magic Mirror', vogue:'The Lola Vogue', virtual:'The Lola Virtual Booth', audio:'Audio Guest Book'};
 export const printableExperiences = ['glam', 'mirror', 'vogue'];
 export const celebrationPrices = {glam:[599,899,1499], '360':[699,1099,1799], mirror:[799,1199,1999], vogue:[899,1399,2299]};
 export function celebrationFeatures(key,index) {

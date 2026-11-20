@@ -88,7 +88,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
     for(const width of [1440,390]){
      const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
      await page.addInitScript(token=>{if(window.top===window)localStorage.setItem('lola_access_token',token);},jwt.sign({sub:owner.id},process.env.JWT_SECRET));
-     await page.goto(web+'/content/pricing');await page.getByRole('heading',{name:'Pricing & travel',exact:true}).waitFor();
+     await page.goto(web+'/content/pricing');await page.getByRole('heading',{name:'Pricing & catalog',exact:true}).waitFor();
      await page.getByLabel('Dispatch location *',{exact:true}).waitFor();assert.equal(await page.getByLabel('Dispatch location *',{exact:true}).inputValue(),'Downtown Chicago');
      await page.getByLabel('Pricing catalog',{exact:true}).selectOption('PROFESSIONAL');assert.equal(await page.getByRole('heading',{name:'Package inclusions',exact:true}).locator('..').locator('tbody tr').count(),12);
      await page.getByLabel('Pricing catalog',{exact:true}).selectOption('STANDARD');await page.getByRole('button',{name:'Edit inclusions',exact:true}).first().click();
