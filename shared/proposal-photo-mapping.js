@@ -1,3 +1,4 @@
+import {isCorporateEvent} from './proposal-imagery.js';
 // Reviewed supplied photography. Order: hero, equipment, guest interface, output.
 export const proposalPhotoMapping = {
   glam: [
@@ -26,7 +27,10 @@ export function proposalPhotoKey(name='') {
   return null;
 }
 export const photoSectionTitle = name => `${name} · Experience photos`;
-export function mappedProposalPhotos(experiences,assets,createId) {
+export function mappedProposalPhotos(experiences,assets,createId,eventType='') {
+  // Legacy file-prefix sets have no business-context metadata.
+  // Business composition uses the reviewed professional assets instead.
+  if(isCorporateEvent(eventType))return [];
   return experiences.flatMap(experience=>{
     const mapping=proposalPhotoMapping[proposalPhotoKey(experience.name)];
     if(!mapping)return [];

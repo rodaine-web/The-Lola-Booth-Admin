@@ -6,6 +6,7 @@ export function proposalEditInput(proposal) {
     ...proposal,
     ...proposal.pricing_snapshot,
     postcard_mailing_quantity: content.postcard_mailing?.quantity||0,
+    customer_type:content.scenario?.audience==='BUSINESS'?'BUSINESS':undefined,
     scenario_enabled: Boolean(content.scenario),
     scenario_overrides: content.scenario_overrides || {},
     event_type: content.scenario?.eventType,

@@ -238,12 +238,13 @@ export default function ProposalWizard(){
 
   const previewPayload=useMemo(()=>clean({
     pricing_quote_id:catalogQuote?.selectionKey===quoteSelectionKey?catalogQuote.id:undefined,
+    customer_type:lead?.source_details?.customerType||catalogQuote?.customerType,
     scenario_enabled:true,scenario_overrides:overrides,
     client_details:{first_name:form.first_name,last_name:form.last_name,name:[form.first_name,form.last_name].filter(Boolean).join(' '),email:form.email,phone:form.phone,company:form.company},
     event_type:form.event_type,event_details:{event_name:eventTitle(),event_type:actualEventType(),event_date:form.event_date,start_time:form.start_time,end_time:form.end_time,guest_count:form.guest_count,venue_name:form.venue_name,venue_address:form.venue_address,city:form.city,state:form.state,zip:form.zip},
     experience_id:selectedExperiences[0]?.experience_id||null,package_id:selectedExperiences[0]?.packages?.[0]?.package_id||null,
     selected_experiences:selectedExperiences,addons:selectedAddons,custom_line_items:customLines,
-    visual_sections:mappedProposalPhotos(selectedExperiences,photoAssets,()=>crypto.randomUUID()),
+    visual_sections:mappedProposalPhotos(selectedExperiences,photoAssets,()=>crypto.randomUUID(),actualEventType()),
     proposal_title:form.proposal_title||eventTitle(),proposal_type:proposalType(actualEventType()),
     customer_notes:form.customer_notes,notes:form.notes||null,discount:Number(form.discount||0),travel:Number(form.travel||0),other_fees:Number(form.other_fees||0),
     tax_rate:form.tax_rate===''?undefined:Number(form.tax_rate),deposit_type:form.deposit_type,
@@ -348,7 +349,7 @@ export default function ProposalWizard(){
       </section>)}
       </div>
       {!!addons.length&&<section className="wizard-section"><h3>Add-ons <small>Optional</small></h3><div className="addon-choice-grid">{addons.map(item=><label key={item.id}><input type="checkbox" disabled={Boolean(proposalAddonStatus(item,selectedExperiences,packages))} checked={!proposalAddonStatus(item,selectedExperiences,packages)&&selectedAddons.some(entry=>entry.addon_id===item.id)} onChange={()=>chooseAddon(item)}/><span>{item.name}</span><strong>{proposalAddonStatus(item,selectedExperiences,packages)||money(item.price||0)}</strong></label>)}</div></section>}
-      {!!mappedProposalPhotos(selectedExperiences,photoAssets,()=>"preview").length&&<p role="status">Reviewed experience photos will be included in this proposal.</p>}
+      {!!mappedProposalPhotos(selectedExperiences,photoAssets,()=>"preview",actualEventType()).length&&<p role="status">Reviewed experience photos will be included in this proposal.</p>}
       {previewError&&<p role="alert" className="toast error">{previewError}</p>}
       <section className="wizard-pricing-summary">
         <div><span>Selected services</span><strong>{money(pricing.services)}</strong></div>
