@@ -253,10 +253,11 @@ export async function buildProposalSnapshot(input) {
   if (input.scenario_enabled) {
     const template = (await query("SELECT config,version FROM proposal_document_templates WHERE key='scenario_composer' AND active=true")).rows[0];
     if (!template) throw new AppError("Apply the proposal scenario migration before creating a composed proposal.",503,"PROPOSAL_TEMPLATE_UNAVAILABLE");
-    snapshot.content.scenario = composeProposal({input:{...input,proposal_title:snapshot.proposalTitle,proposal_date:snapshot.proposalDate,valid_through:snapshot.validThrough},client:customer,event:ev,experiences:selectedExperiences,pricing:snapshot.pricing,lines,config:template.config,templateVersion:template.version,settings:s});
+    snapshot.content.scenario = composeProposal({input:{...input,customer_type:catalogQuote?.customerType||input.customer_type,proposal_title:snapshot.proposalTitle,proposal_date:snapshot.proposalDate,valid_through:snapshot.validThrough},client:customer,event:ev,experiences:selectedExperiences,pricing:snapshot.pricing,lines,config:template.config,templateVersion:template.version,settings:s});
     snapshot.content.scenario_overrides = input.scenario_overrides || {};
     const scenario=snapshot.content.scenario;
-    for(const item of scenario.experiences) { const slot='experience:'+item.experience_id; if(!scenario.media[slot])scenario.media[slot]=template.config?.experiences?.[item.key]?.media_ids||[]; }
+    // Unscoped global/experience media can belong to a different event audience.
+    // Automatic imagery uses reviewed context-specific assets; retain explicit per-proposal overrides.
     const mediaSections=['cover','event','why',...selectedExperiences.map(item=>'experience:'+item.experience_id)].map(slot=>({id:crypto.randomUUID(),title:slot,kind:'REFERENCE',body:'',media_ids:(scenario.media[slot]|| (slot.startsWith('experience:') ? [] : [...scenario.media.event,...scenario.media.global])).slice(0,4)})).filter(section=>section.media_ids.length);
     snapshot.visualSections = await validateProposalVisuals([...visualSections.filter(section=>!(section.kind==='REFERENCE' && /^(cover|event|why|experience:)/.test(section.title))),...mediaSections]);
     // Freeze approved media together with copy, facts and financials. Later CMS edits cannot change sent documents.

@@ -520,6 +520,7 @@ const proposalSchema = z.object({
   postcard_mailing_quantity:z.coerce.number().int().min(0).max(10000).optional(),
   pricing_quote_id:uuid.optional().nullable(),
   customer_notes:z.string().max(10000).optional().nullable(),
+  customer_type:z.enum(["BUSINESS","INDIVIDUAL"]).optional(),
   scenario_enabled:z.boolean().optional(),
   scenario_overrides:scenarioOverridesSchema.optional(),
   visual_sections: proposalVisualSchema.optional(),
