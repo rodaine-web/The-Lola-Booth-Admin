@@ -64,6 +64,7 @@ test('business plan publication, public privacy, CMS preservation and accepted p
   try{const publicSite=await(await import('../server/src/services/website-cms-service.js')).publicSitePayload();assert.equal(publicSite.channel,'PUBLIC');assert.equal(publicSite.cmsAuthoritative,true);assert.equal(publicSite.experiences.length,4);assert.equal(publicSite.heroSlides.filter(x=>x.page_slug==='home').length,4);assert.ok(publicSite.faqs.some(x=>x.question==='Production preserved FAQ'));assert.ok(!publicSite.faqs.some(x=>x.question==='QA preserved question'));}finally{process.env.APP_ENV='test';}
   const originals=(await query('SELECT id,name,starting_price,pricing_profile,active FROM packages ORDER BY id')).rows;
   const addition=await import('../server/src/services/business-catalog-update.js');
+  await assert.rejects(addition.updateProductionBusinessCatalog({req,expectedVersion:published.id}),/Production environment required/);
   assert.equal((await addition.updateStagingBusinessCatalog({req})).dryRun,true);
   const added=await addition.updateStagingBusinessCatalog({apply:true,expectedVersion:published.id,req});
   assert.equal((await addition.updateStagingBusinessCatalog({apply:true,expectedVersion:published.id,req})).alreadyApplied,true);
@@ -102,7 +103,7 @@ test('business plan publication, public privacy, CMS preservation and accepted p
    const vite=await createServer({configFile:false,root:(await import('node:url')).fileURLToPath(new URL('../',import.meta.url)),plugins:[react(),{name:'local-redesign-config',configureServer(v){v.middlewares.use((q,r,next)=>{if(q.url?.split('?')[0]==='/staging-site/config.js'){r.setHeader('Content-Type','application/javascript');r.end('window.LOLA_CONFIG='+JSON.stringify({apiBase:'http://localhost:5198',environment:'staging',cmsChannel:'STAGING',formsEnabled:true}));}else next();});}}],define:{__BUILD_REVISION__:JSON.stringify('local-redesign-qa')},server:{host:'127.0.0.1',port:5198,strictPort:true,proxy:{'/api':origin}}});
    const {env}=await import('../server/src/config/env.js');env.clientOrigin='http://localhost:5198';env.publicInquiryAllowedOrigins=['http://localhost:5198'];await vite.listen();
    console.log('INTERACTIVE_REDESIGN_QA http://localhost:5198 /staging-site/index.html — synthetic database only; no worker or external email');
-   try{if(process.env.BUSINESS_EXPERIENCES_BROWSER_TEST==='true')await(await import('./helpers/business-experiences-browser.mjs')).qualifyBusinessExperiences({origin:'http://localhost:5198',token:jwt.sign({sub:owner.id},process.env.JWT_SECRET)});else await new Promise(resolve=>process.once('SIGINT',resolve));}finally{await vite.close();}
+   try{if(process.env.BUSINESS_EXPERIENCES_BROWSER_TEST==='true')await(await import('./helpers/business-experiences-browser.mjs')).qualifyBusinessExperiences({origin:'http://localhost:5198',clientId:customer.id,eventId:event.id,token:jwt.sign({sub:owner.id},process.env.JWT_SECRET)});else await new Promise(resolve=>process.once('SIGINT',resolve));}finally{await vite.close();}
   }
 
  }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await base.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await base.end();}

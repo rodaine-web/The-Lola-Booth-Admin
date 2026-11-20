@@ -69,7 +69,7 @@ export default function ProposalWizard(){
         const labels=["experiences","packages","add-ons"];
         const failures=[];
         results.forEach((result,index)=>{
-          if(result.status==="fulfilled")setters[index](result.value.filter(item=>item.active!==false && (index!==0 || ["glam","360","mirror","vogue","audio"].includes(experienceKey(item)))));
+          if(result.status==="fulfilled")setters[index](result.value.filter(item=>item.active!==false && (index!==0 || ["glam","360","mirror","vogue","audio","virtual"].includes(experienceKey(item)))));
           else failures.push(labels[index]+": "+result.reason.message);
         });
         setCatalogError(failures.length?"Unable to load "+failures.join("; "):"");
@@ -335,7 +335,7 @@ export default function ProposalWizard(){
       {!catalogLoading&&!catalogError&&!experiences.length&&<p role="status">No active experiences are available. Add an experience in the catalog before creating a proposal.</p>}
       <BusinessPlanPicker experiences={experiences} packages={packages} selected={selectedExperiences} onChange={setSelectedExperiences} active={businessMode} onModeChange={setBusinessMode}/>
       <div hidden={businessMode}><div className="experience-card-grid">
-        {experiences.map(item=>{const selected=selectedExperiences.some(entry=>entry.experience_id===item.id);return <button key={item.id} className={selected?"experience-card selected":"experience-card"} onClick={()=>chooseExperience(item)}><img className="wizard-experience-photo" src={experienceImage(item.name,actualEventType())} alt=""/><span className="experience-select">{selected?<Check size={15}/>:<Plus size={15}/>}</span><strong>{item.website_name||item.name}</strong><small>{item.website_short_description||item.description||"LOLA experience"}</small>{item.base_price!=null&&<b>Starting at {money(item.base_price)}</b>}</button>;})}
+        {experiences.map(item=>{const selected=selectedExperiences.some(entry=>entry.experience_id===item.id);return <button key={item.id} className={selected?"experience-card selected":"experience-card"} onClick={()=>chooseExperience(item)}>{experienceKey(item)==='virtual'?<svg className="wizard-experience-photo" viewBox="1213 365 274 168" role="img" aria-label="Virtual photo experience"><image href="/staging-site/assets/business-corporate-reference.png" width="1536" height="1024"/></svg>:<img className="wizard-experience-photo" src={experienceImage(item.name,actualEventType())} alt=""/>}<span className="experience-select">{selected?<Check size={15}/>:<Plus size={15}/>}</span><strong>{item.website_name||item.name}</strong><small>{item.website_short_description||item.description||"LOLA experience"}</small>{item.base_price!=null&&<b>Starting at {money(item.base_price)}</b>}</button>;})}
       </div>
       {selectedExperiences.map(item=><section className="wizard-section package-picker" key={item.experience_id}>
         <div><h3>{item.name} Packages</h3><p>Choose the package that best fits this event.</p></div>

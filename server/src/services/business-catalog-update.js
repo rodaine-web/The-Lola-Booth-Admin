@@ -6,8 +6,18 @@ import {pricingPackageDefaults} from './pricing-catalog-defaults.js';
 const action='business-virtual-retail-catalog-20261119';
 export const virtualRates=[['DAY','24 Hours',349],['THREE_DAYS','3 Days',699],['WEEK','1 Week',999],['MONTHLY','Monthly Subscription',499]];
 export const retailRates=[['strip-one','One 2×6 photo strip',5,'2X6','ONSITE',1],['strip-two','Two identical 2×6 strips',8,'2X6','ONSITE',2],['print-one','One 4×6 photo print',7,'4X6','ONSITE',1],['print-two','Two 4×6 photo prints',12,'4X6','ONSITE',2],['postcard-one','One personalized 4×6 postcard mailed within the US',10,'4X6','US_MAIL',1],['postcard-two','Two 4×6 postcards mailed to different US addresses',18,'4X6','US_MAIL',2]];
-export async function updateStagingBusinessCatalog({apply=false,expectedVersion,req}){
+export async function updateStagingBusinessCatalog(options){
  if(!['staging','test'].includes(process.env.APP_ENV))throw Error('Staging only. Production promotion requires a separately approved release.');
+ return updateBusinessCatalog(options);
+}
+// Explicit entry point for the owner-approved production promotion. It retains
+// database identity, expected-version, unpublished-change and preservation guards.
+export async function updateProductionBusinessCatalog(options){
+ if(process.env.APP_ENV!=='production')throw Error('Production environment required.');
+ if(!options.expectedVersion)throw Error('Explicit reviewed production pricing version required.');
+ return updateBusinessCatalog(options);
+}
+async function updateBusinessCatalog({apply=false,expectedVersion,req}){
  return transaction(async client=>{
   await assertDatabaseIdentity(client);await query("SELECT pg_advisory_xact_lock(hashtext($1))",[action]);
   const prior=(await query('SELECT after_json FROM audit_logs WHERE action=$1 ORDER BY created_at DESC LIMIT 1',[action])).rows[0];if(prior)return {alreadyApplied:true,...prior.after_json};

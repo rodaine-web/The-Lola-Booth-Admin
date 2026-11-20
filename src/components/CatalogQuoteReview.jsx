@@ -25,7 +25,7 @@ export default function CatalogQuoteReview({experiences,addons,customLines=[],di
   let active=true;setBusy(true);setError('');
   const timer=setTimeout(async()=>{try{
    const packages=catalog.packages,catalogKey=proposalPricingCatalog(selected,packages);
-   const customerType=businessRows.length?'BUSINESS':initialQuote?.customerType||requestContext?.customerType||'INDIVIDUAL';
+   const customerType=businessRows.length||selected.some(p=>catalog.packages.find(row=>row.id===p.package_id)?.pricing_profile?.virtual)?'BUSINESS':initialQuote?.customerType||requestContext?.customerType||'INDIVIDUAL';
    const eventCategory=proposalPricingCategory(catalogKey,initialQuote?.eventCategory||requestContext?.eventCategory,customerType);
    const packagePrices=[];
    const selections=selected.map(pkg=>{
