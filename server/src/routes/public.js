@@ -65,7 +65,7 @@ publicRouter.use('/workspaces', publicWorkspaceRouter);
 
 publicRouter.use(campaignPublicRouter);
 
-publicRouter.get("/booking-catalog",asyncHandler(async (_req,res)=>{res.set("Cache-Control","no-store").json(await publicBookingCatalog());}));
+publicRouter.get("/booking-catalog",asyncHandler(async (req,res)=>{res.set("Cache-Control","no-store").json(await publicBookingCatalog({business:req.query.customerType==='BUSINESS'}));}));
 
 publicRouter.post("/inquiries", (req, _res, next) => {
   if(!req.body || typeof req.body!=="object" || Array.isArray(req.body))return next(new AppError("Submit a JSON inquiry object.",400,"INVALID_REQUEST"));
