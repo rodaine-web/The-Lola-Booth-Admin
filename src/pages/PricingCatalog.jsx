@@ -19,7 +19,7 @@ export default function PricingCatalog(){
  async function run(action,message){if(busy)return;setBusy(true);setError('');setNotice('');try{await action();await load();setNotice(message);}catch(e){setError(e.message);}finally{setBusy(false);}}
  const version=data?.versions.find(v=>v.id===selected),draft=version?.status==='DRAFT';
  function editProfile(key,value){setEditing(current=>({...current,pricing_profile:{...current.pricing_profile,[key]:value}}));}
- return <main className="pricing-catalog"><header><div><h1>Pricing &amp; catalog</h1><p>Manage package inclusions and publish a dated pricing catalog. Issued quotes keep their agreed prices.</p></div><Link to="/content/packages">All packages →</Link></header>
+ return <main className="pricing-catalog"><header><div><h1>Pricing &amp; catalog</h1><p>Manage package inclusions and publish a dated pricing catalog. Issued quotes keep their agreed prices.</p></div><div className="button-row"><a href="#retail-rates">Retail print &amp; postcard rates ↓</a><Link to="/content/experiences">Experiences →</Link><Link to="/content/packages">All packages →</Link></div></header>
  {error&&<p role="alert" className="error-banner">{error}</p>}{notice&&<p role="status">{notice}</p>}
  {!data&&!error&&<p role="status">Loading pricing catalog…</p>}
  {data&&<><section className="panel"><h2>Catalog versions</h2><p>{data.enabled?'New pricing calculations are enabled.':'New pricing calculations are awaiting activation.'}</p><p>Tax is calculated by Stripe using the customer billing address before payment.</p>
