@@ -198,7 +198,7 @@ galleryAdminRouter.get('/albums/:id/postcard-workspace',write,asyncHandler(async
 galleryAdminRouter.post('/albums/:id/postcard-reports',write,asyncHandler(async(req,res)=>{
  const report=await createPostcardReport(id.parse(req.params.id),req.user);res.status(201).json({id:report.id,created_at:report.created_at});
 }));
-galleryAdminRouter.post('/albums/:id/postcard-notifications',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await requestPostcardNotification(id.parse(req.params.id),req.user))));
+galleryAdminRouter.post('/albums/:id/postcard-notifications',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await requestPostcardNotification(id.parse(req.params.id),req.user,req.body))));
 galleryAdminRouter.get('/albums/:id/postcard-reports/:reportId/download',write,asyncHandler(async(req,res)=>{
  res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').attachment('Postcard_Mailing_Report.xlsx').send(await adminReportDownload(id.parse(req.params.id),id.parse(req.params.reportId),req.user));
 }));

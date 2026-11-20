@@ -30,6 +30,10 @@ test('Excel report keeps literal strings, ZIP zeros, dates, links, native chart 
  const files=unzipSync(await buildPostcardWorkbook(snapshot)),detail=strFromU8(files['xl/worksheets/sheet2.xml']),summary=strFromU8(files['xl/worksheets/sheet1.xml']);
  assert.match(detail,/01234/);assert.match(detail,/HYPERLINK\(&quot;/);assert.doesNotMatch(detail,/<x:f>/);assert.match(detail,/<x:autoFilter ref="A7:R10"/);assert.match(detail,/r="N8" s="8" t="n"/);assert.match(detail,/r="O8" s="8"\//);assert.match(summary,/Synthetic Event &amp; Gallery/);assert.match(summary,/<x:c r="B15" s="6" t="n"><x:v>1<\/x:v>/);assert.match(summary,/Not yet submitted/);
  assert.ok(Object.keys(files).some(p=>/charts\/chart1.xml$/.test(p)));assert.match(strFromU8(files['xl/worksheets/_rels/sheet2.xml.rels']),/gallery\/photo\//);
+ const chartPath=Object.keys(files).find(p=>/charts\/chart1.xml$/.test(p)),chart=new XMLParser({ignoreAttributes:false}).parse(strFromU8(files[chartPath]))['c:chartSpace']['c:chart'];
+ assert.equal(chart['c:title']['c:dPt'],undefined);
+ assert.equal(chart['c:plotArea']['c:doughnutChart']['c:ser']['c:dPt'].length,5);
+ assert.equal(chart['c:plotArea']['c:doughnutChart']['c:holeSize']['@_val'],'55');
  const text=Object.keys(files).filter(p=>p.endsWith('.xml')).map(p=>strFromU8(files[p])).join('');assert.doesNotMatch(text,/\b(budget|cost_limit|price_source|margin|unit_cost)\b|Sample\.jpg|PLACEHOLDER/i);
 });
 test('Excel detail sheet preserves all recipient rows and valid worksheet element order',async()=>{

@@ -16,3 +16,6 @@
 @media(prefers-reduced-motion:reduce){.pf-workspace *{animation:none!important;transition:none!important}}
 .pf-workspace [aria-label="Production live mailing"] fieldset{max-height:340px;overflow:auto;border:1px solid var(--pf-border);border-radius:9px;padding:16px;margin-bottom:18px}.pf-workspace [aria-label="Production live mailing"] fieldset>div{padding:10px 0;border-bottom:1px solid var(--pf-border)}
 .pf-artwork-grid{scroll-margin-top:90px}
+
+.pf-report-confirm { width:min(34rem,calc(100vw - 2rem)); padding:1.5rem; border:1px solid #d8c49e; border-radius:16px; }
+.pf-report-confirm::backdrop { background:rgb(0 0 0 / 40%); }
