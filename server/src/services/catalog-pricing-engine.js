@@ -1,3 +1,4 @@
+import {virtualConfigurationSchema} from '../../../shared/virtual-booth.js';
 import {businessPlanPricing} from './business-plan-pricing.js';
 import {printableExperiences,experienceNames} from '../../../shared/experience-catalog.js';
 import {AppError} from '../utils/errors.js';
@@ -50,15 +51,15 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
   simpleAdmin=admin&&simpleAdmin;
   if(!['INDIVIDUAL','BUSINESS','ORGANIZATION'].includes(customerType))invalid('Choose a customer type.');
   const selectedCatalog=selectPricingCatalog(eventCategory,catalogKey,{admin,reason:override?.reason||''});
-  if(!Array.isArray(selections)||!selections.length||selections.length>4)invalid('Choose one to four experiences.');
+  if(!Array.isArray(selections)||!selections.length||(customerType!=='BUSINESS'&&selections.length>4))invalid('Choose one to four experiences.');
   const business=businessPlanPricing({selections,businessPlan,override},catalog,{admin});
   const lines=[],seen=new Set(),entitlements=[],reasons=[];let allowance=0;
   for(const choice of selections){
     const pkg=catalog.packages.find(p=>p.id===choice.packageId&&p.active&&(p.catalog_key===selectedCatalog||p.pricing_profile?.quoteRequired||(p.pricing_profile?.perEventRental&&p.pricing_profile.experience==='audio')));
     if(!pkg)invalid('Choose an active package in the selected catalog.');
-    const profile={...pkg.pricing_profile};
-    if(business?.coverageHours!=null){if(business.tier!=='CAMPAIGN')invalid('Only Campaign coverage uses a scoped schedule.');profile.serviceHours=integer(business.coverageHours,1,24);}
-    if(business?.scope)profile.featureLabels=[...(profile.featureLabels||[]),'Agreed campaign scope: '+business.scope];if(!profile)invalid('Package pricing rules are missing.');
+    const profile={...pkg.pricing_profile};if(profile.experience==='virtual'){const configured=virtualConfigurationSchema.parse(choice.virtualConfig||profile.virtual);if(configured.duration!==profile.virtual.duration)invalid('Virtual Booth duration must match the selected package.');profile.virtual=configured;}
+    if(profile.businessPlan&&business?.coverageHours!=null){if(business.tier!=='CAMPAIGN')invalid('Only Campaign coverage uses a scoped schedule.');profile.serviceHours=integer(business.coverageHours,1,24);}
+    if(profile.businessPlan&&business?.scope)profile.featureLabels=[...(profile.featureLabels||[]),'Agreed campaign scope: '+business.scope];if(!profile)invalid('Package pricing rules are missing.');
     if(seen.has(profile.experience))invalid('Select each experience once.');seen.add(profile.experience);
     const scopeApproval=override?.scopeApprovals?.find(item=>item.packageId===pkg.id);
     if(scopeApproval&&(!admin||!override.reason?.trim()||!scopeApproval.description?.trim()))invalid('Scope approval requires an Admin reason and an explicit description.');
@@ -69,10 +70,11 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
     const base=priceOverride?moneyInteger(priceOverride.amountCents):minorUnits(pkg.starting_price);allowance=Math.max(allowance,profile.travelMinutes||0);
     const addLine=(type,description,quantity,unitCents)=>{const amount=integer(quantity,1,10000)*moneyInteger(unitCents);moneyInteger(amount);lines.push({type,description,quantity,unitPriceCents:unitCents,amountCents:amount,packageId:pkg.id,experience:profile.experience});};
     const experienceLabel=experienceNames[profile.experience];
-    const additional=business&&!business.includedPackageIds.includes(pkg.id);
+    const additional=business&&profile.businessPlan&&!business.includedPackageIds.includes(pkg.id);
     const businessDiscount=additional?Math.round(base*business.discountPercent/100):0;
-    addLine('PACKAGE',business?`${additional?'Additional ':''}${experienceLabel}${additional?` (${business.discountPercent}% additional-experience discount)`:''}`:pkg.name.includes('—')?pkg.name:`${experienceLabel} — ${pkg.name}`,1,base-businessDiscount);
-    if(business)Object.assign(lines[lines.length-1],{businessRole:additional?'ADDITIONAL':'INCLUDED',originalUnitPriceCents:base,experienceDiscountCents:businessDiscount,discountPercent:additional?business.discountPercent:0});
+    addLine('PACKAGE',business&&profile.businessPlan?`${additional?'Additional ':''}${experienceLabel}${additional?` (${business.discountPercent}% additional-experience discount)`:''}`:pkg.name.includes('—')?pkg.name:`${experienceLabel} — ${pkg.name}`,1,base-businessDiscount);
+    if(business&&profile.businessPlan)Object.assign(lines[lines.length-1],{businessRole:additional?'ADDITIONAL':'INCLUDED',originalUnitPriceCents:base,experienceDiscountCents:businessDiscount,discountPercent:additional?business.discountPercent:0});
+    if(profile.experience==='virtual'){if(profile.virtual.duration==='MONTHLY'&&profile.virtual.setupFeeCents)addLine('SETUP','Virtual Booth — one-time setup',1,profile.virtual.setupFeeCents);if(!profile.virtual.participantAllowance||!profile.virtual.activeExperiences)reasons.push('Confirm Virtual Booth participant allowance and active branded experiences in the proposal scope.');}
     const included=profile.prints||0,selected=choice.prints??included;
     const printFormat=choice.printFormat||'4X6';
     if(!['4X6','2X6'].includes(printFormat))invalid('Choose a supported print format.');
@@ -80,7 +82,7 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
     if(unlimited&&!printableExperiences.includes(profile.experience))invalid('Printing is available only for Glam, Magic Mirror and Vogue.');
     const printApproval=override?.printApprovals?.find(item=>item.packageId===pkg.id&&item.selectedPrints===selected&&Boolean(item.unlimitedPrints)===unlimited);
     integer(selected);if(selected<included&&!(business&&admin&&printApproval))invalid('Selected prints cannot be less than the included allowance without an audited business print override.');
-    if(business&&selected===0)profile.featureLabels=profile.featureLabels.map(f=>/^On-site printing:/.test(f)?'Digital delivery only; no physical prints included.':f);
+    if(business&&profile.businessPlan&&selected===0)profile.featureLabels=profile.featureLabels.map(f=>/^On-site printing:/.test(f)?'Digital delivery only; no physical prints included.':f);
     const customPrinting=unlimited||(selected>included&&printableExperiences.includes(profile.experience)&&(catalog.rules.printPrices?.[profile.experience]?.[selected]==null||(included>0&&catalog.rules.printPrices?.[profile.experience]?.[included]==null)));
     if(printApproval&&(!admin||(!simpleAdmin&&!override.reason?.trim())))invalid('Print allowance overrides require an audited Admin approval.');
     let upgrade;
@@ -94,7 +96,7 @@ export function calculateCatalogQuote({version,selections,eventCategory,customer
     for(const chosen of choice.addons||[]){
       if(addonSeen.has(chosen.addonId))invalid('Select each add-on only once per experience.');addonSeen.add(chosen.addonId);
       const addon=catalog.addons.find(a=>a.id===chosen.addonId&&a.active),policy=addon?.pricing_policy;
-      if(!addon||!policy)invalid('Choose a configured add-on.');
+      if(!addon||!policy)invalid('Choose a configured add-on.');if(policy.category==='RETAIL'||policy.internalOnly)invalid('Retail rates cannot be charged as business booking add-ons.');
       if(addonSeen.has('key:'+policy.key))invalid('This enhancement was already selected.');addonSeen.add('key:'+policy.key);
       if(!policy.experiences?.includes(profile.experience)||(policy.packageIds?.length&&!policy.packageIds.includes(pkg.id)))invalid('Add-on is incompatible with this package.');
       if((simpleAdmin?['PRINTS','TRAVEL']:['PRINTS','EXTRA_HOURS','TRAVEL']).includes(policy.category))invalid('Use the dedicated print, hours or travel selection.');

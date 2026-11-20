@@ -88,7 +88,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
     for(const width of [1440,390]){
      const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
      await page.addInitScript(token=>{if(window.top===window)localStorage.setItem('lola_access_token',token);},jwt.sign({sub:owner.id},process.env.JWT_SECRET));
-     await page.goto(web+'/content/pricing');await page.getByRole('heading',{name:'Pricing & travel',exact:true}).waitFor();
+     await page.goto(web+'/content/pricing');await page.getByRole('heading',{name:'Pricing & catalog',exact:true}).waitFor();
      await page.getByLabel('Dispatch location *',{exact:true}).waitFor();assert.equal(await page.getByLabel('Dispatch location *',{exact:true}).inputValue(),'Downtown Chicago');
      await page.getByLabel('Pricing catalog',{exact:true}).selectOption('PROFESSIONAL');assert.equal(await page.getByRole('heading',{name:'Package inclusions',exact:true}).locator('..').locator('tbody tr').count(),12);
      await page.getByLabel('Pricing catalog',{exact:true}).selectOption('STANDARD');await page.getByRole('button',{name:'Edit inclusions',exact:true}).first().click();
@@ -213,17 +213,17 @@ await revision.getByText('Service total:',{exact:false}).waitFor();assert.match(
       await page.screenshot({path:'artifacts/pricing/website-packages-individual-'+width+'.png',fullPage:true});
       await page.getByRole('button',{name:'Business/Corporates',exact:true}).click();
       const business=page.locator('[data-audience-view="BUSINESS"]');await business.waitFor({state:'visible'});
-      assert.equal(await business.locator('[data-business-experience]').count(),4);assert.ok(await business.locator('[data-business-addon]').count()>0);
+      assert.equal(await business.locator('[data-business-experience]').count(),5);assert.equal(await business.locator('[data-business-addon]').count(),0);
       assert.equal(await page.locator('.package-grid:visible').count(),0,'Business sees experiences and add-ons, never internal tiers');
       assert.doesNotMatch(await page.locator('body').innerText(),/\$[\d,]+|Event Plus|Event Premium|Most Popular/);
-      await business.locator('[data-business-experience=glam]').check();
+      await business.locator('[data-business-experience=glam]').check();await business.locator('[data-business-addon]').first().waitFor();
       const businessLink=await page.locator('[data-business-quote]').getAttribute('href');assert.ok(businessLink.includes('customerType=BUSINESS'));assert.ok(businessLink.includes('experiences=glam'));
       await page.screenshot({path:'artifacts/pricing/website-packages-business-'+width+'.png',fullPage:true});
       await page.goto(new URL(businessLink,web).href);await page.locator('[data-catalog-status]').getByText(/Choose available catalog packages|Select experiences and optional add-ons/).waitFor();
       assert.equal(await page.locator('[name=customerType]').inputValue(),'BUSINESS');assert.equal(await page.locator('[data-experience="glam"]').isChecked(),true);
       await page.getByRole('button',{name:'Request a Quote →',exact:true}).waitFor();assert.doesNotMatch(await page.locator('[data-multi-booking]').textContent(),/\$[\d,]+/);
       await page.route('**/api/public/pricing-catalog',route=>route.fulfill({status:503,body:'Unavailable'}));await page.goto(web+'/packages.html');
-      await page.getByRole('button',{name:'Business/Corporates',exact:true}).click();assert.equal(await page.locator('[data-business-experience]').count(),4,'Business request path remains available during a pricing catalogue outage');
+      await page.getByRole('button',{name:'Business/Corporates',exact:true}).click();assert.equal(await page.locator('[data-business-experience]').count(),5,'Business request path remains available during a pricing catalogue outage');
       assert.ok((await page.locator('[data-business-quote]').getAttribute('href')).includes('customerType=BUSINESS'));
       assert.deepEqual(errors,[]);await page.close();
      }

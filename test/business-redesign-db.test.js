@@ -62,15 +62,48 @@ test('business plan publication, public privacy, CMS preservation and accepted p
   await query("INSERT INTO audit_logs(action,entity,entity_type) VALUES('production-redesign-owner-release-2026-11-10','website_release','website_release')");
   process.env.APP_ENV='production';
   try{const publicSite=await(await import('../server/src/services/website-cms-service.js')).publicSitePayload();assert.equal(publicSite.channel,'PUBLIC');assert.equal(publicSite.cmsAuthoritative,true);assert.equal(publicSite.experiences.length,4);assert.equal(publicSite.heroSlides.filter(x=>x.page_slug==='home').length,4);assert.ok(publicSite.faqs.some(x=>x.question==='Production preserved FAQ'));assert.ok(!publicSite.faqs.some(x=>x.question==='QA preserved question'));}finally{process.env.APP_ENV='test';}
+  const originals=(await query('SELECT id,name,starting_price,pricing_profile,active FROM packages ORDER BY id')).rows;
+  const addition=await import('../server/src/services/business-catalog-update.js');
+  await assert.rejects(addition.updateProductionBusinessCatalog({req,expectedVersion:published.id}),/Production environment required/);
+  assert.equal((await addition.updateStagingBusinessCatalog({req})).dryRun,true);
+  const added=await addition.updateStagingBusinessCatalog({apply:true,expectedVersion:published.id,req});
+  assert.equal((await addition.updateStagingBusinessCatalog({apply:true,expectedVersion:published.id,req})).alreadyApplied,true);
+  for(const old of originals)assert.deepEqual(await one('SELECT id,name,starting_price,pricing_profile,active FROM packages WHERE id=$1',[old.id]),old);
+  const fresh=await pricing.currentPricingCatalog(),virtual=fresh.snapshot.packages.filter(p=>p.pricing_profile.experience==='virtual'),retail=fresh.snapshot.addons.filter(a=>a.pricing_policy.category==='RETAIL');
+  assert.deepEqual(virtual.map(p=>Number(p.starting_price)).sort((a,b)=>a-b),[349,499,699,999]);assert.equal(retail.length,6);
+  assert.deepEqual(retail.map(a=>Number(a.price)).sort((a,b)=>a-b),[5,7,8,10,12,18]);
+  const businessCatalog=await call('public/booking-catalog?customerType=BUSINESS');assert.equal(businessCatalog.body.experiences.length,5);assert.equal(businessCatalog.body.packages.length,0);
+  assert.doesNotMatch(JSON.stringify(businessCatalog.body),/starting_price|unitPrice|"price"|printPrices|mileageRate|businessPlan/);
+  assert.equal((await call('public/booking-catalog')).body.experiences.some(e=>e.key==='virtual'),false);
+  assert.equal((await call('public/pricing-catalog')).body.addons.some(a=>a.pricing_policy.category==='RETAIL'),false);
+  const selections=businessCatalog.body.experiences.map(e=>({experienceId:e.id,...(e.key==='virtual'?{virtualDuration:'MONTHLY'}:{})}));
+  const publicService=await import('../server/src/services/public-booking-service.js');
+  const validated=publicService.validateBookingSelections({customerType:'BUSINESS',selections},await publicService.publicBookingCatalog({internal:true}));assert.equal(validated.selections.length,5);assert.equal(validated.selections.find(x=>x.virtualDuration).virtualDuration,'MONTHLY');
+  assert.throws(()=>publicService.validateBookingSelections({customerType:'BUSINESS',selections:selections.map(x=>({experienceId:x.experienceId}))},awaitableCatalog()),/duration/);
+  function awaitableCatalog(){return {experiences:businessCatalog.body.experiences,packages:[],addons:[]};}
+  const inquiry=await call('public/inquiries',{method:'POST',body:{firstName:'Synthetic',lastName:'Business',email:'business-quote@example.invalid',phone:'3125550100',company:'QA ONLY',eventName:'QA ONLY virtual and physical activation',eventDate:'2038-11-20',eventStartTime:'10:00',eventEndTime:'16:00',eventType:'Corporate Event',guestCount:150,venueAddress:'100 Sample St',city:'Chicago',state:'IL',zip:'60601',customerType:'BUSINESS',formKind:'BOOKING',bookingVersion:2,submissionId:crypto.randomUUID(),selections,addons:[],marketing_email_opt_in:false}});
+  assert.equal(inquiry.status,201,JSON.stringify(inquiry.body));
+  const lead=await one("SELECT source_details FROM leads WHERE email='business-quote@example.invalid'");assert.equal(lead.source_details.bookingInquiry.selections.length,5);assert.equal(lead.source_details.bookingInquiry.selections.find(x=>x.virtualDuration).virtualDuration,'MONTHLY');
+  const four=plans.filter(p=>p.tier_key==='EVENT'),day=virtual.find(p=>p.pricing_profile.virtual.duration==='DAY');
+  const combination=await call('pricing/quotes',{user:owner,method:'POST',body:{catalogVersion:added.versionId,eventCategory:'PROFESSIONAL',customerType:'BUSINESS',catalogKey:'PROFESSIONAL',selections:[...four.map(p=>({packageId:p.id})),{packageId:day.id,virtualConfig:{...day.pricing_profile.virtual,participantAllowance:150,activeExperiences:1}}],businessPlan:{includedPackageIds:[four[0].id],additionalDiscountPercent:0},override:{travelAmountCents:0,reason:'Synthetic approved five-experience quote'}}});assert.equal(combination.status,201,JSON.stringify(combination.body));assert.equal(combination.body.entitlements.length,5);assert.equal(combination.body.serviceTotalCents,494500);
+  const monthly=virtual.find(p=>p.pricing_profile.virtual.duration==='MONTHLY');
+  const virtualConfig={...monthly.pricing_profile.virtual,participantAllowance:150,activeExperiences:1,startDate:'2038-11-20',renewalDate:'2038-12-20'};
+  const virtualQuote=await call('pricing/quotes',{user:owner,method:'POST',body:{catalogVersion:added.versionId,eventCategory:'CUSTOM_PRODUCTION',customerType:'BUSINESS',catalogKey:'CUSTOM',selections:[{packageId:monthly.id,virtualConfig}],override:{travelAmountCents:0}}});
+  assert.equal(virtualQuote.status,201,JSON.stringify(virtualQuote.body));assert.equal(virtualQuote.body.serviceTotalCents,99800);assert.equal(virtualQuote.body.entitlements[0].virtual.minimumMonths,3);assert.equal(virtualQuote.body.lines.filter(l=>l.type==='SETUP').length,1);
+  const vProposal=await proposalSvc.createProposal({...req,body:{client_id:customer.id,event_id:event.id,pricing_quote_id:virtualQuote.body.id,scenario_enabled:true,selected_experiences:[{experience_id:monthly.experience_id,name:'The Lola Virtual Booth',packages:[{package_id:monthly.id,name:monthly.name,price:499}]}]}});assert.equal(Number(vProposal.total),998);
+  assert.equal(Number((await one('SELECT total FROM proposals WHERE id=$1',[proposal.id])).total),10697.15);assert.equal(Number((await one('SELECT total FROM invoices WHERE id=$1',[invoice.id])).total),10697.15);
   const nextDraft=await call('pricing/drafts',{user:owner,method:'POST',body:{}});assert.equal(nextDraft.status,201);const editedRules=await call('pricing/'+nextDraft.body.id,{user:owner,method:'PATCH',body:{...published.rules,dispatchLabel:'QA updated dispatch label'}});assert.equal(editedRules.status,200);assert.deepEqual(editedRules.body.rules.businessPlans,published.rules.businessPlans);
+  const patch=await call('pricing/packages/'+monthly.id,{user:owner,method:'PATCH',body:{starting_price:'549.00',active:false,description:'QA configurable virtual package',pricing_profile:{...monthly.pricing_profile,virtual:virtualConfig},reason:'Synthetic configuration persistence'}});assert.equal(patch.status,200,JSON.stringify(patch.body));assert.equal(patch.body.active,false);assert.equal(patch.body.pricing_profile.virtual.startDate,'2038-11-20');
+  const rate=retail[0],retailEdit=await call('pricing/addons/'+rate.id,{user:owner,method:'PATCH',body:{price:'11.00',active:false,display_order:0,pricing_policy:rate.pricing_policy,reason:'Synthetic retail rate persistence'}});assert.equal(retailEdit.status,200);assert.equal(Number(retailEdit.body.price),11);
+  const invalidRetail=await call('pricing/addons/'+rate.id,{user:owner,method:'PATCH',body:{price:'11.00',active:true,display_order:0,pricing_policy:{...rate.pricing_policy,internalOnly:false},reason:'Synthetic invalid retail exposure'}});assert.equal(invalidRetail.status,422);
   assert.equal((await update.updateStagingBusinessPlans({apply:true,expectedVersion:current.id,req})).alreadyApplied,true);
-  if(process.env.REDESIGN_INTERACTIVE_QA==='true'){
+  if(process.env.REDESIGN_INTERACTIVE_QA==='true'||process.env.BUSINESS_EXPERIENCES_BROWSER_TEST==='true'){
    await query('UPDATE users SET password_hash=$2 WHERE id=$1',[owner.id,(await import('bcryptjs')).default.hashSync('Local-Redesign-QA-Only-2038',10)]);
    const {createServer}=await import('vite'),react=(await import('@vitejs/plugin-react')).default;
    const vite=await createServer({configFile:false,root:(await import('node:url')).fileURLToPath(new URL('../',import.meta.url)),plugins:[react(),{name:'local-redesign-config',configureServer(v){v.middlewares.use((q,r,next)=>{if(q.url?.split('?')[0]==='/staging-site/config.js'){r.setHeader('Content-Type','application/javascript');r.end('window.LOLA_CONFIG='+JSON.stringify({apiBase:'http://localhost:5198',environment:'staging',cmsChannel:'STAGING',formsEnabled:true}));}else next();});}}],define:{__BUILD_REVISION__:JSON.stringify('local-redesign-qa')},server:{host:'127.0.0.1',port:5198,strictPort:true,proxy:{'/api':origin}}});
    const {env}=await import('../server/src/config/env.js');env.clientOrigin='http://localhost:5198';env.publicInquiryAllowedOrigins=['http://localhost:5198'];await vite.listen();
    console.log('INTERACTIVE_REDESIGN_QA http://localhost:5198 /staging-site/index.html — synthetic database only; no worker or external email');
-   try{await new Promise(resolve=>process.once('SIGINT',resolve));}finally{await vite.close();}
+   try{if(process.env.BUSINESS_EXPERIENCES_BROWSER_TEST==='true')await(await import('./helpers/business-experiences-browser.mjs')).qualifyBusinessExperiences({origin:'http://localhost:5198',clientId:customer.id,eventId:event.id,token:jwt.sign({sub:owner.id},process.env.JWT_SECRET)});else await new Promise(resolve=>process.once('SIGINT',resolve));}finally{await vite.close();}
   }
 
  }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await base.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await base.end();}

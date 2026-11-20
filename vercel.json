@@ -211,6 +211,26 @@
       "destination": "/staging-site/design.js"
     },
     {
+      "source": "/business-experiences.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/business-experiences.js"
+    },
+    {
+      "source": "/business-experiences.css",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/business-experiences.css"
+    },
+    {
       "source": "/design-packages.js",
       "has": [
         {

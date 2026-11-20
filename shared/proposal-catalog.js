@@ -19,6 +19,7 @@ export function proposalCatalogError(input, pack, addons) {
 export function proposalAddonStatus(addon, experiences, packages) {
   const policy=addon?.pricing_policy;
   if (!policy) return null;
+  if(policy.internalOnly||policy.category==='RETAIL')return 'Retail rates require separate event authorization and are not booking add-ons.';
   const selected=experiences.flatMap(item=>item.packages||[])
     .map(item=>({...packages.find(pkg=>pkg.id===item.package_id),...item}));
   if(policy.category==='TRAVEL')return 'Enter the amount in Travel charge.';
