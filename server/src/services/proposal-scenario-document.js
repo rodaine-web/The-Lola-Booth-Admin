@@ -39,7 +39,7 @@ export function scenarioHtml(proposal,logo) {
   const original=proposal.content.scenario;
   const model=proposal.payment_requirement?.fullPaymentRequired?{...original,pricing:{...original.pricing,full_payment_required:true,deposit_amount:original.pricing.total,balance:0}}:original, number=proposal.proposal_number||'Draft';
   const virtualOnly=model.experiences.length>0&&model.experiences.every(x=>x.key==='virtual');
-  const image=(slot,item)=>{const uri=scenarioImage(model,slot,item);return uri?`<img class="editorial-photo ${item?.key==='virtual'||virtualOnly?'virtual-photo':''}" src="${uri}" alt="${escape(item?.name||model.imageryCategory+' event')}"/>`:`<div class="neutral-photo"><span>THE LOLA BOOTH</span><em>${escape(model.copy.tagline)}</em></div>`;};
+  const image=(slot,item)=>{const uri=scenarioImage(model,slot,item);return uri?`<img class="editorial-photo ${item?.key==='virtual'||virtualOnly||model.mediaImages?.[slot]?.[0]?.source?.includes('activation-')?'virtual-photo':''}" src="${uri}" alt="${escape(item?.name||model.imageryCategory+' event')}"/>`:`<div class="neutral-photo"><span>THE LOLA BOOTH</span><em>${escape(model.copy.tagline)}</em></div>`;};
   const paras=value=>`<p>${escape(text(value)).replace(/\n/g,'<br>')}</p>`;
   const pages=model.sections.map((section,index)=>{
     const item=model.experiences[section.index];
@@ -78,7 +78,7 @@ export function renderScenarioPdf(doc,proposal,{logo}) {
     for(const word of words){const next=chunk?chunk+' '+word:word;doc.font('Helvetica').fontSize(size);if(y+doc.heightOfString(next,{width:w,lineGap:4})>limit&&chunk){doc.fillColor(color).text(chunk,x,y,{width:w,lineGap:4});begin(label,title,true);chunk=word;}else chunk=next;}
     if(chunk){doc.font('Helvetica').fontSize(size).fillColor(color).text(chunk,x,y,{width:w,lineGap:4});y=doc.y+12;}
   }
-  function photo(slot,item,x,top,w,h){const uri=scenarioImage(m,slot,item);if(uri){try{doc.save().rect(x,top,w,h).clip();doc.image(Buffer.from(uri.split(',')[1],'base64'),x,top,{...(slot.startsWith('experience:')||(m.experiences.length>0&&m.experiences.every(x=>x.key==='virtual'))?{fit:[w,h]}:{cover:[w,h]}),align:'center',valign:'center'});doc.restore();return;}catch{doc.restore();}}doc.rect(x,top,w,h).fill(slot==='cover'?'#171715':'#f5f0e8');doc.font('LolaEditorial').fontSize(18).fillColor(gold).text('THE LOLA BOOTH',x+15,top+h/2-16,{width:w-30,align:'center'});}
+  function photo(slot,item,x,top,w,h){const uri=scenarioImage(m,slot,item);if(uri){try{doc.save().rect(x,top,w,h).clip();doc.image(Buffer.from(uri.split(',')[1],'base64'),x,top,{...(slot.startsWith('experience:')||m.mediaImages?.[slot]?.[0]?.source?.includes('activation-')||(m.experiences.length>0&&m.experiences.every(x=>x.key==='virtual'))?{fit:[w,h]}:{cover:[w,h]}),align:'center',valign:'center'});doc.restore();return;}catch{doc.restore();}}doc.rect(x,top,w,h).fill(slot==='cover'?'#171715':'#f5f0e8');doc.font('LolaEditorial').fontSize(18).fillColor(gold).text('THE LOLA BOOTH',x+15,top+h/2-16,{width:w-30,align:'center'});}
   // Start with our own page; PDFKit's initial page is disabled by the caller.
   for(const section of m.sections){
     begin(section.kind==='cover'?'Event proposal':section.kind==='experience'?`${m.copy.experience_intro_style} ${section.index+1} of ${m.experiences.length}`:section.kind==='why'?'Why The Lola Booth?':section.kind==='investment'?'The investment':section.kind==='close'?'Let’s make it official':'Your event',section.kind==='cover'?'':section.title);
