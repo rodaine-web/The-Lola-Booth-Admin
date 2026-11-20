@@ -17,6 +17,8 @@ export async function qualifyBusinessExperiences({origin,token}){
   const addons=page.locator('[data-business-addon]');if(await addons.count())await addons.first().check();
   assert.doesNotMatch(await page.locator('[data-audience-view="BUSINESS"]').innerText(),/\$|Event Plus|Event Premium|starting price/i);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  const panels=await page.locator('.business-benefits').evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,cardTop:n.closest('.business-card').getBoundingClientRect().top})));
+  for(const panel of panels)for(const peer of panels)if(Math.abs(panel.cardTop-peer.cardTop)<2)assert.ok(Math.abs(panel.top-peer.top)<2,'Benefit panels in the same card row must align');
   await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo({top:0,behavior:'instant'});return document.fonts.ready;});await page.screenshot({path:path.join(out,`business-${width}.png`),fullPage:true});
   const quote=page.locator('[data-business-quote]');const href=await quote.getAttribute('href');assert.equal(new URL(href,origin).searchParams.get('experiences').split(',').length,5);assert.equal(new URL(href,origin).searchParams.get('virtualDuration'),'MONTHLY');
   await quote.click();await page.waitForFunction(()=>document.querySelectorAll('[data-experience]:checked').length===5);

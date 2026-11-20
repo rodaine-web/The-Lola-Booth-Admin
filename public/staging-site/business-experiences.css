@@ -6,3 +6,9 @@
 .business-photo-frame{position:relative}.business-photo-frame input[data-business-experience],.business-booking .business-photo-frame input[data-experience]{appearance:none;position:absolute;top:4%;right:3%;width:12%;height:22%;border:2px solid #282820;border-radius:5px;background:#fff;box-shadow:0 0 0 2px #fff;z-index:1;margin:0;cursor:pointer}.business-photo-frame input:checked{background:#b47b17;border-color:#b47b17}.business-photo-frame input:checked:after{content:'✓';display:grid;place-items:center;width:100%;height:100%;color:white;font-size:clamp(20px,2vw,30px);line-height:1}.business-photo-frame input:focus-visible{outline:3px solid #a8700d;outline-offset:3px}
 
 .business-mode .package-page{max-width:1600px;width:calc(100% - 80px)}.business-mode [data-business-duration]:not(:empty){max-width:420px;margin-top:20px;padding:16px;border:1px solid #e0d0b5;border-radius:12px;background:#fffdf9}.business-mode [data-business-duration] .business-duration{margin:0}@media(max-width:760px){.business-mode .package-page{width:calc(100% - 32px)}}
+
+/* Share content tracks within each responsive card row so benefit panels align. */
+.business-mode .business-card{display:grid;grid-template-rows:subgrid;grid-row:span 6;row-gap:0}
+.business-mode .business-card-copy{display:grid;grid-template-rows:subgrid;grid-row:span 5;row-gap:0}
+.business-mode .business-benefits{margin-top:0}
+.business-mode .business-photo-frame .business-photo{height:100%;aspect-ratio:270/168}
