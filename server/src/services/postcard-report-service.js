@@ -9,6 +9,8 @@ import {env} from '../config/env.js';
 import {AppError} from '../utils/errors.js';
 import {buildPostcardWorkbook} from './postcard-report-workbook.js';
 import {mailingHistory} from './gallery-mailing-service.js';
+import {z} from 'zod';
+export const postcardNotificationRequestSchema=z.object({requestKey:z.string().uuid(),confirmResend:z.boolean().default(false)}).strict();
 const financial=/\$|\b(cost|price|budget|payment|funds|balance|margin|charge|credit)\b/i;
 export async function createPostcardReport(albumId,user=null,batchId=null){
  if(user)await assertFiestaReviewAccess(albumId,user);
@@ -52,17 +54,28 @@ export async function enqueuePostcardNotifications(){
  AND b.status IN('COMPLETE','NEEDS_REVIEW')
  AND EXISTS(SELECT 1 FROM gallery_live_mailing_jobs j WHERE j.batch_id=b.id AND j.status='SUBMITTED')
  AND NOT EXISTS(SELECT 1 FROM gallery_live_mailing_jobs j WHERE j.batch_id=b.id AND j.status IN('DRAFT','QUEUED','PROCESSING'))
- ON CONFLICT(batch_id) DO NOTHING`);
+ AND NOT EXISTS(SELECT 1 FROM gallery_postcard_notifications n WHERE n.batch_id=b.id)
+ ON CONFLICT DO NOTHING`);
 }
-export async function requestPostcardNotification(albumId,user){
+export async function requestPostcardNotification(albumId,user,input){
  await assertFiestaReviewAccess(albumId,user);
+ const {requestKey,confirmResend}=postcardNotificationRequestSchema.parse(input);
+ return transaction(async()=>{
+ const replay=(await query('SELECT id,status FROM gallery_postcard_notifications WHERE album_id=$1 AND request_key=$2',[albumId,requestKey])).rows[0];
+ if(replay)return {...replay,queued:false,deduplicated:true};
  const batch=(await query(`SELECT b.id FROM gallery_live_mailing_batches b WHERE b.album_id=$1 AND b.status IN('COMPLETE','NEEDS_REVIEW')
  AND EXISTS(SELECT 1 FROM gallery_live_mailing_jobs j WHERE j.batch_id=b.id AND j.status='SUBMITTED')
- AND NOT EXISTS(SELECT 1 FROM gallery_live_mailing_jobs j WHERE j.batch_id=b.id AND j.status IN('DRAFT','QUEUED','PROCESSING')) ORDER BY b.created_at DESC LIMIT 1`,[albumId])).rows[0];
+ AND NOT EXISTS(SELECT 1 FROM gallery_live_mailing_jobs j WHERE j.batch_id=b.id AND j.status IN('DRAFT','QUEUED','PROCESSING')) ORDER BY b.created_at DESC LIMIT 1 FOR UPDATE OF b`,[albumId])).rows[0];
  if(!batch)throw new AppError('A confirmed production submission is required before notifying the client.',409,'POSTCARD_REPORT_NOT_READY');
- await query('INSERT INTO gallery_postcard_notifications(album_id,batch_id) VALUES($1,$2) ON CONFLICT(batch_id) DO NOTHING',[albumId,batch.id]);
- await mailingHistory(albumId,null,'CLIENT_REPORT_NOTIFICATION_REQUESTED',user,{batchId:batch.id});
- return (await query('SELECT status FROM gallery_postcard_notifications WHERE batch_id=$1',[batch.id])).rows[0];
+ const prior=(await query('SELECT id,status,request_key FROM gallery_postcard_notifications WHERE batch_id=$1 ORDER BY created_at DESC',[batch.id])).rows;
+ const same=prior.find(n=>n.request_key===requestKey),active=prior.find(n=>['PENDING','SENDING'].includes(n.status));
+ if(same||active)return {id:(same||active).id,status:(same||active).status,queued:false,deduplicated:true};
+ if(prior.length&&!confirmResend)throw new AppError('A previous email attempt exists. Review its status and confirm sending another report email.',409,'POSTCARD_REPORT_RESEND_CONFIRMATION_REQUIRED');
+ const row=(await query(`INSERT INTO gallery_postcard_notifications(album_id,batch_id,request_key,requested_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id,status`,[albumId,batch.id,requestKey,user.id])).rows[0];
+ if(!row){const active=(await query("SELECT id,status FROM gallery_postcard_notifications WHERE batch_id=$1 AND status IN('PENDING','SENDING')",[batch.id])).rows[0];if(active)return {...active,queued:false,deduplicated:true};throw new AppError('The report email changed while requesting it. Refresh before trying again.',409,'POSTCARD_REPORT_REQUEST_CHANGED');}
+ await mailingHistory(albumId,null,'CLIENT_REPORT_NOTIFICATION_REQUESTED',user,{batchId:batch.id,notificationId:row.id,requestKey,confirmedResend:confirmResend});
+ return {...row,queued:true,deduplicated:false};
+ });
 }
 export async function processPostcardNotifications({send=sendEmail,limit=3}={}){
  // Staging never emails clients automatically; qualification uses an injected transport.

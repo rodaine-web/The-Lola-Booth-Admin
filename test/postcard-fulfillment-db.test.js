@@ -54,18 +54,42 @@ test('single-photo grants, scoped reporting, exclusions and exactly-once notific
   await reports.processPostcardNotifications({send});assert.equal(sends,1);
   const stored=await one('SELECT * FROM gallery_postcard_reports WHERE album_id=$1',[album.id]);assert.ok(stored.snapshot_ciphertext);assert.ok((await reports.adminReportDownload(album.id,stored.id,admin)).length>1000);
   await assert.rejects(reports.clientReportDownload({client_id:crypto.randomUUID()},event.id,stored.id));
+  await query("UPDATE gallery_postcard_notifications SET status='SENDING',started_at=now()-interval '1 hour' WHERE album_id=$1",[album.id]);await reports.processPostcardNotifications({send});assert.equal(sends,1);assert.equal((await one('SELECT status FROM gallery_postcard_notifications WHERE album_id=$1',[album.id])).status,'NEEDS_REVIEW');
+  const requestKey=crypto.randomUUID();
+  await assert.rejects(reports.requestPostcardNotification(album.id,admin,{requestKey}),{code:'POSTCARD_REPORT_RESEND_CONFIRMATION_REQUIRED'});
+  const requests=await Promise.all(Array.from({length:4},()=>reports.requestPostcardNotification(album.id,admin,{requestKey,confirmResend:true})));
+  assert.equal(requests.filter(r=>r.queued).length,1);assert.equal(new Set(requests.map(r=>r.id)).size,1);
+  const queuedOther=await reports.requestPostcardNotification(album.id,admin,{requestKey:crypto.randomUUID(),confirmResend:true});assert.equal(queuedOther.id,requests[0].id);assert.equal(queuedOther.queued,false);
+  await Promise.all([reports.processPostcardNotifications({send}),reports.processPostcardNotifications({send})]);assert.equal(sends,2);
+  // Replaying the same HTTP request even after completion never sends again.
+  assert.equal((await reports.requestPostcardNotification(album.id,admin,{requestKey,confirmResend:true})).status,'SENT');await reports.processPostcardNotifications({send});assert.equal(sends,2);
+  assert.equal((await one('SELECT count(*)::int n FROM gallery_postcard_notifications WHERE batch_id=$1',[batch.id])).n,2);
+  await assert.rejects(reports.requestPostcardNotification(album.id,admin,{requestKey:crypto.randomUUID()}),{code:'POSTCARD_REPORT_RESEND_CONFIRMATION_REQUIRED'});
+  // A fresh, explicitly confirmed resend creates a new audited email attempt.
+  const nextKey=crypto.randomUUID();await reports.requestPostcardNotification(album.id,admin,{requestKey:nextKey,confirmResend:true});await reports.processPostcardNotifications({send});assert.equal(sends,3);
+  await reports.enqueuePostcardNotifications();assert.equal((await one('SELECT count(*)::int n FROM gallery_postcard_notifications WHERE batch_id=$1',[batch.id])).n,3);
+  assert.equal((await one('SELECT count(*)::int n FROM gallery_postcard_notifications WHERE requested_by=$1',[user.id])).n,2);
+  await query("INSERT INTO permissions(key) VALUES('*') ON CONFLICT DO NOTHING");await query("INSERT INTO user_permissions(user_id,permission_id) SELECT $1,id FROM permissions WHERE key='*'",[user.id]);
+  const {default:jwt}=await import('jsonwebtoken');
+  const headers={authorization:'Bearer '+jwt.sign({sub:user.id},process.env.JWT_SECRET),'content-type':'application/json'};
   const {default:express}=await import('express'),{galleryPublicRouter,galleryAdminRouter}=await import('../server/src/routes/gallery.js'),{clientSessionRouter}=await import('../server/src/routes/client-session.js'),{errorHandler}=await import('../server/src/middleware/error-handler.js');
   const app=express();app.use(express.json());app.use('/api/gallery',galleryPublicRouter);app.use('/api/gallery-admin',galleryAdminRouter);app.use('/api/public/client',clientSessionRouter);app.use(errorHandler);
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
   try{
    assert.equal((await fetch(origin+`/api/gallery-admin/albums/${album.id}/postcard-workspace`)).status,401);
+   const notificationUrl=origin+`/api/gallery-admin/albums/${album.id}/postcard-notifications`;
+   assert.equal((await fetch(notificationUrl,{method:'POST',body:'{}',headers:{'content-type':'application/json'}})).status,401);
+   const requestKey=crypto.randomUUID(),body=JSON.stringify({requestKey,confirmResend:true});
+   const first=await fetch(notificationUrl,{method:'POST',headers,body});assert.equal(first.status,200);const queued=await first.json();assert.equal(queued.queued,true);
+   const replay=await fetch(notificationUrl,{method:'POST',headers,body});assert.equal(replay.status,200);assert.equal((await replay.json()).queued,false);
+   await reports.processPostcardNotifications({send});assert.equal(sends,4);
+   const completed=await fetch(notificationUrl,{method:'POST',headers,body});assert.equal((await completed.json()).status,'SENT');await reports.processPostcardNotifications({send});assert.equal(sends,4);
    assert.equal((await fetch(origin+`/api/gallery/access/photo/${token}/zip`)).status,404);
    assert.equal((await fetch(origin+`/api/gallery/access/photo/${token}/media/${b.id}/download`,{method:'POST'})).status,404);
    process.env.APP_ENV='development';
    assert.equal((await fetch(origin+`/api/public/client/events/${event.id}/postcard-reports`)).status,401);
    process.env.APP_ENV='test';
   }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
-  await query("UPDATE gallery_postcard_notifications SET status='SENDING',started_at=now()-interval '1 hour' WHERE album_id=$1",[album.id]);await reports.processPostcardNotifications({send});assert.equal(sends,1);assert.equal((await one('SELECT status FROM gallery_postcard_notifications WHERE album_id=$1',[album.id])).status,'NEEDS_REVIEW');
   // No physical-mail dispatch path is invoked by report generation or notification.
   assert.equal((await one('SELECT count(*)::int n FROM gallery_live_mailing_jobs')).n,1);
  }finally{if(db)await db.pool.end();await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();}

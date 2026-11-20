@@ -48,7 +48,10 @@ export async function buildPostcardWorkbook(report){
  const names=['Successfully submitted','Failed','Held / needs review','Excluded','Not yet submitted'],counts=keys.slice(3,8).map(key=>key==='pending'?(summary.pending||0)+(summary.ready||0):summary[key]||0);
  chart=chart.replace(/<c:strCache>[\s\S]*?<\/c:strCache>/,`<c:strCache><c:ptCount val="5"/>${names.map((v,i)=>`<c:pt idx="${i}"><c:v>${escape(v)}</c:v></c:pt>`).join('')}</c:strCache>`).replace(/<c:numCache>[\s\S]*?<\/c:numCache>/,`<c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="5"/>${counts.map((v,i)=>`<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}</c:numCache>`);
  const palette=['4C7B3C','B83E32','D2A148','AAA49C','D4B977'];
- chart=chart.replace('</c:tx>','</c:tx>'+palette.map((color,i)=>`<c:dPt><c:idx val="${i}"/><c:spPr><a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:srgbClr val="${color}"/></a:solidFill></c:spPr></c:dPt>`).join(''));
+ const points=palette.map((color,i)=>`<c:dPt><c:idx val="${i}"/><c:spPr><a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:srgbClr val="${color}"/></a:solidFill></c:spPr></c:dPt>`).join('');
+ // Data-point colors belong to the series, never the chart title's text.
+ chart=chart.replace(/<c:ser>[\s\S]*?<\/c:ser>/,series=>series.replace('</c:tx>','</c:tx>'+points));
+ chart=chart.replace('</c:doughnutChart>','<c:holeSize val="55"/></c:doughnutChart>');
  files[path]=strToU8(chart);
  let styles=strFromU8(files['xl/styles.xml']);
  styles=styles.replace('<x:cellXfs count="11">','<x:cellXfs count="12">').replace('</x:cellXfs>','<x:xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyAlignment="1"><x:alignment vertical="center" wrapText="1"/></x:xf></x:cellXfs>');
