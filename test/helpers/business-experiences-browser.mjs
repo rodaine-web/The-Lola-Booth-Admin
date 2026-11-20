@@ -3,7 +3,7 @@ import {chromium} from 'playwright';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-export async function qualifyBusinessExperiences({origin,token}){
+export async function qualifyBusinessExperiences({origin,token,clientId,eventId}){
  const browser=await chromium.launch(),out=process.env.BUSINESS_QA_EVIDENCE_DIR||path.join(os.tmpdir(),'lola-business-redesign','screens');await fs.mkdir(out,{recursive:true});
  try{for(const width of [1440,768,390]){
   const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(30000);await page.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
@@ -41,7 +41,23 @@ export async function qualifyBusinessExperiences({origin,token}){
   await page.getByRole('heading',{name:'Pricing & catalog',exact:true}).waitFor();await page.getByLabel('Pricing catalog',{exact:true}).selectOption('VIRTUAL');await page.getByLabel('Show inactive packages').check();
   assert.equal(await page.locator('tr').filter({hasText:'Virtual Booth —'}).count(),4);await page.getByRole('button',{name:'Edit inclusions',exact:true}).first().click();
   await page.getByLabel('Participant/session allowance',{exact:true}).fill('250');await page.getByLabel('Active branded experiences',{exact:true}).fill('2');await page.getByLabel('Reason for change *',{exact:true}).fill('Synthetic browser scope persistence');await page.getByRole('button',{name:'Save package draft',exact:true}).click();await page.getByText('Package draft updated.',{exact:false}).waitFor();
-  await page.getByRole('heading',{name:'Retail printing & postcards'}).waitFor();assert.equal(await page.locator('#retail-rates tbody tr').count(),6);await page.screenshot({path:path.join(out,`admin-${width}.png`),fullPage:true});await page.close();
+  await page.getByRole('heading',{name:'Retail printing & postcards'}).waitFor();assert.equal(await page.locator('#retail-rates tbody tr').count(),6);await page.screenshot({path:path.join(out,`admin-${width}.png`),fullPage:true});
+  await page.goto(origin+'/sales/proposals/new?clientId='+clientId+'&eventId='+eventId,{waitUntil:'domcontentloaded'});
+  await page.getByText('Creating a proposal for QA ONLY — business redesign',{exact:false}).waitFor();
+  await page.getByRole('button',{name:'Continue to Services',exact:false}).click();
+  await page.locator('.experience-card').filter({hasText:'The Lola Virtual Booth'}).click();
+  await page.locator('.package-card').filter({hasText:'Virtual Booth — 24 Hours'}).click();
+  const review=page.locator('#package-pricing-review');
+  await review.getByLabel('Participant/session allowance',{exact:true}).fill('250');
+  await review.getByLabel('Active branded experiences',{exact:true}).fill('2');
+  await review.getByText(/Service total:.*\$349\.00/).waitFor();
+  await page.getByRole('button',{name:'Existing business package',exact:true}).click();
+  const duration=page.getByLabel('Business Virtual Booth duration',{exact:true});assert.notEqual(await duration.inputValue(),'');
+  await duration.selectOption({label:'Monthly Subscription — $499.00/month + setup'});
+  await page.locator('.experience-card[aria-pressed]').filter({hasText:/glam/i}).click();
+  const monthlyId=await duration.inputValue();await page.getByLabel('Business plan',{exact:true}).selectOption('EVENT_PLUS');
+  assert.equal(await duration.inputValue(),monthlyId,'Changing physical tiers must preserve the separately priced Virtual Booth selection');
+  await page.screenshot({path:path.join(out,`proposal-virtual-${width}.png`),fullPage:true});await page.close();
  }
  console.log('Business browser QA: all five experiences, durations, compatible add-ons, real CRM submissions, unchanged Celebrations, Admin persistence and retail separation passed.');
  }finally{await browser.close();}
