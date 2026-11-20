@@ -33,3 +33,7 @@ test('removing an experience removes its automatic photo section while preservin
  assert.deepEqual(retainProposalPhotoSections([...automatic,manual],[{name:'Digital Booth'}]),[manual]);
  assert.deepEqual(retainProposalPhotoSections([...automatic,manual],[{name:'Lola Glam'}]),[...automatic,manual]);
 });
+test('business requests skip unclassified legacy photo sets and use context-specific composition',()=>{
+ assert.deepEqual(mappedProposalPhotos([{name:'Lola Glam'}],assets,()=> 'section','Brand Activation'),[]);
+ assert.deepEqual(mappedProposalPhotos([{name:'Lola 360'}],assets,()=> 'section','Corporate Event'),[]);
+});
