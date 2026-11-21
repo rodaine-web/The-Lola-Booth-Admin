@@ -379,6 +379,7 @@ export default function PublicGallery() {
               </div>
               {photoNotice && <p className="kg-photo-notice" role="status">{photoNotice}</p>}{error && <p className="kg-photo-notice" role="alert">{error}</p>}
               <div className="kg-product-grid">{keepsakesProducts.map(product => <Link className="kg-product-tile" key={product.id} to={shopPath(product)} aria-label={`Customize ${product.title}`}><KeepsakeProductPreview product={product} url={mediaUrl(selected.url)}/><div><strong>{product.title}</strong><small>{keepsakeDescription(product.category)}</small></div><ChevronRight size={20}/></Link>)}</div>
+              {!keepsakesProducts.some(product=>String(product.category).toLowerCase()==='postcard') && <div className="kg-postcard-pending"><strong>Send a Postcard</strong><small>Back design being prepared · personal messages and font choices coming with the approved artwork</small></div>}
               {!keepsakesProducts.length && <p className="kg-empty-products">Personalized products for this photo are being prepared. Your permitted free photo actions remain available.</p>}
               {keepsakesProducts.length > 0 && <><Link className="kg-all-products" to={shopPath()}><ShoppingCart size={22}/> See All Photo Products</Link><p className="kg-preview-note">Product previews use your selected photo. Review the final layout in the shop.</p></>}
             </aside>
@@ -442,6 +443,7 @@ function keepsakeDescription(category) {
   return ({postcard: 'Mail this photo to a loved one', print: 'Professionally printed photos', frame: 'A ready-to-display keepsake', mug: 'Your photo on a ceramic mug', magnet: 'A fun, everyday keepsake', keychain: 'A custom photo keychain', digital: 'Your available original photo', bundle: 'Your available original photos'})[String(category).toLowerCase()] || 'Personalize with your photo';
 }
 function KeepsakeProductPreview({product, url}) {
-  const category = String(product.category || 'print').toLowerCase();
-  return <div className={`kg-product-preview kg-preview-${category}`} aria-hidden="true"><div className="kg-preview-object"><img src={url} alt=""/></div>{category === 'postcard' && <div className="kg-postcard-back"><i/><i/><i/></div>}</div>;
+  const kind=String(product.category||'').toLowerCase();
+  const supplierMug=kind==='mug'&&product.variants?.[0]?.sku==='GLOBAL-MUG-W';
+  return <div className="kg-product-preview kg-supplier-image" aria-hidden="true">{supplierMug?<img src="/assets/keepsakes/prodigi-white-mug-11oz.png" alt=""/>:['digital','bundle'].includes(kind)?<img crossOrigin="anonymous" src={url} alt=""/>:<span>Partner image pending</span>}</div>;
 }
