@@ -1,4 +1,15 @@
 const count=value=>Number.isFinite(Number(value))?Number(value):0;
+export function analyticsPagePath(value){
+ const path=String(value||'').split(/[?#]/)[0];
+ let decoded=path;try{decoded=decodeURIComponent(path);}catch{}
+ const privateRoute=decoded.match(/^\/(invoice|invoices|pay|payment|payments|proposal|proposals|client|sales|finance|system)(?:\/|\.|$)/i);
+ return privateRoute?`/${privateRoute[1].toLowerCase()}/[private]`:path;
+}
+export function analyticsPageRows(rows=[],dimension='landingPage',metric='sessions'){
+ const paths=new Map();
+ for(const row of rows){const path=analyticsPagePath(row[dimension]);paths.set(path,(paths.get(path)||0)+count(row[metric]));}
+ return [...paths].map(([path,total])=>({[dimension]:path,[metric]:total})).sort((a,b)=>b[metric]-a[metric]);
+}
 export function previousAnalyticsDates(dates){
  const day=86400000,start=Date.parse(dates.startDate+'T00:00:00Z'),end=Date.parse(dates.endDate+'T00:00:00Z');
  const iso=n=>new Date(n).toISOString().slice(0,10);

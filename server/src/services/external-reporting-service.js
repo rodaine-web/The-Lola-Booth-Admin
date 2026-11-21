@@ -1,4 +1,4 @@
-import {previousAnalyticsDates,websiteAnalyticsInsights} from '../../../shared/website-analytics-insights.js';
+import {previousAnalyticsDates,websiteAnalyticsInsights,analyticsPageRows} from '../../../shared/website-analytics-insights.js';
 import { query } from '../db/pool.js';
 import { AppError } from '../utils/errors.js';
 import { getBusinessDateRanges } from '../utils/date-ranges.js';
@@ -58,7 +58,7 @@ export async function websiteReport(input = {}, req = null) {
   return {
     state: cache ? 'AVAILABLE' : job?.status==='FAILED'?'FAILED':'QUEUED',
     message:job?.status==='FAILED'?'The Google report refresh failed. Check the connection and retry.':undefined,
-    report: cache?.report,
+    report: cache?.report?{...cache.report,landing:analyticsPageRows(cache.report.landing),pages:analyticsPageRows(cache.report.pages,'pagePath','screenPageViews')}:undefined,
     refreshed_at: cache?.refreshed_at,
     stale: Boolean(cache && job),
     job,
@@ -145,7 +145,7 @@ export async function refreshAnalytics(row, tokens, payload) {
  WHERE l.deleted_at IS NULL AND l.test_mode=false AND l.created_at >= ($1::date::timestamp AT TIME ZONE $3) AND l.created_at < (($2::date+1)::timestamp AT TIME ZONE $3) GROUP BY 1,2,3`, [dates.startDate, dates.endDate, dates.timeZone]);
   const crmSummary=crm.rows.reduce((sum,row)=>({inquiries:sum.inquiries+Number(row.inquiries||0),bookings:sum.bookings+Number(row.bookings||0),bookingValue:sum.bookingValue+Number(row.booking_value||0)}),{inquiries:0,bookings:0,bookingValue:0});
   // Store paths, never query strings which can contain visitor-entered data.
-  const landingPaths=new Map();for(const row of landing.rows){const path=String(row.landingPagePlusQueryString||'').split('?')[0];landingPaths.set(path,(landingPaths.get(path)||0)+Number(row.sessions||0));}
+  const landingPaths=analyticsPageRows(landing.rows.map(row=>({landingPage:row.landingPagePlusQueryString,sessions:row.sessions})));
   const performance = campaigns.rows.map(c => {
     const match = x => x.campaign === c.sessionCampaignName && x.source === c.sessionSource && x.medium === c.sessionMedium;
     const lead = crm.rows.find(match),
@@ -173,8 +173,8 @@ export async function refreshAnalytics(row, tokens, payload) {
     traffic: traffic.rows,
     sources: sources.rows,
     campaigns: performance,
-    landing:[...landingPaths].map(([landingPage,sessions])=>({landingPage,sessions})).sort((a,b)=>b.sessions-a.sessions),
-    pages: pages.rows,
+    landing:landingPaths,
+    pages:analyticsPageRows(pages.rows,'pagePath','screenPageViews'),
     contents: contents.rows,
     contentUnavailable: Boolean(contents.unavailable),
     crmOnlyCampaigns: crm.rows.filter(x => !campaigns.rows.some(c => x.campaign === c.sessionCampaignName && x.source === c.sessionSource && x.medium === c.sessionMedium)),

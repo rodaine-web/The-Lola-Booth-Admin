@@ -11,3 +11,10 @@ test('insights explain measurement gaps without treating GA events as people or 
 test('zero prior traffic does not produce invented percentage changes',()=>{
  assert.ok(!websiteAnalyticsInsights({summary:{sessions:0},previous:{summary:{sessions:0}}}).some(x=>x.body.includes('%')));
 });
+import {analyticsPagePath,analyticsPageRows} from '../shared/website-analytics-insights.js';
+test('private document tokens and query strings are masked while page totals remain intact',()=>{
+ assert.equal(analyticsPagePath('/invoice/private-document-token?email=private@example.invalid'),'/invoice/[private]');
+ assert.equal(analyticsPagePath('/%70roposal/private-token'),'/proposal/[private]');
+ assert.equal(analyticsPagePath('/availability?email=private@example.invalid'),'/availability');
+ assert.deepEqual(analyticsPageRows([{pagePath:'/invoice/token-a',screenPageViews:2},{pagePath:'/invoice/token-b',screenPageViews:3}], 'pagePath','screenPageViews'),[{pagePath:'/invoice/[private]',screenPageViews:5}]);
+});
