@@ -153,10 +153,15 @@ export async function selectAccount(provider, id, req) {
     };
     if (provider === 'GA4') {
       const property = await providerApi(provider, tokens, `/v1beta/properties/${id}`);
+      const streams=await providerApi(provider,tokens,`/v1beta/properties/${id}/dataStreams`);
+      const measurementIds=(streams.dataStreams||[]).map(s=>s.webStreamData?.measurementId).filter(Boolean);
+      const expected=process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;
+      if(expected&&!measurementIds.includes(expected))throw new AppError('This property does not contain the website’s Google tag. Choose the matching Lola Booth property.',422,'GA4_PROPERTY_MISMATCH');
       metadata = {
         ...metadata,
         property_id: id,
         property_name: property.displayName,
+        measurement_ids:measurementIds,
         account_id: selected.account_id,
         account_name: selected.account_name,
         time_zone: property.timeZone,
