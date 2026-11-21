@@ -41,5 +41,9 @@ test('lead selection actions persist, preserve links, filter archives and enforc
   assert.equal((await one('SELECT lead_id FROM proposals WHERE id=$1',[proposal.id])).lead_id,ids[0]);
   assert.equal((await one("SELECT count(*)::int n FROM audit_logs WHERE action IN ('lead_archived','lead_restored','lead_deleted')")).n,5);
   assert.equal((await action('restore')).status,409);
+  const google=await one("INSERT INTO leads(first_name,last_name,email,event_type,lead_source,first_touch) VALUES('Google','QA','google@qa.invalid','Corporate','WEBSITE',$1) RETURNING id",[{gclid:'synthetic-google-click'}]);
+  await one("INSERT INTO leads(first_name,last_name,email,event_type,lead_source,utm_source,utm_medium) VALUES('Organic','QA','organic@qa.invalid','Corporate','WEBSITE','google','organic') RETURNING id");
+  const filtered=await call('leads?status=ALL&source=GOOGLE_ADS');
+  assert.equal(filtered.status,200);assert.deepEqual(filtered.body.data.map(row=>row.id),[google.id]);
  }finally{if(server)await new Promise(resolve=>server.close(resolve));await pool?.end();await base.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await base.end();}
 });
