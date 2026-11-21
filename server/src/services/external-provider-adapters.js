@@ -139,7 +139,7 @@ export function providerApi(provider, tokens, path, options = {}) {
       'Access-Token': tokens.access_token
     }
   });
-  return providerRequest(`https://${path.startsWith('/v1beta/account') || /^\/v1beta\/properties\/\d+$/.test(path) ? 'analyticsadmin' : 'analyticsdata'}.googleapis.com${path}`, {
+  return providerRequest(`https://${path.startsWith('/v1beta/account') || /^\/v1beta\/properties\/\d+(?:\/dataStreams(?:\?.*)?)?$/.test(path) ? 'analyticsadmin' : 'analyticsdata'}.googleapis.com${path}`, {
     ...options,
     token: tokens.access_token
   });

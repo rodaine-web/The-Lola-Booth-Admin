@@ -132,6 +132,11 @@ jobs:
           INTEGRATION_MARKETPLACE_BROWSER_TEST: "true"
         run: node --test test/integration-marketplace-browser.test.js
 
+      - name: Website analytics responsive and failure-state checks
+        env:
+          WEBSITE_ANALYTICS_BROWSER_TEST: "true"
+        run: node --test test/website-analytics-browser.test.js
+
       - name: Partnerships real API desktop/mobile
         env:
           BOOKING_LIFECYCLE_TEST_DATABASE_URL: postgresql://lola_test:lola_test@localhost:5432/lola_phase1_qa_ci_qa

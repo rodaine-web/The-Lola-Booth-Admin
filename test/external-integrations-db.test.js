@@ -55,7 +55,7 @@ test('external hub migration and queue run against disposable PostgreSQL', {
         audience_id: 'list1',
         needs_selection: false
       }]);
-      await query("INSERT INTO leads(first_name,last_name,email,event_type,marketing_email_opt_in,status) VALUES('QA','External','consented@example.invalid','Corporate',true,'NEW')");
+      await query("INSERT INTO leads(first_name,last_name,email,event_type,marketing_email_opt_in,status,created_at) VALUES('QA','External','consented@example.invalid','Corporate',true,'NEW','2026-11-12T12:00:00Z')");
       t.mock.method(globalThis, 'fetch', async (_url, opts) => new Response(JSON.stringify(opts.method === 'GET' ? {} : {
         id: 'member'
       }), {
@@ -77,6 +77,22 @@ test('external hub migration and queue run against disposable PostgreSQL', {
       const connection = (await query("SELECT encrypted_credentials,status FROM integration_connections WHERE provider='MAILCHIMP'")).rows[0];
       assert.equal(connection.encrypted_credentials, null);
       assert.equal(connection.status, 'DISABLED');
+      // Multiple bookings must not multiply the inquiry cohort. ZIP/guest data never leaves this local fixture.
+      const analyticsLead=(await query("INSERT INTO leads(first_name,last_name,email,event_type,status,created_at,utm_campaign,utm_source,utm_medium) VALUES('Analytics','QA','analytics@example.invalid','Corporate','NEW','2026-11-10T12:00:00Z','qa','google','cpc') RETURNING id")).rows[0];
+      await query("INSERT INTO leads(first_name,last_name,email,event_type,status,created_at,test_mode) VALUES('Test','Only','test@example.invalid','Corporate','NEW','2026-11-10T12:00:00Z',true)");
+      const client=(await query("INSERT INTO clients(name) VALUES('Analytics QA') RETURNING id")).rows[0];
+      for(const [total,deleted] of [[100,null],[200,null],[900,'2026-11-11']]){
+        const event=(await query("INSERT INTO events(event_name,event_type,event_date,client_id) VALUES('Analytics QA','Corporate','2026-11-10',$1) RETURNING id",[client.id])).rows[0];
+        await query('INSERT INTO bookings(event_id,client_id,lead_id,total,deleted_at) VALUES($1,$2,$3,$4,$5)',[event.id,client.id,analyticsLead.id,total,deleted]);
+      }
+      t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify({rows:[]})));
+      const ga=(await query("SELECT * FROM integration_connections WHERE provider='GA4'")).rows[0];
+      ga.metadata={property_id:'123',property_name:'QA'};
+      const {refreshAnalytics}=await import('../server/src/services/external-reporting-service.js');
+      await refreshAnalytics(ga,{access_token:'local-test-only'},{dates:{startDate:'2026-11-01',endDate:'2026-11-20',timeZone:'America/Chicago'},event:'generate_lead',cache_key:'qa-cohort'});
+      const cached=(await query("SELECT report FROM integration_report_cache WHERE connection_id=$1 AND cache_key='qa-cohort'",[ga.id])).rows[0].report;
+      assert.deepEqual(cached.crmSummary,{inquiries:2,bookings:2,bookingValue:300});
+      assert.equal(cached.crmOnlyCampaigns.find(row=>row.campaign==='qa').inquiries,1);
       await query(`DROP SCHEMA ${schema} CASCADE`);
     });
   } finally {
