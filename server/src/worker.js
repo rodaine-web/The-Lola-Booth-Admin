@@ -1,4 +1,5 @@
 import {processLiveMailingQueue} from './services/gallery-live-mailing-service.js';
+import {processKeepsakesQueue,processKeepsakesNotifications} from './services/keepsakes-fulfillment-service.js';
 import {processPostcardNotifications} from './services/postcard-report-service.js';
 import {processMailingQueue} from './services/gallery-mailing-service.js';
 import {queueEventCloseouts} from './services/event-closeout-service.js';
@@ -41,6 +42,8 @@ async function tick() {
   try {
     await pool.query('SELECT reconcile_sales_lifecycle()');
     await recordWorkerHeartbeat("automation-worker", { pid: process.pid, ...buildInfo(), jobsPaused:stagingJobsPaused(), databaseSystemId });
+    await processKeepsakesQueue({limit:3});
+    await processKeepsakesNotifications();
     const formNotifications=await processFormOwnerNotifications();
     if(formNotifications.processed.length){
       logger.info({processed:formNotifications.processed},'Owner form notifications processed');

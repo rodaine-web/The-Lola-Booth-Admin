@@ -12,6 +12,8 @@ import Login from "./pages/Login.jsx";
 import SetupPassword from "./pages/SetupPassword.jsx";
 
 const GalleryAdmin = lazy(() => import("./pages/GalleryAdmin.jsx"));
+const Keepsakes = lazy(() => import('./pages/Keepsakes.jsx'));
+const KeepsakesAdmin = lazy(() => import('./pages/KeepsakesAdmin.jsx'));
 const PublicGallery = lazy(() => import("./pages/PublicGallery.jsx"));
 const WebsiteDiagnostics = lazy(() => import("./pages/WebsiteDiagnostics.jsx"));
 const Users = lazy(() => import("./pages/Users.jsx"));
@@ -104,6 +106,8 @@ export default function App() {
       {GALLERY_ENABLED && <><Route path="/gallery" element={<PublicGallery />} />
       <Route path="/gallery/:type/:token" element={<PublicGallery />} /></>}
       <Route path="/delivery/:token" element={<PublicDelivery />} />
+      <Route path="/keepsakes/orders/:orderToken" element={<Keepsakes />} />
+      <Route path="/keepsakes/:type/:token" element={<Keepsakes />} />
       <Route path="/partner-workspace" element={<PartnerWorkspacePublic />} />
       <Route path="/my-events" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
       <Route path="/my-events/:eventId" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
@@ -164,6 +168,7 @@ export default function App() {
         <Route path="content/experiences" element={<ResourcePage title="Experiences" endpoint="/experiences" columns={["name", "base_price", "default_duration", "active"]} fields={experienceFields} />} />
         <Route path="content/addons" element={<ResourcePage title="Add-ons" endpoint="/addons" columns={["name", "price", "pricing_type", "active"]} fields={addonFields} />} />
         <Route path="operations/live" element={<LiveOperations />} />
+        <Route path="operations/keepsakes" element={<KeepsakesAdmin />} />
         <Route path="operations/tasks" element={<ResourcePage title="Tasks" endpoint="/tasks" columns={["title", "owner_name", "event_name", "client_name", "due_date", "priority", "status"]} fields={taskFields} />} />
         <Route path="operations/files" element={<ResourcePage title="Files" endpoint="/files" phase="Metadata model ready" columns={["filename", "category", "storage_provider", "created_at"]} />} />
         {GALLERY_ENABLED && <><Route path="operations/galleries" element={<GalleryAdmin />} />

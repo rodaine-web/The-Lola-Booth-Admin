@@ -116,6 +116,11 @@ const navGroups = [{
     to: '/operations/galleries',
     permission: 'read:events',
     gallery: true
+  }, {
+    label: 'Keepsakes & Orders',
+    to: '/operations/keepsakes',
+    permission: 'read:finance',
+    gallery: true
   }]
 }, {
   label: 'Website',
