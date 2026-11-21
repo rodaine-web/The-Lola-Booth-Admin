@@ -41,6 +41,8 @@ test(
         firstName: "FORMS QA",
         lastName: marker,
         email: `qa-${marker}@example.invalid`,
+        gclid:'synthetic-google-click',
+        utm_source:'google',utm_medium:'cpc',utm_campaign:'qa-campaign',
       };
       const contact = {
         ...common,
@@ -86,6 +88,7 @@ test(
         await query("SELECT * FROM leads WHERE email=$1", [common.email])
       ).rows;
       assert.equal(leads.length, 3);
+      assert.ok(leads.every(lead=>lead.first_touch.gclid==='synthetic-google-click'&&lead.utm_campaign==='qa-campaign'));
       assert.equal(leads.find(l => l.source_subtype !== "CONTACT").source_details.eventReferralCode, "LOLA-EVENT-10");
       assert.equal(
         leads.filter(
