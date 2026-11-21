@@ -11,6 +11,8 @@ import {stripeConfiguration,verifyStripeAccount} from './stripe-configuration.js
 import {prodigiQuote,prodigiStatus,prodigiMoneyCents} from './prodigi-service.js';
 import {galleryStorage} from './gallery-storage.js';
 import {lockKeepsakesOrder} from './keepsakes-order-lock.js';
+import {STANDARD_POSTCARD_TEMPLATE,STANDARD_POSTCARD_SHA256} from '../../../shared/postcard-template.js';
+import {standardPostcardBack} from './keepsakes-postcard-template.js';
 
 export const keepsakesHash=value=>crypto.createHash('sha256').update(Buffer.isBuffer(value)?value:String(value)).digest('hex');
 export function keepsakesSnapshot(snapshot){return {...snapshot,items:snapshot.items.map(item=>{const {recipientsCiphertext,...rest}=item;return {...rest,recipients:recipientsCiphertext?decryptSecretJson(recipientsCiphertext).recipients:item.recipients||[]};})};}
@@ -70,6 +72,14 @@ export async function keepsakesAsset(type,token,assetId){
  const bytes=await verifiedGalleryBytes(asset,async()=>{if(!(await keepsakesScope(type,token)).assets.some(a=>a.id===assetId))throw unavailable();});
  return sharp(bytes,{limitInputPixels:60_000_000}).rotate().resize({width:1200,height:1200,fit:'inside',withoutEnlargement:true}).jpeg({quality:82}).toBuffer();
 }
+export async function keepsakesPostcardPreview(type,token,input){
+ const scope=await keepsakesScope(type,token),{products}=await availableProducts(scope);
+ const product=products.find(p=>p.id===input.productId&&p.provider==='LOB'),variant=product?.variants.find(v=>v.id===input.variantId);
+ if(variant?.backTemplate!==STANDARD_POSTCARD_TEMPLATE)throw new AppError('The approved postcard preview is unavailable.',404,'KEEPSAKES_BACK_ARTWORK_REQUIRED');
+ const {renderKeepsakesPostcardBack}=await import('./keepsakes-lob.js');
+ const rendered=await renderKeepsakesPostcardBack({...input,bytes:await standardPostcardBack(),backTemplate:STANDARD_POSTCARD_TEMPLATE});
+ return sharp(rendered).resize({width:1200}).jpeg({quality:88,chromaSubsampling:'4:4:4'}).toBuffer();
+}
 const addressForProdigi=a=>({line1:a.address1,line2:a.address2||'',townOrCity:a.city,stateOrCounty:a.state,postalOrZipCode:a.zip,countryCode:a.country});
 export {addressForProdigi};
 export async function quoteKeepsakes(type,token,input){
@@ -98,6 +108,7 @@ export async function quoteKeepsakes(type,token,input){
   if(product.category!=='bundle'&&assets.length!==1)throw new AppError('Select one photo for this product.',422,'KEEPSAKES_ASSET_COUNT');
   if(product.provider==='LOB'&&(!item.recipients.length||!settings.returnAddress))throw new AppError('Postcards need recipients and an approved event return address.',422,'KEEPSAKES_POSTCARD_ADDRESS');
   if(product.provider!=='LOB'&&item.recipients.length)throw new AppError('Only postcards accept separate recipients.',422,'KEEPSAKES_RECIPIENTS_INVALID');
+  if(product.provider==='LOB'&&variant.backTemplate===STANDARD_POSTCARD_TEMPLATE&&item.quantity!==1)throw new AppError('Choose one recipient per postcard; copies cannot multiply recipients.',422,'KEEPSAKES_POSTCARD_QUANTITY');
   const units=product.provider==='LOB'?item.quantity*item.recipients.length:item.quantity;
   if(product.provider==='PRODIGI'){
    if(!cart.shippingAddress)throw new AppError('A shipping address is required.',422,'KEEPSAKES_SHIPPING_REQUIRED');
@@ -110,14 +121,19 @@ export async function quoteKeepsakes(type,token,input){
   subtotal+=product.retail_cents*units;
   let backArtworkId,backArtworkChecksum;
   if(product.provider==='LOB'){
+   let bytes;
+   if(variant.backTemplate===STANDARD_POSTCARD_TEMPLATE){bytes=await standardPostcardBack();backArtworkChecksum=STANDARD_POSTCARD_SHA256;}
+   else{
    const back=(await query("SELECT * FROM gallery_postcard_back_artworks WHERE album_id=$1 AND status='APPROVED' ORDER BY version DESC LIMIT 1",[scope.albumId])).rows[0];
    if(!back)throw new AppError('An approved postcard back is required before purchase.',409,'KEEPSAKES_BACK_ARTWORK_REQUIRED');
    const storage=galleryStorage();if(storage.provider!==back.storage_provider)throw new AppError('Artwork storage is unavailable.',503,'KEEPSAKES_ARTWORK_STORAGE');
-   const chunks=[];for await(const chunk of await storage.get(back.storage_key))chunks.push(chunk);const bytes=Buffer.concat(chunks);
+   const chunks=[];for await(const chunk of await storage.get(back.storage_key))chunks.push(chunk);bytes=Buffer.concat(chunks);
    if(keepsakesHash(bytes)!==back.sha256)throw new AppError('Approved artwork could not be verified.',409,'KEEPSAKES_ARTWORK_CHANGED');
+
+    backArtworkId=back.id;backArtworkChecksum=back.sha256;
+   }
    const {renderKeepsakesPostcardBack}=await import('./keepsakes-lob.js');
-   for(const recipient of item.recipients)await renderKeepsakesPostcardBack({bytes,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:variant.messageZone});
-   backArtworkId=back.id;backArtworkChecksum=back.sha256;
+   for(const recipient of item.recipients)await renderKeepsakesPostcardBack({bytes,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:variant.messageZone,backTemplate:variant.backTemplate,postcardArtworkColor:item.postcardArtworkColor});
   }
   items.push({...item,units,backArtworkId,backArtworkChecksum,product:{id:product.id,title:product.title,category:product.category,provider:product.provider,retailCents:product.retail_cents,taxCode:product.tax_code},variant,assets:assets.map(a=>({id:a.id,mediaId:a.media_id,checksum:a.checksum,label:a.label,kind:a.kind})),returnAddress:product.provider==='LOB'?settings.returnAddress:undefined});
  }

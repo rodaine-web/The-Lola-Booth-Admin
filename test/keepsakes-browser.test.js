@@ -32,7 +32,7 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
         { id: 'mug', title: 'Photo Mug', category: 'MUG', provider: 'PRODIGI', retailCents: 2499, currency: 'USD', available: true, variants: [{ id: 'white', sku:'GLOBAL-MUG-W', label: 'White ceramic', color: '#f7f5ee', printSpec: { widthPx: 1000, heightPx: 1000, customizationVerified: true } }, { id: 'black', label: 'Black ceramic', color: '#333333', printSpec: { widthPx: 1000, heightPx: 1000, customizationVerified: true } }] },
         { id: 'frame', title: 'Framed Print', category: 'FRAME', provider: 'PRODIGI', retailCents: 3999, currency: 'USD', available: true, variants: [{ id: 'oak', label: 'Oak frame', color: '#c39459', printSpec: { widthPx: 1200, heightPx: 900 } }] },
         { id: 'bundle', title: 'Digital Bundle', category: 'DIGITAL_BUNDLE', provider: 'DIGITAL', retailCents: 1299, currency: 'USD', available: true, variants: [{ id: 'original', label: 'Original files' }] },
-        { id: 'postcard', title: 'Send a Postcard', category: 'POSTCARD', provider: 'LOB', retailCents: 599, currency: 'USD', available: true, variants: [{ id: '4x6', label: '4 × 6 inch' }] },
+        { id: 'postcard', title: 'Send a Postcard', category: 'POSTCARD', provider: 'LOB', retailCents: 599, currency: 'USD', available: true, variants: [{ id: '4x6', label: '4 × 6 inch',backTemplate:'lola-connect-v2' }] },
         { id: 'unverified', title: 'Unverified Keychain', available: false, variants: [] },
       ];
       const portrait = (n) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000"><defs><linearGradient id="a"><stop stop-color="#b8a689"/><stop offset="1" stop-color="#51483c"/></linearGradient></defs><rect width="1000" height="1000" fill="url(#a)"/><circle cx="500" cy="375" r="170" fill="#d4a67d"/><path d="M200 1000Q180 560 500 560Q820 560 800 1000" fill="#242b31"/><text x="500" y="950" fill="#e9c58b" font-family="Georgia" font-size="56" text-anchor="middle">Synthetic Photo ${n}</text></svg>`)}`;
@@ -45,6 +45,7 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       }));
       await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
         const request = route.request(), pathname = new URL(request.url()).pathname;
+        if (pathname.endsWith('/postcard-preview')) return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII=','base64')});
         if (pathname.endsWith('/quote')) { const body = request.postDataJSON(); quotes.push(body); const physical = body.items.some(item => item.productId !== 'bundle'); return route.fulfill({ json: { quoteId: `synthetic-quote-${quotes.length}`, subtotalCents: 6498, shippingCents: 899, taxCents: 0, totalCents: 7397, currency: 'USD', expiresAt: new Date(Date.now() + 600000).toISOString(), checkoutReady, issues: checkoutReady ? [] : ['Sandbox provider setup is incomplete. No payment will be taken.'], proofs: physical ? [{label: 'Photo Mug', side: 'front', itemIndex: 0, recipientIndex: null, url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII='}, {label: 'Postcard message layout', side: 'back', itemIndex: 1, recipientIndex: 0, url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII='}] : [] } }); }
         if (pathname.includes('/orders/')) return route.fulfill({ json: { order: { id: 'synthetic-order', status: 'PAID', items: [{ id: 'item-1', title: 'Photo Mug', quantity: 1, status: 'IN_PRODUCTION' }] }, downloads: [] } });
         return route.fulfill({ json: { album: { id: 'synthetic-gallery', title: 'MINIO Brand Activation · Synthetic QA' }, enabled, assets: Array.from({ length: photoCount }, (_, index) => ({ id: `photo-${index + 1}`, label: `Photo ${index + 1}`, kind: index ? 'ORIGINAL' : 'COMPOSITE', width: 2000, height: 2000, url: `http://keepsakes-assets.test/photo-${index + 1}.svg`, digitalEligible: index !== 0, merchandiseEligible: true, included: index === 0 })), products, readiness: { checkout: checkoutReady, message: 'Sandbox checkout is not enabled.' } } });
@@ -123,8 +124,10 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       assert.doesNotMatch(await dialog.innerText(), /Digital Bundle/);
       await dialog.getByRole('button', { name: 'Close cart', exact: true }).click();
       await page.getByRole('button', { name: /Send a Postcard.*5.99/ }).click();
-      await page.getByRole('button', { name: 'Add another recipient', exact: true }).click();
-      for (const index of [1, 2]) {
+      await page.getByLabel('How many postcards?',{exact:true}).fill('4');
+      await page.getByLabel('Use the same note for every recipient',{exact:true}).uncheck();
+      await page.getByLabel('Back artwork color',{exact:true}).fill('#703040');
+      for (const index of [1, 2, 3, 4]) {
         const recipient = page.getByRole('group', { name: `Recipient ${index}`, exact: true });
         for (const [label, value] of [['Full name', `Synthetic Recipient ${index}`], ['Street address', `${index} Test Street`], ['City', 'Test City'], ['State / province', 'MA'], ['ZIP / postal code', '02134']]) await recipient.getByLabel(label, { exact: true }).fill(value);
         await recipient.getByLabel('Your message (optional)', { exact: true }).fill(`A personal message for recipient ${index}.`);
@@ -134,11 +137,11 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
         assert.match(await recipient.getByLabel('Message and address preview').innerText(), new RegExp(`recipient ${index}`));
       }
       await page.getByRole('button', { name: 'Add to cart', exact: true }).click();
-      await page.getByRole('button', { name: 'Cart (4)', exact: true }).click();
-      assert.match(await dialog.innerText(), /2 recipients/);
+      await page.getByRole('button', { name: 'Cart (7)', exact: true }).click();
+      assert.match(await dialog.innerText(), /4 recipients/);
       await dialog.getByRole('button', { name: 'Calculate shipping & tax', exact: true }).click();
       await dialog.getByRole('heading', { name: 'Your order total', exact: true }).waitFor();
-      assert.equal(quotes[3].items[2].recipients.length, 2);
+      assert.equal(quotes[3].items[2].recipients.length, 4);assert.equal(quotes[3].items[2].quantity,1);assert.equal(quotes[3].items[2].postcardArtworkColor,'#703040');
       assert.equal(quotes[3].items[2].recipients[1].message, 'A personal message for recipient 2.');
       assert.equal(quotes[3].items[2].recipients[0].messageFont,'typewriter');
       assert.equal(quotes[3].items[2].recipients[1].messageFont,'handwritten');

@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import sharp from 'sharp';
 import {AppError} from '../utils/errors.js';
+import {STANDARD_POSTCARD_TEMPLATE,STANDARD_POSTCARD_SHA256} from '../../../shared/postcard-template.js';
+import {standardPostcardBack} from './keepsakes-postcard-template.js';
 
 const unavailable = () => new AppError('This proof is unavailable. Refresh the cart and review its current photos.', 404, 'KEEPSAKES_PROOF_UNAVAILABLE');
 const validIndex = value => Number.isSafeInteger(value) && value >= 0;
@@ -71,6 +73,11 @@ export async function keepsakesQuoteProof(type, token, quoteId, {itemIndex, side
       customization: {...customization, positionX: customization.x, positionY: customization.y}})).buffer;
   } else {
     const [{galleryStorage}, {renderKeepsakesPostcardBack}] = await Promise.all([import('./gallery-storage.js'), import('./keepsakes-lob.js')]);
+    let bytes;
+    if(item.variant?.backTemplate===STANDARD_POSTCARD_TEMPLATE){
+      if(item.backArtworkChecksum!==STANDARD_POSTCARD_SHA256)throw unavailable();
+      bytes=await standardPostcardBack();
+    }else{
     const back = (await query(`SELECT * FROM gallery_postcard_back_artworks
       WHERE id=$1 AND album_id=$2 AND status='APPROVED'`, [item.backArtworkId, quote.album_id])).rows[0];
     if (!back || !item.backArtworkChecksum || back.sha256 !== item.backArtworkChecksum) throw unavailable();
@@ -82,9 +89,10 @@ export async function keepsakesQuoteProof(type, token, quoteId, {itemIndex, side
       if (size > 20 * 1024 * 1024) throw unavailable();
       chunks.push(chunk);
     }
-    const bytes = Buffer.concat(chunks);
+    bytes = Buffer.concat(chunks);
     if (crypto.createHash('sha256').update(bytes).digest('hex') !== item.backArtworkChecksum) throw unavailable();
-    artwork = await renderKeepsakesPostcardBack({bytes, message: item.recipients[recipientIndex].message || '', messageFont:item.recipients[recipientIndex].messageFont, messageColor:item.recipients[recipientIndex].messageColor, messageZone: item.variant?.messageZone});
+    }
+    artwork = await renderKeepsakesPostcardBack({bytes,backTemplate:item.variant?.backTemplate,postcardArtworkColor:item.postcardArtworkColor, message: item.recipients[recipientIndex].message || '', messageFont:item.recipients[recipientIndex].messageFont, messageColor:item.recipients[recipientIndex].messageColor, messageZone: item.variant?.messageZone});
   }
   const thumbnail = await renderKeepsakesProofThumbnail(artwork);
   await ensureCurrentAccess();

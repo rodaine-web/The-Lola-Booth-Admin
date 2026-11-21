@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { formatDateOnly } from "../utils/display.js";
 import "../styles/keepsakes-gallery.css";
+import {partnerProductImage} from "../../shared/keepsakes-product-imagery.js";
 const API = import.meta.env.VITE_API_URL || "/api";
 const mediaUrl = (url) => `${API.replace(/\/api$/, "")}${url}`;
 async function request(path, options) {
@@ -444,6 +445,6 @@ function keepsakeDescription(category) {
 }
 function KeepsakeProductPreview({product, url}) {
   const kind=String(product.category||'').toLowerCase();
-  const supplierMug=kind==='mug'&&product.variants?.[0]?.sku==='GLOBAL-MUG-W';
-  return <div className="kg-product-preview kg-supplier-image" aria-hidden="true">{supplierMug?<img src="/assets/keepsakes/prodigi-white-mug-11oz.png" alt=""/>:['digital','bundle'].includes(kind)?<img crossOrigin="anonymous" src={url} alt=""/>:<span>Partner image pending</span>}</div>;
+  const supplier=partnerProductImage(product.variants?.[0]);
+  return <div className="kg-product-preview kg-supplier-image" aria-hidden="true">{supplier?<img src={supplier.url} alt=""/>:kind==='postcard'?<img src="/assets/keepsakes/lola-postcard-back-v2.svg" alt=""/>:['digital','bundle'].includes(kind)?<img crossOrigin="anonymous" src={url} alt=""/>:<span>Partner image pending</span>}</div>;
 }

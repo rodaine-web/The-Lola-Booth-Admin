@@ -11,6 +11,8 @@ import {verifiedGalleryBytes} from './gallery-media-delivery.js';
 import sharp from 'sharp';
 import {isDeepStrictEqual} from 'node:util';
 import {lockKeepsakesOrder} from './keepsakes-order-lock.js';
+import {STANDARD_POSTCARD_TEMPLATE,STANDARD_POSTCARD_SHA256} from '../../../shared/postcard-template.js';
+import {standardPostcardBack} from './keepsakes-postcard-template.js';
 
 export function assertKeepsakesManager(user){assertKeepsakes();if(!user?.roles?.some(r=>['OWNER','ADMIN','SUPER_ADMIN'].includes(r)))throw new AppError('Keepsakes financial management requires an administrator.',403,'FORBIDDEN');}
 const audit=(user,action,id,after)=>writeAudit({req:{user},action,entity:'keepsakes',entityId:id,after});
@@ -63,7 +65,8 @@ export async function verifyKeepsakesProduct(id,user){
   }else if(product.provider==='LOB'){
    if(variant.printSpec?.widthPx!==1875||variant.printSpec?.heightPx!==1275||variant.printSpec?.dpi!==300||variant.printSpec?.bleedPx!==37||variant.printSpec?.safePx<37)throw new AppError('Lob 4×6 requires the reviewed 1875×1275, 300 DPI bleed template.',422,'KEEPSAKES_LOB_SPEC');
    if(!process.env.LOB_TEST_API_KEY?.startsWith('test_'))throw new AppError('Lob test credentials are required.',409,'KEEPSAKES_LOB_NOT_READY');
-   evidence.push({provider:'LOB',template:'4x6',checkedAt:new Date().toISOString()});
+   if(variant.backTemplate===STANDARD_POSTCARD_TEMPLATE)await standardPostcardBack();
+   evidence.push({provider:'LOB',template:'4x6',...(variant.backTemplate?{backTemplate:variant.backTemplate,backChecksum:STANDARD_POSTCARD_SHA256}:{}),checkedAt:new Date().toISOString()});
   }else evidence.push({provider:'DIGITAL',checks:'Existing, authorized, not included source files only'});
  }
  if(!evidence.length)throw new AppError('Configure at least one variant.',422,'KEEPSAKES_VARIANTS_REQUIRED');

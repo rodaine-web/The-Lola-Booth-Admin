@@ -10,6 +10,8 @@ import {renderKeepsakesArtwork} from './keepsakes-artwork.js';
 import {createProdigiDraft,submitProdigiOrder,getProdigiOrder,prodigiShipments,prodigiQuote,prodigiMoneyCents} from './prodigi-service.js';
 import {sendCommunication,brandedEmailHtml} from './automation-service.js';
 import {withKeepsakesOrderLock} from './keepsakes-order-lock.js';
+import {STANDARD_POSTCARD_TEMPLATE,STANDARD_POSTCARD_SHA256} from '../../../shared/postcard-template.js';
+import {standardPostcardBack} from './keepsakes-postcard-template.js';
 
 const fail=(message,code='KEEPSAKES_FULFILLMENT_REVIEW')=>new AppError(message,409,code);
 const secret=()=>process.env.INTEGRATION_SECRET_KEY;
@@ -75,11 +77,17 @@ async function fulfillLob(f,order,item){
  }
  if(f.attempts>1&&Date.now()-new Date(f.created_at).getTime()>23*3600000)throw fail('Lob idempotency window expired. Reconcile the original request before retry.');
  const art=await savedArtwork(f,item),front=await verifiedGalleryBytes({...art[0],mime_type:'image/png'},async()=>{},{maxBytes:20*1024*1024});
+ let source;
+ if(item.variant.backTemplate===STANDARD_POSTCARD_TEMPLATE){
+  if(item.backArtworkChecksum!==STANDARD_POSTCARD_SHA256)throw fail('The purchased postcard template changed.');
+  source=await standardPostcardBack();
+ }else{
  const back=(await query("SELECT * FROM gallery_postcard_back_artworks WHERE album_id=$1 AND id=$2 AND status='APPROVED'",[order.album_id,item.backArtworkId])).rows[0];
  if(!back||back.sha256!==item.backArtworkChecksum)throw fail('The approved postcard back changed. Review the purchased artwork.');
- const storage=galleryStorage(),chunks=[];for await(const chunk of await storage.get(back.storage_key))chunks.push(chunk);const source=Buffer.concat(chunks);
+ const storage=galleryStorage(),chunks=[];for await(const chunk of await storage.get(back.storage_key))chunks.push(chunk);source=Buffer.concat(chunks);
  if(storage.provider!==back.storage_provider||crypto.createHash('sha256').update(source).digest('hex')!==back.sha256)throw fail('Postcard back integrity could not be verified.');
- const recipient=item.recipients[f.recipient_index],backBytes=await renderKeepsakesPostcardBack({bytes:source,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:item.variant.messageZone});
+ }
+ const recipient=item.recipients[f.recipient_index],backBytes=await renderKeepsakesPostcardBack({bytes:source,backTemplate:item.variant.backTemplate,postcardArtworkColor:item.postcardArtworkColor,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:item.variant.messageZone});
  const result=await sendKeepsakesLob({idempotencyKey:`keepsakes:${f.id}`,front,back:backBytes,to:recipient,from:item.returnAddress});
  await query("UPDATE keepsakes_fulfillments SET provider_order_id=$2,status='SUBMITTED',lease_until=NULL,submitted_at=now(),tracking=$3,next_attempt_at=now()+interval '1 day',updated_at=now() WHERE id=$1",[f.id,result.id,JSON.stringify([{expectedDelivery:result.expected_delivery_date,mailingDate:result.send_date}])]);
 }
