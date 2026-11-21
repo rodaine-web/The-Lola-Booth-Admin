@@ -41,7 +41,9 @@ CREATE TABLE keepsakes_orders (
  token_hash text NOT NULL UNIQUE, contact_ciphertext jsonb NOT NULL, snapshot jsonb NOT NULL,
  subtotal_cents integer NOT NULL, shipping_cents integer NOT NULL, tax_cents integer NOT NULL, total_cents integer NOT NULL,
  currency text NOT NULL DEFAULT 'USD', stripe_session_id text UNIQUE, stripe_payment_intent text UNIQUE,
- stripe_refund_id text, tax_transaction_id text, tax_transactions jsonb NOT NULL DEFAULT '[]', checkout_url text, paid_at timestamptz, refunded_cents integer NOT NULL DEFAULT 0,
+ stripe_refund_id text, tax_transaction_id text, tax_transactions jsonb NOT NULL DEFAULT '[]',
+ tax_refund_status text NOT NULL DEFAULT 'NOT_REQUIRED', tax_reversals jsonb NOT NULL DEFAULT '[]',
+ checkout_url text, paid_at timestamptz, refunded_cents integer NOT NULL DEFAULT 0,
  stripe_fee_cents integer, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
  last_error text, mode text NOT NULL DEFAULT 'TEST' CHECK(mode='TEST')
 );

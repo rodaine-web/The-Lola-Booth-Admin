@@ -151,18 +151,23 @@ export async function queueKeepsakesNotification(orderId,milestone='confirmation
  if(!allowed.includes(contact.email.toLowerCase()))return;
  const url=`${(process.env.GALLERY_PUBLIC_ORIGIN||process.env.CLIENT_ORIGIN).replace(/\/$/,'')}/keepsakes/orders/${contact.statusToken}`;
  const body=`Thank you for choosing The Lola Keepsakes. Your test order ${order.id} status is ${order.status}. View your order and available downloads: ${url}`;
- const communication=(await query(`INSERT INTO communications(channel,direction,subject,recipient,rendered_body,rendered_html,message_summary,status,send_mode,idempotency_key,trigger_key)
- VALUES('EMAIL','OUTBOUND',$1,$2,$3,$4,$3,'DRAFT','SEND_NOW',$5,'KEEPSAKES_TRANSACTIONAL')
+ const communication=(await query(`INSERT INTO communications(type,channel,direction,subject,recipient,rendered_body,rendered_html,message_summary,status,send_mode,idempotency_key,trigger_key)
+ VALUES('EMAIL','EMAIL','OUTBOUND',$1,$2,$3,$4,$3,'DRAFT','SEND_NOW',$5,'KEEPSAKES_TRANSACTIONAL')
  ON CONFLICT(idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key RETURNING id,status`,['Your Lola Keepsakes order update',contact.email,body,brandedEmailHtml(body,{ctaLabel:'VIEW ORDER',ctaUrl:url}),`keepsakes:${order.id}:${milestone}`])).rows[0];
- if(['DRAFT','FAILED'].includes(communication.status))await sendCommunication(communication.id);
+ if(['DRAFT','FAILED'].includes(communication.status))return (await sendCommunication(communication.id)).communication;
  return communication;
 }
 export async function processKeepsakesNotifications(){
  if(!keepsakesStaging()||process.env.KEEPSAKES_FULFILLMENT_ENABLED!=='true'||!process.env.KEEPSAKES_TEST_EMAIL_ALLOWLIST)return [];
  if(!(await query("SELECT to_regclass('keepsakes_orders') table_name")).rows[0].table_name)return [];
- const orders=(await query(`SELECT id,status FROM keepsakes_orders WHERE paid_at IS NOT NULL OR status IN('PAYMENT_FAILED','EXPIRED','CANCELLED') ORDER BY updated_at DESC LIMIT 10`)).rows,results=[];
+ // Skip acknowledged milestones so a large batch cannot starve older orders.
+ const orders=(await query(`SELECT o.id,o.status FROM keepsakes_orders o
+ LEFT JOIN communications c ON c.idempotency_key='keepsakes:'||o.id::text||':'||o.status
+ WHERE (o.paid_at IS NOT NULL OR o.status IN('PAYMENT_FAILED','EXPIRED','CANCELLED'))
+ AND (c.id IS NULL OR (c.status IN('DRAFT','FAILED') AND c.failure_code IS DISTINCT FROM 'DELIVERY_OUTCOME_UNKNOWN'))
+ ORDER BY o.updated_at DESC,o.id LIMIT 100`)).rows,results=[];
  for(const order of orders){
-  try{const sent=await queueKeepsakesNotification(order.id,order.status);if(sent)results.push({id:order.id,status:sent.status});}
+  try{const sent=await queueKeepsakesNotification(order.id,order.status);if(sent)results.push({id:order.id,status:sent.status});if(results.length>=10)break;}
   catch(error){
    await query("INSERT INTO keepsakes_events(order_id,action,provider_event_id,details) VALUES($1,'notification_requires_review',$2,$3) ON CONFLICT DO NOTHING",[order.id,`notification-review:${order.id}:${order.status}`,JSON.stringify({code:error.code||'NOTIFICATION_ERROR'})]);
   }

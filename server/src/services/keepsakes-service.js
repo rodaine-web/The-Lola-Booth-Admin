@@ -233,11 +233,9 @@ export async function handleKeepsakesStripeEvent(event){
    await query("UPDATE keepsakes_fulfillments SET status='REQUIRES_REVIEW',last_error='Payment dispute requires review.' WHERE order_id=$1 AND status IN('QUEUED','RETRY')",[row.id]);
    await query('UPDATE keepsakes_entitlements SET revoked_at=now() WHERE order_id=$1',[row.id]);
   }else if(event.type==='charge.refunded'&&object.payment_intent===row.stripe_payment_intent){
-   if(row.tax_transaction_id&&object.amount_refunded===row.total_cents&&row.refunded_cents<row.total_cents){
-    const transactions=row.tax_transactions?.length?row.tax_transactions:[{index:0,id:row.tax_transaction_id}];
-    for(const transaction of transactions){const suffix=transaction.index?`:${transaction.index}`:'';await keepsakesStripe('tax/transactions/create_reversal',{mode:'full',original_transaction:transaction.id,reference:`keepsakes-refund:${row.id}${suffix}`},`keepsakes-tax-reversal:${row.id}${suffix}`);}
-   }
-   await query("UPDATE keepsakes_orders SET refunded_cents=$2,status='REFUNDED',updated_at=now() WHERE id=$1",[row.id,object.amount_refunded]);
+   // Refund access changes must not depend on Stripe Tax being available.
+   const taxRefund=row.tax_transaction_id&&object.amount_refunded===row.total_cents&&row.tax_refund_status!=='COMPLETE'?'PENDING':row.tax_refund_status;
+   await query("UPDATE keepsakes_orders SET refunded_cents=$2,status='REFUNDED',tax_refund_status=$3,updated_at=now() WHERE id=$1",[row.id,object.amount_refunded,taxRefund]);
    await query('UPDATE keepsakes_entitlements SET revoked_at=now() WHERE order_id=$1',[row.id]);
    await query("UPDATE keepsakes_fulfillments SET status=CASE WHEN status IN('QUEUED','RETRY') THEN 'CANCELLED' ELSE 'REQUIRES_REVIEW' END,updated_at=now() WHERE order_id=$1",[row.id]);
    if(object.amount_refunded!==row.total_cents)await query("UPDATE keepsakes_orders SET last_error='Partial refund requires item and tax allocation review.' WHERE id=$1",[row.id]);

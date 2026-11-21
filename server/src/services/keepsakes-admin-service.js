@@ -23,7 +23,7 @@ export async function keepsakesDashboard(user){
  COALESCE(sum(CASE WHEN refunded_cents>=total_cents THEN 0 ELSE subtotal_cents+shipping_cents-refunded_cents END) FILTER(WHERE paid_at IS NOT NULL),0)::bigint net,
  count(*) FILTER(WHERE paid_at IS NOT NULL)::int orders,
  count(*) FILTER(WHERE status='AWAITING_PAYMENT')::int awaiting,
- count(*) FILTER(WHERE status='REQUIRES_REVIEW')::int intervention,
+ count(*) FILTER(WHERE status='REQUIRES_REVIEW' OR tax_refund_status='REQUIRES_REVIEW' OR EXISTS(SELECT 1 FROM keepsakes_fulfillments f WHERE f.order_id=keepsakes_orders.id AND f.status='REQUIRES_REVIEW'))::int intervention,
  sum(stripe_fee_cents) fees,count(*) FILTER(WHERE paid_at IS NOT NULL AND stripe_fee_cents IS NULL)::int missing_fees
  FROM keepsakes_orders`)).rows[0];
  const costs=(await query(`SELECT sum(provider_cost_cents) production,sum(shipping_cost_cents) shipping,count(*) FILTER(WHERE provider<>'DIGITAL' AND (provider_cost_cents IS NULL OR shipping_cost_cents IS NULL))::int unknown FROM keepsakes_fulfillments`)).rows[0];
@@ -131,7 +131,11 @@ export async function cancelKeepsakesOrder(id,user,{refund=false,reason='request
  const result=await transaction(async()=>{
   await lockKeepsakesOrder(id);
   const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!order)throw new AppError('Order unavailable.',404,'NOT_FOUND');
-  if(order.status==='CANCELLED'||order.status==='REFUND_PENDING'||order.paid_at&&order.refunded_cents>=order.total_cents)return {requested:true,alreadyProcessed:true};
+  if(order.paid_at&&order.refunded_cents>=order.total_cents){
+   if(order.tax_refund_status==='REQUIRES_REVIEW')await query("UPDATE keepsakes_orders SET tax_refund_status='PENDING' WHERE id=$1",[id]);
+   return {requested:true,alreadyProcessed:true};
+  }
+  if(order.status==='CANCELLED'||order.status==='REFUND_PENDING')return {requested:true,alreadyProcessed:true};
   if(order.paid_at&&!refund)throw new AppError('Use refund to cancel a paid order after supplier cancellation.',409,'KEEPSAKES_PAID_CANCEL_REQUIRES_REFUND');
   const fulfillments=(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 FOR UPDATE',[id])).rows;
   if(fulfillments.some(f=>f.lease_until&&new Date(f.lease_until)>new Date()))throw new AppError('Fulfillment is processing. Retry after reconciliation.',409,'KEEPSAKES_FULFILLMENT_BUSY');

@@ -57,7 +57,7 @@ export default function KeepsakesAdmin() {
 }
 
 export function KeepsakesStatus({value}) {
-  return <span className={`ka-status ${['VERIFIED', 'ACTIVE', 'PAID', 'SHIPPED', 'COMPLETED', 'DELIVERED'].includes(value) ? 'good' : ['FAILED', 'NEEDS_REVIEW', 'UNVERIFIED', 'INTERVENTION'].includes(value) ? 'warning' : ''}`}>{label(value)}</span>;
+  return <span className={`ka-status ${['VERIFIED', 'ACTIVE', 'PAID', 'SHIPPED', 'COMPLETE', 'COMPLETED', 'DELIVERED'].includes(value) ? 'good' : ['FAILED', 'NEEDS_REVIEW', 'REQUIRES_REVIEW', 'UNVERIFIED', 'INTERVENTION'].includes(value) ? 'warning' : ''}`}>{label(value)}</span>;
 }
 function Empty({children}) {return <div className="ka-empty"><Gift size={26}/><p>{children}</p></div>;}
 function RevenueChart({title, rows}) {

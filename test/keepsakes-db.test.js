@@ -12,9 +12,9 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
   assert.ok(['127.0.0.1', 'localhost'].includes(url.hostname)); assert.match(url.pathname, /_qa$/);
   const schema = 'keepsakes_' + crypto.randomBytes(6).toString('hex'), bootstrap = new pg.Pool({ connectionString: url.toString() });
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'lola-keepsakes-db-'));
-  const originalFetch = globalThis.fetch, outbound = [], events = new Map(), taxReversals = [], taxCalculations = [], taxTransactions = [], lobRequests = [];
+  const originalFetch = globalThis.fetch, outbound = [], events = new Map(), taxReversals = [], taxReversalAttempts = [], taxCalculations = [], taxTransactions = [], lobRequests = [];
   let prodigiMode = 'success', prodigiOrderState = 'draft', prodigiCurrentId = 'ord_syntheticKeepsakes', prodigiCreates = 0, prodigiSubmits = 0, supplierArtworkUrl, supplierGate;
-  let lobDelivered = false, localHttpOrigin, destinationTaxEnabled = false;
+  let lobDelivered = false, localHttpOrigin, destinationTaxEnabled = false, taxReversalFails = false;
   const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
   let db;
   const signingSecret = 'whsec_synthetic_keepsakes_db_qa';
@@ -84,6 +84,8 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
         assert.ok(match); const orderId = match[1], index = Number(match[2] || 0), original = taxTransactions.find((record) => record.orderId === orderId && record.index === index);
         assert.ok(original); assert.equal(body.get('mode'), 'full'); assert.equal(body.get('original_transaction'), original.id);
         assert.equal(options.headers['Idempotency-Key'], `keepsakes-tax-reversal:${orderId}${index ? ':' + index : ''}`);
+        taxReversalAttempts.push({ orderId, index, key: options.headers['Idempotency-Key'] });
+        if (taxReversalFails && index === 1) { taxReversalFails = false; return result({ error: 'Synthetic tax accounting outage' }, 503); }
         taxReversals.push({ orderId, index, original: original.id, key: options.headers['Idempotency-Key'] });
         return result({ id: 'taxrev_' + taxReversals.length });
       }
@@ -228,8 +230,14 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     assert.equal((await shop.keepsakesOrderView(contact.statusToken)).downloads.length, 0);
     await query("UPDATE keepsakes_entitlements SET expires_at=now()+interval '7 days' WHERE id=$1", [entitlement.id]);
     const fullRefund = { id: 'evt_syntheticKeepsakesRefund', type: 'charge.refunded', livemode: false, data: { object: { id: 'ch_syntheticKeepsakes', payment_intent: order.stripe_payment_intent, amount_refunded: 799 } } };
-    await deliver(fullRefund); assert.equal(taxReversals.length, 1); assert.equal(taxReversals[0].orderId, order.id);
-    await deliver(fullRefund); assert.equal(taxReversals.length, 1, 'Duplicate signed refund webhooks must not create a second tax reversal');
+    const { processKeepsakesTaxRefunds } = await import('../server/src/services/keepsakes-refund-tax-service.js');
+    await deliver(fullRefund);
+    assert.equal(taxReversals.length, 0, 'The refund webhook must revoke access without waiting for tax accounting');
+    assert.equal((await one('SELECT status,tax_refund_status FROM keepsakes_orders WHERE id=$1', [order.id])).status, 'REFUNDED');
+    assert.equal((await one('SELECT tax_refund_status FROM keepsakes_orders WHERE id=$1', [order.id])).tax_refund_status, 'PENDING');
+    await assert.rejects(shop.keepsakesDownload(contact.statusToken, entitlement.id), { code: 'KEEPSAKES_UNAVAILABLE' });
+    await processKeepsakesTaxRefunds({ limit: 5 }); assert.equal(taxReversals.length, 1); assert.equal(taxReversals[0].orderId, order.id);
+    await deliver(fullRefund); await processKeepsakesTaxRefunds({ limit: 5 }); assert.equal(taxReversals.length, 1, 'Duplicate signed refund webhooks must not create a second tax reversal');
     assert.equal((await one('SELECT status FROM keepsakes_orders WHERE id=$1', [order.id])).status, 'REFUNDED');
     assert.ok((await one('SELECT revoked_at FROM keepsakes_entitlements WHERE id=$1', [entitlement.id])).revoked_at);
     await assert.rejects(shop.keepsakesDownload(contact.statusToken, entitlement.id), { code: 'KEEPSAKES_UNAVAILABLE' });
@@ -314,6 +322,7 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
       for (const result of completed) if (result.status === 'rejected') throw result.reason;
       const refunded = await one('SELECT * FROM keepsakes_orders WHERE id=$1', [raceOrder.id]);
       assert.equal(refunded.status, 'REFUNDED'); assert.equal(refunded.refunded_cents, 1599); assert.ok(refunded.paid_at);
+      await processKeepsakesTaxRefunds({ limit: 5 });
       assert.equal(taxReversals.length, reversalsBeforeRace + 1); assert.equal(taxReversals.at(-1).orderId, raceOrder.id);
       assert.equal((await one('SELECT status FROM keepsakes_fulfillments WHERE order_id=$1', [raceOrder.id])).status, 'REQUIRES_REVIEW');
       await deliver({ ...racePaid, id: `evt_syntheticLatePaid_${stage}` });
@@ -387,8 +396,22 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     assert.equal(taxTransactions.filter((record) => record.orderId === retailOrder.id).length, 2, 'Copy fulfillment and delivery polls must reuse both recorded tax groups');
     assert.equal(outbound.filter((request) => request.path === '/v1/tax/transactions/create_from_calculation').length, beforeRetailTaxRecordCalls + 2);
     const reversalsBeforeRetailRefund = taxReversals.length, retailRefund = { id: 'evt_syntheticRetailLobRefund', type: 'charge.refunded', livemode: false, data: { object: { id: 'ch_syntheticRetailLob', payment_intent: 'pi_syntheticRetailLob', amount_refunded: retailQuote.totalCents } } };
-    await deliver(retailRefund); assert.equal(taxReversals.length, reversalsBeforeRetailRefund + 2); assert.deepEqual(taxReversals.slice(-2).map(({ original }) => original), retailTaxRecords.map(({ id }) => id));
-    await deliver(retailRefund); await deliver({ ...retailRefund, id: 'evt_syntheticRetailLobRefundRepeated' }); assert.equal(taxReversals.length, reversalsBeforeRetailRefund + 2, 'Duplicate and repeated full refunds must not reverse either tax group twice');
+    taxReversalFails = true; await deliver(retailRefund);
+    assert.equal((await one('SELECT status FROM keepsakes_orders WHERE id=$1', [retailOrder.id])).status, 'REFUNDED'); assert.equal(taxReversals.length, reversalsBeforeRetailRefund);
+    assert.equal((await one("SELECT status FROM webhook_events WHERE external_event_id=$1", [retailRefund.id])).status, 'PROCESSED');
+    assert.equal((await processKeepsakesTaxRefunds({ limit: 5 }))[0].status, 'REQUIRES_REVIEW');
+    const accountingFailed = await one('SELECT * FROM keepsakes_orders WHERE id=$1', [retailOrder.id]);
+    assert.equal(accountingFailed.status, 'REFUNDED'); assert.equal(accountingFailed.tax_refund_status, 'REQUIRES_REVIEW'); assert.equal(accountingFailed.tax_reversals.length, 1); assert.equal(accountingFailed.tax_reversals[0].index, 0);
+    assert.equal(taxReversals.length, reversalsBeforeRetailRefund + 1, 'The first completed destination reversal must remain durable when the second fails');
+    const beforeAccountingRetry = outbound.length;
+    assert.equal((await manager.cancelKeepsakesOrder(retailOrder.id, admin, { refund: true })).alreadyProcessed, true);
+    assert.equal(outbound.length, beforeAccountingRetry, 'Accounting retry must not issue another Stripe refund or supplier cancellation');
+    assert.equal((await one('SELECT tax_refund_status FROM keepsakes_orders WHERE id=$1', [retailOrder.id])).tax_refund_status, 'PENDING');
+    assert.equal((await processKeepsakesTaxRefunds({ limit: 5 }))[0].status, 'COMPLETE');
+    const accounted = await one('SELECT * FROM keepsakes_orders WHERE id=$1', [retailOrder.id]); assert.equal(accounted.status, 'REFUNDED'); assert.equal(accounted.tax_refund_status, 'COMPLETE'); assert.equal(accounted.tax_reversals.length, 2);
+    assert.equal(taxReversalAttempts.filter((attempt) => attempt.orderId === retailOrder.id && attempt.index === 0).length, 1); assert.equal(taxReversalAttempts.filter((attempt) => attempt.orderId === retailOrder.id && attempt.index === 1).length, 2);
+    assert.equal(taxReversals.length, reversalsBeforeRetailRefund + 2); assert.deepEqual(taxReversals.slice(-2).map(({ original }) => original), retailTaxRecords.map(({ id }) => id));
+    await deliver(retailRefund); await deliver({ ...retailRefund, id: 'evt_syntheticRetailLobRefundRepeated' }); await processKeepsakesTaxRefunds({ limit: 5 }); assert.equal(taxReversals.length, reversalsBeforeRetailRefund + 2, 'Duplicate and repeated full refunds must not reverse either tax group twice');
     assert.deepEqual(await one('SELECT (SELECT count(*)::int FROM gallery_postcards) postcards,(SELECT count(*)::int FROM gallery_live_mailing_jobs) live,(SELECT count(*)::int FROM gallery_mailing_jobs) test'), sponsoredCounts);
 
     // A submitted Lob item blocks mixed-order refunds before the system even
@@ -435,6 +458,7 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
       assert.equal((await fetch(localHttpOrigin + retailQuote.proofs[0].url)).status, 404);
     } finally { localHttpOrigin = undefined; server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
     await query("UPDATE gallery_access_keys SET status='REVOKED' WHERE id=$1", [key.id]); await assert.rejects(shop.keepsakesScope('photo', first.token), { statusCode: 404 });
+    const dashboard=await manager.keepsakesDashboard(admin); assert.ok(dashboard.orders.length>0); assert.ok(dashboard.metrics.intervention>0); assert.ok(dashboard.metrics.grossCents>=dashboard.metrics.netCents);
     process.env.APP_ENV = 'production'; assert.throws(() => shop.assertKeepsakes(), { code: 'KEEPSAKES_DISABLED' }); process.env.APP_ENV = 'test';
     assert.ok(outbound.every((request) => ['api.stripe.com', 'api.prodigi.com', 'api.lob.com'].includes(request.host)));
   } finally {

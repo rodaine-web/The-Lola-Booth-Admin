@@ -13,7 +13,7 @@ This is a staging release. Production, existing gallery commerce permissions, li
 * Reuse of Stripe account/mode verification, raw signed event verification and the existing webhook ledger. Commerce events are dispatched separately from invoice reconciliation. Exact order/session/amount/currency matching precedes durable fulfillment reservations. Success redirects do not fulfill orders.
 * Separate guest-paid Lob reservations for each recipient and copy. Reuses existing photo renderer, approved event back artwork and private storage. Personal messages require a reviewed blank left-side zone; overflow/incompatible artwork is rejected before payment. Sponsored postcard queues and consent records are independent.
 * Digital fulfillment, independently fulfilled mixed carts, immutable purchase configurations, provider failure/intervention states, supplier artwork capabilities and reconciliation. Order-level advisory locks serialize dispatch/refunds/retries. Ambiguous Lob retries past the provider idempotency window require review.
-* Separate destination-based Stripe Tax calculations combined into one payment, recorded after verified payment with per-calculation full-refund reversals, test refund/cancellation workflows and settled Stripe-fee reconciliation. Unknown fees/costs remain unknown rather than fabricated. Supplier tax is separate from customer tax.
+* Separate destination-based Stripe Tax calculations combined into one payment, recorded after verified payment with per-calculation full-refund reversals reconciled independently of immediate refund/download revocation, test refund/cancellation workflows and settled Stripe-fee reconciliation. Unknown fees/costs remain unknown rather than fabricated. Supplier tax is separate from customer tax.
 * Admin Keepsakes & Orders: sales metrics/charts, event/product breakdowns, searchable orders, provider/tracking/error history, safe retry/refund/cancel actions, product/variant/price/tax-code/template management, Prodigi readiness/test/curated sync and event-level permissions/session mapping.
 * Customer contacts and postcard recipients are encrypted at rest with existing integration encryption.
 * Guest order status without an account; branded transactional updates through existing communication infrastructure, with durable keys and a dedicated staging recipient allowlist. No marketing enrollment.
@@ -60,7 +60,7 @@ Official product references: [mug](https://www.prodigi.com/products/home-and-liv
 
 ## Configuration and validation boundary
 
-Read-only staging checks confirmed Stripe **test** credentials, active sandbox tax settings and an active sandbox tax registration. The API's newly supplied Prodigi credential had legacy UUID format; the worker lacked `PRODIGI_SANDBOX_API_KEY`. The worker now references the staging API’s Prodigi key and gallery storage credentials, without exposing secret values. Do not prepend `sandbox_` to a legacy key. Replace the API value with an issued v5 sandbox credential; the worker reference follows it. No real Prodigi catalogue/quote/order verification is claimed yet.
+Read-only staging checks confirmed Stripe **test** credentials, active sandbox tax settings and an active sandbox tax registration. The API's newly supplied Prodigi credential had legacy UUID format; the worker lacked `PRODIGI_SANDBOX_API_KEY`. The worker now references the staging API’s Prodigi key and gallery storage credentials, without exposing secret values. Do not prepend `sandbox_` to a legacy key. Replace the API value with an issued v5 sandbox credential; the worker reference follows it. A direct read-only v5 catalogue probe returned HTTP 401 for that credential. No real Prodigi catalogue/quote/order verification is claimed yet. The worker private Azure gallery-container read check passed.
 
 Required staging configuration before enabling test checkout:
 
@@ -78,6 +78,7 @@ No API keys are returned to the browser. No live resource provisioning or suppli
 Focused test files:
 
 * `test/keepsakes-artwork.test.js`: dimensions/DPI, complete-composite edge preservation inside safe/bleed margins, crop/zoom/position, insufficient resolution, immutable hashes and 1/2/3/4/6 real asset counts.
+* `test/keepsakes-notifications-db.test.js`: 17-order batches drain as 10 then 7; milestone deduplication, recipient allowlisting and unchanged marketing consent. Development delivery only; no external emails.
 * `test/keepsakes-proofs.test.js`: exact-layout thumbnail edges, dimensions/metadata, safe descriptor generation and invalid-scope input rejection.
 * `test/prodigi-service.test.js`: exact v5 paths/schema, sandbox gates, prohibited shared-resource writes, stable creation keys, independent submission/poll/cancel, cents parsing and raw signed-event replay/tamper protection.
 * `test/keepsakes-lob.test.js`: approved-back composition, literal message rendering, blank message-zone/overflow validation, test-only transport, one recipient/copy per reservation and sanitized failures.
