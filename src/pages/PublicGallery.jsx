@@ -43,7 +43,7 @@ export default function PublicGallery() {
     // Commerce is optional and can only enrich an already-authorized gallery.
     // A supplier or checkout outage must never prevent free photo access.
     if (data && type && token && import.meta.env.VITE_APP_ENV !== 'production') {
-      fetch(`${API}/keepsakes/access/${type}/${token}`, {signal: controller.signal, credentials: 'include', cache: 'no-store'})
+      fetch(`${API}/keepsakes/access/${type}/${token}`, {signal: controller.signal, credentials: 'omit', cache: 'no-store'})
         .then(response => response.ok ? response.json() : null)
         .then(view => {if (current) setKeepsakesView(view?.enabled ? view : null);})
         .catch(() => {if (current) setKeepsakesView(null);});
