@@ -30,5 +30,6 @@ export const galleryOrigins = {
 
 export function galleryOriginAllowed(environment, origin, path) {
   return Boolean(galleryOrigins[environment] && origin === galleryOrigins[environment]
-    && (path === '/api/gallery' || path.startsWith('/api/gallery/')));
+    && (path === '/api/gallery' || path.startsWith('/api/gallery/')
+      || path === '/api/keepsakes' || path.startsWith('/api/keepsakes/')));
 }
