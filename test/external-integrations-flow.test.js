@@ -458,7 +458,7 @@ test('GA refresh combines actual provider metrics with aggregate CRM attribution
         date: '20261001',
         landingPagePlusQueryString: '/weddings?email=must-not-be-cached@example.invalid',
         eventName:'select_experience_glam',
-        pagePath: '/weddings',
+        pagePath: '/invoice/private-document-token',
         sessionManualAdContent: 'partner'
       };
     return new Response(JSON.stringify({
@@ -495,7 +495,7 @@ test('GA refresh combines actual provider metrics with aggregate CRM attribution
   assert.equal(cache.summary.sessions, 20);
   assert.equal(cache.crmSummary.inquiries,2);assert.equal(cache.crmSummary.bookings,1);assert.equal(cache.crmSummary.bookingValue,499);
   assert.equal(cache.experienceInterest[0].experience,'glam');
-  assert.doesNotMatch(JSON.stringify(cache),/must-not-be-cached|email=/);
+  assert.doesNotMatch(JSON.stringify(cache),/must-not-be-cached|private-document-token|email=/);
   assert.ok(cache.previous.dates.endDate<dates.startDate);
   assert.equal(cache.campaigns[0].crmInquiries, 2);
   assert.equal(cache.campaigns[0].crmConversionRate, .1);
