@@ -84,7 +84,7 @@ export async function keepsakesQuoteProof(type, token, quoteId, {itemIndex, side
     }
     const bytes = Buffer.concat(chunks);
     if (crypto.createHash('sha256').update(bytes).digest('hex') !== item.backArtworkChecksum) throw unavailable();
-    artwork = await renderKeepsakesPostcardBack({bytes, message: item.recipients[recipientIndex].message || '', messageZone: item.variant?.messageZone});
+    artwork = await renderKeepsakesPostcardBack({bytes, message: item.recipients[recipientIndex].message || '', messageFont:item.recipients[recipientIndex].messageFont, messageColor:item.recipients[recipientIndex].messageColor, messageZone: item.variant?.messageZone});
   }
   const thumbnail = await renderKeepsakesProofThumbnail(artwork);
   await ensureCurrentAccess();

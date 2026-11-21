@@ -116,7 +116,7 @@ export async function quoteKeepsakes(type,token,input){
    const chunks=[];for await(const chunk of await storage.get(back.storage_key))chunks.push(chunk);const bytes=Buffer.concat(chunks);
    if(keepsakesHash(bytes)!==back.sha256)throw new AppError('Approved artwork could not be verified.',409,'KEEPSAKES_ARTWORK_CHANGED');
    const {renderKeepsakesPostcardBack}=await import('./keepsakes-lob.js');
-   for(const recipient of item.recipients)await renderKeepsakesPostcardBack({bytes,message:recipient.message,messageZone:variant.messageZone});
+   for(const recipient of item.recipients)await renderKeepsakesPostcardBack({bytes,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:variant.messageZone});
    backArtworkId=back.id;backArtworkChecksum=back.sha256;
   }
   items.push({...item,units,backArtworkId,backArtworkChecksum,product:{id:product.id,title:product.title,category:product.category,provider:product.provider,retailCents:product.retail_cents,taxCode:product.tax_code},variant,assets:assets.map(a=>({id:a.id,mediaId:a.media_id,checksum:a.checksum,label:a.label,kind:a.kind})),returnAddress:product.provider==='LOB'?settings.returnAddress:undefined});

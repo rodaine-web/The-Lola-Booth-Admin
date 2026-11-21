@@ -359,7 +359,7 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     let postcard = await manager.saveKeepsakesProduct(null, postcardInput, admin); await manager.verifyKeepsakesProduct(postcard.id, admin); postcard = await manager.saveKeepsakesProduct(postcard.id, { ...postcardInput, active: true }, admin);
     const returnAddress = { ...shippingAddress, name: 'The Lola Booth QA' };
     await manager.saveKeepsakesSettings(album.id, { enabled: true, brandedMerchandise: true, originalSales: true, productIds: [digital.id, print.id, postcard.id], returnAddress }, admin);
-    const recipientAddresses = [{ ...shippingAddress, name: 'Synthetic Recipient One', message: 'A note for recipient one.' }, { ...shippingAddress, name: 'Synthetic Recipient Two', address1: '22 Test Street', city: 'San Francisco', state: 'CA', zip: '94105', message: 'A different note for recipient two.' }];
+    const recipientAddresses = [{ ...shippingAddress, name: 'Synthetic Recipient One', message: 'A note for recipient one.',messageFont:'typewriter',messageColor:'#17365d' }, { ...shippingAddress, name: 'Synthetic Recipient Two', address1: '22 Test Street', city: 'San Francisco', state: 'CA', zip: '94105', message: 'A different note for recipient two.',messageFont:'handwritten',messageColor:'#703040' }];
     const retailCart = { ...cart, items: [{ ...cart.items[0], productId: postcard.id, variantId: '4x6', assetIds: [postcardScope.assets[0].id], quantity: 2, recipients: recipientAddresses }] };
     const sponsoredCounts = await one('SELECT (SELECT count(*)::int FROM gallery_postcards) postcards,(SELECT count(*)::int FROM gallery_live_mailing_jobs) live,(SELECT count(*)::int FROM gallery_mailing_jobs) test');
     const beforeRetailCalculations = taxCalculations.length; destinationTaxEnabled = true;
@@ -371,6 +371,8 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     await shop.checkoutKeepsakes('photo', postcardToken, retailQuote.quoteId, { proofReviewed: true });
     const retailOrder = await one('SELECT * FROM keepsakes_orders WHERE quote_id=$1', [retailQuote.quoteId]);
     assert.ok(retailOrder.snapshot.proofReviewedAt);
+    const styledRecipients=shop.keepsakesSnapshot(retailOrder.snapshot).items[0].recipients;
+    assert.deepEqual(styledRecipients.map(r=>[r.messageFont,r.messageColor]),[['typewriter','#17365d'],['handwritten','#703040']]);
     assert.equal(retailOrder.snapshot.items[0].recipients, undefined, 'Mailing recipients must remain encrypted at rest'); assert.ok(retailOrder.snapshot.items[0].recipientsCiphertext); assert.equal(retailOrder.snapshot.items[0].backArtworkId, approvedBack.id); assert.equal(retailOrder.snapshot.items[0].backArtworkChecksum, backChecksum);
     assert.deepEqual(retailOrder.snapshot.taxCalculations.map(({ id }) => id), retailCalculations.map(({ id }) => id)); assert.equal(retailOrder.snapshot.taxCalculationId, retailCalculations[0].id);
     const retailPaid = { ...paidEvent, id: 'evt_syntheticRetailLobPaid', data: { object: { ...paidEvent.data.object, id: retailOrder.stripe_session_id, amount_total: retailQuote.totalCents, payment_intent: 'pi_syntheticRetailLob', metadata: { keepsakes_order_id: retailOrder.id } } } };

@@ -116,3 +116,19 @@ test('reconciliation uses only the persisted postcard ID and returns raw test st
   await assert.rejects(reconcileKeepsakesLob('../live', async () => {}, config), {code: 'KEEPSAKES_LOB_REFERENCE'});
   await assert.rejects(reconcileKeepsakesLob('psc_synthetic1', async () => ({ok: true, json: async () => ({id: 'psc_other'})}), config), {code: 'KEEPSAKES_LOB_RESPONSE_INVALID'});
 });
+
+test('all five bundled message fonts render distinctly with the selected ink, and arbitrary styles are rejected', async () => {
+  const {POSTCARD_FONTS}=await import('../shared/postcard-message-styles.js');
+  const {createHash}=await import('node:crypto');
+  const input=await back(), hashes=new Set();
+  for(const font of POSTCARD_FONTS){
+    const rendered=await renderKeepsakesPostcardBack({bytes:input,message:'A favorite memory, with love.',messageZone:zone,messageFont:font.id,messageColor:'#17365d'});
+    hashes.add(createHash('sha256').update(rendered).digest('hex'));
+    const pixels=await sharp(rendered).extract({left:zone.x,top:zone.y,width:zone.width,height:zone.height}).removeAlpha().raw().toBuffer();
+    let navy=0;for(let i=0;i<pixels.length;i+=3)if(pixels[i]===23&&pixels[i+1]===54&&pixels[i+2]===93)navy++;
+    assert.ok(navy>10,`Selected ink not rendered for ${font.id}`);
+  }
+  assert.equal(hashes.size,5);
+  await assert.rejects(renderKeepsakesPostcardBack({bytes:input,message:'Hello',messageZone:zone,messageFont:'arbitrary-font'}),{code:'KEEPSAKES_LOB_INVALID'});
+  await assert.rejects(renderKeepsakesPostcardBack({bytes:input,message:'Hello',messageZone:zone,messageColor:'url(https://example.invalid)'}),{code:'KEEPSAKES_LOB_INVALID'});
+});

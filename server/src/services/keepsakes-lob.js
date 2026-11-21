@@ -6,7 +6,8 @@ import {normalizeUsMailAddress} from '../../../shared/us-mail-address.js';
 import {renderPhoto} from './lob-print-ready-service.js';
 
 const WIDTH = 1875, HEIGHT = 1275, SAFE = 37;
-const fontReady = GlobalFonts.registerFromPath(fileURLToPath(new URL('../assets/postcard-fonts/LiberationSans-Regular.ttf', import.meta.url)), 'LolaKeepsakesMessage');
+import {POSTCARD_FONTS,POSTCARD_COLORS,DEFAULT_MESSAGE_FONT,DEFAULT_MESSAGE_COLOR} from '../../../shared/postcard-message-styles.js';
+const registeredFonts = new Map(POSTCARD_FONTS.map(font => [font.id, GlobalFonts.registerFromPath(fileURLToPath(new URL('../../../public/'+font.file,import.meta.url)),font.family)]));
 const fail = (message, code = 'KEEPSAKES_LOB_INVALID', status = 422, details) => {throw new AppError(message, status, code, details);};
 
 function assertSandbox(config) {
@@ -65,21 +66,23 @@ function wrapMessage(message, context, maxWidth) {
  * message zone is drawn upon. No resize, brand relocation or guessed text area.
  * An empty message requires no zone. Output is always full-resolution PNG.
  */
-export async function renderKeepsakesPostcardBack({bytes, message = '', messageZone, zone} = {}) {
+export async function renderKeepsakesPostcardBack({bytes, message = '', messageZone, zone, messageFont=DEFAULT_MESSAGE_FONT, messageColor=DEFAULT_MESSAGE_COLOR} = {}) {
   const canvas = await backCanvas(bytes);
   if (typeof message !== 'string' || message.length > 600 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) fail('The postcard message is invalid.');
+  const font=POSTCARD_FONTS.find(font=>font.id===messageFont);
+  if(!font||!POSTCARD_COLORS.some(color=>color.value===messageColor))fail('Choose one of the available postcard fonts and ink colors.');
   const text = message.replace(/\r\n?/g, '\n').replace(/\t/g, ' ').trim();
   if (!text) return canvas.png({compressionLevel: 9}).toBuffer();
   const area = validateKeepsakesMessageZone(messageZone || zone);
-  if (!fontReady) fail('The licensed postcard message font is unavailable.', 'KEEPSAKES_LOB_FONT_UNAVAILABLE', 503);
+  if (!registeredFonts.get(messageFont)) fail('The licensed postcard message font is unavailable.', 'KEEPSAKES_LOB_FONT_UNAVAILABLE', 503);
   const pixels = await canvas.clone().extract({left: area.x, top: area.y, width: area.width, height: area.height}).raw().toBuffer();
   // Text may not erase brand art or an existing message. Only an explicitly
   // approved, genuinely blank light area is compatible with personalization.
   if (pixels.some(value => value < 245)) fail('The configured message area contains artwork. Choose an approved blank area.', 'MESSAGE_ZONE_REQUIRED');
   const image = createCanvas(area.width, area.height), context = image.getContext('2d');
-  context.font = '40px LolaKeepsakesMessage';
-  context.fillStyle = '#26221d'; context.textBaseline = 'top';
-  const padding = 12, lineHeight = 52;
+  context.font = `${font.size}px ${font.family}`;
+  context.fillStyle = messageColor; context.textBaseline = 'top';
+  const padding = 16, lineHeight = Math.ceil(font.size*1.5);
   const lines = wrapMessage(text, context, area.width - padding * 2);
   if (lines.length * lineHeight > area.height - padding * 2) fail('The complete message does not fit the approved area. Shorten it or choose a larger approved zone.', 'MESSAGE_ZONE_REQUIRED');
   lines.forEach((line, index) => context.fillText(line, padding, padding + index * lineHeight));

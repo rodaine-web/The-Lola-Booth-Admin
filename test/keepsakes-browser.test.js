@@ -29,7 +29,7 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       page.on('pageerror', (e) => errors.push(e.message));
       let photoCount = 4, enabled = true, checkoutReady = false;
       const products = [
-        { id: 'mug', title: 'Photo Mug', category: 'MUG', provider: 'PRODIGI', retailCents: 2499, currency: 'USD', available: true, variants: [{ id: 'white', label: 'White ceramic', color: '#f7f5ee', printSpec: { widthPx: 1000, heightPx: 1000, customizationVerified: true } }, { id: 'black', label: 'Black ceramic', color: '#333333', printSpec: { widthPx: 1000, heightPx: 1000, customizationVerified: true } }] },
+        { id: 'mug', title: 'Photo Mug', category: 'MUG', provider: 'PRODIGI', retailCents: 2499, currency: 'USD', available: true, variants: [{ id: 'white', sku:'GLOBAL-MUG-W', label: 'White ceramic', color: '#f7f5ee', printSpec: { widthPx: 1000, heightPx: 1000, customizationVerified: true } }, { id: 'black', label: 'Black ceramic', color: '#333333', printSpec: { widthPx: 1000, heightPx: 1000, customizationVerified: true } }] },
         { id: 'frame', title: 'Framed Print', category: 'FRAME', provider: 'PRODIGI', retailCents: 3999, currency: 'USD', available: true, variants: [{ id: 'oak', label: 'Oak frame', color: '#c39459', printSpec: { widthPx: 1200, heightPx: 900 } }] },
         { id: 'bundle', title: 'Digital Bundle', category: 'DIGITAL_BUNDLE', provider: 'DIGITAL', retailCents: 1299, currency: 'USD', available: true, variants: [{ id: 'original', label: 'Original files' }] },
         { id: 'postcard', title: 'Send a Postcard', category: 'POSTCARD', provider: 'LOB', retailCents: 599, currency: 'USD', available: true, variants: [{ id: '4x6', label: '4 × 6 inch' }] },
@@ -55,6 +55,11 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       await mugImage.evaluate(image => image.decode());
       assert.equal(await mugImage.evaluate(image => image.naturalWidth > 0 && image.getBoundingClientRect().height > 0), true);
       assert.equal(await mugImage.getAttribute('crossorigin'), 'anonymous');
+      const supplierBlank = page.locator('.ks-preview-panel .ks-mug-blank');
+      await supplierBlank.evaluate(image => image.decode());
+      assert.match(await supplierBlank.getAttribute('src'), /prodigi-white-mug-11oz\.png$/);
+      assert.equal(await supplierBlank.evaluate(image => image.naturalWidth === image.naturalHeight && Math.abs(image.width - image.height) < 1), true);
+      assert.equal(await page.locator('.ks-product-card').first().evaluate(card => card.getBoundingClientRect().width <= 261), true);
       assert.equal(await page.getByText('Unverified Keychain').count(), 0);
       await page.screenshot({ path: path.join(output, `mug-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Select Photo 2', exact: true }).click();
@@ -123,6 +128,9 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
         const recipient = page.getByRole('group', { name: `Recipient ${index}`, exact: true });
         for (const [label, value] of [['Full name', `Synthetic Recipient ${index}`], ['Street address', `${index} Test Street`], ['City', 'Test City'], ['State / province', 'MA'], ['ZIP / postal code', '02134']]) await recipient.getByLabel(label, { exact: true }).fill(value);
         await recipient.getByLabel('Your message (optional)', { exact: true }).fill(`A personal message for recipient ${index}.`);
+        await recipient.getByLabel('Message font', {exact:true}).selectOption(index===1?'typewriter':'handwritten');
+        await recipient.getByLabel('Font color', {exact:true}).selectOption(index===1?'#17365d':'#703040');
+        assert.equal(await recipient.getByLabel('Message font', {exact:true}).locator('option').count(),5);
         assert.match(await recipient.getByLabel('Message and address preview').innerText(), new RegExp(`recipient ${index}`));
       }
       await page.getByRole('button', { name: 'Add to cart', exact: true }).click();
@@ -132,6 +140,9 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       await dialog.getByRole('heading', { name: 'Your order total', exact: true }).waitFor();
       assert.equal(quotes[3].items[2].recipients.length, 2);
       assert.equal(quotes[3].items[2].recipients[1].message, 'A personal message for recipient 2.');
+      assert.equal(quotes[3].items[2].recipients[0].messageFont,'typewriter');
+      assert.equal(quotes[3].items[2].recipients[1].messageFont,'handwritten');
+      assert.equal(quotes[3].items[2].recipients[1].messageColor,'#703040');
       // Digital-only purchases do not require a physical print-layout review.
       for (let line = 0; line < 3; line++) await dialog.getByRole('button', {name: 'Remove item 1', exact: true}).click();
       await dialog.getByRole('button', { name: 'Close cart', exact: true }).click();

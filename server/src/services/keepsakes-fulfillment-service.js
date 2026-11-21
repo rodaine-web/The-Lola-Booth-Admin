@@ -79,7 +79,7 @@ async function fulfillLob(f,order,item){
  if(!back||back.sha256!==item.backArtworkChecksum)throw fail('The approved postcard back changed. Review the purchased artwork.');
  const storage=galleryStorage(),chunks=[];for await(const chunk of await storage.get(back.storage_key))chunks.push(chunk);const source=Buffer.concat(chunks);
  if(storage.provider!==back.storage_provider||crypto.createHash('sha256').update(source).digest('hex')!==back.sha256)throw fail('Postcard back integrity could not be verified.');
- const recipient=item.recipients[f.recipient_index],backBytes=await renderKeepsakesPostcardBack({bytes:source,message:recipient.message,messageZone:item.variant.messageZone});
+ const recipient=item.recipients[f.recipient_index],backBytes=await renderKeepsakesPostcardBack({bytes:source,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:item.variant.messageZone});
  const result=await sendKeepsakesLob({idempotencyKey:`keepsakes:${f.id}`,front,back:backBytes,to:recipient,from:item.returnAddress});
  await query("UPDATE keepsakes_fulfillments SET provider_order_id=$2,status='SUBMITTED',lease_until=NULL,submitted_at=now(),tracking=$3,next_attempt_at=now()+interval '1 day',updated_at=now() WHERE id=$1",[f.id,result.id,JSON.stringify([{expectedDelivery:result.expected_delivery_date,mailingDate:result.send_date}])]);
 }
