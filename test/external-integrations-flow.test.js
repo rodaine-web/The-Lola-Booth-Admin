@@ -430,7 +430,7 @@ test('GA refresh combines actual provider metrics with aggregate CRM attribution
       campaign: 'wedding',
       source: 'mailchimp',
       medium: 'email',
-      inquiries: 2
+      inquiries: 2,bookings:1,booking_value:'499.00'
     }];
     if (sql.startsWith('INSERT INTO integration_report_cache')) cache = args[2];
     return [];
@@ -456,7 +456,8 @@ test('GA refresh combines actual provider metrics with aggregate CRM attribution
         sessionMedium: 'email',
         sessionDefaultChannelGroup: 'Email',
         date: '20261001',
-        landingPagePlusQueryString: '/weddings',
+        landingPagePlusQueryString: '/weddings?email=must-not-be-cached@example.invalid',
+        eventName:'select_experience_glam',
         pagePath: '/weddings',
         sessionManualAdContent: 'partner'
       };
@@ -492,6 +493,10 @@ test('GA refresh combines actual provider metrics with aggregate CRM attribution
     cache_key: reportKey(dates, 'generate_lead')
   });
   assert.equal(cache.summary.sessions, 20);
+  assert.equal(cache.crmSummary.inquiries,2);assert.equal(cache.crmSummary.bookings,1);assert.equal(cache.crmSummary.bookingValue,499);
+  assert.equal(cache.experienceInterest[0].experience,'glam');
+  assert.doesNotMatch(JSON.stringify(cache),/must-not-be-cached|email=/);
+  assert.ok(cache.previous.dates.endDate<dates.startDate);
   assert.equal(cache.campaigns[0].crmInquiries, 2);
   assert.equal(cache.campaigns[0].crmConversionRate, .1);
   assert.equal(cache.campaigns[0].inquiryEvents, 4);
@@ -562,4 +567,15 @@ test('Mailchimp batch continues past invalid member data and reports a partial f
   assert.equal(r.records_created, 1);
   assert.equal(r.records_processed, 2);
   assert.deepEqual(writes, ['invalid@example.invalid', 'valid@example.invalid']);
+});
+test('Google property selection rejects a stream which does not match the configured website tag',async t=>{
+ const old=process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID='G-EXPECTED';t.after(()=>{if(old==null)delete process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;else process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID=old;});
+ const calls=db(t,async sql=>sql.startsWith('SELECT * FROM integration_connections')?[row()]:[]);
+ t.mock.method(globalThis,'fetch',async url=>{
+  const body=url.includes('accountSummaries')?{accountSummaries:[{account:'accounts/1',propertySummaries:[{property:'properties/123',displayName:'LOLA'}]}]}:url.includes('dataStreams')?{dataStreams:[{webStreamData:{measurementId:'G-WRONG'}}]}:{displayName:'LOLA',timeZone:'America/Chicago',currencyCode:'USD'};
+  if(url.includes('dataStreams'))assert.match(url,/analyticsadmin.googleapis.com/);
+  return new Response(JSON.stringify(body),{status:200});
+ });
+ await assert.rejects(selectAccount('GA4','123',req),e=>e.code==='GA4_PROPERTY_MISMATCH');
+ assert.ok(!calls.some(c=>c.sql.startsWith('UPDATE integration_connections SET provider_account_id')));
 });
