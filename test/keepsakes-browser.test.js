@@ -36,14 +36,25 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
         { id: 'unverified', title: 'Unverified Keychain', available: false, variants: [] },
       ];
       const portrait = (n) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000"><defs><linearGradient id="a"><stop stop-color="#b8a689"/><stop offset="1" stop-color="#51483c"/></linearGradient></defs><rect width="1000" height="1000" fill="url(#a)"/><circle cx="500" cy="375" r="170" fill="#d4a67d"/><path d="M200 1000Q180 560 500 560Q820 560 800 1000" fill="#242b31"/><text x="500" y="950" fill="#e9c58b" font-family="Georgia" font-size="56" text-anchor="middle">Synthetic Photo ${n}</text></svg>`)}`;
+      // Match the deployed API: CORP denies no-cors image embedding, while
+      // anonymous CORS requests from the gallery are explicitly permitted.
+      await page.route('http://keepsakes-assets.test/**', async route => route.fulfill({
+        contentType: 'image/svg+xml',
+        headers: {'Cross-Origin-Resource-Policy': 'same-origin', 'Access-Control-Allow-Origin': origin},
+        body: decodeURIComponent(portrait(1).split(',').slice(1).join(',')),
+      }));
       await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
         const request = route.request(), pathname = new URL(request.url()).pathname;
         if (pathname.endsWith('/quote')) { const body = request.postDataJSON(); quotes.push(body); const physical = body.items.some(item => item.productId !== 'bundle'); return route.fulfill({ json: { quoteId: `synthetic-quote-${quotes.length}`, subtotalCents: 6498, shippingCents: 899, taxCents: 0, totalCents: 7397, currency: 'USD', expiresAt: new Date(Date.now() + 600000).toISOString(), checkoutReady, issues: checkoutReady ? [] : ['Sandbox provider setup is incomplete. No payment will be taken.'], proofs: physical ? [{label: 'Photo Mug', side: 'front', itemIndex: 0, recipientIndex: null, url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII='}, {label: 'Postcard message layout', side: 'back', itemIndex: 1, recipientIndex: 0, url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR1sAAAAASUVORK5CYII='}] : [] } }); }
         if (pathname.includes('/orders/')) return route.fulfill({ json: { order: { id: 'synthetic-order', status: 'PAID', items: [{ id: 'item-1', title: 'Photo Mug', quantity: 1, status: 'IN_PRODUCTION' }] }, downloads: [] } });
-        return route.fulfill({ json: { album: { id: 'synthetic-gallery', title: 'MINIO Brand Activation · Synthetic QA' }, enabled, assets: Array.from({ length: photoCount }, (_, index) => ({ id: `photo-${index + 1}`, label: `Photo ${index + 1}`, kind: index ? 'ORIGINAL' : 'COMPOSITE', width: 2000, height: 2000, url: portrait(index + 1), digitalEligible: index !== 0, merchandiseEligible: true, included: index === 0 })), products, readiness: { checkout: checkoutReady, message: 'Sandbox checkout is not enabled.' } } });
+        return route.fulfill({ json: { album: { id: 'synthetic-gallery', title: 'MINIO Brand Activation · Synthetic QA' }, enabled, assets: Array.from({ length: photoCount }, (_, index) => ({ id: `photo-${index + 1}`, label: `Photo ${index + 1}`, kind: index ? 'ORIGINAL' : 'COMPOSITE', width: 2000, height: 2000, url: `http://keepsakes-assets.test/photo-${index + 1}.svg`, digitalEligible: index !== 0, merchandiseEligible: true, included: index === 0 })), products, readiness: { checkout: checkoutReady, message: 'Sandbox checkout is not enabled.' } } });
       });
       await page.goto(`${origin}/keepsakes-qa/photo/synthetic-token`);
       await page.getByRole('heading', { name: 'Photo Mug', exact: true }).waitFor();
+      const mugImage = page.locator('.ks-preview-panel .ks-preview-art img');
+      await mugImage.evaluate(image => image.decode());
+      assert.equal(await mugImage.evaluate(image => image.naturalWidth > 0 && image.getBoundingClientRect().height > 0), true);
+      assert.equal(await mugImage.getAttribute('crossorigin'), 'anonymous');
       assert.equal(await page.getByText('Unverified Keychain').count(), 0);
       await page.screenshot({ path: path.join(output, `mug-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Select Photo 2', exact: true }).click();
