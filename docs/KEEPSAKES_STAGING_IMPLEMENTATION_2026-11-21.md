@@ -49,7 +49,7 @@ Official v5 contract: [Prodigi OpenAPI](https://www.prodigi.com/print-api/docs/o
 
 | Candidate | Official documented SKU | Account/API validated? |
 | --- | --- | --- |
-| White photo mug | `GLOBAL-MUG-W` | Pending v5 sandbox credential |
+| White photo mug | `GLOBAL-MUG-W` | Sandbox catalogue lookup passed; template/activation reviewed separately |
 | 4×6 C-type print | `GLOBAL-PHO-4X6` | Pending |
 | Classic framed print | `GLOBAL-CFP-12X16` | Pending |
 | Single-photo magnet | `MAG-1-10X10` | Pending |
@@ -60,7 +60,7 @@ Official product references: [mug](https://www.prodigi.com/products/home-and-liv
 
 ## Configuration and validation boundary
 
-Read-only staging checks confirmed Stripe **test** credentials, active sandbox tax settings and an active sandbox tax registration. The API's newly supplied Prodigi credential had legacy UUID format; the worker lacked `PRODIGI_SANDBOX_API_KEY`. The worker now references the staging API’s Prodigi key and gallery storage credentials, without exposing secret values. Do not prepend `sandbox_` to a legacy key. Replace the API value with an issued v5 sandbox credential; the worker reference follows it. A direct read-only v5 catalogue probe returned HTTP 401 for that credential. No real Prodigi catalogue/quote/order verification is claimed yet. The worker private Azure gallery-container read check passed.
+Read-only staging checks confirmed Stripe **test** credentials, active sandbox tax settings and an active sandbox tax registration. The newly saved raw Prodigi key authenticated successfully against the separate v4 Sandbox endpoint (HTTP 200). [Prodigi’s official v5 setup guide](https://www.prodigi.com/blog/your-first-print-api-order/) explicitly instructs adding `sandbox_` to the actual Sandbox dashboard key; prior guidance prohibiting that format was incorrect. The key was confirmed as Sandbox before applying that documented prefix privately in Railway. The staging API and worker reference now use the corrected format. All four candidate v5 catalogue lookups and a US mug shipping quote passed. No supplier orders or payments were created. Worker private Azure gallery-container read verification also passed.
 
 Required staging configuration before enabling test checkout:
 
@@ -95,10 +95,19 @@ Screenshot folders (local QA artifacts, not customer data):
 
 ## Remaining before production
 
-1. Resolve v5 sandbox credentials and verify worker storage access; complete actual catalogue/template/destination verification for each offered SKU.
+1. Complete template/destination verification for each additional offered SKU. Sandbox authentication, four catalogue lookups, one mug quote and worker storage access have passed.
 2. Run real Stripe test Checkout, its deployed signed webhook, Prodigi sandbox draft/submission/shipments and Lob test postcards; record actual IDs and inspect final print files/provider proofs.
 3. Test controlled Microsoft order/shipping/refund emails and digital download expiration on staging, including provider-outcome-unknown recovery.
 4. Review exact product print templates, mug/frame realism and image placement. Current local product visuals are previews; multi-print-area checkout, customer-created collages and unverified crops remain unavailable.
 5. Confirm merchandise/branding rights and included-original rules per event; manually confirm genuine source mappings before enabling any historical gallery. Dropbox does not automatically infer/recurse session originals from arbitrary subfolders.
 6. Review supplier cancellation limitations and partial-refund item/tax allocation. Submitted Lob cancellations require provider review. Dashboard supplier costs are quote-based estimates; missing actual fees remain unknown. Configurable automatic percentage markups, discounts, detailed filtered financial exports and more advanced analytics remain future work; fixed reviewed retail prices are supported.
 7. Confirm live payment/tax/provider/communication configuration, production security and return/support details. This code intentionally rejects production Keepsakes operations. A reviewed separate production change and explicit approval are required; this release is not production-ready.
+
+
+## Supplied staging gallery verification
+
+The user-supplied photo belongs to **Male Studios Brand Activation 2026**, album `4ef6a0ba-d615-476d-a7bf-13b667c411f9`, media `73decd9c-bd28-4917-b2fb-dcdc56728da7` (`IMG_0425.jpeg`, actual 4284×5712). It had no commerce settings, source mapping or products. At the user’s request, this specific staging gallery now has an enabled preview, its existing complete photo confirmed as an included composite eligible for branded merchandise, and one verified white 11oz mug. No originals were invented or made paid. Other galleries remain opt-in.
+
+The official mug PNG template is exactly 2670×1110 pixels, matching the v5 print area at 300 DPI. The preview uses the full supplied print area with no additional bleed extension and a conservative 60px content inset. This inset is an implementation choice, not a supplier-specified safety margin. The product is explicitly named **Photo Mug — Staging Preview**, with an illustrative $24.99 price and generic tangible-goods test tax code. Final retail pricing and tax classification require review before enabling checkout.
+
+Verification: public access endpoint returned enabled=true and an available mug; Safari displayed the Keepsakes viewer and opened the mug customizer with the correct actual photo, white 11oz option, quantity, preview price and Add to cart. API/worker configuration deployments succeeded. Checkout, fulfillment and notifications remain paused. No supplier orders, payments or customer emails were created. Additional product templates and end-to-end sandbox order tests are still pending.
