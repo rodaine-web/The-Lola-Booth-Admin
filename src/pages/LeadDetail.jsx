@@ -1,4 +1,5 @@
 import CatalogQuoteSummary from '../components/CatalogQuoteSummary.jsx';
+import {hasGoogleAdsAttribution} from '../../shared/google-ads-attribution.js';
 import PartnershipLeadPanel from '../components/PartnershipLeadPanel.jsx';
 import LeadAvailability from '../components/LeadAvailability.jsx';
 import { useAuth } from "../context/AuthContext.jsx";
@@ -198,6 +199,7 @@ export default function LeadDetail() {
             <Field label="Received" value={formatDateTime(lead.received_at || lead.created_at)} />
             <Field label="Duplicate Status" value={lead.duplicate_status?.replaceAll("_", " ")} />
             <Field label="UTM Source" value={lead.utm_source} />
+            <Field label="UTM Medium" value={lead.utm_medium} />
             <details className="source-details">
               <summary>Advanced raw IDs</summary>
               <Field label="Provider" value={lead.provider} />
@@ -205,6 +207,7 @@ export default function LeadDetail() {
               <Field label="Campaign ID" value={lead.campaign_id} />
               <Field label="Ad Set ID" value={lead.ad_set_id} />
               <Field label="Ad ID" value={lead.ad_id} />
+              {['gclid','gbraid','wbraid'].filter(key=>lead.first_touch?.[key]).map(key=><Field key={key} label={`Google ${key.toUpperCase()}`} value={lead.first_touch[key]}/>)}
             </details>
           </Panel>
           <Panel title="Possible Duplicates">
@@ -350,6 +353,7 @@ function formatDateTime(value) {
 }
 
 function friendlySource(lead) {
+  if(hasGoogleAdsAttribution(lead))return 'Google Ads';
   if (lead.source_subtype === "INSTAGRAM") return "Instagram";
   if (lead.source_subtype === "FACEBOOK") return "Facebook";
   if (lead.provider === "TIKTOK") return "TikTok";

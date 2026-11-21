@@ -164,7 +164,22 @@
     return data.error?.message||'We could not send your inquiry right now. Please try again.';
   }
 
-  function captureAttribution(){ const p=new URLSearchParams(location.search); const fields=['utm_source','utm_medium','utm_campaign','utm_content','utm_term']; fields.forEach(k=>{const v=p.get(k); if(v)sessionStorage.setItem(`lola_${k}`,v)}); if(!sessionStorage.getItem('lola_landing_page_url'))sessionStorage.setItem('lola_landing_page_url',location.href); if(document.referrer&&!sessionStorage.getItem('lola_referrer_url'))sessionStorage.setItem('lola_referrer_url',document.referrer); }
+  function captureAttribution(){
+    try{
+      const params=new URLSearchParams(location.search),fields=['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid','gbraid','wbraid'];
+      // A new tagged visit replaces the prior campaign as one coherent touch.
+      if(fields.some(key=>params.get(key))){
+        sessionStorage.setItem('lola_landing_page_url',location.origin+location.pathname);
+        fields.forEach(key=>sessionStorage.removeItem('lola_'+key));
+        fields.forEach(key=>{const value=params.get(key);if(value)sessionStorage.setItem('lola_'+key,value.slice(0,key.startsWith('utm_')?120:200));});
+        if(['gclid','gbraid','wbraid'].some(key=>params.get(key))&&!params.get('utm_source')){
+          sessionStorage.setItem('lola_utm_source','google');sessionStorage.setItem('lola_utm_medium','cpc');
+        }
+      }
+      if(!sessionStorage.getItem('lola_landing_page_url'))sessionStorage.setItem('lola_landing_page_url',location.origin+location.pathname);
+      if(document.referrer&&!sessionStorage.getItem('lola_referrer_url')){const referrer=new URL(document.referrer);sessionStorage.setItem('lola_referrer_url',referrer.origin+referrer.pathname);}
+    }catch{ /* Storage restrictions must never prevent a visitor from making an inquiry. */ }
+  }
   captureAttribution();
 
   function formPayload(form){
@@ -186,9 +201,9 @@
     obj.message=[String(fd.get('message')||'').trim(),...details].filter(Boolean).join('\n\n');
     obj.form_id=form.dataset.formId||location.pathname.split('/').filter(Boolean).pop()?.replace(/\.html$/,'')||'public-inquiry';
     obj.marketing_email_opt_in=!!form.querySelector('[name="marketing_email_opt_in"]:checked');
-    for(const key of ['utm_source','utm_medium','utm_campaign','utm_content','utm_term']){const value=sessionStorage.getItem(`lola_${key}`);if(value)obj[key]=value;}
-    obj.landing_page_url=sessionStorage.getItem('lola_landing_page_url')||location.href;
-    obj.referrer_url=sessionStorage.getItem('lola_referrer_url')||document.referrer||'';
+    try{for(const key of ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid','gbraid','wbraid']){const value=sessionStorage.getItem(`lola_${key}`);if(value)obj[key]=value;}
+    obj.landing_page_url=sessionStorage.getItem('lola_landing_page_url')||location.origin+location.pathname;
+    obj.referrer_url=sessionStorage.getItem('lola_referrer_url')||'';}catch{}
     // Preserve a filled honeypot so the API can reject bot submissions.
     obj.website=String(fd.get('website')||'');
     return obj;

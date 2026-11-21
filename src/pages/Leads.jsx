@@ -1,4 +1,5 @@
 import { recordCell } from '../components/workspace/RecordCells.jsx';
+import {hasGoogleAdsAttribution} from '../../shared/google-ads-attribution.js';
 import RecordWorkspace, { RecordMetrics } from "../components/workspace/RecordWorkspace.jsx";
 import RecordTable from "../components/workspace/RecordTable.jsx";
 import EventTypeSelect from "../components/EventTypeSelect.jsx";
@@ -14,7 +15,7 @@ import "../styles/crm-contacts.css";
 import StatusBadge from "../components/StatusBadge.jsx";
 
 const statuses=["ACTIVE","ALL","NEW","CONTACTED","QUALIFIED","PROPOSAL_DRAFT","PROPOSAL_SENT","FOLLOW_UP","WON","LOST"];
-const sources=["","WEBSITE","META","FACEBOOK","INSTAGRAM","TIKTOK","LINKEDIN","Referral","Phone","MANUAL","Bark.com","Other"];
+const sources=["","WEBSITE","GOOGLE_ADS","META","FACEBOOK","INSTAGRAM","TIKTOK","LINKEDIN","Referral","Phone","MANUAL","Bark.com","Other"];
 const eventTypes=["Wedding","Birthday","Private Party","Brand Activation","Corporate Event","Other"];
 
 export default function Leads(){
@@ -106,7 +107,7 @@ export default function Leads(){
     }finally{setSaving(false);}
   }
 
-  const tableRows=useMemo(()=>leads.map(lead=>({...lead,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")})),[leads]);
+  const tableRows=useMemo(()=>leads.map(lead=>({...lead,lead_source:hasGoogleAdsAttribution(lead)?'Google Ads':lead.lead_source,name:[lead.first_name,lead.last_name].filter(Boolean).join(" ")})),[leads]);
   const columns=useMemo(()=>["name","email","phone","event_type","status","created_at"],[]);
 
   return <main className="page lola-list-page record-module">
@@ -127,7 +128,7 @@ export default function Leads(){
 
     <label>Lead visibility<select aria-label="Lead visibility" value={archived?"archived":"active"} onChange={e=>{setSelected([]);setUrlParams(current=>{const next=new URLSearchParams(current);if(e.target.value==="archived"){next.set("archived","true");next.set("status","ALL");}else{next.delete("archived");next.set("status","ACTIVE");}next.delete("funnel");return next;});}}><option value="active">Unarchived leads</option><option value="archived">Archived leads</option></select></label>
     {filtersOpen&&<section className="lola-filter-drawer">
-      <label>Source<select value={source} onChange={e=>setFilter("source",e.target.value)}>{[...new Set([...sources,source])].map(item=><option key={item||"all"} value={item}>{item||"All sources"}</option>)}</select></label>
+      <label>Source<select value={source} onChange={e=>setFilter("source",e.target.value)}>{[...new Set([...sources,source])].map(item=><option key={item||"all"} value={item}>{item==="GOOGLE_ADS"?"Google Ads":item||"All sources"}</option>)}</select></label>
       <label>Opportunity type<select value={urlParams.get("opportunity_type")||""} onChange={e=>setFilter("opportunity_type",e.target.value)}><option value="">All opportunities</option><option value="BOOKING">Booking</option><option value="PARTNERSHIP">Partnership</option></select></label>
       <label>Campaign<input value={campaign} onChange={e=>setFilter("campaign",e.target.value)} placeholder="Campaign"/></label>
       <button onClick={()=>{setFilter("source","");setFilter("campaign","");}}>Clear filters</button>

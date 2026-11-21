@@ -381,7 +381,9 @@ function listRoute(table, searchable = [], permission = "read:admin") {
 
         if (filters.source) {
           params.push(filters.source);
-          where.push(`(lead_source = $${params.length} OR source_subtype = $${params.length} OR provider = $${params.length} OR referral_source = $${params.length})`);
+          if(filters.source==='GOOGLE_ADS'){
+            where.push(`(lead_source=$${params.length} OR NULLIF(first_touch->>'gclid','') IS NOT NULL OR NULLIF(first_touch->>'gbraid','') IS NOT NULL OR NULLIF(first_touch->>'wbraid','') IS NOT NULL OR (lower(COALESCE(utm_source,''))='google' AND lower(COALESCE(utm_medium,'')) IN ('cpc','ppc','paidsearch','paid_search')) OR (lower(COALESCE(first_touch->>'utm_source',''))='google' AND lower(COALESCE(first_touch->>'utm_medium','')) IN ('cpc','ppc','paidsearch','paid_search')))`);
+          }else where.push(`(lead_source = $${params.length} OR source_subtype = $${params.length} OR provider = $${params.length} OR referral_source = $${params.length})`);
         }
         if (filters.campaign) {
           params.push(filters.campaign);
