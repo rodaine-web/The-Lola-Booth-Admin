@@ -38,3 +38,14 @@
 .ks-postcard-coming{max-width:1640px;margin:28px auto;padding:24px;border:1px solid var(--ks-border);border-radius:12px}
 .ks-postcard-coming p{max-width:780px;margin:12px 0;color:var(--ks-muted);line-height:1.6}
 .ks-postcard-coming span{color:var(--ks-gold);font-size:13px}
+
+.ks-postcard-design{margin-top:24px;border-top:1px solid var(--ks-border);padding-top:20px}
+.ks-postcard-design>img{display:block;width:100%;height:auto;border-radius:8px;margin:12px 0}
+.ks-postcard-design>p{font-size:12px;color:var(--ks-muted);line-height:1.5}
+.ks-postcard-loading{aspect-ratio:1875/1275;display:grid;place-items:center;background:#fff;color:#555;margin:12px 0}
+.ks-recipients>label{margin-top:14px}
+.ks-recipients input[type=color]{padding:4px;width:80px;min-height:44px}
+.ks-same-note{display:flex!important;align-items:center;gap:10px;font-size:14px}
+.ks-same-note input{width:20px;min-height:20px}
+
+.ks-supplier-reference{background:#f5f5f5}.ks-supplier-reference>img{width:100%;height:100%;object-fit:contain}.ks-supplier-reference .ks-preview-caption{color:#444;background:#fffd;text-shadow:none}

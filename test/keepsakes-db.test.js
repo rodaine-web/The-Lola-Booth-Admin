@@ -428,6 +428,35 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     assert.equal((await one('SELECT status FROM keepsakes_orders WHERE id=$1', [mixedOrder.id])).status, 'FULFILLING');
     assert.ok((await query('SELECT status FROM keepsakes_fulfillments WHERE order_id=$1', [mixedOrder.id])).rows.every((job) => job.status === 'SUBMITTED'));
 
+    // The approved back uses one unit per recipient, independently rendered
+    // from the pinned asset, without a separately uploaded gallery back.
+    const { messageZone: legacyZone, ...standardVariant } = postcardInput.variants[0];
+    const standardInput = { ...postcardInput, title: 'Synthetic Approved Back', variants: [{ ...standardVariant, backTemplate: 'lola-connect-v2' }] };
+    let standard = await manager.saveKeepsakesProduct(null, standardInput, admin);
+    await manager.verifyKeepsakesProduct(standard.id, admin);
+    standard = await manager.saveKeepsakesProduct(standard.id, { ...standardInput, active: true }, admin);
+    await manager.saveKeepsakesSettings(album.id, { enabled: true, brandedMerchandise: true, originalSales: true, productIds: [digital.id, print.id, postcard.id, standard.id], returnAddress }, admin);
+    const standardItem = { ...retailCart.items[0], productId: standard.id, quantity: 1, postcardArtworkColor: '#703040', recipients: Array.from({ length: 4 }, (_, i) => ({ ...retailCart.items[0].recipients[i % 2], message: `Approved postcard note ${i + 1}` })) };
+    const standardCart = { ...retailCart, items: [standardItem] };
+    await assert.rejects(shop.quoteKeepsakes('photo', postcardToken, { ...standardCart, items: [{ ...standardItem, quantity: 4 }] }), { code: 'KEEPSAKES_POSTCARD_QUANTITY' });
+    const standardQuote = await shop.quoteKeepsakes('photo', postcardToken, standardCart);
+    assert.equal(standardQuote.subtotalCents, 4 * standardInput.retailCents);
+    assert.equal(standardQuote.proofs.length, 5);
+    const standardSnapshot = (await one('SELECT snapshot FROM keepsakes_quotes WHERE id=$1', [standardQuote.quoteId])).snapshot;
+    assert.equal(standardSnapshot.items[0].units, 4);
+    assert.equal(standardSnapshot.items[0].backArtworkId, undefined);
+    assert.equal(standardSnapshot.items[0].backArtworkChecksum, 'f22eedf5e365a2a1b797c85e13736a34e56bec82ff6a1ed45411001f48845eca');
+    await shop.checkoutKeepsakes('photo', postcardToken, standardQuote.quoteId, { proofReviewed: true });
+    const standardOrder = await one('SELECT * FROM keepsakes_orders WHERE quote_id=$1', [standardQuote.quoteId]);
+    await deliver({ ...paidEvent, id: 'evt_syntheticApprovedBackPaid', data: { object: { ...paidEvent.data.object, id: standardOrder.stripe_session_id, amount_total: standardQuote.totalCents, payment_intent: 'pi_syntheticApprovedBack', metadata: { keepsakes_order_id: standardOrder.id } } } });
+    const standardJobs = (await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY recipient_index', [standardOrder.id])).rows;
+    assert.equal(standardJobs.length, 4);
+    assert.ok(standardJobs.every(job => job.copy_index === 0));
+    const lobCallsBeforeStandard = lobRequests.length;
+    await worker.processKeepsakesQueue({ limit: 10 });
+    assert.equal(lobRequests.length, lobCallsBeforeStandard + 4);
+    assert.equal(new Set(lobRequests.slice(-4).map(call => call.backHash)).size, 4);
+
     // Verify the actual HTTP routers preserve authentication, capability scope,
     // private response headers and server-only credentials.
     const { default: express } = await import('express'), { keepsakesPublicRouter, keepsakesAdminRouter } = await import('../server/src/routes/keepsakes.js'), { errorHandler } = await import('../server/src/middleware/error-handler.js');

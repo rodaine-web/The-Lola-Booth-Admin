@@ -132,3 +132,21 @@ test('all five bundled message fonts render distinctly with the selected ink, an
   await assert.rejects(renderKeepsakesPostcardBack({bytes:input,message:'Hello',messageZone:zone,messageFont:'arbitrary-font'}),{code:'KEEPSAKES_LOB_INVALID'});
   await assert.rejects(renderKeepsakesPostcardBack({bytes:input,message:'Hello',messageZone:zone,messageColor:'url(https://example.invalid)'}),{code:'KEEPSAKES_LOB_INVALID'});
 });
+
+test('standard postcard themes artwork only, preserves its working QR and mailing area, and fits notes between approved lines',async()=>{
+ const {standardPostcardBack}=await import('../server/src/services/keepsakes-postcard-template.js');
+ const {STANDARD_POSTCARD_TEMPLATE}=await import('../shared/postcard-template.js');
+ const {default:jsQR}=await import('jsqr');
+ const bytes=await standardPostcardBack();
+ for(const messageFont of ['classic','typewriter','handwritten','casual','script']){
+  const rendered=await renderKeepsakesPostcardBack({bytes,backTemplate:STANDARD_POSTCARD_TEMPLATE,postcardArtworkColor:'#703040',messageFont,messageColor:'#17365d',message:'A favorite memory.\nWith love!'});
+  const {data,info}=await sharp(rendered).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  assert.equal(jsQR(new Uint8ClampedArray(data),info.width,info.height)?.data,'https://thelolabooth.com/connect');
+  const mailing=await sharp(rendered).extract({left:808,top:488,width:984,height:712}).raw().toBuffer();assert.ok(mailing.every(v=>v===255));
+  const qrBefore=await sharp(bytes).extract({left:530,top:925,width:205,height:205}).removeAlpha().raw().toBuffer();
+  const qrAfter=await sharp(rendered).extract({left:530,top:925,width:205,height:205}).removeAlpha().raw().toBuffer();assert.ok(qrBefore.equals(qrAfter));
+ }
+ await assert.rejects(renderKeepsakesPostcardBack({bytes,backTemplate:STANDARD_POSTCARD_TEMPLATE,message:'Too long\n'.repeat(12)}),{code:'MESSAGE_ZONE_REQUIRED'});
+ const changed=await image(1875,1275,'#dddddd');
+ await assert.rejects(renderKeepsakesPostcardBack({bytes:changed,backTemplate:STANDARD_POSTCARD_TEMPLATE,message:'Hello'}),{code:'KEEPSAKES_TEMPLATE_INVALID'});
+});

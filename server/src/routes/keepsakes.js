@@ -9,6 +9,7 @@ import * as admin from '../services/keepsakes-admin-service.js';
 import {prodigiVariant} from '../services/prodigi-service.js';
 import {keepsakesSupplierArtwork} from '../services/keepsakes-fulfillment-service.js';
 import {syncKeepsakesCatalogue,keepsakesProdigiIntegration} from '../services/keepsakes-catalogue-service.js';
+import {POSTCARD_FONTS,POSTCARD_COLORS} from '../../../shared/postcard-message-styles.js';
 import {keepsakesQuoteProof} from '../services/keepsakes-proof-service.js';
 
 const id=z.uuid(),wrap=fn=>asyncHandler(async(req,res)=>res.json(await fn(req))),access='/access/:type/:token';
@@ -18,6 +19,10 @@ keepsakesPublicRouter.use((_req,_res,next)=>{try{shop.assertKeepsakes();next();}
 keepsakesPublicRouter.use(rateLimit({windowMs:60000,limit:90,standardHeaders:true,legacyHeaders:false}));
 keepsakesPublicRouter.get(access,wrap(r=>shop.keepsakesView(r.params.type,r.params.token)));
 keepsakesPublicRouter.get(access+'/assets/:id',asyncHandler(async(req,res)=>res.type('image/jpeg').send(await shop.keepsakesAsset(req.params.type,req.params.token,id.parse(req.params.id)))));
+keepsakesPublicRouter.post(access+'/postcard-preview',rateLimit({windowMs:60000,limit:45,standardHeaders:true,legacyHeaders:false}),asyncHandler(async(req,res)=>{
+ const input=z.object({productId:id,variantId:z.string().max(150),message:z.string().max(600).default(''),messageFont:z.enum(POSTCARD_FONTS.map(f=>f.id)).default('classic'),messageColor:z.enum(POSTCARD_COLORS.map(c=>c.value)).default('#26221d'),postcardArtworkColor:z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#111111')}).strict().parse(req.body);
+ res.type('image/jpeg').send(await shop.keepsakesPostcardPreview(req.params.type,req.params.token,input));
+}));
 keepsakesPublicRouter.post(access+'/quote',rateLimit({windowMs:60000,limit:5,standardHeaders:true,legacyHeaders:false}),wrap(r=>shop.quoteKeepsakes(r.params.type,r.params.token,r.body)));
 keepsakesPublicRouter.post(access+'/checkout',rateLimit({windowMs:60000,limit:5,standardHeaders:true,legacyHeaders:false}),wrap(r=>shop.checkoutKeepsakes(r.params.type,r.params.token,id.parse(r.body.quoteId),{proofReviewed:r.body.proofReviewed===true})));
 keepsakesPublicRouter.get(access+'/quotes/:quoteId/proofs/:itemIndex/:side/:recipientIndex',asyncHandler(async(req,res)=>res.type('image/jpeg').send(await keepsakesQuoteProof(req.params.type,req.params.token,id.parse(req.params.quoteId),{itemIndex:Number(req.params.itemIndex),side:req.params.side,recipientIndex:Number(req.params.recipientIndex)}))));

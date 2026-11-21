@@ -4,6 +4,8 @@ import sharp from 'sharp';
 import {AppError} from '../utils/errors.js';
 import {normalizeUsMailAddress} from '../../../shared/us-mail-address.js';
 import {renderPhoto} from './lob-print-ready-service.js';
+import {STANDARD_POSTCARD_TEMPLATE,STANDARD_POSTCARD_MESSAGE,STANDARD_POSTCARD_LINES} from '../../../shared/postcard-template.js';
+import {themeStandardPostcard} from './keepsakes-postcard-template.js';
 
 const WIDTH = 1875, HEIGHT = 1275, SAFE = 37;
 import {POSTCARD_FONTS,POSTCARD_COLORS,DEFAULT_MESSAGE_FONT,DEFAULT_MESSAGE_COLOR} from '../../../shared/postcard-message-styles.js';
@@ -66,13 +68,27 @@ function wrapMessage(message, context, maxWidth) {
  * message zone is drawn upon. No resize, brand relocation or guessed text area.
  * An empty message requires no zone. Output is always full-resolution PNG.
  */
-export async function renderKeepsakesPostcardBack({bytes, message = '', messageZone, zone, messageFont=DEFAULT_MESSAGE_FONT, messageColor=DEFAULT_MESSAGE_COLOR} = {}) {
-  const canvas = await backCanvas(bytes);
+export async function renderKeepsakesPostcardBack({bytes, message = '', messageZone, zone, messageFont=DEFAULT_MESSAGE_FONT, messageColor=DEFAULT_MESSAGE_COLOR,backTemplate,postcardArtworkColor='#111111'} = {}) {
+  const standard=backTemplate===STANDARD_POSTCARD_TEMPLATE;
+  const canvas = await backCanvas(standard?await themeStandardPostcard(bytes,postcardArtworkColor):bytes);
   if (typeof message !== 'string' || message.length > 600 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) fail('The postcard message is invalid.');
   const font=POSTCARD_FONTS.find(font=>font.id===messageFont);
   if(!font||!POSTCARD_COLORS.some(color=>color.value===messageColor))fail('Choose one of the available postcard fonts and ink colors.');
   const text = message.replace(/\r\n?/g, '\n').replace(/\t/g, ' ').trim();
   if (!text) return canvas.png({compressionLevel: 9}).toBuffer();
+  if(standard){
+    if(!registeredFonts.get(messageFont))fail('The licensed postcard message font is unavailable.','KEEPSAKES_LOB_FONT_UNAVAILABLE',503);
+    const area=STANDARD_POSTCARD_MESSAGE,image=createCanvas(area.width,area.height),context=image.getContext('2d');
+    context.font=`${font.size}px ${font.family}`;context.fillStyle=messageColor;context.textBaseline='alphabetic';
+    const lines=wrapMessage(text,context,area.width-32);
+    if(lines.length>STANDARD_POSTCARD_LINES.length)fail('Your note exceeds the nine writing lines. Please shorten it.','MESSAGE_ZONE_REQUIRED');
+    for(const [index,line]of lines.entries()){
+      const metrics=context.measureText(line);
+      if(metrics.actualBoundingBoxAscent+metrics.actualBoundingBoxDescent>60)fail('This text does not fit the selected font.','MESSAGE_ZONE_REQUIRED');
+      context.fillText(line,16,STANDARD_POSTCARD_LINES[index]-area.y-10);
+    }
+    return canvas.composite([{input:image.toBuffer('image/png'),left:area.x,top:area.y}]).png().toBuffer();
+  }
   const area = validateKeepsakesMessageZone(messageZone || zone);
   if (!registeredFonts.get(messageFont)) fail('The licensed postcard message font is unavailable.', 'KEEPSAKES_LOB_FONT_UNAVAILABLE', 503);
   const pixels = await canvas.clone().extract({left: area.x, top: area.y, width: area.width, height: area.height}).raw().toBuffer();
