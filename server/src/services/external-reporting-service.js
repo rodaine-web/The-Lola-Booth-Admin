@@ -1,3 +1,4 @@
+import {previousAnalyticsDates,websiteAnalyticsInsights} from '../../../shared/website-analytics-insights.js';
 import { query } from '../db/pool.js';
 import { AppError } from '../utils/errors.js';
 import { getBusinessDateRanges } from '../utils/date-ranges.js';
@@ -35,7 +36,7 @@ export function reportRows(report) {
 export function reportKey(dates, event) {
   return digest(JSON.stringify({
     ...dates,
-    event
+    event, schema:2
   }));
 }
 export async function websiteReport(input = {}, req = null) {
@@ -55,7 +56,8 @@ export async function websiteReport(input = {}, req = null) {
     cache_key: key
   }, req);
   return {
-    state: cache ? 'AVAILABLE' : 'QUEUED',
+    state: cache ? 'AVAILABLE' : job?.status==='FAILED'?'FAILED':'QUEUED',
+    message:job?.status==='FAILED'?'The Google report refresh failed. Check the connection and retry.':undefined,
     report: cache?.report,
     refreshed_at: cache?.refreshed_at,
     stale: Boolean(cache && job),
@@ -70,13 +72,13 @@ export async function refreshAnalytics(row, tokens, payload) {
       cache_key
     } = payload,
     base = `/v1beta/properties/${row.metadata.property_id}:runReport`;
-  const report = async (dimensions, metrics, filter) => {
+  const report = async (dimensions, metrics, filter, period=dates) => {
     const r = await providerApi('GA4', tokens, base, {
       method: 'POST',
       body: {
         dateRanges: [{
-          startDate: dates.startDate,
-          endDate: dates.endDate
+          startDate: period.startDate,
+          endDate: period.endDate
         }],
         dimensions: dimensions.map(name => ({
           name
@@ -116,6 +118,10 @@ export async function refreshAnalytics(row, tokens, payload) {
   };
   const summary = await report([], ['activeUsers', 'sessions', 'engagedSessions', 'engagementRate', 'keyEvents', 'sessionKeyEventRate']);
   const inquiries = await report([], ['eventCount'], eventFilter);
+  const previousDates=previousAnalyticsDates(dates);
+  const previousSummary=await report([],['sessions','activeUsers'],null,previousDates);
+  const previousInquiries=await report([],['eventCount'],eventFilter,previousDates);
+  const interest=await report(['eventName'],['eventCount'],{filter:{fieldName:'eventName',stringFilter:{matchType:'FULL_REGEXP',value:'select_experience_(glam|360|mirror|vogue|virtual|audio)'}}});
   const traffic = await report(['date'], ['sessions', 'activeUsers']);
   const sources = await report(['sessionSource', 'sessionMedium', 'sessionDefaultChannelGroup'], ['sessions', 'activeUsers', 'keyEvents']);
   const campaigns = await report(['sessionCampaignName', 'sessionSource', 'sessionMedium'], ['sessions', 'keyEvents']);
@@ -133,8 +139,13 @@ export async function refreshAnalytics(row, tokens, payload) {
     if (e.code !== 'PROVIDER_REJECTED') throw e;
   }
   const crm = await query(`SELECT COALESCE(utm_campaign,first_touch->>'utm_campaign','(unattributed)') AS campaign,
- COALESCE(utm_source,first_touch->>'utm_source','(unattributed)') AS source,COALESCE(utm_medium,first_touch->>'utm_medium','(unattributed)') AS medium,count(*)::int AS inquiries
- FROM leads WHERE deleted_at IS NULL AND test_mode=false AND created_at >= ($1::date::timestamp AT TIME ZONE $3) AND created_at < (($2::date+1)::timestamp AT TIME ZONE $3) GROUP BY 1,2,3`, [dates.startDate, dates.endDate, dates.timeZone]);
+ COALESCE(utm_source,first_touch->>'utm_source','(unattributed)') AS source,COALESCE(utm_medium,first_touch->>'utm_medium','(unattributed)') AS medium,count(*)::int AS inquiries,
+ COALESCE(sum(b.bookings),0)::int AS bookings,COALESCE(sum(b.booking_value),0)::numeric AS booking_value
+ FROM leads l LEFT JOIN LATERAL (SELECT count(*)::int bookings,COALESCE(sum(total),0) booking_value FROM bookings WHERE lead_id=l.id AND deleted_at IS NULL) b ON true
+ WHERE l.deleted_at IS NULL AND l.test_mode=false AND l.created_at >= ($1::date::timestamp AT TIME ZONE $3) AND l.created_at < (($2::date+1)::timestamp AT TIME ZONE $3) GROUP BY 1,2,3`, [dates.startDate, dates.endDate, dates.timeZone]);
+  const crmSummary=crm.rows.reduce((sum,row)=>({inquiries:sum.inquiries+Number(row.inquiries||0),bookings:sum.bookings+Number(row.bookings||0),bookingValue:sum.bookingValue+Number(row.booking_value||0)}),{inquiries:0,bookings:0,bookingValue:0});
+  // Store paths, never query strings which can contain visitor-entered data.
+  const landingPaths=new Map();for(const row of landing.rows){const path=String(row.landingPagePlusQueryString||'').split('?')[0];landingPaths.set(path,(landingPaths.get(path)||0)+Number(row.sessions||0));}
   const performance = campaigns.rows.map(c => {
     const match = x => x.campaign === c.sessionCampaignName && x.source === c.sessionSource && x.medium === c.sessionMedium;
     const lead = crm.rows.find(match),
@@ -142,6 +153,7 @@ export async function refreshAnalytics(row, tokens, payload) {
     return {
       ...c,
       crmInquiries: lead?.inquiries || 0,
+      crmBookings:Number(lead?.bookings||0),crmBookingValue:Number(lead?.booking_value||0),
       inquiryEvents: events?.eventCount || 0,
       crmConversionRate: c.sessions ? (lead?.inquiries || 0) / c.sessions : null
     };
@@ -155,17 +167,22 @@ export async function refreshAnalytics(row, tokens, payload) {
       ...summary.rows[0],
       inquiryEvents: inquiries.rows[0]?.eventCount || 0
     },
+    previous:{dates:previousDates,summary:{...previousSummary.rows[0],inquiryEvents:previousInquiries.rows[0]?.eventCount||0}},
+    crmSummary,
+    experienceInterest:interest.rows.filter(r=>/^select_experience_(glam|360|mirror|vogue|virtual|audio)$/.test(r.eventName)).map(r=>({experience:r.eventName.replace('select_experience_',''),selections:r.eventCount})),
     traffic: traffic.rows,
     sources: sources.rows,
     campaigns: performance,
-    landing: landing.rows,
+    landing:[...landingPaths].map(([landingPage,sessions])=>({landingPage,sessions})).sort((a,b)=>b.sessions-a.sessions),
     pages: pages.rows,
     contents: contents.rows,
     contentUnavailable: Boolean(contents.unavailable),
     crmOnlyCampaigns: crm.rows.filter(x => !campaigns.rows.some(c => x.campaign === c.sessionCampaignName && x.source === c.sessionSource && x.medium === c.sessionMedium)),
     truncated: [summary, inquiries, traffic, sources, campaigns, landing, pages].some(x => x.truncated),
+    cohortNote:'CRM totals describe inquiries received in this date range and their related booking records to date. Booking value is not collected revenue. It is not a person-level match to Google visitors.',
     attributionNote: 'GA event counts and CRM inquiries are separate measurements. Matching is aggregated by campaign/source/medium, not by person.'
   };
+  reportData.insights=websiteAnalyticsInsights(reportData);
   await query('INSERT INTO integration_report_cache(connection_id,cache_key,report) VALUES($1,$2,$3) ON CONFLICT(connection_id,cache_key) DO UPDATE SET report=EXCLUDED.report,refreshed_at=now()', [row.id, cache_key, reportData]);
   return {
     records_processed: performance.length,
