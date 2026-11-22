@@ -205,12 +205,20 @@ export async function keepsakesOrderForToken(token){
 }
 export async function keepsakesOrderView(token){
  const order=await keepsakesOrderForToken(token);
- const fulfillments=(await query('SELECT id,item_index,provider,status,tracking,last_error,submitted_at FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[order.id])).rows;
+ const fulfillments=(await query('SELECT id,item_index,provider,status,recipient_index,tracking,last_error,submitted_at FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[order.id])).rows;
  const downloads=(await query(`SELECT e.id,m.filename,e.expires_at FROM keepsakes_entitlements e JOIN gallery_media m ON m.id=e.media_id WHERE e.order_id=$1 AND e.revoked_at IS NULL AND e.expires_at>now()`,[order.id])).rows.map(d=>({...d,url:`/api/keepsakes/orders/${token}/downloads/${d.id}`}));
- return {id:order.id,status:order.status,mode:'TEST',totalCents:order.total_cents,currency:order.currency,createdAt:order.created_at,paidAt:order.paid_at,items:order.snapshot.items.map((i,index)=>{
+ const snapshot=keepsakesSnapshot(order.snapshot);
+ return {id:order.id,quoteId:order.quote_id,status:order.status,mode:'TEST',subtotalCents:order.subtotal_cents,shippingCents:order.shipping_cents,taxCents:order.tax_cents,totalCents:order.total_cents,currency:order.currency,createdAt:order.created_at,paidAt:order.paid_at,items:snapshot.items.map((i,index)=>{
   const jobs=fulfillments.filter(f=>f.item_index===index),tracking=jobs.flatMap(f=>f.tracking||[]);
-  return {id:`${order.id}:${index}`,title:i.product.title,quantity:i.units,photos:i.assets.map(a=>a.label),status:jobs.some(f=>f.status==='REQUIRES_REVIEW')?'REQUIRES_REVIEW':jobs.length&&jobs.every(f=>f.status==='COMPLETE')?'COMPLETE':jobs[0]?.status||order.status,trackingUrl:tracking.find(t=>t.trackingUrl)?.trackingUrl,estimatedDelivery:tracking.find(t=>t.expectedDelivery)?.expectedDelivery,failureReason:jobs.find(f=>f.last_error)?.last_error};
+  return {id:`${order.id}:${index}`,recipients:i.product.provider==='LOB'?i.recipients.map((r,n)=>({...r,status:jobs.find(j=>j.recipient_index===n)?.status||'QUEUED'})):[],category:i.product.category,provider:i.product.provider,variant:i.variant,customization:i.customization,amountCents:i.product.retailCents*i.units,previewUrl:order.paid_at&&!order.refunded_cents?`/api/keepsakes/orders/${token}/items/${index}/preview`:null,title:i.product.title,quantity:i.units,photos:i.assets.map(a=>a.label),status:jobs.some(f=>f.status==='REQUIRES_REVIEW')?'REQUIRES_REVIEW':jobs.length&&jobs.every(f=>f.status==='COMPLETE')?'COMPLETE':jobs[0]?.status||order.status,trackingUrl:tracking.find(t=>t.trackingUrl)?.trackingUrl,estimatedDelivery:tracking.find(t=>t.expectedDelivery)?.expectedDelivery,failureReason:jobs.find(f=>f.last_error)?.last_error};
  }),fulfillments,downloads};
+}
+export async function keepsakesOrderPreview(token,index){
+ const order=await keepsakesOrderForToken(token);
+ if(!Number.isInteger(index)||index<0||!order.paid_at||order.refunded_cents)throw unavailable();
+ const source=order.snapshot.items[index]?.assets[0];if(!source)throw unavailable();
+ const media=(await query('SELECT * FROM gallery_media WHERE id=$1 AND checksum=$2',[source.mediaId,source.checksum])).rows[0];if(!media)throw unavailable();
+ return sharp(await verifiedGalleryBytes(media),{limitInputPixels:60_000_000}).rotate().resize({width:1200,height:1200,fit:'inside',withoutEnlargement:true}).jpeg({quality:82}).toBuffer();
 }
 export async function keepsakesDownload(token,id){
  const order=await keepsakesOrderForToken(token);
