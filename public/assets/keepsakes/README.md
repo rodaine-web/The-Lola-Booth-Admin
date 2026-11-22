@@ -14,3 +14,7 @@ Message fonts are bundled for consistent browser/print rendering: Liberation San
 `prodigi-c-type-gloss.jpg`: unmodified C-Type - Gloss.jpg from https://www.prodigi.com/download/product-range/c-types/prodigi-c-types-photo-assets.zip. This is the supplier's paper-finish reference; its sample photograph is not the customer's purchased artwork.
 
 `lola-postcard-back-v2.svg`: deterministic Lola-owned postcard back, approved for this workflow, with protected Lob mailing space and a verified QR to https://thelolabooth.com/connect. Native source and geometry are recorded in the corresponding postcard deliverable. The canonical PNG is pinned by SHA-256 on the server; only decorative ink can be themed, with the QR kept black.
+
+The 2026-11-22 personalized collection uses native canvas product visualizations from these supplier blanks. Classic frame corners and rails are taken from the supplier image, with its aperture adapted to the configured print ratio. The 11oz mug uses a cylindrical projection of the configured wrap layout. The complete selected photo stays inside the configured safe border in contain mode. These visualizations remain separate from the server-generated print proofs.
+
+`prodigi-classic-frame-gold.png` and `prodigi-classic-frame-white.png` are the unmodified Gold Classic Frame_blank.png and White classic frame_blank.png from the same official Prodigi classic-frame archive. Only catalogue-verified, album-enabled variants are offered.

@@ -13,6 +13,7 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
   const schema = 'keepsakes_' + crypto.randomBytes(6).toString('hex'), bootstrap = new pg.Pool({ connectionString: url.toString() });
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'lola-keepsakes-db-'));
   const originalFetch = globalThis.fetch, outbound = [], events = new Map(), taxReversals = [], taxReversalAttempts = [], taxCalculations = [], taxTransactions = [], lobRequests = [];
+  let submitNotReady = false;
   let prodigiMode = 'success', prodigiOrderState = 'draft', prodigiCurrentId = 'ord_syntheticKeepsakes', prodigiCreates = 0, prodigiSubmits = 0, supplierArtworkUrl, supplierGate;
   let lobDelivered = false, localHttpOrigin, destinationTaxEnabled = false, taxReversalFails = false;
   const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
@@ -61,11 +62,12 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
         }
         if (address.pathname === `/v5/orders/${prodigiCurrentId}:submit`) {
           prodigiSubmits++;
+          if(submitNotReady){submitNotReady=false;return result({message:'Synthetic draft not ready'},409);}
           if (supplierGate?.stage === 'submit') { supplierGate.entered.resolve(); await supplierGate.release.promise; }
-          prodigiOrderState = 'submitted'; return result({ data: { id: prodigiCurrentId, status: prodigiOrderState } });
+          prodigiOrderState = 'submitted'; return result({ data: { id: prodigiCurrentId, status: prodigiOrderState, issues: [] } });
         }
         if (address.pathname === `/v5/orders/${prodigiCurrentId}/shipments`) return result({ data: [{ carrier: 'Synthetic Carrier', trackingNumber: 'SYNTHETIC001', trackingUrl: 'https://example.invalid/tracking/SYNTHETIC001', dispatchedAt: '2035-11-19T12:00:00Z' }] });
-        if (address.pathname === `/v5/orders/${prodigiCurrentId}`) return result({ data: { id: prodigiCurrentId, status: prodigiOrderState } });
+        if (address.pathname === `/v5/orders/${prodigiCurrentId}`) return result({ data: { id: prodigiCurrentId, status: prodigiOrderState, issues: [] } });
         throw new Error('Unexpected synthetic Prodigi fixture request: ' + method + ' ' + address.pathname);
       }
       assert.equal(address.host, 'api.stripe.com', 'External requests must use only intercepted synthetic Stripe/Prodigi fixtures');
@@ -215,6 +217,9 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     assert.equal((await one('SELECT count(*)::int n FROM keepsakes_entitlements WHERE order_id=$1', [order.id])).n, 1);
     assert.equal((await one('SELECT status FROM keepsakes_fulfillments WHERE order_id=$1', [order.id])).status, 'COMPLETE');
     const settled = await one('SELECT * FROM keepsakes_orders WHERE id=$1', [order.id]);
+    const paidThumb=await shop.keepsakesOrderPreview(contact.statusToken,0),paidThumbMeta=await sharp(paidThumb).metadata();
+    assert.ok(paidThumbMeta.width<=1200&&paidThumbMeta.height<=1200);assert.equal(paidThumbMeta.exif,undefined);assert.notEqual(paidThumb.length,first.raw[0].bytes.length);
+    await assert.rejects(shop.keepsakesOrderPreview(contact.statusToken,99),{code:'KEEPSAKES_UNAVAILABLE'});
     assert.equal(settled.status, 'COMPLETE'); assert.equal(settled.stripe_fee_cents, 37); assert.ok(settled.tax_transaction_id);
     assert.equal(settled.tax_transactions.length, 1); assert.equal(settled.tax_transactions[0].id, settled.tax_transaction_id);
     const taxRequests = outbound.filter((request) => request.path === '/v1/tax/transactions/create_from_calculation').length;
@@ -428,6 +433,29 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     assert.equal((await one('SELECT status FROM keepsakes_orders WHERE id=$1', [mixedOrder.id])).status, 'FULFILLING');
     assert.ok((await query('SELECT status FROM keepsakes_fulfillments WHERE order_id=$1', [mixedOrder.id])).rows.every((job) => job.status === 'SUBMITTED'));
 
+    // Eventual supplier draft readiness retries the same saved order, then
+    // submits it once. Failed/ambiguous creates retain their existing review gate.
+    const delayedQuote = await shop.quoteKeepsakes('photo', first.token, printCart);
+    await shop.checkoutKeepsakes('photo', first.token, delayedQuote.quoteId, { proofReviewed: true });
+    const delayedOrder = await one('SELECT * FROM keepsakes_orders WHERE quote_id=$1', [delayedQuote.quoteId]);
+    await deliver({ ...paidEvent, id: 'evt_syntheticDelayedDraft', data: { object: { ...paidEvent.data.object, id: delayedOrder.stripe_session_id, amount_total: delayedQuote.totalCents, payment_intent: 'pi_syntheticDelayedDraft', metadata: { keepsakes_order_id: delayedOrder.id } } } });
+    prodigiOrderState='draft';submitNotReady=true;const createsBeforeDelay=prodigiCreates;
+    await query("UPDATE keepsakes_fulfillments SET next_attempt_at=now()+interval '1 day' WHERE order_id<>$1 AND status IN('QUEUED','RETRY','SUBMITTED','SHIPPED')",[delayedOrder.id]);
+    await worker.processKeepsakesQueue({limit:1});
+    const delayedJob=await one('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1',[delayedOrder.id]);
+    assert.equal(delayedJob.status,'RETRY');assert.equal(delayedJob.last_error,'PRODIGI_SUBMISSION_PENDING');
+    assert.equal(prodigiCreates,createsBeforeDelay+1);assert.ok(delayedJob.provider_order_id);
+    await query('UPDATE keepsakes_fulfillments SET next_attempt_at=now() WHERE id=$1',[delayedJob.id]);
+    await worker.processKeepsakesQueue({limit:1});
+    const delayedSubmitted=await one('SELECT * FROM keepsakes_fulfillments WHERE id=$1',[delayedJob.id]);
+    assert.equal(delayedSubmitted.status,'SUBMITTED');assert.equal(delayedSubmitted.provider_order_id,delayedJob.provider_order_id);
+    assert.equal(prodigiCreates,createsBeforeDelay+1);
+    const temporary={code:'PRODIGI_REQUEST_FAILED',details:{providerStatus:409}};
+    assert.equal(worker.prodigiDraftMayRetry({status:'draft',issues:[]},temporary,1),true);
+    assert.equal(worker.prodigiDraftMayRetry({status:'draft',issues:[]},temporary,3),false);
+    assert.equal(worker.prodigiDraftMayRetry({status:'draft',issues:[{code:'invalid_artwork'}]},temporary,1),false);
+    assert.equal(worker.prodigiDraftMayRetry({status:'draft',issues:[]},{...temporary,details:{providerStatus:401}},1),false);
+
     // The approved back uses one unit per recipient, independently rendered
     // from the pinned asset, without a separately uploaded gallery back.
     const { messageZone: legacyZone, ...standardVariant } = postcardInput.variants[0];
@@ -474,6 +502,12 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
       const sourceResponse = await fetch(localHttpOrigin + `/api/keepsakes/access/photo/${first.token}/assets/${first.scope.assets[1].id}`); assert.equal(sourceResponse.status, 200); assert.match(sourceResponse.headers.get('content-type'), /^image\/jpeg/);
       assert.ok((await sharp(Buffer.from(await sourceResponse.arrayBuffer())).metadata()).width <= 1200);
       assert.equal((await fetch(localHttpOrigin + '/api/keepsakes/orders/' + crypto.randomBytes(32).toString('base64url'))).status, 404);
+      const standardContact=decryptSecretJson(standardOrder.contact_ciphertext);
+      const thumbnailResponse=await fetch(localHttpOrigin+`/api/keepsakes/orders/${standardContact.statusToken}/items/0/preview`);
+      assert.equal(thumbnailResponse.status,200);assert.match(thumbnailResponse.headers.get('cache-control'),/no-store/);
+      assert.equal((await sharp(Buffer.from(await thumbnailResponse.arrayBuffer())).metadata()).width,1200);
+      assert.equal((await fetch(localHttpOrigin+`/api/keepsakes/orders/${standardContact.statusToken}/items/1/preview`)).status,404);
+      assert.equal((await fetch(localHttpOrigin+`/api/keepsakes/orders/${contact.statusToken}/items/0/preview`)).status,404,'Refunded previews must be revoked');
       const beforeProofRequests = outbound.length, renderedBacks = [];
       for (const proof of retailQuote.proofs) {
         const proofResponse = await fetch(localHttpOrigin + proof.url); assert.equal(proofResponse.status, 200); assert.match(proofResponse.headers.get('content-type'), /^image\/jpeg/);

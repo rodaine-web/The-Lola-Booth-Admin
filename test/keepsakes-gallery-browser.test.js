@@ -34,7 +34,7 @@ test('opt-in gallery lightbox shows only verified eligible products and preserve
       await page.route(url => url.pathname.startsWith('/api/'), async route => {
         const req = route.request(), pathname = new URL(req.url()).pathname;
         if (pathname.startsWith('/api/keepsakes/')) return supplierFailure ? route.fulfill({status: 503, json: {error: {message: 'Commerce temporarily unavailable'}}}) : route.fulfill({json: {enabled, assets: [{id: 'asset-1', mediaId: 'photo-1', merchandiseEligible: true, digitalEligible: false, included: true}], products: [
-          ...['postcard', 'print', 'frame', 'mug', 'magnet', 'keychain'].map(category => ({id: category, title: ({postcard: 'Send a Postcard', print: 'Order Prints', frame: 'Frame My Photo', mug: 'Photo Mug', magnet: 'Photo Magnet', keychain: 'Create a Keychain'})[category], category, provider: category === 'postcard' ? 'LOB' : 'PRODIGI', available: category !== 'keychain', verified: category !== 'keychain'})),
+          ...['postcard', 'print', 'frame', 'mug', 'magnet', 'keychain'].map(category => ({id: category, title: ({postcard: 'Send a Postcard', print: 'Order Prints', frame: 'Frame My Photo', mug: 'Photo Mug', magnet: 'Photo Magnet', keychain: 'Create a Keychain'})[category], category, provider: category === 'postcard' ? 'LOB' : 'PRODIGI', variants:[{id:'default',sku:({mug:'GLOBAL-MUG-W',frame:'GLOBAL-CFP-12X16',print:'GLOBAL-PHO-4X6'})[category],...(category==='postcard'?{backTemplate:'lola-connect-v2'}:{})}], available: category !== 'keychain', verified: category !== 'keychain'})),
           {id: 'digital', title: 'Original Digital Photo', category: 'digital', provider: 'DIGITAL', available: true}
         ]}});
         if (pathname.endsWith('/download')) {downloads.push(req.postDataJSON()); return route.fulfill({json: {url: '/api/gallery/test-download'}});}
@@ -47,10 +47,11 @@ test('opt-in gallery lightbox shows only verified eligible products and preserve
       await page.goto(url);
       const dialog = page.getByRole('dialog');
       await dialog.getByRole('heading', {name: 'The Lola Keepsakes', exact: true}).waitFor();
-      assert.equal(await dialog.getByRole('link', {name: /^Customize /}).count(), 5);
+      assert.equal(await dialog.getByRole('link', {name: /^Customize /}).count(), 4);
       assert.equal(await dialog.getByText('Create a Keychain', {exact: true}).count(), 0);
       assert.equal(await dialog.getByText('Original Digital Photo', {exact: true}).count(), 0);
       assert.match(await dialog.getByRole('link', {name: 'Customize Photo Mug', exact: true}).getAttribute('href'), /product=mug&asset=photo-1/);
+      await page.screenshot({path:path.join(output,`gallery-before-${width}.png`),fullPage:true});
       await dialog.getByRole('button', {name: 'Favorite this photo', exact: true}).click();
       assert.equal(await dialog.getByRole('button', {name: 'Favorite this photo', exact: true}).getAttribute('aria-pressed'), 'true');
       await dialog.getByRole('button', {name: 'Copy Photo Link', exact: true}).click();

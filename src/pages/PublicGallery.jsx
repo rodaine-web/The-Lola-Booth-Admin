@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { formatDateOnly } from "../utils/display.js";
 import "../styles/keepsakes-gallery.css";
-import {partnerProductImage} from "../../shared/keepsakes-product-imagery.js";
+import ProductPreview, {canPreviewKeepsake} from "../components/KeepsakesProductPreview.jsx";
 const API = import.meta.env.VITE_API_URL || "/api";
 const mediaUrl = (url) => `${API.replace(/\/api$/, "")}${url}`;
 async function request(path, options) {
@@ -230,7 +230,7 @@ export default function PublicGallery() {
   const selected = active === null ? null : data.media[active];
   const keepsakesEnabled = Boolean(keepsakesView?.enabled && selected?.mediaType !== 'VIDEO');
   const selectedAsset = keepsakesView?.assets?.find(asset => (asset.mediaId || asset.id) === selected?.id);
-  const keepsakesProducts = (keepsakesView?.products || []).filter(product => product.available === true && product.verified !== false
+  const keepsakesProducts = (keepsakesView?.products || []).filter(product => product.available === true && product.verified !== false && canPreviewKeepsake(product)
     && selectedAsset && (product.provider === 'DIGITAL' ? selectedAsset.digitalEligible && !selectedAsset.included : selectedAsset.merchandiseEligible));
   const shopPath = product => `/keepsakes/${type}/${token}?${new URLSearchParams({...(product ? {product: product.id} : {}), ...(selected ? {asset: selected.id} : {})})}`;
   const copyPhoto = async () => {
@@ -372,18 +372,18 @@ export default function PublicGallery() {
               <button className="kg-photo-next" aria-label="Next photo" onClick={() => setActive(index => (index + 1) % data.media.length)}><ArrowRight/></button>
             </section>
             <aside className="kg-keepsakes-aside" aria-label="Photo keepsakes">
-              <p className="kg-eyebrow">TURN THIS MOMENT INTO A KEEPSAKE</p><h2>The Lola Keepsakes</h2><p className="kg-description">Download, share, or shop personalized products with your photo.</p>
+              <p className="kg-eyebrow">YOUR EVENT PHOTO</p><h2>The Lola Keepsakes</h2><h3 className="kg-headline">Turn your memory into a wonderful keepsake.</h3><p className="kg-description">Personalized photo gifts, prints and more — all featuring your favorite moment.</p>
               <div className="kg-free-actions">
                 {data.allowDownload && <button onClick={() => download(selected.id)} aria-label="Download this photo"><span><Download size={23}/></span>Download</button>}
                 <button aria-label="Favorite this photo" aria-pressed={favorites.has(selected.id)} onClick={() => toggleFavorite(selected.id)}><span><Heart size={25} fill={favorites.has(selected.id) ? 'currentColor' : 'none'}/></span>Love</button>
                 {type === 'photo' && <><button onClick={sharePhoto} aria-label="Share this photo"><span><Share2 size={23}/></span>Share</button><button onClick={copyPhoto} aria-label="Copy Photo Link"><span><Link2 size={23}/></span>Copy Link</button></>}
               </div>
               {photoNotice && <p className="kg-photo-notice" role="status">{photoNotice}</p>}{error && <p className="kg-photo-notice" role="alert">{error}</p>}
-              <div className="kg-product-grid">{keepsakesProducts.map(product => <Link className="kg-product-tile" key={product.id} to={shopPath(product)} aria-label={`Customize ${product.title}`}><KeepsakeProductPreview product={product} url={mediaUrl(selected.url)}/><div><strong>{product.title}</strong><small>{keepsakeDescription(product.category)}</small></div><ChevronRight size={20}/></Link>)}</div>
+              </aside><section className="kg-collection" aria-label="Personalized keepsakes"><h2>Create your keepsake</h2><p>PERSONALIZED PRODUCTS FEATURING YOUR PHOTO</p><div className="kg-product-grid">{keepsakesProducts.map(product => <article className="kg-product-tile" key={product.id}><ProductPreview product={product} asset={{url:mediaUrl(selected.url),label:selected.filename||"Your photo"}} variant={product.variants?.[0]} compact/><div><strong>{product.title}</strong><small>{keepsakeDescription(product.category)}</small>{Number.isInteger(product.retailCents)&&<strong className="kg-price">{new Intl.NumberFormat("en-US",{style:"currency",currency:product.currency||"USD"}).format(product.retailCents/100)}</strong>}<Link className="kg-view-options" to={shopPath(product)} aria-label={`Customize ${product.title}`}>View options</Link></div></article>)}</div>
               {!keepsakesProducts.some(product=>String(product.category).toLowerCase()==='postcard') && <div className="kg-postcard-pending"><strong>Send a Postcard</strong><small>Back design being prepared · personal messages and font choices coming with the approved artwork</small></div>}
               {!keepsakesProducts.length && <p className="kg-empty-products">Personalized products for this photo are being prepared. Your permitted free photo actions remain available.</p>}
               {keepsakesProducts.length > 0 && <><Link className="kg-all-products" to={shopPath()}><ShoppingCart size={22}/> See All Photo Products</Link><p className="kg-preview-note">Product previews use your selected photo. Review the final layout in the shop.</p></>}
-            </aside>
+            </section>
           </> : <>
           <button
             className="lightbox-prev"
@@ -442,9 +442,4 @@ export default function PublicGallery() {
 
 function keepsakeDescription(category) {
   return ({postcard: 'Mail this photo to a loved one', print: 'Professionally printed photos', frame: 'A ready-to-display keepsake', mug: 'Your photo on a ceramic mug', magnet: 'A fun, everyday keepsake', keychain: 'A custom photo keychain', digital: 'Your available original photo', bundle: 'Your available original photos'})[String(category).toLowerCase()] || 'Personalize with your photo';
-}
-function KeepsakeProductPreview({product, url}) {
-  const kind=String(product.category||'').toLowerCase();
-  const supplier=partnerProductImage(product.variants?.[0]);
-  return <div className="kg-product-preview kg-supplier-image" aria-hidden="true">{supplier?<img src={supplier.url} alt=""/>:kind==='postcard'?<img src="/assets/keepsakes/lola-postcard-back-v2.svg" alt=""/>:['digital','bundle'].includes(kind)?<img crossOrigin="anonymous" src={url} alt=""/>:<span>Partner image pending</span>}</div>;
 }

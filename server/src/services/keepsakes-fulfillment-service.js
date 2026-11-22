@@ -43,6 +43,11 @@ function supplierUrl(f,art,index=0){
  const url=new URL(origin);if(!/^(stagingapi\.thelolabooth\.com|[a-z0-9-]+\.up\.railway\.app)$/.test(url.hostname))throw fail('Use the staging API artwork origin.');
  return `${url.origin}/api/keepsakes/artwork/${keepsakesArtworkToken(f.id,index,art.checksum)}`;
 }
+export function prodigiDraftMayRetry(current,error,attempts){
+ return current?.status==='draft'&&Array.isArray(current.issues)&&current.issues.length===0
+  &&error?.code==='PRODIGI_REQUEST_FAILED'&&[400,409,429,502,503,504].includes(error.details?.providerStatus)
+  &&Number.isInteger(attempts)&&attempts>=1&&attempts<3;
+}
 async function fulfillProdigi(f,order,item,contact){
  const artwork=await savedArtwork(f,item);let current;
  if(f.provider_order_id)current=await getProdigiOrder(f.provider_order_id);
@@ -55,7 +60,18 @@ async function fulfillProdigi(f,order,item,contact){
   current=await getProdigiOrder(draft.id);
  }
  if(current.status==='draft'){
-  await submitProdigiOrder(current.id);
+  try{await submitProdigiOrder(current.id);}
+  catch(error){
+   // Accepted drafts may be readable before the supplier can submit them.
+   // Reconcile the durable ID first; never create a replacement order.
+   current=await getProdigiOrder(current.id);
+   if(current.status==='draft'){
+    if(prodigiDraftMayRetry(current,error,f.attempts)){
+     await query("UPDATE keepsakes_fulfillments SET status='RETRY',lease_until=NULL,next_attempt_at=now()+interval '30 seconds',last_error='PRODIGI_SUBMISSION_PENDING',updated_at=now() WHERE id=$1",[f.id]);return;
+    }
+    throw error;
+   }
+  }
   current=await getProdigiOrder(current.id);
  }
  const known=['draft','pending_submission','submitted','in_production','on_hold','paused','partially_shipped','shipped','completed','cancelled','failed'];
