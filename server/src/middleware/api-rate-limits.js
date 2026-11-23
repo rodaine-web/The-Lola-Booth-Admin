@@ -6,7 +6,7 @@ export function requestQuota(req) {
   if(req.method==='POST'&&req.path==='/api/public/pricing-quotes')return 'estimate';
   if (['GET','HEAD'].includes(req.method)) {
     if (req.path === '/api/health') return 'health';
-    if (/^\/api\/public\/(?:staging\/)?media\/[^/]+$/.test(req.path) || /^\/api\/(?:gallery|gallery-admin)\/media\/[^/]+$/.test(req.path)) return 'media';
+    if (/^\/api\/keepsakes\/photos\/assets\/[^/]+$/.test(req.path) || /^\/api\/public\/(?:staging\/)?media\/[^/]+$/.test(req.path) || /^\/api\/(?:gallery|gallery-admin)\/media\/[^/]+$/.test(req.path)) return 'media';
     return 'read';
   }
   if (req.path.startsWith('/api/auth/')) return 'auth';
