@@ -22,6 +22,8 @@ test('approved shop preserves the twelve-product catalogue and secure photo entr
   const output=path.join(os.tmpdir(),'lola-core-shop-browser');await fs.mkdir(output,{recursive:true});
   for(const width of [1440,768,390,320]){
    const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+   await page.route('**/api/keepsakes/photos/link',r=>r.fulfill({json:{token:'synthetic-photo-session-token-123456789012345'}}));
+   await page.route('**/api/keepsakes/photos/collection',r=>r.fulfill({json:{expiresAt:'2035-11-30',albums:[],assets:[]}}));
    await page.route('**/api/keepsakes/catalogue',r=>r.fulfill({json:{products:coreCatalogueView([{id:'qa-keychain',catalogue_key:'keychain',retail_cents:2499}])}}));
    await page.goto(origin+'/shop');await page.getByRole('heading',{name:/Turn Your/}).waitFor();await page.evaluate(()=>document.fonts.ready);
    assert.equal(await page.locator('.shop-product-strip>a').count(),12);
@@ -41,7 +43,7 @@ test('approved shop preserves the twelve-product catalogue and secure photo entr
    await page.getByRole('button',{name:'Find My Photos',exact:true}).click();await page.getByRole('alert').waitFor();
    await page.getByLabel('Your secure Lola Booth photo link').fill('https://staginggallery.thelolabooth.com/gallery/photo/synthetic-private-photo-link123456');
    await page.getByRole('button',{name:'Find My Photos',exact:true}).click();
-   await page.getByRole('heading',{name:'Authorized gallery resolver'}).waitFor();
+   await page.getByRole('heading',{name:'Your Lola Memories'}).waitFor();
    assert.deepEqual(errors,[]);await page.close();
   }
  }finally{await browser?.close();await vite.close();}

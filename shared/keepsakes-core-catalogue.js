@@ -19,7 +19,7 @@ const entries=[
  ['photo-book','Photo Books & Albums','signature','GELATO_OR_WHCC','A beautifully bound collection of your authorized Lola Booth photographs.','MULTI_PHOTO'],
  ['metal-print','Metal Photo Prints','signature','WHCC','Your photograph on metal, with a radiant contemporary finish.','SINGLE_PHOTO'],
 ];
-export const KEEPSAKES_CORE_PRODUCTS=Object.freeze(entries.map(([key,title,collection,route,description,source])=>Object.freeze({key,title,collection,route,description,source,image:`/assets/keepsakes/approved/${key}.webp`})));
+export const KEEPSAKES_CORE_PRODUCTS=Object.freeze(entries.map(([key,title,collection,route,description,source])=>Object.freeze({key,title,collection,route,description,source,retailEligible:true,stationEligible:collection==='everyday',complimentaryEligible:['keychain','magnet'].includes(key),mandatoryPaidEligible:['keychain','magnet'].includes(key),image:`/assets/keepsakes/approved/${key}.webp`})));
 export const keepsakesCoreProduct=key=>KEEPSAKES_CORE_PRODUCTS.find(p=>p.key===key);
 export function coreCatalogueView(rows=[]){
  const byKey=new Map(rows.map(row=>[row.catalogue_key,row]));

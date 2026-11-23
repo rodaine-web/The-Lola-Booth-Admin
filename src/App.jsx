@@ -111,6 +111,9 @@ export default function App() {
         <Route path="/shop" element={<KeepsakesShop/>}/>
         <Route path="/shop/collection" element={<KeepsakesShop/>}/>
         <Route path="/shop/find-photos" element={<KeepsakesShop/>}/>
+        <Route path="/shop/check-email" element={<KeepsakesShop/>}/>
+        <Route path="/shop/access" element={<KeepsakesShop/>}/>
+        <Route path="/shop/memories" element={<KeepsakesShop/>}/>
         <Route path="/shop/products/:productKey" element={<KeepsakesShop/>}/>
         <Route path="/shop/how-it-works" element={<KeepsakesShop/>}/>
         <Route path="/shop/event-clients" element={<KeepsakesShop/>}/>

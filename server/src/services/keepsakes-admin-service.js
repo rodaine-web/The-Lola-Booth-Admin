@@ -90,7 +90,7 @@ export async function saveKeepsakesSettings(albumId,input,user){
 }
 export async function saveKeepsakesSession(albumId,input,user){
  assertKeepsakes();await assertFiestaReviewAccess(albumId,user);
- const data=z.object({anchorMediaId:z.uuid(),sourceRef:z.string().max(150).optional(),assets:z.array(z.object({mediaId:z.uuid(),kind:z.enum(['COMPOSITE','ORIGINAL','PROCESSED','EXTRACTED_CROP']),label:z.string().min(1).max(100),sortOrder:z.number().int().min(0),branded:z.boolean(),merchandiseEligible:z.boolean(),digitalEligible:z.boolean(),included:z.boolean()})).min(1).max(100)}).parse(input);
+ const data=z.object({anchorMediaId:z.uuid(),sourceRef:z.string().max(150).optional(),assets:z.array(z.object({mediaId:z.uuid(),kind:z.enum(['COMPOSITE','ORIGINAL','PROCESSED','EXTRACTED_CROP','BRANDED_STRIP']),label:z.string().min(1).max(100),sortOrder:z.number().int().min(0),branded:z.boolean(),merchandiseEligible:z.boolean(),digitalEligible:z.boolean(),included:z.boolean()})).min(1).max(100)}).parse(input);
  if(new Set(data.assets.map(a=>a.mediaId)).size!==data.assets.length||!data.assets.some(a=>a.mediaId===data.anchorMediaId))throw new AppError('Include the session anchor once, with unique real source files.',422,'KEEPSAKES_SESSION_INVALID');
  return transaction(async()=>{
   const album=(await query('SELECT * FROM gallery_albums WHERE id=$1 FOR UPDATE',[albumId])).rows[0];

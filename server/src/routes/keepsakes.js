@@ -1,3 +1,5 @@
+import {stationPolicyAdmin,saveStationPolicy,previewStationPolicy} from '../services/keepsake-station-policy-service.js';
+import * as photoAccess from '../services/keepsakes-photo-access-service.js';
 import {keepsakesCoreCatalogue,saveCoreCataloguePrice} from '../services/keepsakes-core-catalogue-service.js';
 import {AppError} from '../utils/errors.js';
 import {Router} from 'express';
@@ -17,8 +19,17 @@ const id=z.uuid(),wrap=fn=>asyncHandler(async(req,res)=>res.json(await fn(req)))
 const noCache=(_req,res,next)=>{res.set({'Cache-Control':'no-store, private','Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','X-Content-Type-Options':'nosniff'});next();};
 export const keepsakesPublicRouter=Router();
 keepsakesPublicRouter.use((_req,_res,next)=>{try{shop.assertKeepsakes();next();}catch(e){next(e);}},noCache);
-keepsakesPublicRouter.use(rateLimit({windowMs:60000,limit:90,standardHeaders:true,legacyHeaders:false}));
+keepsakesPublicRouter.use(rateLimit({windowMs:60000,limit:90,standardHeaders:true,legacyHeaders:false,skip:req=>req.method==='GET'&&/^\/photos\/assets\/[\w-]+$/.test(req.path)}));
+keepsakesPublicRouter.use('/photos/assets',rateLimit({windowMs:60000,limit:600,standardHeaders:true,legacyHeaders:false}));
 keepsakesPublicRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
+const photoLookupLimit=rateLimit({windowMs:15*60000,limit:10,standardHeaders:true,legacyHeaders:false});
+const photoBearer=req=>{const token=req.get('Authorization')?.match(/^Bearer ([\w-]{43})$/)?.[1];if(!token)throw new AppError('Request a new photo access link.',401,'PHOTO_ACCESS_REQUIRED');return token;};
+keepsakesPublicRouter.post('/photos/request',photoLookupLimit,wrap(r=>photoAccess.requestPhotoAccess(z.object({channel:z.enum(['EMAIL','PHONE']),value:z.string().max(254),email:z.string().max(254).optional()}).strict().parse(r.body))));
+keepsakesPublicRouter.post('/photos/redeem',photoLookupLimit,wrap(r=>photoAccess.redeemPhotoAccess(z.string().max(100).parse(r.body.code))));
+keepsakesPublicRouter.post('/photos/link',photoLookupLimit,wrap(r=>photoAccess.directPhotoAccess(z.enum(['photo','p','a']).parse(r.body.type),z.string().max(100).parse(r.body.token))));
+keepsakesPublicRouter.get('/photos/collection',wrap(r=>photoAccess.photoCollection(photoBearer(r))));
+keepsakesPublicRouter.get('/photos/assets/:id',asyncHandler(async(req,res)=>res.type('image/jpeg').send(await photoAccess.collectionPhoto(photoBearer(req),id.parse(req.params.id)))));
+
 keepsakesPublicRouter.get(access,wrap(r=>shop.keepsakesView(r.params.type,r.params.token)));
 keepsakesPublicRouter.get(access+'/assets/:id',asyncHandler(async(req,res)=>res.type('image/jpeg').send(await shop.keepsakesAsset(req.params.type,req.params.token,id.parse(req.params.id)))));
 keepsakesPublicRouter.post(access+'/postcard-preview',rateLimit({windowMs:60000,limit:45,standardHeaders:true,legacyHeaders:false}),asyncHandler(async(req,res)=>{
@@ -40,11 +51,14 @@ keepsakesAdminRouter.get('/albums/:id',wrap(r=>admin.keepsakesAlbumAdmin(id.pars
 keepsakesAdminRouter.put('/albums/:id',requirePermission('write:operations'),wrap(r=>admin.saveKeepsakesSettings(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.post('/albums/:id/sessions',requirePermission('write:operations'),wrap(r=>admin.saveKeepsakesSession(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.use(requirePermission('read:finance'),(req,_res,next)=>{try{admin.assertKeepsakesManager(req.user);next();}catch(e){next(e);}});
+keepsakesAdminRouter.get('/station-policy',wrap(r=>stationPolicyAdmin(r.user)));
+keepsakesAdminRouter.post('/station-policy/preview',wrap(r=>previewStationPolicy(r.body,r.user)));
 keepsakesAdminRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
 keepsakesAdminRouter.get('/',wrap(r=>admin.keepsakesDashboard(r.user)));
 keepsakesAdminRouter.get('/orders/:id',wrap(r=>admin.keepsakesAdminOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.get('/integrations/prodigi',wrap(()=>keepsakesProdigiIntegration()));
 keepsakesAdminRouter.use(requirePermission('write:integrations'));
+keepsakesAdminRouter.put('/station-policy',wrap(r=>saveStationPolicy(r.body,r.user)));
 keepsakesAdminRouter.put('/catalogue/:key/price',wrap(r=>saveCoreCataloguePrice(r.params.key,r.body,r.user)));
 keepsakesAdminRouter.post('/products',wrap(()=>{throw new AppError('Use the approved 12-product catalogue.',409,'KEEPSAKES_CATALOGUE_REPLACED');}));
 keepsakesAdminRouter.put('/products/:id',wrap(()=>{throw new AppError('Use the approved 12-product catalogue.',409,'KEEPSAKES_CATALOGUE_REPLACED');}));
