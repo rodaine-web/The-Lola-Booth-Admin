@@ -116,6 +116,13 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     const admin = { ...user, roles: ['ADMIN'], permissions: ['*'] }, stranger = { id: crypto.randomUUID(), roles: ['ATTENDANT'], permissions: ['read:events'] };
     const client = await one("INSERT INTO clients(name,email,client_type) VALUES('Synthetic Keepsakes Client','keepsakes-client@example.invalid','CORPORATE') RETURNING id");
     const gallery = await import('../server/src/services/private-gallery-service.js'), shop = await import('../server/src/services/keepsakes-service.js'), manager = await import('../server/src/services/keepsakes-admin-service.js');
+    const core = await import('../server/src/services/keepsakes-core-catalogue-service.js');
+    const coreBefore = await core.keepsakesCoreCatalogue(); assert.equal(coreBefore.products.length,12); assert.ok(coreBefore.products.every(p=>p.retailCents===null&&!p.available));
+    await assert.rejects(core.saveCoreCataloguePrice('keychain',{retailCents:2499},stranger),{code:'FORBIDDEN'});
+    await core.saveCoreCataloguePrice('keychain',{retailCents:2499},admin);
+    const coreAfter=await core.keepsakesCoreCatalogue();assert.equal(coreAfter.products.find(p=>p.key==='keychain').retailCents,2499);assert.equal(coreAfter.products.find(p=>p.key==='keychain').available,false);
+    await assert.rejects(core.saveCoreCataloguePrice('mug',{retailCents:2499},admin),{code:'NOT_FOUND'});
+
     const { photoLink } = await import('../server/src/services/gallery-photo-link-service.js');
     const { encryptSecretJson, decryptSecretJson } = await import('../server/src/services/integration-secrets.js');
     const createAlbum = async (name) => {
@@ -365,9 +372,10 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     const returnAddress = { ...shippingAddress, name: 'The Lola Booth QA' };
     await manager.saveKeepsakesSettings(album.id, { enabled: true, brandedMerchandise: true, originalSales: true, productIds: [digital.id, print.id, postcard.id], returnAddress }, admin);
     const recipientAddresses = [{ ...shippingAddress, name: 'Synthetic Recipient One', message: 'A note for recipient one.',messageFont:'typewriter',messageColor:'#17365d' }, { ...shippingAddress, name: 'Synthetic Recipient Two', address1: '22 Test Street', city: 'San Francisco', state: 'CA', zip: '94105', message: 'A different note for recipient two.',messageFont:'handwritten',messageColor:'#703040' }];
-    const retailCart = { ...cart, items: [{ ...cart.items[0], productId: postcard.id, variantId: '4x6', assetIds: [postcardScope.assets[0].id], quantity: 2, recipients: recipientAddresses }] };
+    const retailCart = { ...cart, items: [{ ...cart.items[0], productId: postcard.id, variantId: '4x6', assetIds: [postcardScope.assets[0].id], quantity: 2, returnAddress, recipients: recipientAddresses }] };
     const sponsoredCounts = await one('SELECT (SELECT count(*)::int FROM gallery_postcards) postcards,(SELECT count(*)::int FROM gallery_live_mailing_jobs) live,(SELECT count(*)::int FROM gallery_mailing_jobs) test');
     const beforeRetailCalculations = taxCalculations.length; destinationTaxEnabled = true;
+    await assert.rejects(shop.quoteKeepsakes('photo',postcardToken,{...retailCart,items:[{...retailCart.items[0],returnAddress:undefined}]}),{code:'KEEPSAKES_POSTCARD_ADDRESS'});
     const retailQuote = await shop.quoteKeepsakes('photo', postcardToken, retailCart); assert.equal(retailQuote.subtotalCents, 2396); assert.equal(retailQuote.taxCents, 30); assert.equal(retailQuote.totalCents, 2426); assert.equal(retailQuote.checkoutReady, true);
     const retailCalculations = taxCalculations.slice(beforeRetailCalculations);
     assert.equal(retailCalculations.length, 2); assert.deepEqual(retailCalculations.map(({ state, zip, source, amount, taxCents }) => ({ state, zip, source, amount, taxCents })), [{ state: 'MA', zip: '02134', source: 'shipping', amount: 1198, taxCents: 10 }, { state: 'CA', zip: '94105', source: 'shipping', amount: 1198, taxCents: 20 }]);
@@ -464,7 +472,7 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     await manager.verifyKeepsakesProduct(standard.id, admin);
     standard = await manager.saveKeepsakesProduct(standard.id, { ...standardInput, active: true }, admin);
     await manager.saveKeepsakesSettings(album.id, { enabled: true, brandedMerchandise: true, originalSales: true, productIds: [digital.id, print.id, postcard.id, standard.id], returnAddress }, admin);
-    const standardItem = { ...retailCart.items[0], productId: standard.id, quantity: 1, postcardArtworkColor: '#703040', recipients: Array.from({ length: 4 }, (_, i) => ({ ...retailCart.items[0].recipients[i % 2], message: `Approved postcard note ${i + 1}` })) };
+    const standardItem = { returnAddress, ...retailCart.items[0], productId: standard.id, quantity: 1, postcardArtworkColor: '#703040', recipients: Array.from({ length: 4 }, (_, i) => ({ ...retailCart.items[0].recipients[i % 2], message: `Approved postcard note ${i + 1}` })) };
     const standardCart = { ...retailCart, items: [standardItem] };
     await assert.rejects(shop.quoteKeepsakes('photo', postcardToken, { ...standardCart, items: [{ ...standardItem, quantity: 4 }] }), { code: 'KEEPSAKES_POSTCARD_QUANTITY' });
     const standardQuote = await shop.quoteKeepsakes('photo', postcardToken, standardCart);

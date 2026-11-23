@@ -136,6 +136,8 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       await page.getByLabel('Use the same note for every recipient',{exact:true}).uncheck();
       await page.getByLabel('Back artwork color',{exact:true}).fill('#703040');
       await page.getByRole('button',{name:'Continue to recipients',exact:true}).click();
+      const sender=page.getByRole('group',{name:'Your return address',exact:true});
+      for(const [label,value] of [['Full name','Synthetic Sender'],['Street address','1 Sender Street'],['City','Boston'],['State / province','MA'],['ZIP / postal code','02134']])await sender.getByLabel(label,{exact:true}).fill(value);
       for (const index of [1, 2, 3, 4]) {
         const recipient = page.getByRole('group', { name: `Recipient ${index}`, exact: true });
         for (const [label, value] of [['Full name', `Synthetic Recipient ${index}`], ['Street address', `${index} Test Street`], ['City', 'Test City'], ['State / province', 'MA'], ['ZIP / postal code', '02134']]) await recipient.getByLabel(label, { exact: true }).fill(value);
@@ -152,7 +154,7 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       assert.match(await dialog.innerText(), /4 recipients/);
       await dialog.getByRole('button', { name: 'Calculate shipping & tax', exact: true }).click();
       await dialog.getByRole('heading', { name: 'Your order total', exact: true }).waitFor();
-      assert.equal(quotes[3].items[2].recipients.length, 4);assert.equal(quotes[3].items[2].quantity,1);assert.equal(quotes[3].items[2].postcardArtworkColor,'#703040');
+      assert.equal(quotes[3].items[2].returnAddress.name,'Synthetic Sender');assert.equal(quotes[3].items[2].returnAddress.zip,'02134');assert.equal(quotes[3].items[2].recipients.length, 4);assert.equal(quotes[3].items[2].quantity,1);assert.equal(quotes[3].items[2].postcardArtworkColor,'#703040');
       assert.equal(quotes[3].items[2].recipients[1].message, 'A personal message for recipient 2.');
       assert.equal(quotes[3].items[2].recipients[0].messageFont,'typewriter');
       assert.equal(quotes[3].items[2].recipients[1].messageFont,'handwritten');

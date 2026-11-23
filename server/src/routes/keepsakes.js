@@ -1,3 +1,5 @@
+import {keepsakesCoreCatalogue,saveCoreCataloguePrice} from '../services/keepsakes-core-catalogue-service.js';
+import {AppError} from '../utils/errors.js';
 import {Router} from 'express';
 import rateLimit from 'express-rate-limit';
 import {z} from 'zod';
@@ -6,9 +8,8 @@ import {authenticate,requirePermission} from '../middleware/auth.js';
 import {assertFiestaReviewAccess} from '../services/fiesta-survey-review-service.js';
 import * as shop from '../services/keepsakes-service.js';
 import * as admin from '../services/keepsakes-admin-service.js';
-import {prodigiVariant} from '../services/prodigi-service.js';
 import {keepsakesSupplierArtwork} from '../services/keepsakes-fulfillment-service.js';
-import {syncKeepsakesCatalogue,keepsakesProdigiIntegration} from '../services/keepsakes-catalogue-service.js';
+import {keepsakesProdigiIntegration} from '../services/keepsakes-catalogue-service.js';
 import {POSTCARD_FONTS,POSTCARD_COLORS} from '../../../shared/postcard-message-styles.js';
 import {keepsakesQuoteProof} from '../services/keepsakes-proof-service.js';
 
@@ -17,6 +18,7 @@ const noCache=(_req,res,next)=>{res.set({'Cache-Control':'no-store, private','Re
 export const keepsakesPublicRouter=Router();
 keepsakesPublicRouter.use((_req,_res,next)=>{try{shop.assertKeepsakes();next();}catch(e){next(e);}},noCache);
 keepsakesPublicRouter.use(rateLimit({windowMs:60000,limit:90,standardHeaders:true,legacyHeaders:false}));
+keepsakesPublicRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
 keepsakesPublicRouter.get(access,wrap(r=>shop.keepsakesView(r.params.type,r.params.token)));
 keepsakesPublicRouter.get(access+'/assets/:id',asyncHandler(async(req,res)=>res.type('image/jpeg').send(await shop.keepsakesAsset(req.params.type,req.params.token,id.parse(req.params.id)))));
 keepsakesPublicRouter.post(access+'/postcard-preview',rateLimit({windowMs:60000,limit:45,standardHeaders:true,legacyHeaders:false}),asyncHandler(async(req,res)=>{
@@ -38,15 +40,17 @@ keepsakesAdminRouter.get('/albums/:id',wrap(r=>admin.keepsakesAlbumAdmin(id.pars
 keepsakesAdminRouter.put('/albums/:id',requirePermission('write:operations'),wrap(r=>admin.saveKeepsakesSettings(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.post('/albums/:id/sessions',requirePermission('write:operations'),wrap(r=>admin.saveKeepsakesSession(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.use(requirePermission('read:finance'),(req,_res,next)=>{try{admin.assertKeepsakesManager(req.user);next();}catch(e){next(e);}});
+keepsakesAdminRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
 keepsakesAdminRouter.get('/',wrap(r=>admin.keepsakesDashboard(r.user)));
 keepsakesAdminRouter.get('/orders/:id',wrap(r=>admin.keepsakesAdminOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.get('/integrations/prodigi',wrap(()=>keepsakesProdigiIntegration()));
 keepsakesAdminRouter.use(requirePermission('write:integrations'));
-keepsakesAdminRouter.post('/products',wrap(r=>admin.saveKeepsakesProduct(null,r.body,r.user)));
-keepsakesAdminRouter.put('/products/:id',wrap(r=>admin.saveKeepsakesProduct(id.parse(r.params.id),r.body,r.user)));
+keepsakesAdminRouter.put('/catalogue/:key/price',wrap(r=>saveCoreCataloguePrice(r.params.key,r.body,r.user)));
+keepsakesAdminRouter.post('/products',wrap(()=>{throw new AppError('Use the approved 12-product catalogue.',409,'KEEPSAKES_CATALOGUE_REPLACED');}));
+keepsakesAdminRouter.put('/products/:id',wrap(()=>{throw new AppError('Use the approved 12-product catalogue.',409,'KEEPSAKES_CATALOGUE_REPLACED');}));
 keepsakesAdminRouter.post('/products/:id/verify',wrap(r=>admin.verifyKeepsakesProduct(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.post('/orders/:id/retry',wrap(r=>admin.retryKeepsakesOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.post('/orders/:id/cancel',wrap(r=>admin.cancelKeepsakesOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.post('/orders/:id/refund',wrap(r=>admin.cancelKeepsakesOrder(id.parse(r.params.id),r.user,{refund:true,reason:z.string().max(200).parse(r.body.reason||'requested_by_customer')})));
-keepsakesAdminRouter.post('/integrations/prodigi/test',wrap(async()=>{const variant=await prodigiVariant('GLOBAL-MUG-W');return {...admin.prodigiStatus(),status:'CONNECTED',checkedSku:variant.sku};}));
-keepsakesAdminRouter.post('/integrations/prodigi/sync',wrap(()=>syncKeepsakesCatalogue()));
+keepsakesAdminRouter.post('/integrations/prodigi/test',wrap(()=>{throw new AppError('Prodigi is retired from the new catalogue.',409,'KEEPSAKES_PROVIDER_RETIRED');}));
+keepsakesAdminRouter.post('/integrations/prodigi/sync',wrap(()=>{throw new AppError('Prodigi is retired from the new catalogue.',409,'KEEPSAKES_PROVIDER_RETIRED');}));
