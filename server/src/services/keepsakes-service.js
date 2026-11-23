@@ -15,7 +15,7 @@ import {STANDARD_POSTCARD_TEMPLATE,STANDARD_POSTCARD_SHA256} from '../../../shar
 import {standardPostcardBack} from './keepsakes-postcard-template.js';
 
 export const keepsakesHash=value=>crypto.createHash('sha256').update(Buffer.isBuffer(value)?value:String(value)).digest('hex');
-export function keepsakesSnapshot(snapshot){return {...snapshot,items:snapshot.items.map(item=>{const {recipientsCiphertext,...rest}=item;return {...rest,recipients:recipientsCiphertext?decryptSecretJson(recipientsCiphertext).recipients:item.recipients||[]};})};}
+export function keepsakesSnapshot(snapshot){return {...snapshot,items:snapshot.items.map(item=>{const {recipientsCiphertext,...rest}=item;const privateData=recipientsCiphertext?decryptSecretJson(recipientsCiphertext):{};return {...rest,recipients:privateData.recipients||item.recipients||[],returnAddress:privateData.returnAddress||item.returnAddress};})};}
 export function assertKeepsakes(){if(!keepsakesStaging())throw new AppError('Keepsakes is available in staging only.',404,'KEEPSAKES_DISABLED');}
 const unavailable=()=>new AppError('This photo or order is unavailable.',404,'KEEPSAKES_UNAVAILABLE');
 export const stripeHeaders=()=>({Authorization:`Bearer ${process.env.STRIPE_SECRET_KEY}`,'Stripe-Version':'2026-08-26.dahlia'});
@@ -106,7 +106,7 @@ export async function quoteKeepsakes(type,token,input){
    if(artwork.buffer.length>20*1024*1024)throw new AppError('The configured print file exceeds the supported artwork size.',422,'KEEPSAKES_ARTWORK_SIZE');
   }
   if(product.category!=='bundle'&&assets.length!==1)throw new AppError('Select one photo for this product.',422,'KEEPSAKES_ASSET_COUNT');
-  if(product.provider==='LOB'&&(!item.recipients.length||!settings.returnAddress))throw new AppError('Postcards need recipients and an approved event return address.',422,'KEEPSAKES_POSTCARD_ADDRESS');
+  if(product.provider==='LOB'&&(!item.recipients.length||!item.returnAddress))throw new AppError('Postcards need a sender name and return address, plus one name and address per recipient.',422,'KEEPSAKES_POSTCARD_ADDRESS');
   if(product.provider!=='LOB'&&item.recipients.length)throw new AppError('Only postcards accept separate recipients.',422,'KEEPSAKES_RECIPIENTS_INVALID');
   if(product.provider==='LOB'&&variant.backTemplate===STANDARD_POSTCARD_TEMPLATE&&item.quantity!==1)throw new AppError('Choose one recipient per postcard; copies cannot multiply recipients.',422,'KEEPSAKES_POSTCARD_QUANTITY');
   const units=product.provider==='LOB'?item.quantity*item.recipients.length:item.quantity;
@@ -135,7 +135,7 @@ export async function quoteKeepsakes(type,token,input){
    const {renderKeepsakesPostcardBack}=await import('./keepsakes-lob.js');
    for(const recipient of item.recipients)await renderKeepsakesPostcardBack({bytes,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:variant.messageZone,backTemplate:variant.backTemplate,postcardArtworkColor:item.postcardArtworkColor});
   }
-  items.push({...item,units,backArtworkId,backArtworkChecksum,product:{id:product.id,title:product.title,category:product.category,provider:product.provider,retailCents:product.retail_cents,taxCode:product.tax_code},variant,assets:assets.map(a=>({id:a.id,mediaId:a.media_id,checksum:a.checksum,label:a.label,kind:a.kind})),returnAddress:product.provider==='LOB'?settings.returnAddress:undefined});
+  items.push({...item,units,backArtworkId,backArtworkChecksum,product:{id:product.id,title:product.title,category:product.category,provider:product.provider,retailCents:product.retail_cents,taxCode:product.tax_code},variant,assets:assets.map(a=>({id:a.id,mediaId:a.media_id,checksum:a.checksum,label:a.label,kind:a.kind})),returnAddress:product.provider==='LOB'?item.returnAddress:undefined});
  }
  let tax=0,taxCalculationId=null;const taxCalculations=[];
  const readiness=keepsakesReadiness();
@@ -166,7 +166,7 @@ export async function quoteKeepsakes(type,token,input){
   }
   taxCalculationId=taxCalculations[0]?.id||null;
  }
- const snapshot={items:items.map(item=>{const {recipients,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients})};}),taxCalculationId,taxCalculations,issues},total=subtotal+shipping+tax;
+ const snapshot={items:items.map(item=>{const {recipients,returnAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress})};}),taxCalculationId,taxCalculations,issues},total=subtotal+shipping+tax;
  const row=(await query(`INSERT INTO keepsakes_quotes(album_id,scope_hash,snapshot,contact_ciphertext,subtotal_cents,shipping_cents,tax_cents,total_cents,checkout_ready)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,expires_at`,[scope.albumId,scope.scopeHash,JSON.stringify(snapshot),encryptSecretJson({email:cart.email,shippingAddress:cart.shippingAddress}),subtotal,shipping,tax,total,issues.length===0])).rows[0];
  const {keepsakesProofDescriptors}=await import('./keepsakes-proof-service.js');

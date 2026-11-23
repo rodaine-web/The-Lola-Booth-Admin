@@ -78,6 +78,7 @@ function KeepsakesStore({ type, token }) {
   const [data, setData] = useState(null), [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false);
   const [productId, setProductId] = useState(""), [variantId, setVariantId] = useState(""), [assetIds, setAssetIds] = useState([]), [quantity, setQuantity] = useState(1), [crop, setCrop] = useState(INITIAL_CROP);
   const [cart, setCart] = useState(saved.cart||[]), [cartOpen, setCartOpen] = useState(false), [editing, setEditing] = useState(null), [recipients, setRecipients] = useState([{ ...EMPTY_ADDRESS, message: "" }]);
+  const [returnAddress,setReturnAddress]=useState({...EMPTY_ADDRESS});
   const [postcardCount,setPostcardCount]=useState(1),[sameNote,setSameNote]=useState(true),[artworkColor,setArtworkColor]=useState('#111111'),[previewRecipient,setPreviewRecipient]=useState(0);
   const resizePostcards=value=>{const count=Math.max(1,Math.min(20,Math.trunc(Number(value))||1));setPostcardCount(count);setPreviewRecipient(n=>Math.min(n,count-1));setRecipients(current=>current.length>=count?current:[...current,...Array.from({length:count-current.length},()=>({...EMPTY_ADDRESS,message:''}))]);};
   const [email, setEmail] = useState(saved.email||""), [shippingAddress, setShippingAddress] = useState(saved.shippingAddress||EMPTY_ADDRESS), [quote, setQuote] = useState(null);
@@ -143,14 +144,14 @@ function KeepsakesStore({ type, token }) {
   const ratio=selectedAsset&&Math[crop.fit==='cover'?'max':'min']((requiredWidth-margin)/selectedAsset.width,(requiredHeight-margin)/selectedAsset.height)*crop.zoom;
   const lowResolution = !digital && selectedAsset && requiredWidth && requiredHeight && ratio>1;
   const currency = product?.currency || "USD";
-  function keepProductDraft(){if(productId)productDrafts.current.set(productId,{variantId,assetIds,quantity,crop,recipients,postcardCount,sameNote,artworkColor});}
+  function keepProductDraft(){if(productId)productDrafts.current.set(productId,{variantId,assetIds,quantity,crop,recipients,postcardCount,sameNote,artworkColor,returnAddress});}
   function chooseProduct(next,history=true) {
     keepProductDraft();const draft=productDrafts.current.get(next.id);
     if(history)navigate({pathname:location.pathname,search:new URLSearchParams({product:next.id,...(assetIds[0]?{asset:assetIds[0]}:{})}).toString()});setPostcardStep(0);
     setProductId(next.id); setVariantId(next.variants?.[0]?.id || ""); setQuantity(1); setCrop(INITIAL_CROP); setEditing(null); setError("");
     const allowed = assets.filter((a) => isDigital(next)?a.digitalEligible&&!a.included:a.merchandiseEligible===true);
     setAssetIds(allowed.some((a) => a.id === assetIds[0]) ? [assetIds[0]] : allowed[0] ? [allowed[0].id] : []);
-    if(draft){setVariantId(draft.variantId);setAssetIds(draft.assetIds);setQuantity(draft.quantity);setCrop(draft.crop);setRecipients(draft.recipients);setPostcardCount(draft.postcardCount);setSameNote(draft.sameNote);setArtworkColor(draft.artworkColor);}
+    if(draft){setVariantId(draft.variantId);setAssetIds(draft.assetIds);setQuantity(draft.quantity);setCrop(draft.crop);setRecipients(draft.recipients);setPostcardCount(draft.postcardCount);setSameNote(draft.sameNote);setArtworkColor(draft.artworkColor);setReturnAddress(draft.returnAddress||{...EMPTY_ADDRESS});}
   }
   useEffect(()=>{const wanted=new URLSearchParams(location.search).get('product');const next=products.find(p=>p.id===wanted);if(next&&next.id!==productId)chooseProduct(next,false);},[location.search,data]);
   function updateCart(next) { setCart(next); setQuote(null); }
@@ -158,14 +159,14 @@ function KeepsakesStore({ type, token }) {
     e.preventDefault();
     if (!product || !variant || !selectedAssets.length || !data.enabled) return;
     if(postcard){const invalid=[...e.currentTarget.querySelectorAll('.ks-recipient input')].find(input=>!input.checkValidity());if(invalid){setPostcardStep(1);requestAnimationFrame(()=>invalid.reportValidity());return;}}
-    const item = { productId: product.id, variantId: variant.id, assetIds: selectedAssets.map((a) => a.id), quantity: digital||postcard ? 1 : quantity, customization: { ...crop }, ...(postcard ? { postcardArtworkColor:artworkColor,recipients: recipients.slice(0,postcardCount).map((r) => ({ ...r,...(sameNote?{message:recipients[0].message||'',messageFont:recipients[0].messageFont||'classic',messageColor:recipients[0].messageColor||'#26221d'}:{}) })) } : {}) };
+    const item = { productId: product.id, variantId: variant.id, assetIds: selectedAssets.map((a) => a.id), quantity: digital||postcard ? 1 : quantity, customization: { ...crop }, ...(postcard ? { returnAddress:{...returnAddress},postcardArtworkColor:artworkColor,recipients: recipients.slice(0,postcardCount).map((r) => ({ ...r,...(sameNote?{message:recipients[0].message||'',messageFont:recipients[0].messageFont||'classic',messageColor:recipients[0].messageColor||'#26221d'}:{}) })) } : {}) };
     if (editing !== null) { updateCart(cart.map((row, index) => index === editing ? item : row)); setNotice("Your keepsake has been updated."); }
     else { updateCart([...cart, item]); setNotice(`${product.title} added to your cart.`); }
     setEditing(null); requestAnimationFrame(() => noticeRef.current?.focus());
   }
   function editItem(index) {
     setQuote(null); setReviewedQuote(null);
-    const item = cart[index]; setProductId(item.productId); setVariantId(item.variantId); setAssetIds(item.assetIds); setQuantity(item.quantity); setCrop(item.customization); setRecipients(item.recipients?.length?item.recipients:[{ ...EMPTY_ADDRESS, message: '' }]);setPostcardCount(item.recipients?.length||1);setSameNote(false);setArtworkColor(item.postcardArtworkColor||'#111111');setPreviewRecipient(0); setEditing(index);setPostcardStep(0);navigate({pathname:location.pathname,search:new URLSearchParams({product:item.productId}).toString()}); setCartOpen(false); setNotice("Editing your keepsake. Save your changes below."); window.scrollTo({ top: 0, behavior: "smooth" });
+    const item = cart[index]; setReturnAddress(item.returnAddress||{...EMPTY_ADDRESS}); setProductId(item.productId); setVariantId(item.variantId); setAssetIds(item.assetIds); setQuantity(item.quantity); setCrop(item.customization); setRecipients(item.recipients?.length?item.recipients:[{ ...EMPTY_ADDRESS, message: '' }]);setPostcardCount(item.recipients?.length||1);setSameNote(false);setArtworkColor(item.postcardArtworkColor||'#111111');setPreviewRecipient(0); setEditing(index);setPostcardStep(0);navigate({pathname:location.pathname,search:new URLSearchParams({product:item.productId}).toString()}); setCartOpen(false); setNotice("Editing your keepsake. Save your changes below."); window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function getQuote(e) {
     e.preventDefault(); setBusy(true); setError(""); setQuote(null);
@@ -212,12 +213,12 @@ function KeepsakesStore({ type, token }) {
             <label className="ks-same-note"><input type="checkbox" checked={sameNote} onChange={e=>setSameNote(e.target.checked)}/>Use the same note for every recipient</label>
             <NoteFields recipient={recipients[0]} index={0} onChange={next=>setRecipients(current=>current.map((r,i)=>i===0?next:r))}/>
             <button type="button" className="ks-outline-button" onClick={()=>setPostcardStep(1)}>Continue to recipients</button></div>
-            <div hidden={postcardStep!==1}><p>Enter one name and mailing address for each postcard.</p>{recipients.slice(0,postcardCount).map((recipient,index)=><fieldset className="ks-recipient" key={index}><legend>Recipient {index+1}</legend>
+            <div hidden={postcardStep!==1}><fieldset className="ks-recipient"><legend>Your return address</legend><p>Enter the sender name and address for all postcards in this set.</p><AddressFields prefix="ks-return-address" value={returnAddress} onChange={setReturnAddress}/></fieldset><p>Enter one name and mailing address for each postcard.</p>{recipients.slice(0,postcardCount).map((recipient,index)=><fieldset className="ks-recipient" key={index}><legend>Recipient {index+1}</legend>
               <AddressFields prefix={`ks-recipient-${index}`} value={recipient} recipient onChange={next=>setRecipients(current=>current.map((r,i)=>i===index?next:r))}/>
               {!sameNote&&<NoteFields recipient={recipient} index={index+1} onChange={next=>setRecipients(current=>current.map((r,i)=>i===index?next:r))}/>}
               <button type="button" className="ks-text-button" onClick={()=>{setPreviewRecipient(index);setPostcardSide('back');}}>Preview recipient {index+1}</button>
             </fieldset>)}<button type="button" className="ks-outline-button" disabled={postcardCount>=20} onClick={()=>resizePostcards(postcardCount+1)}><Plus size={15}/>Add another recipient</button><button type="button" className="ks-gold-button" onClick={e=>{const inputs=[...e.currentTarget.closest('form').querySelectorAll('.ks-recipient input')];if(inputs.every(input=>input.reportValidity()))setPostcardStep(2);}}>Review postcards</button></div>
-            <div hidden={postcardStep!==2} className="ks-recipient-review"><h4>Review your {postcardCount} postcard{postcardCount===1?'':'s'}</h4>{recipients.slice(0,postcardCount).map((r,i)=><article key={i}><strong>Recipient {i+1}: {r.name||'Name required'}</strong><p>{r.address1} {r.address2}<br/>{r.city}, {r.state} {r.zip}</p><p className="ks-review-note">{sameNote?recipients[0].message:r.message}</p><button type="button" onClick={()=>{setPostcardStep(1);setPreviewRecipient(i);}}>Edit recipient {i+1}</button></article>)}</div>
+            <div hidden={postcardStep!==2} className="ks-recipient-review"><section><strong>Return address: {returnAddress.name}</strong><p>{returnAddress.address1} {returnAddress.address2}<br/>{returnAddress.city}, {returnAddress.state} {returnAddress.zip}</p></section><h4>Review your {postcardCount} postcard{postcardCount===1?'':'s'}</h4>{recipients.slice(0,postcardCount).map((r,i)=><article key={i}><strong>Recipient {i+1}: {r.name||'Name required'}</strong><p>{r.address1} {r.address2}<br/>{r.city}, {r.state} {r.zip}</p><p className="ks-review-note">{sameNote?recipients[0].message:r.message}</p><button type="button" onClick={()=>{setPostcardStep(1);setPreviewRecipient(i);}}>Edit recipient {i+1}</button></article>)}</div>
           </div>:null}
           <div className="ks-buy-row"><div><label>Quantity</label><Quantity value={postcard?postcardCount:digital?1:quantity} disabled={digital} onChange={postcard?resizePostcards:setQuantity} /></div><div className="ks-price"><span>{postcard && postcardCount > 1 ? `${postcardCount} recipients · each` : "Product price"}</span><strong>{money(product?.retailCents, currency)}</strong></div></div>
           <button className="ks-gold-button ks-add" type="submit" disabled={!selectedAssets.length || !variant || !data.enabled || lowResolution || (postcard&&postcardStep!==2)}><ShoppingCart size={22} />{editing === null ? "Add to cart" : "Save changes"}</button><p className="ks-checkout-note">{digital ? "Secure download access follows verified payment." : "Shipping and applicable taxes are confirmed before payment."}</p>

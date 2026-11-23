@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createServer} from 'vite';
 import react from '@vitejs/plugin-react';
+import {coreCatalogueView} from '../shared/keepsakes-core-catalogue.js';
 
 test('Keepsakes Admin and gallery controls save explicit product/source permissions on desktop and mobile', {skip: process.env.KEEPSAKES_BROWSER_TEST !== 'true', timeout: 120000}, async () => {
   const output = path.join(os.tmpdir(), 'lola-keepsakes-admin-browser');
@@ -30,11 +31,12 @@ test('Keepsakes Admin and gallery controls save explicit product/source permissi
       page.setDefaultTimeout(10000);
       const errors = [], writes = [];
       page.on('pageerror', error => errors.push(error.message));
-      const products = [{id: 'product-1', title: 'Photo Mug', category: 'mug', provider: 'PRODIGI', active: false, verified: false, retail_cents: 2499, tax_code: 'txcd_99999999', variants: [{id: 'white', label: 'White', sku: 'TEST-SKU', printArea: 'default', printSpec: {widthPx: 1200, heightPx: 800, dpi: 300, bleedPx: 10, safePx: 20}, specEvidence: {sourceUrl: 'https://www.prodigi.com/test-template', bleedPx: 10, safePx: 20, colorProfile: 'sRGB'}}]}];
+      const products = [{id: 'product-1', title: 'Photo Keychain', category: 'keychain', provider: 'IN_HOUSE', active: false, verified: false, retail_cents: 2499, tax_code: 'txcd_99999999', variants: [{id: 'white', label: 'White', sku: 'TEST-SKU', printArea: 'default', printSpec: {widthPx: 1200, heightPx: 800, dpi: 300, bleedPx: 10, safePx: 20}, specEvidence: {sourceUrl: 'https://www.prodigi.com/test-template', bleedPx: 10, safePx: 20, colorProfile: 'sRGB'}}]}];
       await page.route(url => url.pathname.startsWith('/api/'), async route => {
         const req = route.request(), pathname = new URL(req.url()).pathname;
         if (req.method() !== 'GET') {writes.push({pathname, body: req.postDataJSON()}); return route.fulfill({json: pathname.endsWith('/test') ? {configured: true, mode: 'SANDBOX', status: 'CONNECTED'} : {ok: true}});}
         if (pathname.endsWith('/auth/me')) return route.fulfill({json: {user: {id: 'qa-admin', permissions: ['*']}}});
+        if (pathname.endsWith('/catalogue')) return route.fulfill({json:{products:coreCatalogueView([])}});
         if (pathname.endsWith('/integrations/prodigi')) return route.fulfill({json: {configured: true, mode: 'SANDBOX', status: 'NOT_TESTED'}});
         if (pathname.endsWith('/albums/album-1')) return route.fulfill({json: {settings: {enabled: false, brandedMerchandise: false, originalSales: false, productIds: []}, products, sessions: [], media: [{id: 'media-1', filename: 'GuestComposite.jpg'}, {id: 'media-2', filename: 'GenuineOriginal.jpg'}]}});
         return route.fulfill({json: {metrics: {grossCents: 0, netCents: 0, orders: 0, averageCents: 0, productsSold: 0, supplierCents: 0, shippingCents: 0, stripeFeesCents: null, contributionCents: null, awaiting: 0, intervention: 0}, products, orders: [], byEvent: [], byProduct: [], readiness: {stripe: true, prodigi: false}}});
@@ -42,26 +44,24 @@ test('Keepsakes Admin and gallery controls save explicit product/source permissi
       await page.goto(`${origin}/keepsakes-admin-qa`);
       await page.getByRole('heading', {name: 'Keepsakes & Orders', exact: true}).waitFor();
       await page.getByRole('button', {name: 'Products', exact: true}).click();
-      await page.getByRole('button', {name: 'Edit product', exact: true}).waitFor();
-      await page.screenshot({path: path.join(output, `products-${width}.png`), fullPage: true});
-      await page.getByRole('button', {name: 'Edit product', exact: true}).click();
-      const dialog = page.getByRole('dialog', {name: 'Edit photo product', exact: true});
-      await dialog.getByLabel('Product name', {exact: true}).fill('Ceramic Photo Mug');
-      await dialog.getByRole('button', {name: 'Save product', exact: true}).click();
-      await page.getByRole('status').filter({hasText: 'Product saved'}).waitFor();
-      assert.equal(writes[0].body.title, 'Ceramic Photo Mug');
-      assert.equal(writes[0].body.retailCents, 2499);
-      assert.equal(writes[0].body.variants[0].specEvidence.sourceUrl, 'https://www.prodigi.com/test-template');
-      assert.equal(writes[0].body.variants[0].specEvidence.safePx, 20);
-      await page.getByRole('button', {name: 'Integrations', exact: true}).click();
-      await page.getByRole('button', {name: 'Test sandbox connection', exact: true}).click();
-      await page.getByRole('status').filter({hasText: 'Connection test completed'}).waitFor();
-      assert.ok(writes.some(row => row.pathname.endsWith('/integrations/prodigi/test')));
+      await page.getByRole('heading',{name:'The 12-product Keepsakes catalogue'}).waitFor();
+      await page.getByLabel('Photo Keychain retail price',{exact:true}).waitFor();
+      assert.equal(await page.locator('.ka-product').count(),12);
+      await page.screenshot({path:path.join(output,`products-${width}.png`),fullPage:true});
+      const card=page.locator('.ka-product').filter({has:page.getByRole('heading',{name:'Photo Keychain',exact:true})});
+      await card.getByLabel('Photo Keychain retail price',{exact:true}).fill('24.99');
+      await card.getByRole('button',{name:'Save price',exact:true}).click();
+      await page.getByRole('status').filter({hasText:'Photo Keychain price saved'}).waitFor();
+      assert.equal(writes[0].body.retailCents,2499);
+      assert.ok(writes[0].pathname.endsWith('/catalogue/keychain/price'));
+      await page.getByRole('button',{name:'Integrations',exact:true}).click();
+      await page.getByText('Standby · no automatic routing',{exact:true}).waitFor();
+      assert.equal(writes.filter(row=>row.pathname.includes('/integrations/prodigi')).length,0);
       await page.goto(`${origin}/keepsakes-admin-qa/gallery`);
       await page.getByRole('heading', {name: 'The Lola Keepsakes', exact: true}).waitFor();
       await page.getByLabel('Enable The Lola Keepsakes', {exact: false}).check();
       await page.getByLabel('Allow branded-photo merchandise', {exact: false}).check();
-      await page.getByLabel('Photo Mug', {exact: false}).check();
+      await page.getByLabel('Photo Keychain', {exact: false}).check();
       await page.getByRole('button', {name: 'Save settings', exact: true}).click();
       await page.getByRole('status').filter({hasText: 'Gallery commerce settings saved'}).waitFor();
       const settingsWrite = writes.find(row => row.pathname.endsWith('/albums/album-1'));
