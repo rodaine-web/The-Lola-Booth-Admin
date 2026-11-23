@@ -1,3 +1,4 @@
+import {keepsakesPublicOrigin} from '../../../shared/keepsakes-host.js';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
 import {query,transaction} from '../db/pool.js';
@@ -62,7 +63,7 @@ export async function requestPhotoAccess(input){
   const request=(await query(`INSERT INTO keepsakes_photo_requests(target_hash,token_hash,scopes,expires_at) VALUES($1,$2,$3,now()+interval '30 minutes') RETURNING id`,[targetHash,hash(code),JSON.stringify(scopes)])).rows[0];
   if(channel==='SMS'&&scopes.length)await query(`INSERT INTO keepsakes_unverified_contacts(phone_hash,email_hash,contact_ciphertext,request_id) VALUES($1,$2,$3,$4)`,[targetHash,contactHash('EMAIL',email),encryptSecretJson({phone:recipient,email}),request.id]);
   if(scopes.length){
-   const origin=process.env.GALLERY_PUBLIC_ORIGIN||env.clientOrigin;
+   const origin=keepsakesPublicOrigin(process.env);
    const link=`${origin.replace(/\/$/,'')}/shop/access#code=${code}`;
    const communication=await createCommunicationDraft({channel:'EMAIL',recipient:email,subject:'Your Lola Booth photos are waiting',body:`Your Lola Booth memories are ready to explore.\n\nOpen your secure photo collection:\n${link}\n\nThis link expires in 30 minutes and can be opened once. Your photo session lasts up to 7 days, subject to your gallery access.\n\nGood people. Better photos.`,status:'SCHEDULED',scheduled_at:new Date(),trigger_key:'KEEPSAKES_PHOTO_ACCESS'});
    await query('UPDATE keepsakes_photo_requests SET communication_id=$2 WHERE id=$1',[request.id,communication.id]);

@@ -1,6 +1,29 @@
 {
   "headers": [
     {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "stagingshop.thelolabooth.com"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
       "source": "/staging-site/(.*)",
       "headers": [
         {
@@ -547,6 +570,17 @@
   ],
   "buildCommand": "npm run build && mv dist/index.html dist/admin.html",
   "redirects": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "stagingshop.thelolabooth.com"
+        }
+      ],
+      "destination": "/shop",
+      "permanent": false
+    },
     {
       "source": "/",
       "has": [
