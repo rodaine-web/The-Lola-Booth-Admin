@@ -20,7 +20,7 @@ test('approved shop preserves the twelve-product catalogue and secure photo entr
   await vite.listen();const {chromium}=await import('playwright');browser=await chromium.launch();
   const origin=`http://127.0.0.1:${vite.httpServer.address().port}`;
   const output=path.join(os.tmpdir(),'lola-core-shop-browser');await fs.mkdir(output,{recursive:true});
-  for(const width of [1440,768,390]){
+  for(const width of [1440,768,390,320]){
    const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/api/keepsakes/catalogue',r=>r.fulfill({json:{products:coreCatalogueView([{id:'qa-keychain',catalogue_key:'keychain',retail_cents:2499}])}}));
    await page.goto(origin+'/shop');await page.getByRole('heading',{name:/Turn Your/}).waitFor();await page.evaluate(()=>document.fonts.ready);
