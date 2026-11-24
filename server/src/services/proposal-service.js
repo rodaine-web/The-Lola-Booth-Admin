@@ -1,3 +1,4 @@
+import {proposalLineDetail} from '../../../shared/proposal-line-details.js';
 import {stationDocumentImages} from './keepsake-station-document.js';
 import {stationProposalQuote,stationProposalLines,assertStationCommercialReady} from './keepsake-station-proposal-service.js';
 import {proposalTaxNote} from '../../../shared/proposal-scenario.js';
@@ -189,6 +190,7 @@ export async function buildProposalSnapshot(input,user=null) {
   const stationQuote=await stationProposalQuote(input.keepsake_station,selectedExperiences,user);
   if(stationQuote)stationQuote.productImages=await stationDocumentImages(stationQuote);
   lines.push(...stationProposalLines(stationQuote));
+  lines=lines.map(line=>({...line,detail:proposalLineDetail(line,{experiences:selectedExperiences,entitlements:catalogQuote?.entitlements||[],addons:addons.rows})}));
   const subtotal = lines.reduce((sum,item)=>sum+Math.round(Number(item.line_total)*100),0)/100;
   const discount = catalogQuote?catalogQuote.discountCents/100:money(input.discount);
   const taxable = Math.max(0, subtotal - discount);

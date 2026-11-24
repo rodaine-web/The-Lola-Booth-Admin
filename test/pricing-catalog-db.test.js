@@ -49,7 +49,7 @@ test('versioned pricing migration, publication, immutable quotes, permissions an
   const event=await one("INSERT INTO events(client_id,event_name,event_type,event_date,status) VALUES($1,'PRICING QA ONLY','Company Celebration','2030-12-15','DRAFT') RETURNING id",[customer.id]);
   const proposalSvc=await import('../server/src/services/proposal-service.js');
   const composed=await proposalSvc.buildProposalSnapshot({client_id:customer.id,event_id:event.id,pricing_quote_id:quote.id,scenario_enabled:true,selected_experiences:[{experience_id:pkg.experience_id,packages:[{package_id:pkg.id,price:1}]}]});
-  assert.equal(composed.pricing.total,1124);assert.match(composed.selectedExperiences[0].packages[0].description,/500 physical prints/);assert.equal(composed.selectedExperiences[0].price,899);
+  assert.ok(composed.lineItems.every(line=>line.detail?.trim()));assert.match(composed.content.scenario.lines.find(line=>line.type==='PACKAGE').detail,/500 physical prints/);assert.equal(composed.pricing.total,1124);assert.match(composed.selectedExperiences[0].packages[0].description,/500 physical prints/);assert.equal(composed.selectedExperiences[0].price,899);
   assert.equal(composed.content.scenario.lines.find(line=>line.type==='PRINT_UPGRADE').stripe_tax_code,'txcd_20090028');
   const creative=await one("SELECT id FROM addons WHERE pricing_policy->>'key'='creative-design'");
   const enhanced=await svc.createPricingQuote({...input,selections:[{packageId:pkg.id,prints:500,addons:[{addonId:creative.id,quantity:2}]}]},req);

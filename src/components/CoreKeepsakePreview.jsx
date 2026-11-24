@@ -6,12 +6,12 @@ function panel(ctx,photo,x,y,w,h,border=12,color='#e1d9cd'){
  ctx.save();ctx.shadowColor='#30261855';ctx.shadowBlur=16;ctx.shadowOffsetY=10;ctx.fillStyle=color;ctx.fillRect(x-border,y-border,w+2*border,h+2*border);ctx.shadowColor='transparent';
  const texture=printTexture(photo,{widthPx:w,heightPx:h},{fit:'contain'});ctx.drawImage(texture,x,y,w,h);ctx.restore();
 }
-export default function CoreKeepsakePreview({product,asset,strip,second,back=false}){
- const {loadPhoto}=useKeepsakesPhotos(),ref=useRef(null),[state,setState]=useState('loading');
+export default function CoreKeepsakePreview({product,asset,strip,second,back=false,illustrative=false}){
+ const {loadPhoto}=useKeepsakesPhotos()||{},ref=useRef(null),[state,setState]=useState('loading');
  useEffect(()=>{let active=true;setState('loading');
-  if(!asset){setState('unavailable');return;}
-  Promise.all([loadPhoto(asset).then(load),product.key==='framed-photo'?load('/assets/keepsakes/prodigi-classic-frame-gold.png'):null,product.key==='postcard'?load('/assets/keepsakes/lola-postcard-back-v2.svg'):null,strip?loadPhoto(strip).then(load):null,second?loadPhoto(second).then(load):null]).then(([photo,frame,postcard,stripPhoto,secondPhoto])=>{
-   if(!active||!ref.current)return;const c=ref.current.getContext('2d');c.clearRect(0,0,1000,750);
+  if(!asset&&!illustrative){setState('unavailable');return;}
+  Promise.all([illustrative?load('/assets/keepsakes/approved/'+(product.key==='edited-strip'?'sample-strip.svg':'sample-photo.webp')):loadPhoto(asset).then(load),product.key==='framed-photo'?load('/assets/keepsakes/prodigi-classic-frame-gold.png'):null,product.key==='postcard'?load('/assets/keepsakes/lola-postcard-back-v2.svg'):null,illustrative&&product.key==='edited-package'?load('/assets/keepsakes/approved/sample-strip.svg'):strip?loadPhoto(strip).then(load):null,illustrative&&product.key==='photo-book'?load('/assets/keepsakes/approved/sample-photo.webp'):second?loadPhoto(second).then(load):null]).then(([photo,frame,postcard,stripPhoto,secondPhoto])=>{
+   if(!active||!ref.current)return;const c=ref.current.getContext('2d');c.setTransform(illustrative?1:2,0,0,illustrative?1:2,0,0);c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';c.clearRect(0,0,1000,750);
    const bg=c.createLinearGradient(0,0,1000,750);bg.addColorStop(0,'#eee4d5');bg.addColorStop(1,'#faf6ef');c.fillStyle=bg;c.fillRect(0,0,1000,750);
    const ratio=photo.width/photo.height,w=ratio>=1?570:400,h=ratio>=1?570/ratio:Math.min(540,400/ratio),x=(1000-w)/2,y=(750-h)/2;
    if(frame)drawFrame(c,printTexture(photo,{widthPx:800,heightPx:1000},{fit:'contain'}),frame);
@@ -29,6 +29,6 @@ export default function CoreKeepsakePreview({product,asset,strip,second,back=fal
    else{drawPaper(c,photo,{x,y,width:w});}
    setState('ready');
   }).catch(()=>{if(active)setState('unavailable');});return()=>{active=false;};
- },[product.key,asset?.id,strip?.id,second?.id,back,loadPhoto]);
- return <div className="shop-own-preview" data-preview-state={state} data-photo-id={asset?.id||''}><canvas width="1000" height="750" ref={ref} hidden={state!=='ready'} role="img" aria-label={`Your photo on ${product.title}`}/>{state!=='ready'&&<p role="status">{state==='loading'?'Preparing your keepsake…':'Your photo preview is unavailable.'}</p>}</div>;
+ },[product.key,asset?.id,strip?.id,second?.id,back,illustrative,loadPhoto]);
+ return <div className="shop-own-preview" data-preview-state={state} data-photo-id={asset?.id||''}><canvas width={illustrative?1000:2000} height={illustrative?750:1500} ref={ref} hidden={state!=='ready'} role="img" aria-label={`${illustrative?'Illustrative product example:':'Your photo on'} ${product.title}`}/>{state!=='ready'&&<p role="status">{state==='loading'?'Preparing your keepsake…':'Your photo preview is unavailable.'}</p>}</div>;
 }
