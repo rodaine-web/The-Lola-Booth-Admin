@@ -27,6 +27,8 @@ test('approved shop preserves the twelve-product catalogue and secure photo entr
    await page.route('**/api/keepsakes/catalogue',r=>r.fulfill({json:{products:coreCatalogueView([{id:'qa-keychain',catalogue_key:'keychain',retail_cents:2499}])}}));
    await page.goto(origin+'/shop');await page.getByRole('heading',{name:/Turn Your/}).waitFor();await page.evaluate(()=>document.fonts.ready);
    assert.equal(await page.locator('.shop-product-strip>a').count(),12);
+   await page.waitForFunction(()=>document.querySelectorAll('.shop-product-strip [data-preview-state="ready"]').length===12);
+   assert.equal(await page.locator('.shop-collection').evaluateAll(cards=>cards.every(card=>card.querySelector('.shop-own-preview').getBoundingClientRect().bottom<=card.querySelector('.shop-own-preview+div').getBoundingClientRect().top+1)),true,'Collection text must stay outside its photograph');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    await page.screenshot({path:path.join(output,`home-${width}.png`),fullPage:true});
    await page.goto(origin+'/shop/collection');await page.getByRole('heading',{name:'Our Keepsake Collections'}).waitFor();

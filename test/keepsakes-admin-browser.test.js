@@ -6,6 +6,7 @@ import path from 'node:path';
 import {createServer} from 'vite';
 import react from '@vitejs/plugin-react';
 import {coreCatalogueView} from '../shared/keepsakes-core-catalogue.js';
+import {DEFAULT_STATION_POLICY,quoteCelebrationStation} from '../shared/keepsake-station-policy.js';
 
 test('Keepsakes Admin and gallery controls save explicit product/source permissions on desktop and mobile', {skip: process.env.KEEPSAKES_BROWSER_TEST !== 'true', timeout: 120000}, async () => {
   const output = path.join(os.tmpdir(), 'lola-keepsakes-admin-browser');
@@ -15,8 +16,8 @@ test('Keepsakes Admin and gallery controls save explicit product/source permissi
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/keepsakes-admin-qa')) return next();
         res.setHeader('Content-Type', 'text/html');
-        const component = req.url.includes('/gallery') ? 'React.createElement(GalleryKeepsakes,{album:{id:"album-1"}})' : 'React.createElement(KeepsakesAdmin)';
-        res.end(await server.transformIndexHtml(req.url, `<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;background:#f8f5ef;font-family:Arial,sans-serif}*{box-sizing:border-box}</style></head><body><div id="root"></div><script type="module">import React from"react";import{createRoot}from"react-dom/client";import{AuthProvider}from"/src/context/AuthContext.jsx";import KeepsakesAdmin from"/src/pages/KeepsakesAdmin.jsx";import GalleryKeepsakes from"/src/components/GalleryKeepsakes.jsx";createRoot(document.getElementById("root")).render(React.createElement(AuthProvider,null,${component}));</script></body></html>`));
+        const component = req.url.includes('/station') ? 'React.createElement(StationQA)' : req.url.includes('/gallery') ? 'React.createElement(GalleryKeepsakes,{album:{id:"album-1"}})' : 'React.createElement(KeepsakesAdmin)';
+        res.end(await server.transformIndexHtml(req.url, `<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;background:#f8f5ef;font-family:Arial,sans-serif}*{box-sizing:border-box}</style></head><body><div id="root"></div><script type="module">import React from"react";import{createRoot}from"react-dom/client";import{AuthProvider}from"/src/context/AuthContext.jsx";import KeepsakesAdmin from"/src/pages/KeepsakesAdmin.jsx";import Config from"/src/components/KeepsakeStationConfigurator.jsx";function StationQA(){const[value,onChange]=React.useState({enabled:true,mode:'CELEBRATION',paid:{keychain:25,magnet:25},complimentary:{keychain:50,magnet:0},optional:{},stations:[{location:'Main Station',hours:4,feeCents:49900}]});return React.createElement(Config,{value,onChange,experiences:[{experience_id:'glam',key:'glam',name:'The Lola Glam',packages:[{package_id:'signature'}]}],packages:[{id:'signature',tier_key:'SIGNATURE'}]});}import GalleryKeepsakes from"/src/components/GalleryKeepsakes.jsx";createRoot(document.getElementById("root")).render(React.createElement(AuthProvider,null,${component}));</script></body></html>`));
       });
     }
   }], server: {host: '127.0.0.1', port: 0}});
@@ -34,6 +35,8 @@ test('Keepsakes Admin and gallery controls save explicit product/source permissi
       const products = [{id: 'product-1', title: 'Photo Keychain', category: 'keychain', provider: 'IN_HOUSE', active: false, verified: false, retail_cents: 2499, tax_code: 'txcd_99999999', variants: [{id: 'white', label: 'White', sku: 'TEST-SKU', printArea: 'default', printSpec: {widthPx: 1200, heightPx: 800, dpi: 300, bleedPx: 10, safePx: 20}, specEvidence: {sourceUrl: 'https://www.prodigi.com/test-template', bleedPx: 10, safePx: 20, colorProfile: 'sRGB'}}]}];
       await page.route(url => url.pathname.startsWith('/api/'), async route => {
         const req = route.request(), pathname = new URL(req.url()).pathname;
+        if(pathname.endsWith('/station-proposal/preview'))return route.fulfill({json:{...quoteCelebrationStation({...req.postDataJSON().configuration,selections:[{experience:'glam',tier:'SIGNATURE'}]},DEFAULT_STATION_POLICY),stations:[{location:'Main Station',hours:4,feeCents:49900}],commercialReady:false}});
+        if(pathname.endsWith('/station-policy'))return route.fulfill({json:{policy:DEFAULT_STATION_POLICY,products:coreCatalogueView([]).filter(p=>p.stationEligible)}});
         if (req.method() !== 'GET') {writes.push({pathname, body: req.postDataJSON()}); return route.fulfill({json: pathname.endsWith('/test') ? {configured: true, mode: 'SANDBOX', status: 'CONNECTED'} : {ok: true}});}
         if (pathname.endsWith('/auth/me')) return route.fulfill({json: {user: {id: 'qa-admin', permissions: ['*']}}});
         if (pathname.endsWith('/catalogue')) return route.fulfill({json:{products:coreCatalogueView([])}});
@@ -47,7 +50,17 @@ test('Keepsakes Admin and gallery controls save explicit product/source permissi
       await page.getByRole('heading',{name:'The 12-product Keepsakes catalogue'}).waitFor();
       await page.getByLabel('Photo Keychain retail price',{exact:true}).waitFor();
       assert.equal(await page.locator('.ka-product').count(),12);
+      await page.waitForFunction(()=>document.querySelectorAll('.ka-product [data-preview-state="ready"]').length===12);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+      assert.equal(await page.locator('.ka-product').evaluateAll(cards=>cards.every(card=>{const image=card.querySelector('.shop-own-preview').getBoundingClientRect(),copy=card.querySelector('.shop-own-preview+div').getBoundingClientRect(),form=card.querySelector('form').getBoundingClientRect();return image.right<=copy.left+1&&form.top>=Math.max(image.bottom,copy.bottom)-1;})),true,'Product image, copy and price form must not overlap');
       await page.screenshot({path:path.join(output,`products-${width}.png`),fullPage:true});
+      const stationPage=await browser.newPage({viewport:{width,height:1000}});stationPage.on('pageerror',e=>console.error('STATION QA',e.message));
+      await stationPage.route(url=>url.pathname.startsWith('/api/'),route=>{const path=new URL(route.request().url()).pathname;if(path.endsWith('/auth/me'))return route.fulfill({json:{user:{id:'qa',permissions:['*']}}});if(path.endsWith('/station-policy'))return route.fulfill({json:{policy:DEFAULT_STATION_POLICY,products:coreCatalogueView([]).filter(p=>p.stationEligible)}});return route.fulfill({json:{...quoteCelebrationStation({selections:[{experience:'glam',tier:'SIGNATURE'}],complimentary:{keychain:50},paid:{keychain:25,magnet:25}},DEFAULT_STATION_POLICY),stations:[{location:'Main Station',hours:4,feeCents:49900}],commercialReady:false}});});
+      await stationPage.goto(origin+'/keepsakes-admin-qa/station');await stationPage.waitForFunction(()=>document.querySelectorAll('.ka-product [data-preview-state="ready"]').length===6,{},{timeout:10000}).catch(async e=>{console.error(await stationPage.locator('body').innerText());throw e;});
+      assert.equal(await stationPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+      assert.equal(await stationPage.locator('.ka-product').evaluateAll(cards=>cards.every(card=>card.querySelector('.shop-own-preview').getBoundingClientRect().right<=card.querySelector('.shop-own-preview+div').getBoundingClientRect().left+1)),true);
+      await stationPage.getByText(/Station enhancement:/).waitFor();assert.equal(await stationPage.locator('input[type=radio]').first().evaluate(el=>el.getBoundingClientRect().width),18);await stationPage.screenshot({path:path.join(output,`station-proposal-${width}.png`),fullPage:true});await stationPage.close();
+
       const card=page.locator('.ka-product').filter({has:page.getByRole('heading',{name:'Photo Keychain',exact:true})});
       await card.getByLabel('Photo Keychain retail price',{exact:true}).fill('24.99');
       await card.getByRole('button',{name:'Save price',exact:true}).click();
