@@ -2,6 +2,7 @@
 export function customerPricing(value){
  if(Array.isArray(value))return value.map(customerPricing);
  if(!value||typeof value!=='object'||value instanceof Date||value instanceof Uint8Array)return value;
+ if(value.schemaVersion==='keepsake-station-v1'){const {internalApproval,configuration,...safe}=value;return Object.fromEntries(Object.entries(safe).map(([key,item])=>[key,customerPricing(item)]));}
  if(value.pricing_profile?.businessPlan){const {catalog_key,tier_key,pricing_profile,starting_price,...rest}=value;return customerPricing(rest);}
  if(value.schemaVersion===1&&value.catalogVersion&&Array.isArray(value.entitlements)){
   const {override,businessPlan,...quote}=value;

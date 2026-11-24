@@ -1,3 +1,4 @@
+import KeepsakeStationConfigurator from '../components/KeepsakeStationConfigurator.jsx';
 import BusinessPlanPicker from '../components/BusinessPlanPicker.jsx';
 import {withoutCampaignBundle,removeCampaignExperience} from '../../shared/campaign-selection.js';
 import CampaignPackagePicker,{mergeCampaignSelections} from '../components/CampaignPackagePicker.jsx';
@@ -492,6 +493,7 @@ export default function ProposalEditor() {
         )}
 
         {originalRequest&&<section aria-label="Original client request"><h3>Original client request</h3><p style={{whiteSpace:"pre-wrap"}}>{originalRequest}</p></section>}
+        {mode!=='upload'&&import.meta.env.VITE_APP_ENV!=='production'&&<KeepsakeStationConfigurator value={form.keepsake_station} onChange={value=>setField('keepsake_station',value)} experiences={form.selected_experiences||[]} packages={packageOptions} business={businessMode}/>}
         {mode!=='upload'&&<CatalogQuoteReview key={form.content?.catalog_quote?.catalogVersion||'new'} experiences={form.selected_experiences||[]} addons={form.addons||[]} customLines={form.custom_line_items||[]} discount={Number(form.discount||0)} otherFees={Number(form.other_fees||0)} travelAmount={form.travel} onTravelChange={value=>setField('travel',value)} initialQuote={form.content?.catalog_quote} onQuote={setCatalogQuote}/>}
         <label>Included postcard mailing allowance<input type="number" min="0" max="10000" value={form.postcard_mailing_quantity||0} onChange={event=>setField('postcard_mailing_quantity',Number(event.target.value))}/></label><p>This quantity is recorded in the accepted proposal. Mailing costs must still be included in the agreed pricing and approved in the event mailing controls.</p>
         <label>Client-facing notes (proposal and email)<textarea value={form.customer_notes||''} onChange={event=>setField('customer_notes',event.target.value)}/></label>

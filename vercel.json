@@ -184,6 +184,16 @@
       "destination": "/staging-site/about.html"
     },
     {
+      "source": "/keepsake-station.css",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/keepsake-station.css"
+    },
+    {
       "source": "/booking.css",
       "has": [
         {
