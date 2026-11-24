@@ -10,3 +10,5 @@ test('every charge type gets details and written custom scope is preserved',()=>
  assert.equal(proposalLineDetail({type:'CUSTOM',detail:'Owner-approved delivery arrangement.'}),'Owner-approved delivery arrangement.');
  assert.equal(proposalLineDetail({type:'ADDON',addon_id:'backdrop'},{addons:[{id:'backdrop',description:'Selected premium backdrop.'}]}),'Selected premium backdrop.');
 });
+
+test('existing package inclusion prose is not repeated in rental details',()=>{const detail=proposalLineDetail({type:'PACKAGE',package_id:'p'},{experiences:[{packages:[{package_id:'p',description:'4 active service hours'}]}],entitlements:[{packageId:'p',experience:'audio',serviceHours:4}]});assert.equal(detail.split('4 active service hours').length-1,1);});
