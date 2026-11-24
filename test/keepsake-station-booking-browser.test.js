@@ -16,7 +16,7 @@ test('Step 4 station configuration shares allowance, enforces minimum, and price
   await page.route('**/api/public/booking-catalog*',r=>r.fulfill({json:catalog}));
   await page.route('**/api/public/keepsake-station/preview',r=>{const input=r.request().postDataJSON();const quote=quoteCelebrationStation({...input.keepsakeStation,selections:input.selections.map(s=>({experience:s.experienceId,tier:catalog.packages.find(p=>p.id===s.packageId).tier_key}))},policy);return r.fulfill({json:{quote,pricingReady:true,requestOnly:false}});});
   await page.goto(origin+'/availability.html');await page.locator('[data-experience="glam"]').check();await page.locator('[data-experience-package="glam"]').selectOption('signature');await page.locator('[data-station-enable]').check();
-  assert.equal(await page.locator('.station-product').count(),6);assert.equal(await page.locator('[data-station-free]').count(),2);
+  assert.equal(await page.locator('.station-product').count(),6);assert.equal(await page.locator('.station-product').first().evaluate(el=>getComputedStyle(el).display),'grid');assert.equal(await page.locator('[data-station-free]').count(),2);
   await page.getByLabel('Photo Keychain quantity',{exact:true}).fill('20');await page.getByLabel('Photo Magnet quantity',{exact:true}).fill('20');await page.locator('[data-station-minimum]').getByText('10 more paid keychains or magnets required',{exact:true}).waitFor();
   await page.getByLabel('Photo Keychain quantity',{exact:true}).fill('25');await page.getByLabel('Photo Magnet quantity',{exact:true}).fill('25');
   await page.locator('[data-booking-summary]').getByRole('heading',{name:'$1,672.50',exact:true}).waitFor();
@@ -24,7 +24,7 @@ test('Step 4 station configuration shares allowance, enforces minimum, and price
   await page.locator('[data-booking-summary]').getByRole('heading',{name:'$2,092.20',exact:true}).waitFor();
   assert.equal(await page.locator('[data-station-unit="framed-photo"]').textContent(),'$29.99 per unit · $149.95 total');assert.equal(await page.locator('[data-station-unit="jacketed-print"]').textContent(),'$7.99 per unit · $79.90 total');
   await page.locator('[data-experience="vogue"]').check();await page.locator('[data-experience-package="vogue"]').selectOption('essential');
-  assert.equal(await page.locator('[data-station-enable]').count(),1);assert.equal(await page.locator('[data-station-free]').count(),2);assert.ok((await page.locator('.station-config').innerText()).includes('one event-wide allowance'));
+  await page.locator('[data-booking-summary]').getByRole('heading',{name:'$2,791.20',exact:true}).waitFor();assert.equal(await page.locator('[data-station-enable]').count(),1);assert.equal(await page.locator('[data-station-free]').count(),2);assert.ok((await page.locator('.station-config').innerText()).includes('one event-wide allowance'));
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:fileURLToPath(new URL(`booking-${width}.png`,output)),fullPage:true});
   page.once('dialog',d=>d.accept());await page.locator('[data-station-enable]').uncheck();assert.equal(await page.locator('.station-config').count(),0);
   await page.locator('[data-experience="glam"]').uncheck();await page.locator('[data-experience="vogue"]').uncheck();await page.locator('[data-experience="360"]').check();await page.locator('[data-experience-package="360"]').selectOption('video');assert.equal(await page.locator('.booking-keepsake-station').isVisible(),false);
