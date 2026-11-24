@@ -1,0 +1,6 @@
+import {z} from 'zod';
+const count=z.number().int().nonnegative().safe();
+const products=z.object({'framed-photo':count.optional(),'jacketed-print':count.optional(),'acrylic-display':count.optional(),postcard:count.optional()}).strict();
+export const keepsakeStationInput=z.object({enabled:z.literal(true),policyVersion:z.string().max(100).optional(),complimentary:z.object({keychain:count.optional(),magnet:count.optional()}).strict().optional(),paid:z.object({keychain:count.optional(),magnet:count.optional()}).strict().optional(),optional:products.optional(),stationCount:z.number().int().positive().safe().optional(),hours:z.number().positive().max(168).optional(),notes:z.string().max(3000).optional()}).strict();
+const cents=z.number().int().nonnegative().safe();
+export const keepsakeStationProposalInput=keepsakeStationInput.extend({mode:z.enum(['CELEBRATION','BUSINESS']),stations:z.array(z.object({location:z.string().max(200).default(''),hours:z.number().positive().max(168),feeCents:cents.optional()}).strict()).min(1).optional(),unitPrices:z.object({keychain:cents.optional(),magnet:cents.optional(),'framed-photo':cents.optional(),'jacketed-print':cents.optional(),'acrylic-display':cents.optional(),postcard:cents.optional()}).strict().optional(),priceApprovalReason:z.string().trim().min(10).max(1500).optional()}).strict();

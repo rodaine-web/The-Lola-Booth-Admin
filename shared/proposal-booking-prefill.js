@@ -29,6 +29,7 @@ export function proposalBookingPrefill(lead, catalogExperiences = [], catalogPac
     price: Number(matchingPackage?.starting_price ?? experience?.base_price ?? 0)
   }] : [];
   const inquiry=lead.source_details?.bookingInquiry;
+  if(inquiry?.keepsakeStation)fields.keepsake_station={...inquiry.keepsakeStation.configuration,mode:inquiry.keepsakeStation.mode,...(inquiry.keepsakeStation.quote?{stations:[{location:'Main Keepsake Station',hours:inquiry.keepsakeStation.quote.hours,feeCents:inquiry.keepsakeStation.quote.lines.find(l=>l.key==='station').totalCents}]}:{stations:[]})};
   const requested=inquiry?.selections?.map(item=>{
     const experience=catalogExperiences.find(x=>x.id===item.experienceId);
     if(item.requestOnly)return {experience_id:item.experienceId,name:experience?.name||item.experienceName,description:experience?.description||'',price:0,packages:[]};

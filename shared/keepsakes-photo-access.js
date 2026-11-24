@@ -12,8 +12,8 @@ export function photoSourceForProduct(product,assets,selectedId){
  const related=assets.filter(a=>a.sessionId&&a.sessionId===selected.sessionId||a.id===selected.id);
  const original=related.find(a=>!a.branded&&['ORIGINAL','PROCESSED'].includes(a.kind));
  const strip=related.find(a=>a.kind==='BRANDED_STRIP'&&a.branded);
- if(product.source==='ORIGINAL_UNBRANDED')return {asset:original,reason:original?'':'An unbranded source is not mapped for this photo yet.'};
- if(product.source==='BRANDED_STRIP')return {asset:strip,reason:strip?'':'A branded strip is not mapped for this photo yet.'};
- if(product.source==='PHOTO_AND_STRIP')return {asset:original&&strip?original:null,strip,reason:original&&strip?'':'This package needs a mapped unbranded photo and branded strip.'};
+ if(product.source==='ORIGINAL_UNBRANDED')return {asset:original,reason:original?'':'An unbranded photo is not available for this moment yet.'};
+ if(product.source==='BRANDED_STRIP')return {asset:strip,reason:strip?'':'A branded photo strip is not available for this moment yet.'};
+ if(product.source==='PHOTO_AND_STRIP')return {asset:original&&strip?original:null,strip,reason:original&&strip?'':'This package needs an unbranded photo and branded strip from this moment.'};
  return {asset:selected,reason:''};
 }

@@ -1,3 +1,5 @@
+import {keepsakeStationInput} from '../../../shared/keepsake-station-input.js';
+import {bookingStationConfiguration} from '../services/keepsake-station-booking-service.js';
 import {queueWebsiteProposal} from '../services/website-proposal-handoff-service.js';
 import {pricingPublicRouter} from './pricing.js';
 import {customerPricing} from '../../../shared/customer-pricing.js';
@@ -50,7 +52,7 @@ publicRouter.use(rateLimit({
   limit: Math.max(1, Math.min(10000, Number(process.env.PUBLIC_WRITE_RATE_LIMIT_MAX)||20)),
   store: new PostgresPublicRateLimitStore(),
   message:{error:{code:"RATE_LIMITED",message:"We’re receiving too many requests right now. Please wait a little and try again."}},
-  skip: req => ["GET", "HEAD", "OPTIONS"].includes(req.method)||(req.method==='POST'&&req.path==='/pricing-quotes'),
+  skip: req => ["GET", "HEAD", "OPTIONS"].includes(req.method)||(req.method==='POST'&&['/pricing-quotes','/keepsake-station/preview'].includes(req.path)),
   standardHeaders: true,
   legacyHeaders: false
 }));
@@ -65,6 +67,14 @@ publicRouter.use('/workspaces', publicWorkspaceRouter);
 
 publicRouter.use(campaignPublicRouter);
 
+publicRouter.post('/keepsake-station/preview',asyncHandler(async(req,res)=>{
+ const payload=req.body;
+ const input=z.object({customerType:z.enum(['INDIVIDUAL','BUSINESS']),selections:z.array(z.object({experienceId:z.uuid(),packageId:z.uuid().optional()})).min(1),keepsakeStation:keepsakeStationInput}).strict().parse(payload);
+ const catalog=await publicBookingCatalog({business:input.customerType==='BUSINESS'});
+ const result=await bookingStationConfiguration(input.keepsakeStation,input,catalog,{preview:true});
+ if(result?.quote&&!result.pricingReady){const quote=result.quote;result.quote={...quote,lines:quote.lines.map(l=>l.key==='station'||l.complimentary?l:{...l,unitCents:null,totalCents:null}),subtotalCents:null,totalCents:null,paidTierMinimum:null};}
+ res.set('Cache-Control','no-store').json(result);
+}));
 publicRouter.get("/booking-catalog",asyncHandler(async (req,res)=>{res.set("Cache-Control","no-store").json(await publicBookingCatalog({business:req.query.customerType==='BUSINESS'}));}));
 
 publicRouter.post("/inquiries", (req, _res, next) => {

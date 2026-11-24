@@ -1,3 +1,5 @@
+import {publicStationPolicy,bookingStationConfiguration} from './keepsake-station-booking-service.js';
+import {keepsakesStaging} from '../../../shared/keepsakes.js';
 import {experienceNames} from '../../../shared/experience-catalog.js';
 import {packageEntitlementLabels} from '../../../shared/package-entitlements.js';
 import crypto from 'node:crypto';
@@ -29,8 +31,9 @@ export async function publicBookingCatalog({business=false,internal=false}={}){
  result.addons=result.addons.filter(a=>!a.pricing_policy?.internalOnly&&a.pricing_policy?.category!=='RETAIL');
  const availableVirtual=(version?.snapshot.packages||[]).filter(p=>p.active&&p.pricing_profile?.experience==='virtual').map(p=>p.pricing_profile.virtual?.duration);
  if(business||internal)result.virtualDurations=Object.fromEntries(Object.entries(virtualDurations).filter(([key])=>availableVirtual.includes(key)));
+ if(keepsakesStaging())result.keepsakeStation=await publicStationPolicy();
  if(!business)return result;
- return {experiences:result.experiences.filter(x=>x.key!=='audio'&&(x.key!=='virtual'||Object.keys(result.virtualDurations).length)).map(({id,key,name})=>({id,key,name})),packages:[],addons:result.addons.map(({id,name,pricing_policy})=>({id,name,pricing_type:'CUSTOM',pricing_policy:pricing_policy?{key:pricing_policy.key,category:pricing_policy.category,experiences:pricing_policy.experiences,packageIds:pricing_policy.packageIds,minQuantity:pricing_policy.minQuantity,maxQuantity:pricing_policy.maxQuantity,approvalRequired:true}:null})),compatibilityPolicy:result.compatibilityPolicy,virtualDurations:result.virtualDurations};
+ return {experiences:result.experiences.filter(x=>x.key!=='audio'&&(x.key!=='virtual'||Object.keys(result.virtualDurations).length)).map(({id,key,name})=>({id,key,name})),packages:[],addons:result.addons.map(({id,name,pricing_policy})=>({id,name,pricing_type:'CUSTOM',pricing_policy:pricing_policy?{key:pricing_policy.key,category:pricing_policy.category,experiences:pricing_policy.experiences,packageIds:pricing_policy.packageIds,minQuantity:pricing_policy.minQuantity,maxQuantity:pricing_policy.maxQuantity,approvalRequired:true}:null})),compatibilityPolicy:result.compatibilityPolicy,virtualDurations:result.virtualDurations,...(result.keepsakeStation?{keepsakeStation:{...result.keepsakeStation,packages:{},paidTiers:undefined,optionalTiers:undefined}}:{})};
 }
 export function validateBookingSelections(input,catalog){
  const requestOnly=input.customerType==='BUSINESS';
@@ -62,7 +65,10 @@ export async function preparePublicBooking(payload){
  await query('SELECT id FROM experiences WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[payload.selections.map(x=>x.experienceId)]);
  await query('SELECT id FROM packages WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[payload.selections.map(x=>x.packageId).filter(Boolean)]);
  await query('SELECT id FROM addons WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[(payload.addons||[]).map(x=>x.addonId)]);
- const booking=validateBookingSelections(payload,await publicBookingCatalog({internal:true}));
+ const catalog=await publicBookingCatalog({internal:true});
+ const booking=validateBookingSelections(payload,catalog);
+ const station=await bookingStationConfiguration(payload.keepsakeStation,payload,catalog);
+ if(station)booking.keepsakeStation=station;
  if(pricingCatalogEnabled()&&payload.customerType!=='BUSINESS'){
   const version=await currentPricingCatalog();
   const selections=booking.selections.map(item=>({packageId:item.packageId,prints:item.prints,printFormat:item.printFormat,unlimitedPrints:item.unlimitedPrints,extraHours:item.extraHours,addons:[]}));

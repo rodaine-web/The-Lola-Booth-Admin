@@ -19,3 +19,16 @@ export async function saveStationPolicy(input,user){
  return transaction(async()=>{const version='station-'+crypto.randomUUID();const row=(await query("INSERT INTO keepsake_station_policies(version,configuration,created_by) VALUES($1,$2,$3) RETURNING id",[version,config,user.id])).rows[0];await writeAudit({req:{user},action:'keepsake_station_policy_drafted',entity:'keepsake_station_policy',entityId:row.id,after:{version,...config}});return {saved:true,version,status:'DRAFT'};});
 }
 export async function previewStationPolicy(input,user){const {policy}=await stationPolicyAdmin(user);try{return quoteCelebrationStation(input,policy);}catch(e){throw new AppError(e.message,422,'STATION_CONFIGURATION_INVALID');}}
+export async function publishStationPolicy(input,user){
+ assertKeepsakesManager(user);
+ const {version,approval}=z.object({version:z.string().max(100),approval:z.literal('APPROVE_PUBLIC_STATION_RATES')}).strict().parse(input);
+ return transaction(async()=>{
+  await query("SELECT pg_advisory_xact_lock(hashtext('keepsake-station-publication'))");
+  const row=(await query("SELECT * FROM keepsake_station_policies WHERE version=$1 AND status='DRAFT' FOR UPDATE",[version])).rows[0];
+  if(!row)throw new AppError('Save and review the current draft before publishing.',409,'STATION_POLICY_CHANGED');
+  await query("UPDATE keepsake_station_policies SET status='RETIRED' WHERE status='PUBLISHED'");
+  await query("UPDATE keepsake_station_policies SET status='PUBLISHED' WHERE id=$1",[row.id]);
+  await writeAudit({req:{user},action:'keepsake_station_policy_published',entity:'keepsake_station_policy',entityId:row.id,after:{version,approval}});
+  return {published:true,version};
+ });
+}

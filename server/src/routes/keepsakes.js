@@ -1,4 +1,5 @@
-import {stationPolicyAdmin,saveStationPolicy,previewStationPolicy} from '../services/keepsake-station-policy-service.js';
+import {stationProposalQuote} from '../services/keepsake-station-proposal-service.js';
+import {stationPolicyAdmin,saveStationPolicy,previewStationPolicy,publishStationPolicy} from '../services/keepsake-station-policy-service.js';
 import * as photoAccess from '../services/keepsakes-photo-access-service.js';
 import {keepsakesCoreCatalogue,saveCoreCataloguePrice} from '../services/keepsakes-core-catalogue-service.js';
 import {AppError} from '../utils/errors.js';
@@ -51,6 +52,7 @@ keepsakesAdminRouter.get('/albums/:id',wrap(r=>admin.keepsakesAlbumAdmin(id.pars
 keepsakesAdminRouter.put('/albums/:id',requirePermission('write:operations'),wrap(r=>admin.saveKeepsakesSettings(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.post('/albums/:id/sessions',requirePermission('write:operations'),wrap(r=>admin.saveKeepsakesSession(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.use(requirePermission('read:finance'),(req,_res,next)=>{try{admin.assertKeepsakesManager(req.user);next();}catch(e){next(e);}});
+keepsakesAdminRouter.post('/station-proposal/preview',wrap(r=>{const selections=z.array(z.object({experience_id:id,packages:z.array(z.object({package_id:id}).passthrough()).optional()}).passthrough()).parse(r.body.selections||[]);return stationProposalQuote(r.body.configuration,selections,r.user);}));
 keepsakesAdminRouter.get('/station-policy',wrap(r=>stationPolicyAdmin(r.user)));
 keepsakesAdminRouter.post('/station-policy/preview',wrap(r=>previewStationPolicy(r.body,r.user)));
 keepsakesAdminRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
@@ -58,6 +60,7 @@ keepsakesAdminRouter.get('/',wrap(r=>admin.keepsakesDashboard(r.user)));
 keepsakesAdminRouter.get('/orders/:id',wrap(r=>admin.keepsakesAdminOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.get('/integrations/prodigi',wrap(()=>keepsakesProdigiIntegration()));
 keepsakesAdminRouter.use(requirePermission('write:integrations'));
+keepsakesAdminRouter.post('/station-policy/publish',wrap(r=>publishStationPolicy(r.body,r.user)));
 keepsakesAdminRouter.put('/station-policy',wrap(r=>saveStationPolicy(r.body,r.user)));
 keepsakesAdminRouter.put('/catalogue/:key/price',wrap(r=>saveCoreCataloguePrice(r.params.key,r.body,r.user)));
 keepsakesAdminRouter.post('/products',wrap(()=>{throw new AppError('Use the approved 12-product catalogue.',409,'KEEPSAKES_CATALOGUE_REPLACED');}));

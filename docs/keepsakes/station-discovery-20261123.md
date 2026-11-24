@@ -61,3 +61,31 @@ saved. No historical bookings/proposals/invoices/orders are rewritten or deleted
 4. Proposal/PDF/invoice/workspace snapshot consistency and acceptance validation.
 5. Event commitments, inventory, staff/equipment capacity, Lob readiness and
    operational reporting. Validate complete journeys before production review.
+
+Discovery clarification: the currently served staging website is the tracked
+`public/staging-site` bundle in the Admin repository (see
+`docs/releases/pricing-catalog-staging.md`). The older separate staging website
+checkout is a source mirror and is not the live deployment source. Booking
+integration must extend the currently served four-step form, with source mirroring
+handled separately; deploying the old source mirror would regress newer behavior.
+
+## Booking and shop staging increment
+
+The served four-step booking form now offers the six eligible station products,
+event-wide complimentary allowances, minimum paid quantities and server pricing.
+Draft unit rates remain quote-only until an authorized Admin publishes them.
+Business requests retain private custom pricing and station configuration.
+Station requests require Admin proposal review and cannot be silently omitted by
+the website proposal automation. Proposals carry frozen itemized snapshots,
+images and quantities into customer HTML/PDF and invoice conversion.
+
+The shop uses the website logo, main navigation, full footer and published STAGING
+contact settings. Event buttons open staging availability.html rather than contact.
+
+This increment does not implement event operational commitments, client artwork
+approval, inventory or production capacity scheduling. Acceptance starts no
+manufacturing. Premium supplier integrations and retail checkout remain gated.
+
+Local validation: 827 tracked tests passed, 58 environment-specific skips;
+real disposable PostgreSQL lookup/policy/proposal checks passed; booking at
+1440/390 pixels and shop at 1440/390/320 pixels passed; Vite build passed.
