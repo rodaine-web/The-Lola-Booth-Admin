@@ -14,7 +14,7 @@ export async function premiumSupplierCatalogue(provider,options,user,{request=fe
  assertKeepsakesManager(user);if(!['WHCC','GELATO'].includes(provider))throw new AppError('Supplier unavailable.',404,'NOT_FOUND');
  let data;
  if(provider==='WHCC')data=await read(provider,options.product?'/v1/catalog/products/'+pathPart(options.product):'/v1/catalog/products?limit=200'+(options.cursor?'&cursor='+encodeURIComponent(options.cursor):''),{request});
- else if(options.product)data=await read(provider,'/v3/products/'+pathPart(options.product),{request});
+ else if(options.product){const suffix=options.operation==='PRICES'?'/prices?country=US&currency=USD'+(options.pageCount?'&pageCount='+options.pageCount:''):options.operation==='COVER'?'/cover-dimensions?pageCount='+options.pageCount:'';if(options.operation==='COVER'&&!options.pageCount)throw new AppError('Select a supported page count first.',422,'SUPPLIER_PAGE_COUNT_REQUIRED');data=await read(provider,'/v3/products/'+pathPart(options.product)+suffix,{request});}
  else if(options.catalog)data=await read(provider,'/v3/catalogs/'+pathPart(options.catalog)+(options.search?'/products:search':''),{request,...(options.search?{body:{limit:50,offset:options.offset||0,attributeFilters:{}}}:{})});
  else data=await read(provider,'/v3/catalogs',{request});
  return {provider,readOnly:true,checkedAt:new Date().toISOString(),data};

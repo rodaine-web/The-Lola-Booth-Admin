@@ -1,4 +1,3 @@
-const GalleryHome=lazy(()=>import('./pages/GalleryHome.jsx'));
 import {isStagingShopHost} from '../shared/keepsakes-host.js';
 // ppar-client-profile-parity-v1
 import { GALLERY_ENABLED } from "./utils/features.js";
@@ -64,6 +63,8 @@ const Scan = lazy(() => import("./pages/Scan.jsx"));
 const LiveOperations = lazy(() => import("./pages/LiveOperations.jsx"));
 const SystemHealth = lazy(() => import("./pages/SystemHealth.jsx"));
 const PricingCatalog = lazy(() => import("./pages/PricingCatalog.jsx"));
+
+const GalleryHome=lazy(()=>import('./pages/GalleryHome.jsx'));
 
 function PrivateRoute({ children }) {
   const { user, loading, authError, retryAuth } = useAuth();

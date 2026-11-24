@@ -62,7 +62,7 @@ keepsakesAdminRouter.use(requirePermission('read:finance'),(req,_res,next)=>{try
 keepsakesAdminRouter.post('/station-proposal/preview',wrap(r=>{const selections=z.array(z.object({experience_id:id,packages:z.array(z.object({package_id:id}).passthrough()).optional()}).passthrough()).parse(r.body.selections||[]);return stationProposalQuote(r.body.configuration,selections,r.user);}));
 keepsakesAdminRouter.get('/station-policy',wrap(r=>stationPolicyAdmin(r.user)));
 keepsakesAdminRouter.post('/station-policy/preview',wrap(r=>previewStationPolicy(r.body,r.user)));
-keepsakesAdminRouter.get('/books/suppliers/:provider',wrap(r=>premiumSupplierCatalogue(z.enum(['WHCC','GELATO']).parse(r.params.provider),z.object({product:z.string().max(400).optional(),catalog:z.string().max(100).optional(),search:z.coerce.boolean().optional(),offset:z.coerce.number().int().min(0).max(10000).optional(),cursor:z.string().max(200).optional()}).strict().parse(r.query),r.user)));
+keepsakesAdminRouter.get('/books/suppliers/:provider',wrap(r=>premiumSupplierCatalogue(z.enum(['WHCC','GELATO']).parse(r.params.provider),z.object({product:z.string().max(400).optional(),catalog:z.string().max(100).optional(),search:z.coerce.boolean().optional(),offset:z.coerce.number().int().min(0).max(10000).optional(),operation:z.enum(['DETAIL','PRICES','COVER']).optional(),pageCount:z.coerce.number().int().min(1).max(1000).optional(),cursor:z.string().max(200).optional()}).strict().parse(r.query),r.user)));
 keepsakesAdminRouter.get('/books',wrap(r=>books.bookAdmin(r.user)));
 keepsakesAdminRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
 keepsakesAdminRouter.get('/',wrap(r=>admin.keepsakesDashboard(r.user)));
