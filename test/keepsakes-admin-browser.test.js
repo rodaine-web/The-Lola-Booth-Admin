@@ -59,7 +59,7 @@ test('Keepsakes Admin and gallery controls save explicit product/source permissi
       await stationPage.goto(origin+'/keepsakes-admin-qa/station');await stationPage.waitForFunction(()=>document.querySelectorAll('.ka-product [data-preview-state="ready"]').length===6,{},{timeout:10000}).catch(async e=>{console.error(await stationPage.locator('body').innerText());throw e;});
       assert.equal(await stationPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
       assert.equal(await stationPage.locator('.ka-product').evaluateAll(cards=>cards.every(card=>card.querySelector('.shop-own-preview').getBoundingClientRect().right<=card.querySelector('.shop-own-preview+div').getBoundingClientRect().left+1)),true);
-      await stationPage.screenshot({path:path.join(output,`station-proposal-${width}.png`),fullPage:true});await stationPage.close();
+      await stationPage.getByText(/Station enhancement:/).waitFor();assert.equal(await stationPage.locator('input[type=radio]').first().evaluate(el=>el.getBoundingClientRect().width),18);await stationPage.screenshot({path:path.join(output,`station-proposal-${width}.png`),fullPage:true});await stationPage.close();
 
       const card=page.locator('.ka-product').filter({has:page.getByRole('heading',{name:'Photo Keychain',exact:true})});
       await card.getByLabel('Photo Keychain retail price',{exact:true}).fill('24.99');
