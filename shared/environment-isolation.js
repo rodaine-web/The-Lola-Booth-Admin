@@ -1,3 +1,4 @@
+import {STAGING_SHOP_ORIGIN} from './keepsakes-host.js';
 export const environments = {
   production: { website: 'https://thelolabooth.com', admin: 'https://admin.thelolabooth.com', api: 'https://api.thelolabooth.com', origins: ['https://thelolabooth.com', 'https://www.thelolabooth.com', 'https://admin.thelolabooth.com'] },
   staging: { website: 'https://staging.thelolabooth.com', admin: 'https://stagingadmin.thelolabooth.com', api: 'https://stagingapi.thelolabooth.com', origins: ['https://staging.thelolabooth.com', 'https://stagingadmin.thelolabooth.com'] }
@@ -29,6 +30,7 @@ export const galleryOrigins = {
 };
 
 export function galleryOriginAllowed(environment, origin, path) {
+  if(environment==='staging'&&origin===STAGING_SHOP_ORIGIN)return path==='/api/keepsakes'||path.startsWith('/api/keepsakes/');
   return Boolean(galleryOrigins[environment] && origin === galleryOrigins[environment]
     && (path === '/api/gallery' || path.startsWith('/api/gallery/')
       || path === '/api/keepsakes' || path.startsWith('/api/keepsakes/')));

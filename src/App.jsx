@@ -1,3 +1,4 @@
+import {isStagingShopHost} from '../shared/keepsakes-host.js';
 // ppar-client-profile-parity-v1
 import { GALLERY_ENABLED } from "./utils/features.js";
 import DataReview from "./pages/DataReview.jsx";
@@ -83,6 +84,21 @@ const PublicCreativeApproval = lazy(() => import("./pages/PublicCreativeApproval
 const PublicContract = lazy(() => import("./pages/PublicContract.jsx"));
 
 export default function App() {
+  if(isStagingShopHost(window.location.hostname))return <Suspense fallback={<main className="boot-screen">Opening The Lola Keepsakes…</main>}><Routes>
+    {import.meta.env.VITE_APP_ENV !== 'production' && <>
+      <Route path="/shop" element={<KeepsakesShop/>}/>
+      <Route path="/shop/collection" element={<KeepsakesShop/>}/>
+      <Route path="/shop/find-photos" element={<KeepsakesShop/>}/>
+      <Route path="/shop/check-email" element={<KeepsakesShop/>}/>
+      <Route path="/shop/access" element={<KeepsakesShop/>}/>
+      <Route path="/shop/memories" element={<KeepsakesShop/>}/>
+      <Route path="/shop/products/:productKey" element={<KeepsakesShop/>}/>
+      <Route path="/shop/how-it-works" element={<KeepsakesShop/>}/>
+      <Route path="/shop/event-clients" element={<KeepsakesShop/>}/>
+      <Route path="/keepsakes/orders/:orderToken" element={<Keepsakes/>}/>
+    </>}
+    <Route path="*" element={<Navigate to="/shop" replace/>}/>
+  </Routes></Suspense>;
   return (
     <Suspense fallback={<main className="boot-screen">Opening Admin Portal...</main>}>
     <Routes>

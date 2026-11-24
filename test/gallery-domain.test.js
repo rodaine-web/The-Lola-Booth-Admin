@@ -55,3 +55,17 @@ for (const environment of ['staging','production']) {
     assert.throws(()=>assertEnvironmentIsolation({...config,GALLERY_PUBLIC_ORIGIN:galleryOrigins[environment==='staging'?'production':'staging']}),/Gallery origin/);
   });
 }
+
+test('staging shop domain has only public Keepsakes access, including bearer preflight',async()=>{
+ const {STAGING_SHOP_ORIGIN}=await import('../shared/keepsakes-host.js');
+ const app=express();app.use(environmentCors('staging'));app.use((req,res)=>res.json({ok:true}));app.use((error,req,res,next)=>res.status(403).end());
+ const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+ try{const base=`http://127.0.0.1:${server.address().port}`;
+  for(const path of ['/api/keepsakes/catalogue','/api/keepsakes/photos/request','/api/keepsakes/photos/collection','/api/keepsakes/photos/assets/synthetic']){
+   const response=await fetch(base+path,{headers:{Origin:STAGING_SHOP_ORIGIN}});assert.equal(response.status,200);assert.equal(response.headers.get('access-control-allow-credentials'),null);
+  }
+  const preflight=await fetch(base+'/api/keepsakes/photos/collection',{method:'OPTIONS',headers:{Origin:STAGING_SHOP_ORIGIN,'Access-Control-Request-Method':'GET','Access-Control-Request-Headers':'authorization'}});assert.equal(preflight.status,204);assert.match(preflight.headers.get('access-control-allow-headers'),/authorization/);
+  for(const path of ['/api/auth/me','/api/keepsakes-admin','/api/gallery-admin/albums','/api/gallery','/api/public/inquiries'])assert.equal((await fetch(base+path,{headers:{Origin:STAGING_SHOP_ORIGIN}})).status,403);
+  assert.equal((await fetch(base+'/api/keepsakes/catalogue',{headers:{Origin:'https://stagingshop.thelolabooth.com.evil.example'}})).status,403);
+ }finally{await new Promise(resolve=>server.close(resolve));}
+});
