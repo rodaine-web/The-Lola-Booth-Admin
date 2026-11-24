@@ -1,3 +1,4 @@
+import {clientOpportunities,opportunityPreview,reopenOpportunity,closeOpportunity,bookingHandoffPreview,repairBookingHandoff} from '../services/opportunity-lifecycle-service.js';
 import {keepsakeStationProposalInput} from '../../../shared/keepsake-station-input.js';
 import {audioFulfillment,saveAudioFulfillment,transitionAudioFulfillment} from '../services/audio-fulfillment-service.js';
 import {eventCloseout,saveEventCloseout} from '../services/event-closeout-service.js';
@@ -216,6 +217,12 @@ adminRouter.use((req,_res,next)=>{
 adminRouter.use('/website/staging',(req,res,next)=>isStaging()?next():next(new AppError('Staging CMS is unavailable in this environment.',404,'NOT_FOUND')),stagingCmsRouter);
 
 const eventStatuses = ["INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "READY", "IN_PROGRESS", "COMPLETED", "CANCELLED", "DRAFT", "PENDING_CONTRACT", "PENDING_DEPOSIT"];
+adminRouter.get('/clients/:id/opportunities',requirePermission('read:sales'),asyncHandler(async(req,res)=>res.json({opportunities:await clientOpportunities(uuid.parse(req.params.id))})));
+adminRouter.get('/leads/:id/lifecycle',requirePermission('read:sales'),asyncHandler(async(req,res)=>res.json(await opportunityPreview(uuid.parse(req.params.id)))));
+adminRouter.post('/leads/:id/reopen',requirePermission('write:sales'),asyncHandler(async(req,res)=>res.json(await reopenOpportunity(uuid.parse(req.params.id),req.body,req))));
+adminRouter.post('/leads/:id/close-opportunity',requirePermission('write:sales'),asyncHandler(async(req,res)=>res.json(await closeOpportunity(uuid.parse(req.params.id),req.body,req))));
+adminRouter.get('/proposals/:id/booking-handoff',requirePermission('read:finance'),asyncHandler(async(req,res)=>res.json(await bookingHandoffPreview(uuid.parse(req.params.id)))));
+adminRouter.post('/proposals/:id/booking-handoff/repair',requirePermission('write:sales'),requirePermission('write:finance'),asyncHandler(async(req,res)=>res.json(await repairBookingHandoff(uuid.parse(req.params.id),req.body,req))));
 const leadStatuses = ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_DRAFT", "PROPOSAL_SENT", "FOLLOW_UP", "WON", "LOST", "ARCHIVED"];
 const taskStatuses = ["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"];
 const taskPriorities = ["LOW", "NORMAL", "HIGH", "URGENT"];
@@ -867,6 +874,7 @@ adminRouter.post("/leads/:id/merge", requirePermission("write:sales"), validate(
 adminRouter.patch("/leads/:id", requirePermission("write:sales"), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Lead");
+  if(before.rows[0].status==='LOST'&&req.body.status&&req.body.status!=='LOST')throw new AppError("Use Reopen opportunity to review the event and proposal together.",409,"OPPORTUNITY_REVIEW_REQUIRED");
   const allowed = [
     "first_name", "last_name", "email", "phone", "company", "preferred_contact_method",
     "event_type", "event_date", "event_start_time", "event_end_time", "venue_name",

@@ -1,3 +1,5 @@
+import {premiumSupplierCatalogue} from '../services/keepsakes-premium-suppliers.js';
+import * as books from '../services/keepsakes-book-service.js';
 import {stationProposalQuote} from '../services/keepsake-station-proposal-service.js';
 import {stationPolicyAdmin,saveStationPolicy,previewStationPolicy,publishStationPolicy} from '../services/keepsake-station-policy-service.js';
 import * as photoAccess from '../services/keepsakes-photo-access-service.js';
@@ -22,12 +24,17 @@ export const keepsakesPublicRouter=Router();
 keepsakesPublicRouter.use((_req,_res,next)=>{try{shop.assertKeepsakes();next();}catch(e){next(e);}},noCache);
 keepsakesPublicRouter.use(rateLimit({windowMs:60000,limit:90,standardHeaders:true,legacyHeaders:false,skip:req=>req.method==='GET'&&/^\/photos\/assets\/[\w-]+$/.test(req.path)}));
 keepsakesPublicRouter.use('/photos/assets',rateLimit({windowMs:60000,limit:600,standardHeaders:true,legacyHeaders:false}));
+keepsakesPublicRouter.get('/books/variants',wrap(r=>books.bookVariants(r.get('Authorization')?photoBearer(r):null)));
+keepsakesPublicRouter.get('/books/drafts',wrap(r=>books.listBookDrafts(photoBearer(r))));
+keepsakesPublicRouter.post('/books/drafts',wrap(r=>books.saveBookDraft(photoBearer(r),r.body)));
 keepsakesPublicRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
 const photoLookupLimit=rateLimit({windowMs:15*60000,limit:10,standardHeaders:true,legacyHeaders:false});
 const photoBearer=req=>{const token=req.get('Authorization')?.match(/^Bearer ([\w-]{43})$/)?.[1];if(!token)throw new AppError('Request a new photo access link.',401,'PHOTO_ACCESS_REQUIRED');return token;};
 keepsakesPublicRouter.post('/photos/request',photoLookupLimit,wrap(r=>photoAccess.requestPhotoAccess(z.object({channel:z.enum(['EMAIL','PHONE']),value:z.string().max(254),email:z.string().max(254).optional()}).strict().parse(r.body))));
 keepsakesPublicRouter.post('/photos/redeem',photoLookupLimit,wrap(r=>photoAccess.redeemPhotoAccess(z.string().max(100).parse(r.body.code))));
 keepsakesPublicRouter.post('/photos/link',photoLookupLimit,wrap(r=>photoAccess.directPhotoAccess(z.enum(['photo','p','a']).parse(r.body.type),z.string().max(100).parse(r.body.token))));
+keepsakesPublicRouter.post('/photos/handoff',wrap(r=>{const input=z.object({selected:z.array(id).min(1).max(1000),target:z.enum(['SHOP','GALLERY'])}).strict().parse(r.body);return photoAccess.createPhotoHandoff(photoBearer(r),input.selected,input.target);}));
+keepsakesPublicRouter.post('/photos/handoff/redeem',photoLookupLimit,wrap(r=>{const input=z.object({code:z.string().max(100),target:z.enum(['SHOP','GALLERY'])}).strict().parse(r.body);return photoAccess.redeemPhotoHandoff(input.code,input.target);}));
 keepsakesPublicRouter.get('/photos/collection',wrap(r=>photoAccess.photoCollection(photoBearer(r))));
 keepsakesPublicRouter.get('/photos/assets/:id',asyncHandler(async(req,res)=>res.type('image/jpeg').send(await photoAccess.collectionPhoto(photoBearer(req),id.parse(req.params.id)))));
 
@@ -55,6 +62,8 @@ keepsakesAdminRouter.use(requirePermission('read:finance'),(req,_res,next)=>{try
 keepsakesAdminRouter.post('/station-proposal/preview',wrap(r=>{const selections=z.array(z.object({experience_id:id,packages:z.array(z.object({package_id:id}).passthrough()).optional()}).passthrough()).parse(r.body.selections||[]);return stationProposalQuote(r.body.configuration,selections,r.user);}));
 keepsakesAdminRouter.get('/station-policy',wrap(r=>stationPolicyAdmin(r.user)));
 keepsakesAdminRouter.post('/station-policy/preview',wrap(r=>previewStationPolicy(r.body,r.user)));
+keepsakesAdminRouter.get('/books/suppliers/:provider',wrap(r=>premiumSupplierCatalogue(z.enum(['WHCC','GELATO']).parse(r.params.provider),z.object({product:z.string().max(400).optional(),catalog:z.string().max(100).optional(),search:z.coerce.boolean().optional(),offset:z.coerce.number().int().min(0).max(10000).optional(),cursor:z.string().max(200).optional()}).strict().parse(r.query),r.user)));
+keepsakesAdminRouter.get('/books',wrap(r=>books.bookAdmin(r.user)));
 keepsakesAdminRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
 keepsakesAdminRouter.get('/',wrap(r=>admin.keepsakesDashboard(r.user)));
 keepsakesAdminRouter.get('/orders/:id',wrap(r=>admin.keepsakesAdminOrder(id.parse(r.params.id),r.user)));
@@ -71,3 +80,5 @@ keepsakesAdminRouter.post('/orders/:id/cancel',wrap(r=>admin.cancelKeepsakesOrde
 keepsakesAdminRouter.post('/orders/:id/refund',wrap(r=>admin.cancelKeepsakesOrder(id.parse(r.params.id),r.user,{refund:true,reason:z.string().max(200).parse(r.body.reason||'requested_by_customer')})));
 keepsakesAdminRouter.post('/integrations/prodigi/test',wrap(()=>{throw new AppError('Prodigi is retired from the new catalogue.',409,'KEEPSAKES_PROVIDER_RETIRED');}));
 keepsakesAdminRouter.post('/integrations/prodigi/sync',wrap(()=>{throw new AppError('Prodigi is retired from the new catalogue.',409,'KEEPSAKES_PROVIDER_RETIRED');}));
+
+keepsakesAdminRouter.patch('/books/variants/:id/price',requirePermission('write:integrations'),wrap(r=>books.updateBookPrice(id.parse(r.params.id),r.body,r.user)));

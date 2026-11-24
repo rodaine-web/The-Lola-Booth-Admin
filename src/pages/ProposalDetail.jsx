@@ -1,3 +1,4 @@
+import OpportunityActions from '../components/OpportunityActions.jsx';
 import ProposalAgreement from "../components/ProposalAgreement.jsx";
 import {AssetImage} from "../components/ProposalVisualEditor.jsx";
 import { documentAccessState } from "../../shared/document-access.js";
@@ -78,6 +79,8 @@ export default function ProposalDetail({reviewMode=false}) {
   const accessAvailable = documentAccessState(proposal) === "AVAILABLE";
   return (
     <main className="page">
+      {can('write:finance')&&can('write:sales')&&['ACCEPTED','CONVERTED'].includes(proposal.status)&&<OpportunityActions proposalId={id} onUpdated={load}/>}
+
       <div className="detail-back"><Link to="/sales/proposals"><ArrowLeft size={16} />Back to proposals</Link></div>
       <div className="page-heading detail-heading">
         <div>

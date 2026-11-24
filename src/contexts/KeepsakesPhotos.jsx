@@ -17,6 +17,7 @@ export function KeepsakesPhotos({children}){
   return()=>{generation.current++;};
  },[token]);
  useEffect(()=>()=>{for(const pending of cache.current.values())pending.then(url=>URL.revokeObjectURL(url)).catch(()=>{});},[]);
+ const handoff=useCallback(target=>photoRequest('handoff',{target,selected},token),[selected,token]);
  const loadPhoto=useCallback(asset=>{
   if(!asset||!token)return Promise.reject(Error('Choose your photo'));
   const key=token+':'+asset.id;if(cache.current.has(key))return cache.current.get(key);
@@ -24,7 +25,8 @@ export function KeepsakesPhotos({children}){
   const pending=fetch(path,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',referrerPolicy:'no-referrer'}).then(async response=>{if(!response.ok)throw Error('Photo preview unavailable');return URL.createObjectURL(await response.blob());});
   cache.current.set(key,pending);pending.catch(()=>cache.current.delete(key));return pending;
  },[token]);
- return <Photos.Provider value={{collection,selected,setSelected,accept,loadPhoto,error,loading,hasSession:Boolean(token)}}>{children}</Photos.Provider>;
+ const commerce=useCallback(async(path,body)=>{const response=await fetch(`${API}/keepsakes/books/${path}`,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store',referrerPolicy:'no-referrer'});const data=await response.json();if(!response.ok)throw Error(data.error?.message||data.message||'Book unavailable.');return data;},[token]);
+ return <Photos.Provider value={{commerce,collection,selected,setSelected,accept,handoff,loadPhoto,error,loading,hasSession:Boolean(token)}}>{children}</Photos.Provider>;
 }
 export const useKeepsakesPhotos=()=>useContext(Photos);
 export function GuestPhoto({asset,...props}){

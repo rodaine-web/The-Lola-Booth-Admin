@@ -1,3 +1,4 @@
+import OpportunityActions from '../components/OpportunityActions.jsx';
 import CatalogQuoteSummary from '../components/CatalogQuoteSummary.jsx';
 import AgreementList from '../components/AgreementList.jsx';
 import { useAuth } from "../context/AuthContext.jsx";
@@ -89,6 +90,7 @@ export default function ClientDetail() {
     <main className="page record-workspace record-dashboard clientdetail-workspace">
       <div className="detail-back"><Link to="/sales/clients"><ArrowLeft size={16} />Back to clients</Link></div>
       <RecordIdentity reference={{label:'Client ID',value:client.id}} name={client.name} status="Client" subtitle={<>{client.email || 'No email'} · {client.phone || 'No phone'} · Client since {client.created_at ? formatDateOnly(client.created_at) : 'not recorded'}</>} event={activeEvent} actions={<><Link className="secondary-action" to={`/sales/clients/${client.id}/workspace`}>Open Client 360</Link><Link className="primary-action" to={`/sales/proposals/new?clientId=${client.id}${activeEvent ? `&eventId=${activeEvent.id}` : ''}`}>Create Proposal</Link><Link to={`/finance/invoices/new?clientId=${client.id}${activeEvent ? `&eventId=${activeEvent.id}` : ''}`}>Create Invoice</Link><button onClick={()=>setTab('Communications')}>Communications</button></>}/>
+      {can('write:sales')&&<OpportunityActions clientId={id} onUpdated={loadClient}/>}
       {(notice || error) && <div role={error ? 'alert' : 'status'} className={error ? 'toast error' : 'toast'}>{error || notice}</div>}
       {client.events?.length > 1 && <label className="record-event-select">Booking / Event<select value={selectedEvent?.id || ''} onChange={e=>setSelectedEventId(e.target.value)}>{client.events.map(event=><option key={event.id} value={event.id}>{event.event_name} · {event.event_date ? formatDateOnly(event.event_date) : 'Date TBD'}</option>)}</select></label>}
       {eventError && <p role="alert">Event details unavailable: {eventError}</p>}

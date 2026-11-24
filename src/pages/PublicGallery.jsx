@@ -1,3 +1,4 @@
+import {photoRequest} from '../contexts/KeepsakesPhotos.jsx';
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
@@ -232,6 +233,7 @@ export default function PublicGallery() {
   const selectedAsset = keepsakesView?.assets?.find(asset => (asset.mediaId || asset.id) === selected?.id);
   const keepsakesProducts = (keepsakesView?.products || []).filter(product => product.available === true && product.verified !== false && canPreviewKeepsake(product)
     && selectedAsset && (product.provider === 'DIGITAL' ? selectedAsset.digitalEligible && !selectedAsset.included : selectedAsset.merchandiseEligible));
+  async function openCoreShop(){try{setPhotoNotice('Preparing your selected photo…');const access=await photoRequest('link',{type,token}),collection=await photoRequest('collection',null,access.token);const chosen=collection.assets.find(a=>a.id===selectedAsset?.id)||collection.assets.find(a=>a.id===selected?.id);if(!chosen)throw Error('Select an eligible photograph first.');const transfer=await photoRequest('handoff',{target:'SHOP',selected:[chosen.id]},access.token);window.location.assign('https://stagingshop.thelolabooth.com/shop/transfer#code='+encodeURIComponent(transfer.code));}catch(e){setPhotoNotice(e.message);}}
   const shopPath = product => `/keepsakes/${type}/${token}?${new URLSearchParams({...(product ? {product: product.id} : {}), ...(selected ? {asset: selected.id} : {})})}`;
   const copyPhoto = async () => {
     try {await navigator.clipboard.writeText(window.location.href); setPhotoNotice('Photo link copied.');}
@@ -380,8 +382,8 @@ export default function PublicGallery() {
               </div>
               {photoNotice && <p className="kg-photo-notice" role="status">{photoNotice}</p>}{error && <p className="kg-photo-notice" role="alert">{error}</p>}
               </aside><section className="kg-collection" aria-label="Personalized keepsakes"><h2>Create your keepsake</h2><p>PERSONALIZED PRODUCTS FEATURING YOUR PHOTO</p><div className="kg-product-grid">{keepsakesProducts.map(product => <article className="kg-product-tile" key={product.id}><ProductPreview product={product} asset={{url:mediaUrl(selected.url),label:selected.filename||"Your photo"}} variant={product.variants?.[0]} compact/><div><strong>{product.title}</strong><small>{keepsakeDescription(product.category)}</small>{Number.isInteger(product.retailCents)&&<strong className="kg-price">{new Intl.NumberFormat("en-US",{style:"currency",currency:product.currency||"USD"}).format(product.retailCents/100)}</strong>}<Link className="kg-view-options" to={shopPath(product)} aria-label={`Customize ${product.title}`}>View options</Link></div></article>)}</div>
-              {!keepsakesProducts.some(product=>String(product.category).toLowerCase()==='postcard') && <div className="kg-postcard-pending"><strong>Send a Postcard</strong><small>Back design being prepared · personal messages and font choices coming with the approved artwork</small></div>}
-              {!keepsakesProducts.length && <p className="kg-empty-products">Personalized products for this photo are being prepared. Your permitted free photo actions remain available.</p>}
+              {!keepsakesProducts.some(product=>String(product.category).toLowerCase()==='postcard') && <div className="kg-postcard-pending"><strong>Send a Postcard</strong><small>Create a personalized postcard using your photo and a note for your loved ones</small></div>}
+              <button className="kg-all-products" onClick={openCoreShop}><ShoppingCart size={22}/>Turn This Photo Into a Keepsake</button>
               {keepsakesProducts.length > 0 && <><Link className="kg-all-products" to={shopPath()}><ShoppingCart size={22}/> See All Photo Products</Link><p className="kg-preview-note">Product previews use your selected photo. Review the final layout in the shop.</p></>}
             </section>
           </> : <>

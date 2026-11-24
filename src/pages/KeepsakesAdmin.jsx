@@ -1,3 +1,4 @@
+import KeepsakesBooksAdmin from '../components/KeepsakesBooksAdmin.jsx';
 import KeepsakesCoreCatalogue from '../components/KeepsakesCoreCatalogue.jsx';
 import {useEffect, useRef, useState} from 'react';
 import {BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer} from 'recharts';
@@ -36,7 +37,8 @@ export default function KeepsakesAdmin() {
   return <main className="page ka-admin">
     <header className="ka-heading"><div><p className="ka-eyebrow">THE LOLA KEEPSAKES</p><h1><Gift size={28}/> Keepsakes &amp; Orders</h1><p>Photo products, guest purchases and fulfillment in one place.</p></div><button onClick={refresh} disabled={loading}><RefreshCw size={16}/> Refresh</button></header>
     <div className="ka-sandbox"><ShieldCheck size={18}/><span><strong>Staging · sandbox fulfillment</strong> Test purchases and supplier validation stay separate from production.</span></div>
-    <nav className="ka-tabs" aria-label="Keepsakes management">{['Overview', 'Orders', 'Products', 'Integrations'].map(name => <button key={name} aria-pressed={tab === name} className={tab === name ? 'active' : ''} onClick={() => setTab(name)}>{name}</button>)}</nav>
+    <nav className="ka-tabs" aria-label="Keepsakes management">{['Overview', 'Orders', 'Products', 'Books & Albums', 'Integrations'].map(name => <button key={name} aria-pressed={tab === name} className={tab === name ? 'active' : ''} onClick={() => setTab(name)}>{name}</button>)}</nav>
+    {tab==='Books & Albums'&&<KeepsakesBooksAdmin writable={writable}/>}
     {notice && <p role="status" className="ka-notice">{notice}</p>}
     {error && <AsyncState error={error} noun="Keepsakes" onRetry={refresh}/>}
     <AsyncState loading={loading && !data} noun="Keepsakes"/>

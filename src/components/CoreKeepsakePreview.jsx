@@ -30,5 +30,5 @@ export default function CoreKeepsakePreview({product,asset,strip,second,back=fal
    setState('ready');
   }).catch(()=>{if(active)setState('unavailable');});return()=>{active=false;};
  },[product.key,asset?.id,strip?.id,second?.id,back,illustrative,loadPhoto]);
- return <div className="shop-own-preview" data-preview-state={state} data-photo-id={asset?.id||''}><canvas width={illustrative?1000:2000} height={illustrative?750:1500} ref={ref} hidden={state!=='ready'} role="img" aria-label={`${illustrative?'Illustrative product example:':'Your photo on'} ${product.title}`}/>{state!=='ready'&&<p role="status">{state==='loading'?'Preparing your keepsake…':'Your photo preview is unavailable.'}</p>}</div>;
+ return <div className="shop-own-preview" data-preview-state={state} data-photo-id={asset?.id||''}><canvas width={illustrative?1000:2000} height={illustrative?750:1500} ref={ref} hidden={state!=='ready'} role="img" aria-label={`${illustrative?'Illustrative product example:':'Your photo on'} ${product.title}`}/>{state==='ready'&&<small className="shop-preview-disclosure">{illustrative?'Design illustration · sample photography pending':'Photo placement illustration · review final product proof'}</small>}{state!=='ready'&&<p role="status">{state==='loading'?'Preparing your keepsake…':'Your photo preview is unavailable.'}</p>}</div>;
 }

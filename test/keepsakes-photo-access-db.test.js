@@ -12,7 +12,7 @@ test('phone/email normalization and explicit source selection',()=>{
  const assets=[{id:'a',sessionId:'s',kind:'COMPOSITE',branded:true},{id:'b',sessionId:'s',kind:'ORIGINAL',branded:false},{id:'c',sessionId:'s',kind:'BRANDED_STRIP',branded:true},{id:'other',sessionId:'x',kind:'ORIGINAL',branded:false}];
  assert.equal(photoSourceForProduct({source:'ORIGINAL_UNBRANDED'},assets,'a').asset.id,'b');assert.equal(photoSourceForProduct({source:'BRANDED_STRIP'},assets,'a').asset.id,'c');assert.equal(photoSourceForProduct({source:'BRANDED_STRIP'},assets.slice(0,2),'a').asset,undefined);
 });
-test('photo retrieval queues neutral email, binds unverified phone associations, redeems once and rechecks every scope',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL,timeout:120000},async()=>{
+test('photo retrieval queues neutral email, requires authorized phone/email associations, redeems once and rechecks every scope',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL,timeout:120000},async()=>{
  const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['127.0.0.1','localhost'].includes(url.hostname));assert.match(url.pathname,/_qa$/);
  const schema='photo_access_'+crypto.randomBytes(6).toString('hex'),bootstrap=new pg.Pool({connectionString:url.toString()}),storage=await fs.mkdtemp(path.join(os.tmpdir(),'lola-photo-access-'));let db;
  try{
@@ -75,7 +75,21 @@ test('photo retrieval queues neutral email, binds unverified phone associations,
   await assert.rejects(access.collectionPhoto(session.token,fixtures[0].unrelated.id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
   const image=await access.collectionPhoto(session.token,view.assets[0].id);assert.equal((await sharp(image).metadata()).format,'jpeg');
   await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'test-recipient@example.invalid'});
-  const association=await one('SELECT * FROM keepsakes_unverified_contacts');assert.equal(association.verification_status,'UNVERIFIED');assert.equal(decryptSecretJson(association.contact_ciphertext).email,'test-recipient@example.invalid');assert.ok(!JSON.stringify(association).includes('+13125550123'));
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,0,'An arbitrary email cannot bind to another guest phone');assert.equal((await one("SELECT count(*)::int n FROM communications WHERE recipient='test-recipient@example.invalid'")).n,0);
+  await query("UPDATE keepsakes_photo_requests SET created_at=now()-interval '3 minutes'");
+  await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'guest@example.invalid'});
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,1);
+  const transfer=await access.createPhotoHandoff(session.token,[view.assets[0].id],'SHOP');
+  await assert.rejects(access.redeemPhotoHandoff(transfer.code,'GALLERY'),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  const transfers=await Promise.allSettled([access.redeemPhotoHandoff(transfer.code,'SHOP'),access.redeemPhotoHandoff(transfer.code,'SHOP')]);
+  assert.equal(transfers.filter(x=>x.status==='fulfilled').length,1);const moved=transfers.find(x=>x.status==='fulfilled').value;assert.deepEqual(moved.selected,[view.assets[0].id]);assert.equal((await access.photoCollection(moved.token)).assets.length,6);
+  await assert.rejects(access.createPhotoHandoff(session.token,[fixtures[0].unrelated.id],'SHOP'),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  const bookService=await import('../server/src/services/keepsakes-book-service.js');const variants=await bookService.bookVariants(session.token);assert.equal(variants.audience,'GUEST');assert.equal(variants.startingCents,null);assert.ok(variants.variants.every(v=>v.kind==='BOOK'&&!v.available));
+  const chosen=view.assets.slice(0,5).map(a=>a.id),book={title:'QA memories',photos:chosen,coverPhoto:chosen[0],copies:2,layout:'EDITORIAL'};
+  const draft=await bookService.saveBookDraft(session.token,{variantId:variants.variants[0].id,books:[book]});assert.equal(draft.price.totalCents,variants.variants[0].retailCents*2);assert.equal(draft.price.demo,true);assert.equal((await bookService.listBookDrafts(session.token)).drafts.length,1);
+  await assert.rejects(bookService.saveBookDraft(session.token,{id:draft.id,revision:9,variantId:variants.variants[0].id,books:[book]}),{code:'BOOK_CHANGED'});
+  const albumVariant=await one("SELECT id FROM keepsakes_book_variants WHERE kind='ALBUM' LIMIT 1");await assert.rejects(bookService.saveBookDraft(session.token,{variantId:albumVariant.id,books:[book]}),{code:'BOOK_UNAVAILABLE'});
+  const revised=await bookService.saveBookDraft(session.token,{id:draft.id,revision:1,variantId:variants.variants[0].id,books:[{...book,title:'Revised title'}]});assert.equal(revised.revision,2);assert.equal(revised.proofApprovedAt,null);
   // A newly revoked personal key takes precedence over any album grant.
   const personal=await gallery.createGalleryKey(fixtures[0].album.id,'PERSON',fixtures[0].people[0].id,null,admin);
   await query("UPDATE gallery_access_keys SET status='REVOKED' WHERE id=$1",[personal.id]);
@@ -93,6 +107,10 @@ test('photo retrieval queues neutral email, binds unverified phone associations,
   const proposalStation={...stationConfig,mode:'CELEBRATION',stations:[{location:'Main Station',hours:4,feeCents:49900}]};
   const proposalInput={client_id:client.id,event_id:fixtures[0].album.event_id,proposal_title:'Synthetic Station Proposal',event_type:'Corporate Event',selected_experiences:[{experience_id:exp.id,packages:[{package_id:pkg.id,price:899}]}],keepsake_station:proposalStation,tax_rate:0};
   const snap=await proposalService.buildProposalSnapshot(proposalInput,admin);assert.equal(snap.pricing.total,2092.2);assert.ok(snap.lineItems.every(l=>l.detail?.trim()));assert.ok(snap.content.scenario.lines.every(l=>l.detail?.trim()));assert.equal(snap.content.keepsake_station.totalProducts,130);assert.equal(snap.content.postcard_mailing.quantity,10);assert.equal(snap.lineItems.filter(l=>l.type==='KEEPSAKE'&&l.complimentary).reduce((n,l)=>n+l.quantity,0),50);assert.equal(snap.content.keepsake_station.stations.length,1);
+  const standardQuote=await stationProposal.stationProposalQuote(proposalStation,proposalInput.selected_experiences,admin);assert.equal(standardQuote.commercialReady,true);stationProposal.assertStationCommercialReady({content:{keepsake_station:standardQuote}});
+  const newerDraft=await station.saveStationPolicy({packages,paidTiers,optionalTiers},admin);const editorPolicy=await station.stationPolicyAdmin(admin);assert.equal(editorPolicy.policy.version,newerDraft.version);assert.equal(editorPolicy.quotePolicy.status,'PUBLISHED');
+  await station.publishStationPolicy({version:newerDraft.version,approval:'APPROVE_PUBLIC_STATION_RATES'},admin);
+  const historical=await stationProposal.stationProposalQuote({...proposalStation,policyVersion:saved.version},proposalInput.selected_experiences,admin);assert.equal(historical.commercialReady,true,'Previously approved unchanged policy remains approved after retirement');
   const {customerPricing}=await import('../shared/customer-pricing.js');const publicSnap=customerPricing(snap.content.keepsake_station);assert.equal(publicSnap.configuration,undefined);assert.equal(publicSnap.internalApproval,undefined);
   await assert.rejects(stationProposal.stationProposalQuote({...proposalStation,paid:{keychain:20,magnet:20}},proposalInput.selected_experiences,admin),{code:'STATION_MINIMUM_REQUIRED'});
   const double=await stationProposal.stationProposalQuote({...proposalStation,stationCount:2,stations:[...proposalStation.stations,{location:'Guest Lounge',hours:4,feeCents:40000}],priceApprovalReason:'Approved second station and all-inclusive service fee.'},proposalInput.selected_experiences,admin);assert.equal(double.totalQualifying,100);assert.equal(double.stations.length,2);assert.equal(double.subtotalCents,159320);
