@@ -8,6 +8,7 @@ export const KEEPSAKES_COLLECTIONS = Object.freeze([
 // Owner-supplied design examples, never supplier verification or a guest's photograph.
 export const KEEPSAKES_PRODUCT_EXAMPLES=Object.freeze({
  keychain:['keychain'],magnet:['magnet'],'photo-book':['photo-book','album-open'],
+ 'metal-print':['metal-print'],postcard:['postcard'],
  'premium-acrylic':['premium-acrylic'],'framed-photo':['framed-strip-gold','framed-strip-silver'],
 });
 export const keepsakesExample=(key,index=0)=>{const images=KEEPSAKES_PRODUCT_EXAMPLES[key];return images?'/brand/keepsakes-examples/'+images[index%images.length]+'.png':null;};
