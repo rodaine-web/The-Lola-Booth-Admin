@@ -87,7 +87,7 @@ test('photo retrieval queues neutral email, matches imported Fiesta contacts acr
   const phoneSession=await access.redeemPhotoAccess(/#code=([\w-]+)/.exec(phoneEmail.rendered_body)[1]);
   const phoneView=await access.photoCollection(phoneSession.token);assert.equal(phoneView.albums.length,2);assert.equal(phoneView.assets.length,6);
   assert.equal((await one('SELECT verification_status FROM keepsakes_unverified_contacts')).verification_status,'UNVERIFIED');
-  const included=view.assets.find(a=>a.included);assert.equal(included.canDownload,true);
+  const included=view.assets.find(a=>a.included&&a.albumId===fixtures[0].album.id);assert.equal(included.canDownload,true);
   assert.ok((await access.collectionDownload(session.token,included.id)).bytes.length>0);
   await assert.rejects(access.collectionDownload(session.token,view.assets.find(a=>!a.included).id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
   await assert.rejects(access.collectionDownload(session.token,fixtures[0].unrelated.id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
