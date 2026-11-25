@@ -205,8 +205,8 @@ await revision.getByText('Service total:',{exact:false}).waitFor();assert.match(
       await page.locator('[data-package-key="glam:signature"] .price').getByText('$899',{exact:true}).waitFor();
       assert.equal(await page.locator('[data-package-key="glam:essential"]').isVisible(),true,'CMS content cannot hide published celebration cards');
       assert.doesNotMatch(await page.locator('[data-package-key="glam:signature"]').textContent(),/CMS overwrite/);
-      assert.deepEqual(await page.locator('header .navlinks a').allTextContents(),['Home','Experiences','Packages','About','FAQ','Contact','Gallery','Shop']);
-      assert.equal(await page.locator('header .navlinks a[hidden]').count(),0);assert.equal(await page.locator('.mobile-menu a[href="index.html"]').count(),1);
+      assert.deepEqual(await page.locator('header .navlinks a').allTextContents(),['Experiences','Packages','About','FAQ','Contact','Gallery','Shop']);
+      assert.equal(await page.locator('header .navlinks a[hidden]').count(),0);assert.equal(await page.locator('.mobile-menu a[href="index.html"]').count(),0);
       const customLink=await page.locator('[data-package-key="glam:custom"] a').getAttribute('href');
       await page.goto(new URL(customLink,web).href);await page.locator('[data-experience-package=glam]').waitFor();await page.locator('[data-booking-summary]').getByText('Custom quote',{exact:false}).first().waitFor();
       assert.equal(await page.locator('[name=eventCategory], [name=catalogKey]').count(),0);assert.equal(await page.locator('[data-booking-summary]').getByText('$0.00',{exact:true}).count(),0);

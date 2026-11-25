@@ -1,3 +1,4 @@
+import {PublicSiteLayout} from '../components/PublicSiteChrome.jsx';
 import {photoRequest} from '../contexts/KeepsakesPhotos.jsx';
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -28,7 +29,8 @@ async function request(path, options) {
     );
   return data;
 }
-export default function PublicGallery() {
+export default function PublicGallery() {return <PublicSiteLayout><PublicGalleryContent/></PublicSiteLayout>;}
+function PublicGalleryContent() {
   const { type, token } = useParams(),
     navigate = useNavigate();
   const [data, setData] = useState(null),
@@ -162,17 +164,9 @@ export default function PublicGallery() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  const logo = (
-    <img
-      className="gallery-wordmark"
-      src="/brand/LOLA_Horizontal_Light_Transparent.png"
-      alt="The LOLA Booth"
-    />
-  );
   if (!token)
     return (
       <main className="gallery-entry">
-        {logo}
         <div className="gallery-entry-card">
           <LockKeyhole size={22} />
           <p className="eyebrow">PRIVATE MOMENTS. BEAUTIFULLY KEPT.</p>
@@ -209,13 +203,12 @@ export default function PublicGallery() {
           </p>
         </div>
         <a href="/client">Business client sign in</a>
-        <footer>GOOD PEOPLE. BETTER PHOTOS.</footer>
+
       </main>
     );
   if (!data)
     return (
       <main className="gallery-entry">
-        {logo}
         <h1>{error ? "A private moment." : "Opening your gallery…"}</h1>
         <p role={error ? "alert" : undefined}>
           {error || "Your photos will be here shortly."}
@@ -249,7 +242,6 @@ export default function PublicGallery() {
       className={`customer-gallery ${data.type === "PERSON" ? "personal" : "album"}`}
     >
       <header className="gallery-top">
-        {logo}
         <span>
           <LockKeyhole size={13} />
           Private gallery
@@ -336,10 +328,7 @@ export default function PublicGallery() {
           <p>Your host will add approved photos here.</p>
         </div>
       )}
-      <footer className="gallery-footer">
-        THE LOLA BOOTH <span>Good people. Better photos.</span>
-        <button onClick={load}>Refresh gallery</button>
-      </footer>
+      <div className="gallery-footer"><button onClick={load}>Refresh gallery</button></div>
       {selected && (
         <div
           className={`gallery-lightbox ${keepsakesEnabled ? "keepsakes-lightbox" : ""}`}

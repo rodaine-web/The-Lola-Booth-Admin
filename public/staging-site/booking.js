@@ -106,7 +106,7 @@ window.lolaStationBooking=function(form,{catalog,selections,business,onChange,ap
     if(experience&&(pkg||requested.get('customerType')==='BUSINESS'))chosen.set(experience.key,{experienceId:experience.id,packageId:pkg?.id||'',customNotes:''});
    }
    if(business()&&requested.get('experiences'))for(const key of requested.get('experiences').split(',')){const x=catalog.experiences.find(x=>x.key===key);if(x&&definitions.some(d=>d.key===key))chosen.set(key,{experienceId:x.id,packageId:'',customNotes:''});}
-   if(business()&&requested.get('addons'))for(const id of requested.get('addons').split(',')){const a=catalog.addons.find(a=>a.id===id);if(a&&eligible(a))addons.set(id,1);}
+   if(requested.get('addons'))for(const id of requested.get('addons').split(',')){const a=catalog.addons.find(a=>a.id===id);if(a&&eligible(a))addons.set(id,1);}
    updateMode();ready=true;renderExperiences();renderAddons();summary();el('[data-catalog-status]').textContent=catalogGuidance();}
   catch {el('[data-catalog-status]').textContent='We couldn’t load available options. Please retry or contact LOLA.';el('[data-catalog-retry]').hidden=false;}
   el('button[type=submit]').disabled=!ready;
