@@ -42,7 +42,7 @@ export async function reopenOpportunity(id,raw,req){return transaction(async()=>
  const accepted=preview.proposals.find(p=>['ACCEPTED','CONVERTED'].includes(p.status));
  const draft=input.createDraft&&!accepted&&preview.proposals.length?await replacementDraft(preview.proposals[0].id,req.user):null;
  await writeAudit({req,action:'opportunity_reopened',entity:'lead',entityId:id,before:preview,after:{reason:input.reason,events:restored,draft}});
- return {reopened:true,draft,acceptedProposalId:accepted?.id||null,message:'Opportunity restored. Previous proposals, messages and assignments remain historical. Review the draft before sending.'};
+ return {reopened:true,draft,acceptedProposalId:accepted?.id||null,message:draft?'Opportunity restored. Review the replacement draft before sending.':'Opportunity restored. Review the existing accepted proposal and booking setup.'};
  });}
 export async function bookingHandoffPreview(id){
  const proposal=(await query('SELECT id,proposal_number,status,event_id,lead_id,accepted_version_id,updated_at FROM proposals WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0];if(!proposal)throw fail('Proposal not found.','NOT_FOUND');
@@ -71,11 +71,12 @@ export async function repairBookingHandoff(id,raw,req){return transaction(async 
  for(const type of jobTypes){
   if(type===AGREEMENT_HANDOFF_JOB&&!state.agreementEnabled)continue;
   const job=state.jobs.find(j=>j.job_type===type&&j.payload?.acceptedVersionId===p.accepted_version_id);
+  if(job?.status==='COMPLETED'&&type===AGREEMENT_HANDOFF_JOB&&!state.agreementDeliveries.some(d=>d.status==='SENT_TO_PROVIDER')&&!(await query("SELECT 1 FROM contracts WHERE proposal_id=$1 AND status='SIGNED' LIMIT 1",[id])).rowCount)throw fail('The agreement job is marked complete without confirmed delivery. Review its document and provider history before replacement.','AGREEMENT_REVIEW_REQUIRED');
   if(job&&(['FAILED','CANCELLED'].includes(job.status)||(job.status==='COMPLETED'&&type===INVOICE_HANDOFF_JOB&&!delivered)))await query("UPDATE automation_jobs SET status='PENDING',attempt_count=0,started_at=NULL,completed_at=NULL,scheduled_for=now(),last_error=NULL,updated_at=now() WHERE id=$1",[job.id]);
   else if(!job&&type===INVOICE_HANDOFF_JOB)await query("INSERT INTO automation_jobs(job_type,related_entity_type,related_entity_id,payload,scheduled_for) VALUES($1,'proposal',$2,$3,now())",[type,id,{acceptedVersionId:p.accepted_version_id}]);
  }
  // Only proven unsent cancelled messages release their key; history is never erased.
  await query("UPDATE communications SET idempotency_key=NULL WHERE proposal_id=$1 AND idempotency_key=$2 AND status='CANCELLED' AND provider_message_id IS NULL AND failure_code IS DISTINCT FROM 'DELIVERY_OUTCOME_UNKNOWN'",[id,key]);
  await writeAudit({req,action:'booking_handoff_repaired',entity:'proposal',entityId:id,before:state,after:{reason:input.reason,invoiceResend:!delivered,jobTypes}});
- return {queued:true,invoiceResend:!delivered,state:await bookingHandoffPreview(id)};
+ const current=await bookingHandoffPreview(id);return {queued:current.jobs.some(j=>j.status==='PENDING'&&j.payload?.acceptedVersionId===p.accepted_version_id),invoiceResend:!delivered,state:current};
  });}
