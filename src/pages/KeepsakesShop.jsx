@@ -18,7 +18,7 @@ export function resolveLolaPhotoUrl(value,origin=window.location.origin){
 const WEBSITE=publicOrigins.website;
 const GALLERY=publicOrigins.gallery;
 const websiteLink=path=>`${WEBSITE}/${path}`;
-export function Header(){return <><PublicSiteHeader hideGallery/><div className="shop-header shop-keepsake-nav"><Link className="shop-wordmark" to="/shop">The Lola Keepsakes</Link><nav aria-label="Keepsakes navigation"><Link to="/shop/collection">Shop Keepsakes</Link><a href={GALLERY+'/find-photos'}>Find My Photos</a><Link to="/shop/how-it-works">How It Works</Link></nav></div></>;}
+export function Header(){return <><PublicSiteHeader hideGallery/><div className="shop-header shop-keepsake-nav"><Link className="shop-wordmark" to="/shop">The Lola Keepsakes</Link><nav aria-label="Keepsakes navigation"><Link to="/shop/collection">Shop Keepsakes</Link>{import.meta.env.VITE_APP_ENV==='production'?<Link to="/shop/find-photos">Find My Photos</Link>:<a href={GALLERY+'/find-photos'}>Find My Photos</a>}<Link to="/shop/how-it-works">How It Works</Link></nav></div></>;}
 export const Footer=PublicSiteFooter;
 function ProductCard({product}){
  const {collection,selected}=useKeepsakesPhotos(),[back,setBack]=useState(false);
