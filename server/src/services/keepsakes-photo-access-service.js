@@ -8,17 +8,18 @@ import {encryptSecretJson,decryptSecretJson} from './integration-secrets.js';
 import {writeAudit} from './audit-service.js';
 import {createCommunicationDraft} from './automation-service.js';
 import {customerGalleryAccess} from './customer-gallery-service.js';
+import {downloadAllowed} from './gallery-policy.js';
 import {verifiedGalleryBytes} from './gallery-media-delivery.js';
 import {assertKeepsakes,keepsakesScope} from './keepsakes-service.js';
-import {normalizePhotoLookup} from '../../../shared/keepsakes-photo-access.js';
+import {normalizePhotoLookup,PHOTO_LOOKUP_MESSAGE} from '../../../shared/keepsakes-photo-access.js';
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const contactHash=(channel,value)=>crypto.createHmac('sha256',env.integrationSecretKey).update(channel+':'+value).digest('hex');
 const token=()=>crypto.randomBytes(32).toString('base64url');
 const unavailable=()=>new AppError('This photo access has expired or is unavailable. Request a new link.',404,'PHOTO_ACCESS_UNAVAILABLE');
-const neutral={accepted:true,message:'If your request can be processed, a secure photo-access link will be emailed to you.'};
+const neutral={accepted:true,message:PHOTO_LOOKUP_MESSAGE};
 // Revalidate grants, gallery publication, retention and person assignments on every read.
 async function scopeAnchors(scope){
- const key=(await query(`SELECT k.id,k.type,k.person_id FROM gallery_access_keys k
+ const key=(await query(`SELECT k.id,k.type,k.person_id,COALESCE(p.allow_download,a.allow_personal_download) AS lookup_download_allowed FROM gallery_access_keys k
  JOIN gallery_albums a ON a.id=k.album_id JOIN events e ON e.id=a.event_id
  JOIN gallery_people p ON p.id=$3 AND p.album_id=a.id
  WHERE k.id=$1 AND k.album_id=$2 AND k.status='ACTIVE'
@@ -27,9 +28,9 @@ async function scopeAnchors(scope){
  AND (k.expires_at IS NULL OR k.expires_at>now()) AND (a.expires_at IS NULL OR a.expires_at>now())`,[scope.keyId,scope.albumId,scope.personId])).rows[0];
  if(!key)return [];
  return (await query(`SELECT m.* FROM gallery_media m JOIN gallery_media_people mp ON mp.media_id=m.id AND mp.album_id=m.album_id
- WHERE m.album_id=$1 AND mp.person_id=$2 AND m.status='VISIBLE' AND m.media_type='IMAGE'`,[scope.albumId,scope.personId])).rows;
+ WHERE m.album_id=$1 AND mp.person_id=$2 AND m.status='VISIBLE' AND m.media_type='IMAGE'`,[scope.albumId,scope.personId])).rows.map(m=>({...m,lookup_download_allowed:key.lookup_download_allowed===true}));
 }
-async function contactScopes(channel,recipient,includeAssociations=true){
+async function contactScopes(channel,recipient){
  const fingerprint=contactHash(channel,recipient);
  const people=(await query(`SELECT DISTINCT p.id,p.album_id,p.external_ref,s.channel,s.recipient_ciphertext
  FROM gallery_people p JOIN fiesta_gallery_shares s ON s.person_id=p.id AND s.album_id=p.album_id
@@ -56,12 +57,9 @@ export async function requestPhotoAccess(input){
   // Serializing each target prevents concurrent requests bypassing the cooldown.
   await query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[targetHash]);
   if((await query("SELECT 1 FROM keepsakes_photo_requests WHERE target_hash=$1 AND created_at>now()-interval '2 minutes' LIMIT 1",[targetHash])).rowCount)return neutral;
-  let scopes=await contactScopes(channel,recipient);const code=token();
-  if(channel==='SMS'){
-   const trustedEmail=await contactScopes('EMAIL',email,false),authorized=[];
-   for(const scope of trustedEmail){const emailPhotos=await scopeAnchors(scope);for(const phoneScope of scopes.filter(s=>s.albumId===scope.albumId)){const phonePhotos=await scopeAnchors(phoneScope);if(emailPhotos.some(p=>phonePhotos.some(q=>q.id===p.id))&&!authorized.some(s=>s.keyId===scope.keyId&&s.personId===scope.personId))authorized.push(scope);}}
-   scopes=authorized;
-  }
+  const scopes=await contactScopes(channel,recipient),code=token();
+  // A matching Fiesta phone record is sufficient for this explicitly unverified
+  // delivery flow. The supplied email need not already appear in Fiesta.
   const request=(await query(`INSERT INTO keepsakes_photo_requests(target_hash,token_hash,scopes,expires_at) VALUES($1,$2,$3,now()+interval '30 minutes') RETURNING id`,[targetHash,hash(code),JSON.stringify(scopes)])).rows[0];
   if(channel==='SMS'&&scopes.length)await query(`INSERT INTO keepsakes_unverified_contacts(phone_hash,email_hash,contact_ciphertext,request_id) VALUES($1,$2,$3,$4)`,[targetHash,contactHash('EMAIL',email),encryptSecretJson({phone:recipient,email}),request.id]);
   if(scopes.length){
@@ -101,15 +99,17 @@ export async function sessionAssets(sessionToken){
  const assets=[],albums=[];
  for(const scope of session.scopes){
   let anchors,albumId,mapped;
-  if(scope.client){const owner=await validClientPhotoScope(scope.client);const album=await customerGalleryAccess(owner,scope.client.eventId);albumId=album.id;anchors=(await query("SELECT * FROM gallery_media WHERE album_id=$1 AND status='VISIBLE' AND media_type='IMAGE' ORDER BY sort_order,created_at",[albumId])).rows;}
-  else if(scope.direct){const ref=decryptSecretJson(scope.direct),resolved=await keepsakesScope(ref.type,ref.token);albumId=resolved.albumId;mapped=resolved.assets;}
+  if(scope.client){const owner=await validClientPhotoScope(scope.client);const album=await customerGalleryAccess(owner,scope.client.eventId);albumId=album.id;anchors=(await query("SELECT * FROM gallery_media WHERE album_id=$1 AND status='VISIBLE' AND media_type='IMAGE' ORDER BY sort_order,created_at",[albumId])).rows.map(m=>({...m,lookup_download_allowed:album.allow_download===true}));}
+  else if(scope.direct){const ref=decryptSecretJson(scope.direct),resolved=await keepsakesScope(ref.type,ref.token);albumId=resolved.albumId;mapped=resolved.assets.map(a=>({...a,canDownload:a.included===true&&downloadAllowed(resolved.grant)}));}
   else{albumId=scope.albumId;anchors=await scopeAnchors(scope);}
   if(anchors){if(!anchors.length)continue;
    mapped=(await query(`SELECT x.*,m.filename,m.width,m.height,m.checksum,m.mime_type,m.storage_key,m.storage_provider,m.size_bytes
     FROM gallery_photo_sessions s JOIN gallery_session_assets x ON x.session_id=s.id AND x.album_id=s.album_id
     JOIN gallery_media m ON m.id=x.media_id AND m.album_id=x.album_id
     WHERE s.album_id=$1 AND s.anchor_media_id=ANY($2::uuid[]) AND m.status<>'ARCHIVED'`,[albumId,anchors.map(a=>a.id)])).rows;
-   const represented=new Set(mapped.map(a=>a.media_id));for(const a of anchors)if(!represented.has(a.id))mapped.push({...a,media_id:a.id,kind:'COMPOSITE',branded:true,label:'Event photo',included:true});
+   const includedDownloads=new Set(anchors.filter(a=>a.lookup_download_allowed).map(a=>a.id));
+   mapped=mapped.map(a=>({...a,canDownload:a.included===true&&includedDownloads.has(a.media_id)}));
+   const represented=new Set(mapped.map(a=>a.media_id));for(const a of anchors)if(!represented.has(a.id))mapped.push({...a,media_id:a.id,kind:'COMPOSITE',branded:true,label:'Event photo',included:true,canDownload:a.lookup_download_allowed===true});
   }
   const album=(await query('SELECT id,title FROM gallery_albums WHERE id=$1',[albumId])).rows[0];
   if(!mapped.length)continue;
@@ -120,12 +120,20 @@ export async function sessionAssets(sessionToken){
 }
 export async function photoCollection(sessionToken){
  const {session,assets,albums}=await sessionAssets(sessionToken);
- return {expiresAt:session.expires_at,audience:session.scopes.some(s=>s.client)?'CLIENT':'GUEST',albums,assets:assets.map(a=>({id:a.id,albumId:a.albumId,sessionId:a.session_id||null,label:a.label||'Event photo',kind:a.kind,branded:a.branded===true,width:a.width,height:a.height,included:a.included===true,url:`/api/keepsakes/photos/assets/${a.id}`}))};
+ return {expiresAt:session.expires_at,audience:session.scopes.some(s=>s.client)?'CLIENT':'GUEST',albums,assets:assets.map(a=>({id:a.id,albumId:a.albumId,sessionId:a.session_id||null,label:a.label||'Event photo',kind:a.kind,branded:a.branded===true,width:a.width,height:a.height,included:a.included===true,canDownload:a.canDownload===true,url:`/api/keepsakes/photos/assets/${a.id}`}))};
 }
 export async function collectionPhoto(sessionToken,id){
  const {assets}=await sessionAssets(sessionToken),asset=assets.find(a=>a.id===id);if(!asset)throw unavailable();
  const bytes=await verifiedGalleryBytes(asset,async()=>{if(!(await sessionAssets(sessionToken)).assets.some(a=>a.id===id))throw unavailable();});
  return sharp(bytes,{limitInputPixels:60_000_000}).rotate().resize({width:1200,height:1200,fit:'inside',withoutEnlargement:true}).jpeg({quality:82}).toBuffer();
+}
+
+export async function collectionDownload(sessionToken,id){
+ const {assets}=await sessionAssets(sessionToken),asset=assets.find(a=>a.id===id);
+ if(!asset?.canDownload)throw unavailable();
+ const bytes=await verifiedGalleryBytes(asset,async()=>{if(!(await sessionAssets(sessionToken)).assets.some(a=>a.id===id&&a.canDownload))throw unavailable();});
+ const mime=asset.mime_type||'image/jpeg',extension=mime==='image/png'?'png':mime==='image/gif'?'gif':'jpg';
+ return {bytes,mime,filename:`Lola-Booth-Photo.${extension}`};
 }
 
 export async function createPhotoHandoff(sessionToken,selection,target){
