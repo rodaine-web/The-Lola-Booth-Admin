@@ -1,0 +1,33 @@
+import crypto from 'node:crypto';
+import {z} from 'zod';
+import {query,transaction} from '../db/pool.js';
+import {AppError} from '../utils/errors.js';
+import {sessionAssets} from './keepsakes-photo-access-service.js';
+import {decryptSecretJson} from './integration-secrets.js';
+import {assertKeepsakesManager} from './keepsakes-admin-service.js';
+import {writeAudit} from './audit-service.js';
+import {balancedBooks,startingBookPrice} from '../../../shared/keepsakes-books.js';
+const digest=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex');
+const denied=()=>new AppError('This book is unavailable. Open your authorized photos again.',404,'BOOK_UNAVAILABLE');
+async function scope(token){const value=await sessionAssets(token);if(!value.assets.length)throw denied();const audience=value.session.scopes.some(s=>s.client)?'CLIENT':'GUEST';const owner=digest(value.session.scopes.map(s=>s.client?{clientId:s.client.clientId||s.client.sessionId,eventId:s.client.eventId}:s.direct?decryptSecretJson(s.direct):s));return {...value,audience,owner};}
+export async function bookVariants(token){
+ const audience=token?(await scope(token)).audience:'GUEST';
+ const rows=(await query("SELECT * FROM keepsakes_book_variants WHERE status<>'RETIRED' AND ($1='CLIENT' OR audience='GUEST') ORDER BY retail_cents,id",[audience])).rows;
+ return {audience,startingCents:startingBookPrice(rows,audience),albumStartingCents:audience==='CLIENT'?startingBookPrice(rows,audience,'ALBUM'):null,variants:rows.map(v=>({id:v.id,label:v.label,kind:v.kind,cover:v.cover,size:v.size,retailCents:v.retail_cents,available:startingBookPrice([v],audience,v.kind)!=null,status:v.status==='ACTIVE'?'AVAILABLE':'PREPARING',specification:v.specification,updatedAt:v.updated_at}))};
+}
+const book=z.object({title:z.string().trim().max(100),photos:z.array(z.uuid()).min(1).max(60),coverPhoto:z.uuid(),copies:z.number().int().min(1).max(100),layout:z.enum(['EDITORIAL','FULL_PHOTO']).default('EDITORIAL')}).strict();
+const input=z.object({id:z.uuid().optional(),revision:z.number().int().positive().optional(),variantId:z.uuid(),books:z.array(book).min(1).max(50),multipleBooksConfirmed:z.boolean().default(false)}).strict();
+export async function saveBookDraft(token,raw){
+ const data=input.parse(raw);return transaction(async()=>{const owner=await scope(token),variant=(await query("SELECT * FROM keepsakes_book_variants WHERE id=$1 AND status<>'RETIRED' FOR SHARE",[data.variantId])).rows[0];if(!variant||(variant.audience==='CLIENT'&&owner.audience!=='CLIENT')||(variant.kind==='ALBUM'&&owner.audience!=='CLIENT'))throw denied();
+ const allowed=new Set(owner.assets.map(a=>a.id)),all=data.books.flatMap(b=>b.photos);if(all.some(id=>!allowed.has(id))||new Set(all).size!==all.length)throw denied();
+ if(data.books.length>1&&!data.multipleBooksConfirmed)throw new AppError('Confirm the number of books and combined price before saving.',422,'EXTRA_BOOKS_CONFIRMATION_REQUIRED');
+ for(const b of data.books){if(!b.photos.includes(b.coverPhoto))throw new AppError('Choose a cover photo from this book.',422,'BOOK_COVER_INVALID');if(variant.kind==='BOOK')balancedBooks(b.photos);if(variant.kind==='BOOK'&&b.photos.length>20)throw new AppError('Each book needs 5–20 different photos.',422,'BOOK_PHOTO_LIMIT');if(variant.kind==='ALBUM'&&b.photos.length>60)throw new AppError('Choose up to 60 images per album.',422,'ALBUM_PHOTO_LIMIT');}
+ const price={currency:'USD',variantId:variant.id,variantUpdatedAt:variant.updated_at,unitCents:variant.retail_cents,totalCents:data.books.reduce((n,b)=>n+b.copies*variant.retail_cents,0),demo:startingBookPrice([variant],owner.audience,variant.kind)==null};
+ let row;if(data.id){const existing=(await query('SELECT * FROM keepsakes_book_drafts WHERE id=$1 AND owner_hash=$2 FOR UPDATE',[data.id,owner.owner])).rows[0];if(!existing)throw denied();if(existing.status==='ORDERED'||existing.revision!==data.revision)throw new AppError('The book changed. Reload its latest saved revision.',409,'BOOK_CHANGED');row=(await query("UPDATE keepsakes_book_drafts SET photo_session_id=$2,variant_id=$3,books=$4,revision=revision+1,proof_hash=NULL,approved_at=NULL,approved_revision=NULL,status='DRAFT',price_snapshot=$5,updated_at=now() WHERE id=$1 RETURNING *",[data.id,owner.session.id,variant.id,JSON.stringify(data.books),price])).rows[0];}else row=(await query('INSERT INTO keepsakes_book_drafts(owner_hash,photo_session_id,variant_id,audience,books,price_snapshot) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',[owner.owner,owner.session.id,variant.id,owner.audience,JSON.stringify(data.books),price])).rows[0];
+ await query('INSERT INTO keepsakes_book_revisions(draft_id,revision,configuration,price_snapshot) VALUES($1,$2,$3,$4)',[row.id,row.revision,{variantId:variant.id,books:data.books},price]);return publicDraft(row);
+ });
+}
+const publicDraft=row=>({id:row.id,revision:row.revision,variantId:row.variant_id,books:row.books,price:row.price_snapshot,status:row.status,proofApprovedAt:row.approved_at});
+export async function listBookDrafts(token){const owner=await scope(token);const rows=(await query('SELECT * FROM keepsakes_book_drafts WHERE owner_hash=$1 ORDER BY updated_at DESC LIMIT 50',[owner.owner])).rows;const allowed=new Set(owner.assets.map(a=>a.id));return {drafts:rows.filter(r=>r.books.every(b=>b.photos.every(id=>allowed.has(id)))).map(publicDraft)};}
+export async function bookAdmin(user){assertKeepsakesManager(user);return {variants:(await query('SELECT * FROM keepsakes_book_variants ORDER BY retail_cents,id')).rows,drafts:(await query('SELECT d.id,d.audience,d.status,d.books,d.revision,d.approved_revision,d.approved_at,d.production_status,d.price_snapshot,d.updated_at,v.label FROM keepsakes_book_drafts d JOIN keepsakes_book_variants v ON v.id=d.variant_id ORDER BY d.updated_at DESC LIMIT 300')).rows,credentials:{whcc:Boolean(process.env.WHCC_TEST_API_KEY),gelato:Boolean(process.env.GELATO_API_KEY)},workflow:'WHCC requires its hosted Album Editor. Supplier-validated configuration and final proof are required before checkout.'};}
+export async function updateBookPrice(id,raw,user){assertKeepsakesManager(user);const data=z.object({retailCents:z.number().int().min(1).max(1000000),reason:z.string().trim().min(10).max(1000)}).strict().parse(raw);return transaction(async()=>{const result=await query('UPDATE keepsakes_book_variants SET retail_cents=$2,updated_at=now() WHERE id=$1 RETURNING id',[id,data.retailCents]);if(!result.rowCount)throw denied();await writeAudit({req:{user},action:'keepsakes_book_price_updated',entity:'keepsakes_book_variant',entityId:id,after:data});return {saved:true};});}

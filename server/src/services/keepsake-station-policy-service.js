@@ -11,7 +11,7 @@ const complimentary=z.object({keychain:z.number().int().min(0),magnet:z.number()
 const pkg=z.object({hours:z.number().positive().max(168),stationCents:cents,complimentary:quantity,minimumPaid:quantity,complimentaryChoices:z.array(complimentary).min(1).max(3)}).strict();
 const paid=z.object({min:quantity,keychain:cents,magnet:cents}).strict(),optional=z.object({min:quantity,'jacketed-print':cents.nullable(),'framed-photo':cents.nullable(),'acrylic-display':cents.nullable(),postcard:cents.nullable()}).strict();
 const configSchema=z.object({packages:z.object({ESSENTIAL:pkg,SIGNATURE:pkg,LUXE:pkg}).strict(),paidTiers:z.array(paid).min(1).max(20),optionalTiers:z.array(optional).min(1).max(20)}).strict();
-export async function stationPolicyAdmin(user){assertKeepsakesManager(user);const row=(await query('SELECT * FROM keepsake_station_policies ORDER BY created_at DESC,id DESC LIMIT 1')).rows[0];return {policy:row?{...row.configuration,version:row.version,status:row.status}:DEFAULT_STATION_POLICY,products:KEEPSAKES_CORE_PRODUCTS.filter(p=>stationEligibility(p.key).station).map(p=>({...p,eligibility:stationEligibility(p.key)}))};}
+export async function stationPolicyAdmin(user){assertKeepsakesManager(user);const row=(await query('SELECT * FROM keepsake_station_policies ORDER BY created_at DESC,id DESC LIMIT 1')).rows[0];const published=(await query("SELECT * FROM keepsake_station_policies WHERE status='PUBLISHED' ORDER BY created_at DESC,id DESC LIMIT 1")).rows[0];return {quotePolicy:published?{...published.configuration,version:published.version,status:published.status}:null,policy:row?{...row.configuration,version:row.version,status:row.status}:DEFAULT_STATION_POLICY,products:KEEPSAKES_CORE_PRODUCTS.filter(p=>stationEligibility(p.key).station).map(p=>({...p,eligibility:stationEligibility(p.key)}))};}
 export async function saveStationPolicy(input,user){
  assertKeepsakesManager(user);const config=configSchema.parse(input);
  for(const tiers of [config.paidTiers,config.optionalTiers])if(tiers[0].min!==1||tiers.some((t,i)=>i&&t.min<=tiers[i-1].min))throw new AppError('Tiers must start at one and increase without duplicates.',422,'STATION_POLICY_INVALID');
@@ -27,7 +27,7 @@ export async function publishStationPolicy(input,user){
   const row=(await query("SELECT * FROM keepsake_station_policies WHERE version=$1 AND status='DRAFT' FOR UPDATE",[version])).rows[0];
   if(!row)throw new AppError('Save and review the current draft before publishing.',409,'STATION_POLICY_CHANGED');
   await query("UPDATE keepsake_station_policies SET status='RETIRED' WHERE status='PUBLISHED'");
-  await query("UPDATE keepsake_station_policies SET status='PUBLISHED' WHERE id=$1",[row.id]);
+  await query("UPDATE keepsake_station_policies SET status='PUBLISHED',published_at=now(),published_by=$2 WHERE id=$1",[row.id,user.id]);
   await writeAudit({req:{user},action:'keepsake_station_policy_published',entity:'keepsake_station_policy',entityId:row.id,after:{version,approval}});
   return {published:true,version};
  });

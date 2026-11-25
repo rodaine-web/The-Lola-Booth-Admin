@@ -110,6 +110,16 @@
   ],
   "rewrites": [
     {
+      "source": "/keepsakes-navigation.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/keepsakes-navigation.js"
+    },
+    {
       "source": "/robots.txt",
       "has": [
         {
@@ -597,17 +607,6 @@
         {
           "type": "host",
           "value": "gallery.thelolabooth.com"
-        }
-      ],
-      "destination": "/gallery",
-      "permanent": false
-    },
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "staginggallery.thelolabooth.com"
         }
       ],
       "destination": "/gallery",
