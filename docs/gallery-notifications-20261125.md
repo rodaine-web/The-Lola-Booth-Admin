@@ -45,7 +45,7 @@ Number format validation is not a promise of mobile-carrier deliverability. Conf
 - Each recipient's exact private link is rendered before approval. Base, carrier and other known per-segment USD fees are explicit integer microdollars. A dated pricing source is required; no default commercial rate is invented.
 - Defaults: SMS disabled, monthly budget $50, per-Gallery cap $10, warning $5, maximum 500 recipients, maximum three segments. All editable in Admin.
 - Approval reservations serialize across Galleries. A review expires in 15 minutes and settings changes require a new review. Month rollover invalidates queued reservations before dispatch. Reservations and actual recorded prices reconcile without double-counting.
-- Signed delivery callbacks update states monotonically. Provider failures appear in recipient records and never trigger automatic resend. Admin cost reconciliation fetches the provider message with the official SDK, validates account/service/currency and applies only the price delta.
+- Signed delivery callbacks are retained in a durable inbox, including callbacks that arrive before the submission response, and update states monotonically. Provider failures appear in recipient records and never trigger automatic resend. Admin cost reconciliation fetches the provider message with the official SDK, validates account/service/currency and applies only the price delta.
 - Estimates and provider-recorded prices may exclude later adjustments or charges not present on the message resource. The app limit is **not a guaranteed Twilio bill cap**.
 
 ## Notification state transitions
@@ -121,7 +121,7 @@ Main files:
 ## Validation
 
 - Full unit suite: **843 passed, 66 skipped, 0 failed** (909 tests; opt-in database/browser suites run separately).
-- Synthetic 400-recipient lifecycle, pricing and repeated-click/cancel tests passed. Expanded database lifecycle: **18 tests passed**; sequential Gallery notification, Fiesta, Dropbox, deletion and lookup regressions: **22 passed** before the additional CRM opt-out case.
+- Synthetic 400-recipient lifecycle, pricing and repeated-click/cancel tests passed. Expanded database lifecycle: **19 tests passed**; sequential Gallery notification, Fiesta, Dropbox, deletion and lookup regressions: **22 passed** before the additional CRM opt-out and early-callback cases.
 - Cross-Gallery concurrent approvals cannot reserve over the same monthly budget.
 - Signed Twilio STOP/HELP and forged-signature tests passed; no duplicate compliance response or unrelated SMS sends.
 - Token/email verification, forwarded-token limits, revoked grants, unknown-phone neutrality, trusted-only lookup and arbitrary-email takeover prevention passed.

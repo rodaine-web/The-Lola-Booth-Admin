@@ -652,6 +652,19 @@ export async function processGalleryNotifications({ limit = 10 } = {}) {
   await query(
     "UPDATE gallery_notification_deliveries SET status='UNKNOWN',failure_code='DISPATCH_INTERRUPTED',updated_at=now() WHERE status='SUBMITTING' AND updated_at<now()-interval '10 minutes'",
   );
+  const callbacks = (
+    await query(
+      "SELECT i.* FROM gallery_twilio_callback_inbox i JOIN gallery_notification_deliveries d ON d.provider_sid=i.provider_sid WHERE i.processed_at IS NULL ORDER BY i.created_at LIMIT 50",
+    )
+  ).rows;
+  for (const c of callbacks)
+    await galleryTwilioCallback({
+      AccountSid: c.account_sid,
+      MessagingServiceSid: c.service_sid,
+      MessageSid: c.provider_sid,
+      MessageStatus: c.status,
+      ErrorCode: c.error_code,
+    });
   let processed = 0;
   for (let i = 0; i < limit; i++) {
     const d = await transaction(async () => {
@@ -1000,6 +1013,20 @@ export async function galleryTwilioCallback(body) {
     return;
   }
   if (!/^SM[0-9a-f]{32}$/i.test(body.MessageSid || "")) return;
+  const fingerprint = hash(
+    [body.MessageSid, body.MessageStatus, body.ErrorCode || ""].join(":"),
+  );
+  await query(
+    "INSERT INTO gallery_twilio_callback_inbox(fingerprint,provider_sid,account_sid,service_sid,status,error_code) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(fingerprint) DO NOTHING",
+    [
+      fingerprint,
+      body.MessageSid,
+      body.AccountSid,
+      body.MessagingServiceSid,
+      String(body.MessageStatus || "").slice(0, 30),
+      body.ErrorCode || null,
+    ],
+  );
   await transaction(async () => {
     const d = (
       await query(
@@ -1008,6 +1035,10 @@ export async function galleryTwilioCallback(body) {
       )
     ).rows[0];
     if (!d) return;
+    await query(
+      "UPDATE gallery_twilio_callback_inbox SET processed_at=now() WHERE fingerprint=$1",
+      [fingerprint],
+    );
     const state = nextDeliveryState(d.status, body.MessageStatus);
     if (
       state === d.status &&

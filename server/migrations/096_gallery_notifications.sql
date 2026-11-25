@@ -36,3 +36,8 @@ CREATE TABLE gallery_trusted_phone_emails (
 CREATE TABLE gallery_notification_events (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),publication_id uuid REFERENCES gallery_notification_publications(id) ON DELETE CASCADE,delivery_id uuid REFERENCES gallery_notification_deliveries(id) ON DELETE CASCADE,kind text NOT NULL,details jsonb NOT NULL DEFAULT '{}',created_at timestamptz NOT NULL DEFAULT now()
 );
+-- A provider callback can arrive before create() returns the message SID.
+CREATE TABLE gallery_twilio_callback_inbox (
+ fingerprint text PRIMARY KEY,provider_sid text NOT NULL,account_sid text NOT NULL,service_sid text NOT NULL,status text NOT NULL,error_code text,created_at timestamptz NOT NULL DEFAULT now(),processed_at timestamptz
+);
+CREATE INDEX gallery_twilio_callback_pending ON gallery_twilio_callback_inbox(provider_sid) WHERE processed_at IS NULL;

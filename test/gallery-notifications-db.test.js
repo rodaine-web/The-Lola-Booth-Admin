@@ -653,6 +653,55 @@ test(
         },
       );
       await t.test(
+        "early delivery callbacks are retained until the provider SID is recorded",
+        async () => {
+          const sid = "SM" + "d".repeat(32),
+            callback = {
+              AccountSid: process.env.TWILIO_ACCOUNT_SID,
+              MessagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
+              MessageSid: sid,
+              MessageStatus: "delivered",
+            };
+          await n.galleryTwilioCallback(callback);
+          assert.equal(
+            (
+              await one(
+                "SELECT count(*)::int n FROM gallery_twilio_callback_inbox WHERE provider_sid=$1 AND processed_at IS NULL",
+                [sid],
+              )
+            ).n,
+            1,
+          );
+          const d = await one(
+            "SELECT id FROM gallery_notification_deliveries WHERE channel='SMS' AND provider_sid IS NULL LIMIT 1",
+          );
+          await query(
+            "UPDATE gallery_notification_deliveries SET provider_sid=$2,status='SENT' WHERE id=$1",
+            [d.id, sid],
+          );
+          await n.processGalleryNotifications({ limit: 1 });
+          assert.equal(
+            (
+              await one(
+                "SELECT status FROM gallery_notification_deliveries WHERE id=$1",
+                [d.id],
+              )
+            ).status,
+            "DELIVERED",
+          );
+          await n.galleryTwilioCallback(callback);
+          assert.equal(
+            (
+              await one(
+                "SELECT count(*)::int n FROM gallery_twilio_callback_inbox WHERE provider_sid=$1",
+                [sid],
+              )
+            ).n,
+            1,
+          );
+        },
+      );
+      await t.test(
         "existing CRM contact opt-outs suppress Gallery SMS without merging identities",
         async () => {
           await add("SMS", "+13125558889");
