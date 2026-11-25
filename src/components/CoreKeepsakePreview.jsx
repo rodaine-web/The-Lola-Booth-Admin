@@ -1,3 +1,4 @@
+import {keepsakesExample} from '../../shared/keepsakes-core-catalogue.js';
 import {useEffect,useRef,useState} from 'react';
 import {useKeepsakesPhotos} from '../contexts/KeepsakesPhotos.jsx';
 import {drawFrame,drawPaper,printTexture} from '../utils/keepsakes-preview.js';
@@ -6,9 +7,9 @@ function panel(ctx,photo,x,y,w,h,border=12,color='#e1d9cd'){
  ctx.save();ctx.shadowColor='#30261855';ctx.shadowBlur=16;ctx.shadowOffsetY=10;ctx.fillStyle=color;ctx.fillRect(x-border,y-border,w+2*border,h+2*border);ctx.shadowColor='transparent';
  const texture=printTexture(photo,{widthPx:w,heightPx:h},{fit:'contain'});ctx.drawImage(texture,x,y,w,h);ctx.restore();
 }
-export default function CoreKeepsakePreview({product,asset,strip,second,back=false,illustrative=false}){
- const {loadPhoto}=useKeepsakesPhotos()||{},ref=useRef(null),[state,setState]=useState('loading');
- useEffect(()=>{let active=true;setState('loading');
+export default function CoreKeepsakePreview({product,asset,strip,second,back=false,illustrative=false,exampleIndex=0}){
+ const {loadPhoto}=useKeepsakesPhotos()||{},ref=useRef(null),[state,setState]=useState('loading'),example=illustrative?keepsakesExample(product.key,exampleIndex):null;
+ useEffect(()=>{let active=true;setState('loading');if(example){setState('ready');return;}
   if(!asset&&!illustrative){setState('unavailable');return;}
   Promise.all([illustrative?load('/assets/keepsakes/approved/'+(product.key==='edited-strip'?'sample-strip.svg':'sample-photo.webp')):loadPhoto(asset).then(load),product.key==='framed-photo'?load('/assets/keepsakes/prodigi-classic-frame-gold.png'):null,product.key==='postcard'?load('/assets/keepsakes/lola-postcard-back-v2.svg'):null,illustrative&&product.key==='edited-package'?load('/assets/keepsakes/approved/sample-strip.svg'):strip?loadPhoto(strip).then(load):null,illustrative&&product.key==='photo-book'?load('/assets/keepsakes/approved/sample-photo.webp'):second?loadPhoto(second).then(load):null]).then(([photo,frame,postcard,stripPhoto,secondPhoto])=>{
    if(!active||!ref.current)return;const c=ref.current.getContext('2d');c.setTransform(illustrative?1:2,0,0,illustrative?1:2,0,0);c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';c.clearRect(0,0,1000,750);
@@ -29,6 +30,7 @@ export default function CoreKeepsakePreview({product,asset,strip,second,back=fal
    else{drawPaper(c,photo,{x,y,width:w});}
    setState('ready');
   }).catch(()=>{if(active)setState('unavailable');});return()=>{active=false;};
- },[product.key,asset?.id,strip?.id,second?.id,back,illustrative,loadPhoto]);
+ },[product.key,asset?.id,strip?.id,second?.id,back,illustrative,loadPhoto,example]);
+ if(example)return <div className="shop-own-preview" data-preview-state={state==='unavailable'?'unavailable':'ready'} data-photo-id="" data-example-image={example}><img className="shop-approved-product-example" src={example} width="1254" height="1254" loading="lazy" alt={`Illustrative product example: ${product.title}`} onError={()=>setState('unavailable')}/><small className="shop-preview-disclosure">Illustrative product example · sample photo</small>{state==='unavailable'&&<p role="status">This product example is unavailable.</p>}</div>;
  return <div className="shop-own-preview" data-preview-state={state} data-photo-id={asset?.id||''}><canvas width={illustrative?1000:2000} height={illustrative?750:1500} ref={ref} hidden={state!=='ready'} role="img" aria-label={`${illustrative?'Illustrative product example:':'Your photo on'} ${product.title}`}/>{state==='ready'&&<small className="shop-preview-disclosure">{illustrative?'Design illustration · sample photography pending':'Photo placement illustration · review final product proof'}</small>}{state!=='ready'&&<p role="status">{state==='loading'?'Preparing your keepsake…':'Your photo preview is unavailable.'}</p>}</div>;
 }
