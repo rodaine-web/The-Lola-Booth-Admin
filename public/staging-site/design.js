@@ -61,7 +61,7 @@
   for(const target of ['[data-faq-filters]','[data-faq-categories]']){const parent=$(target);if(parent){parent.innerHTML=categories.map(c=>`<button type="button" data-faq-category="${esc(c)}" aria-pressed="${c===category}">${esc(c)}</button>`).join('');parent.addEventListener('click',e=>{const b=e.target.closest('[data-faq-category]');if(b){category=b.dataset.faqCategory;render();}});}}
   $('[data-faq-search]')?.addEventListener('input',render);render();
  }
- const cta=$('.design-cta');if(cta){const art=document.createElement('div');art.className='cta-art';const c=cropCta();art.innerHTML=picture(c.source,c,'');cta.prepend(art);}
+ // The booking prefooter uses the same full-resolution background across all public sites.
  function cropCta(){return makeCrop('/staging-site/assets/reference-home.jpg',800,1323,224,213);}
  const audioCrop=makeCrop('/staging-site/assets/reference-home.jpg',29,988,370,133);
  all('[data-audio-art]').forEach(n=>n.innerHTML=picture(audioCrop.source,audioCrop,'Audio Guestbook recording telephone'));
