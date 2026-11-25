@@ -272,6 +272,8 @@ export async function handleStripeWebhook(rawBody, signature) {
   assertStripeEventMode(receivedEvent);
   const event=await verifyStripeEventAccount(receivedEvent);
   return persistWebhookEvent("STRIPE", event.id, event.type, event, async () => {
+    const {handleKeepsakesStripeEvent}=await import('./keepsakes-service.js');
+    if(await handleKeepsakesStripeEvent(event))return;
     if(['charge.dispute.created','charge.dispute.updated','charge.dispute.closed','charge.dispute.funds_withdrawn','charge.dispute.funds_reinstated'].includes(event.type)){
       await reconcileStripeDispute(event.data?.object?.id,event.livemode);
       return;

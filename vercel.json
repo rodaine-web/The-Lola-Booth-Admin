@@ -40,7 +40,7 @@
       "missing": [
         {
           "type": "host",
-          "value": "(admin|gallery)\\.thelolabooth\\.com"
+          "value": "(admin|gallery|shop)\\.thelolabooth\\.com"
         }
       ]
     },
@@ -71,7 +71,7 @@
       "has": [
         {
           "type": "host",
-          "value": "(admin|gallery)\\.thelolabooth\\.com"
+          "value": "(admin|gallery|shop)\\.thelolabooth\\.com"
         }
       ]
     },
@@ -83,9 +83,42 @@
           "value": "noindex, nofollow, noarchive"
         }
       ]
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "stagingshop.thelolabooth.com"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
     }
   ],
   "rewrites": [
+    {
+      "source": "/keepsakes-navigation.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/keepsakes-navigation.js"
+    },
     {
       "source": "/robots.txt",
       "has": [
@@ -159,6 +192,16 @@
         }
       ],
       "destination": "/staging-site/about.html"
+    },
+    {
+      "source": "/keepsake-station.css",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.thelolabooth.com"
+        }
+      ],
+      "destination": "/staging-site/keepsake-station.css"
     },
     {
       "source": "/booking.css",
@@ -552,6 +595,17 @@
       "has": [
         {
           "type": "host",
+          "value": "stagingshop.thelolabooth.com"
+        }
+      ],
+      "destination": "/shop",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
           "value": "gallery.thelolabooth.com"
         }
       ],
@@ -563,10 +617,10 @@
       "has": [
         {
           "type": "host",
-          "value": "staginggallery.thelolabooth.com"
+          "value": "shop.thelolabooth.com"
         }
       ],
-      "destination": "/gallery",
+      "destination": "/shop",
       "permanent": false
     }
   ]

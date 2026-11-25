@@ -1,3 +1,4 @@
+import {clientPhotoAccess,createPhotoHandoff,photoCollection} from '../services/keepsakes-photo-access-service.js';
 import {clientMailingView,requestClientMailing} from '../services/gallery-mailing-service.js';
 import {clientPostcardReports,clientReportDownload} from '../services/postcard-report-service.js';
 import {publicCreativeApproval,publicCreativeProof,respondToCreativeApproval} from '../services/creative-approval-service.js';
@@ -38,6 +39,7 @@ clientSessionRouter.get('/events/:eventId/postcard-reports/:reportId/download',a
 }));
 clientSessionRouter.get('/events/:eventId/postcards',event,asyncHandler(async(req,res)=>res.json(await clientMailingView(await authenticateClient(req),req.params.eventId))));
 clientSessionRouter.post('/events/:eventId/postcards',event,validate(z.object({quantity:z.number().int().min(1).max(10000),notes:z.string().trim().max(2000).default(''),return_address:z.object({name:z.string().trim().min(1).max(120),address_line1:z.string().trim().min(1).max(200),address_line2:z.string().trim().max(200).default(''),address_city:z.string().trim().min(1).max(100),address_state:z.string().trim().length(2),address_zip:z.string().trim().regex(/^\d{5}(-\d{4})?$/),address_country:z.literal('US')}).strict()}).strict()),asyncHandler(async(req,res)=>res.json(await requestClientMailing(await authenticateClient(req,{mutation:true}),req.params.eventId,req.body))));
+clientSessionRouter.post('/events/:eventId/keepsakes',event,asyncHandler(async(req,res)=>{const session=await authenticateClient(req,{mutation:true}),access=await clientPhotoAccess(session,req.params.eventId),collection=await photoCollection(access.token);if(!collection.assets.length)throw new AppError('This gallery has no eligible photos.',409,'NO_ELIGIBLE_PHOTOS');res.json(await createPhotoHandoff(access.token,collection.assets.map(a=>a.id),'GALLERY'));}));
 clientSessionRouter.get('/events/:eventId/gallery',event,asyncHandler(async(req,res)=>res.json(await customerGalleryView(await authenticateClient(req),req.params.eventId))));
 async function clientCapture(req,res,download){
  const session=await authenticateClient(req,{fresh:download}),media=await customerGalleryMedia(session,req.params.eventId,req.params.mediaId,download);

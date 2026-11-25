@@ -1,14 +1,22 @@
+import {PublicSiteLayout} from '../components/PublicSiteChrome.jsx';
+import {photoRequest} from '../contexts/KeepsakesPhotos.jsx';
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
   Download,
   Heart,
   LockKeyhole,
+  Link2,
+  Share2,
+  ShoppingCart,
+  ChevronRight,
   X,
 } from "lucide-react";
 import { formatDateOnly } from "../utils/display.js";
+import "../styles/keepsakes-gallery.css";
+import ProductPreview, {canPreviewKeepsake} from "../components/KeepsakesProductPreview.jsx";
 const API = import.meta.env.VITE_API_URL || "/api";
 const mediaUrl = (url) => `${API.replace(/\/api$/, "")}${url}`;
 async function request(path, options) {
@@ -21,7 +29,8 @@ async function request(path, options) {
     );
   return data;
 }
-export default function PublicGallery() {
+export default function PublicGallery() {return <PublicSiteLayout><PublicGalleryContent/></PublicSiteLayout>;}
+function PublicGalleryContent() {
   const { type, token } = useParams(),
     navigate = useNavigate();
   const [data, setData] = useState(null),
@@ -30,6 +39,21 @@ export default function PublicGallery() {
     [busy, setBusy] = useState(false),
     [active, setActive] = useState(null),
     [favorites, setFavorites] = useState(new Set());
+  const [keepsakesView, setKeepsakesView] = useState(null), [photoNotice, setPhotoNotice] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    let current = true;
+    setKeepsakesView(null);
+    // Commerce is optional and can only enrich an already-authorized gallery.
+    // A supplier or checkout outage must never prevent free photo access.
+    if (data && type && token && import.meta.env.VITE_APP_ENV !== 'production') {
+      fetch(`${API}/keepsakes/access/${type}/${token}`, {signal: controller.signal, credentials: 'omit', cache: 'no-store'})
+        .then(response => response.ok ? response.json() : null)
+        .then(view => {if (current) setKeepsakesView(view?.enabled ? view : null);})
+        .catch(() => {if (current) setKeepsakesView(null);});
+    }
+    return () => {current = false; controller.abort();};
+  }, [type, token, data]);
   const dialog = useRef(),
     touch = useRef(null),
     previousFocus = useRef();
@@ -140,17 +164,9 @@ export default function PublicGallery() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  const logo = (
-    <img
-      className="gallery-wordmark"
-      src="/brand/LOLA_Horizontal_Light_Transparent.png"
-      alt="The LOLA Booth"
-    />
-  );
   if (!token)
     return (
       <main className="gallery-entry">
-        {logo}
         <div className="gallery-entry-card">
           <LockKeyhole size={22} />
           <p className="eyebrow">PRIVATE MOMENTS. BEAUTIFULLY KEPT.</p>
@@ -187,13 +203,12 @@ export default function PublicGallery() {
           </p>
         </div>
         <a href="/client">Business client sign in</a>
-        <footer>GOOD PEOPLE. BETTER PHOTOS.</footer>
+
       </main>
     );
   if (!data)
     return (
       <main className="gallery-entry">
-        {logo}
         <h1>{error ? "A private moment." : "Opening your gallery…"}</h1>
         <p role={error ? "alert" : undefined}>
           {error || "Your photos will be here shortly."}
@@ -207,12 +222,26 @@ export default function PublicGallery() {
       </main>
     );
   const selected = active === null ? null : data.media[active];
+  const keepsakesEnabled = Boolean(keepsakesView?.enabled && selected?.mediaType !== 'VIDEO');
+  const selectedAsset = keepsakesView?.assets?.find(asset => (asset.mediaId || asset.id) === selected?.id);
+  const keepsakesProducts = (keepsakesView?.products || []).filter(product => product.available === true && product.verified !== false && canPreviewKeepsake(product)
+    && selectedAsset && (product.provider === 'DIGITAL' ? selectedAsset.digitalEligible && !selectedAsset.included : selectedAsset.merchandiseEligible));
+  async function openCoreShop(){try{setPhotoNotice('Preparing your selected photo…');const access=await photoRequest('link',{type,token}),collection=await photoRequest('collection',null,access.token);const chosen=collection.assets.find(a=>a.id===selectedAsset?.id)||collection.assets.find(a=>a.id===selected?.id);if(!chosen)throw Error('Select an eligible photograph first.');const transfer=await photoRequest('handoff',{target:'SHOP',selected:[chosen.id]},access.token);window.location.assign('https://stagingshop.thelolabooth.com/shop/transfer#code='+encodeURIComponent(transfer.code));}catch(e){setPhotoNotice(e.message);}}
+  const shopPath = product => `/keepsakes/${type}/${token}?${new URLSearchParams({...(product ? {product: product.id} : {}), ...(selected ? {asset: selected.id} : {})})}`;
+  const copyPhoto = async () => {
+    try {await navigator.clipboard.writeText(window.location.href); setPhotoNotice('Photo link copied.');}
+    catch {setPhotoNotice('Copy the photo URL from your browser address bar.');}
+  };
+  const sharePhoto = async () => {
+    if (!navigator.share) return copyPhoto();
+    try {await navigator.share({title: data.title || 'Your Lola Booth photo', url: window.location.href});}
+    catch (error) {if (error.name !== 'AbortError') setPhotoNotice('Use Copy Link to share this photo.');}
+  };
   return (
     <main
       className={`customer-gallery ${data.type === "PERSON" ? "personal" : "album"}`}
     >
       <header className="gallery-top">
-        {logo}
         <span>
           <LockKeyhole size={13} />
           Private gallery
@@ -299,20 +328,18 @@ export default function PublicGallery() {
           <p>Your host will add approved photos here.</p>
         </div>
       )}
-      <footer className="gallery-footer">
-        THE LOLA BOOTH <span>Good people. Better photos.</span>
-        <button onClick={load}>Refresh gallery</button>
-      </footer>
+      <div className="gallery-footer"><button onClick={load}>Refresh gallery</button></div>
       {selected && (
         <div
-          className="gallery-lightbox"
+          className={`gallery-lightbox ${keepsakesEnabled ? "keepsakes-lightbox" : ""}`}
           ref={dialog}
           tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-label={`Photo ${active + 1} of ${data.media.length}`}
-          onTouchStart={(e) => (touch.current = e.touches[0].clientX)}
+          onTouchStart={(e) => {touch.current = e.target.closest('.kg-keepsakes-aside') ? null : e.touches[0].clientX;}}
           onTouchEnd={(e) => {
+            if (touch.current === null) return;
             const dx = e.changedTouches[0].clientX - touch.current;
             if (Math.abs(dx) > 50)
               setActive(
@@ -324,10 +351,31 @@ export default function PublicGallery() {
         >
           <header>
             <span>THE LOLA BOOTH</span>
+            {keepsakesEnabled && <span className="kg-counter">{active + 1} of {data.media.length}</span>}
             <button aria-label="Close photo" onClick={() => setActive(null)}>
               <X />
             </button>
           </header>
+          {keepsakesEnabled ? <>
+            <section className="kg-photo-stage" aria-label="Selected photograph">
+              <button className="kg-photo-previous" aria-label="Previous photo" onClick={() => setActive(index => (index - 1 + data.media.length) % data.media.length)}><ArrowLeft/></button>
+              <figure><img crossOrigin="anonymous" src={mediaUrl(selected.url)} alt={`Event moment ${active + 1}`}/><figcaption>{selected.filename || 'Your event photo'} <span>· {String(active + 1).padStart(2, '0')} / {String(data.media.length).padStart(2, '0')}</span></figcaption></figure>
+              <button className="kg-photo-next" aria-label="Next photo" onClick={() => setActive(index => (index + 1) % data.media.length)}><ArrowRight/></button>
+            </section>
+            <aside className="kg-keepsakes-aside" aria-label="Photo keepsakes">
+              <p className="kg-eyebrow">YOUR EVENT PHOTO</p><h2>The Lola Keepsakes</h2><h3 className="kg-headline">Turn your memory into a wonderful keepsake.</h3><p className="kg-description">Personalized photo gifts, prints and more — all featuring your favorite moment.</p>
+              <div className="kg-free-actions">
+                {data.allowDownload && <button onClick={() => download(selected.id)} aria-label="Download this photo"><span><Download size={23}/></span>Download</button>}
+                <button aria-label="Favorite this photo" aria-pressed={favorites.has(selected.id)} onClick={() => toggleFavorite(selected.id)}><span><Heart size={25} fill={favorites.has(selected.id) ? 'currentColor' : 'none'}/></span>Love</button>
+                {type === 'photo' && <><button onClick={sharePhoto} aria-label="Share this photo"><span><Share2 size={23}/></span>Share</button><button onClick={copyPhoto} aria-label="Copy Photo Link"><span><Link2 size={23}/></span>Copy Link</button></>}
+              </div>
+              {photoNotice && <p className="kg-photo-notice" role="status">{photoNotice}</p>}{error && <p className="kg-photo-notice" role="alert">{error}</p>}
+              </aside><section className="kg-collection" aria-label="Personalized keepsakes"><h2>Create your keepsake</h2><p>PERSONALIZED PRODUCTS FEATURING YOUR PHOTO</p><div className="kg-product-grid">{keepsakesProducts.map(product => <article className="kg-product-tile" key={product.id}><ProductPreview product={product} asset={{url:mediaUrl(selected.url),label:selected.filename||"Your photo"}} variant={product.variants?.[0]} compact/><div><strong>{product.title}</strong><small>{keepsakeDescription(product.category)}</small>{Number.isInteger(product.retailCents)&&<strong className="kg-price">{new Intl.NumberFormat("en-US",{style:"currency",currency:product.currency||"USD"}).format(product.retailCents/100)}</strong>}<Link className="kg-view-options" to={shopPath(product)} aria-label={`Customize ${product.title}`}>View options</Link></div></article>)}</div>
+              {!keepsakesProducts.some(product=>String(product.category).toLowerCase()==='postcard') && <div className="kg-postcard-pending"><strong>Send a Postcard</strong><small>Create a personalized postcard using your photo and a note for your loved ones</small></div>}
+              <button className="kg-all-products" onClick={openCoreShop}><ShoppingCart size={22}/>Turn This Photo Into a Keepsake</button>
+              {keepsakesProducts.length > 0 && <><Link className="kg-all-products" to={shopPath()}><ShoppingCart size={22}/> See All Photo Products</Link><p className="kg-preview-note">Product previews use your selected photo. Review the final layout in the shop.</p></>}
+            </section>
+          </> : <>
           <button
             className="lightbox-prev"
             aria-label="Previous photo"
@@ -358,7 +406,7 @@ export default function PublicGallery() {
               {String(data.media.length).padStart(2, "0")}
             </span>
             <div>
-              {type==='photo'&&<button onClick={async()=>{try{await navigator.clipboard.writeText(window.location.href);}catch{setError('Copy the photo URL from your browser address bar.');}}}>Copy Photo Link</button>}
+              {type==='photo'&&<button onClick={copyPhoto}>Copy Photo Link</button>}
               <button
                 aria-label="Favorite this photo"
                 aria-pressed={favorites.has(selected.id)}
@@ -375,8 +423,14 @@ export default function PublicGallery() {
               )}
             </div>
           </footer>
+          </>}
         </div>
       )}
     </main>
   );
+}
+
+
+function keepsakeDescription(category) {
+  return ({postcard: 'Mail this photo to a loved one', print: 'Professionally printed photos', frame: 'A ready-to-display keepsake', mug: 'Your photo on a ceramic mug', magnet: 'A fun, everyday keepsake', keychain: 'A custom photo keychain', digital: 'Your available original photo', bundle: 'Your available original photos'})[String(category).toLowerCase()] || 'Personalize with your photo';
 }

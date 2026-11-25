@@ -1,3 +1,4 @@
+import {isKeepsakesShopHost} from '../shared/keepsakes-host.js';
 // ppar-client-profile-parity-v1
 import { GALLERY_ENABLED } from "./utils/features.js";
 import DataReview from "./pages/DataReview.jsx";
@@ -12,7 +13,10 @@ import Login from "./pages/Login.jsx";
 import SetupPassword from "./pages/SetupPassword.jsx";
 
 const GalleryAdmin = lazy(() => import("./pages/GalleryAdmin.jsx"));
-const PublicGallery = lazy(() => import("./pages/PublicGallery.jsx"));
+const KeepsakesShop = lazy(() => import('./pages/KeepsakesShop.jsx'));
+const Keepsakes = lazy(() => import('./pages/Keepsakes.jsx'));
+const KeepsakesAdmin = lazy(() => import('./pages/KeepsakesAdmin.jsx'));
+const PublicGallery = lazy(() => import.meta.env.VITE_APP_ENV === "production" ? import("./pages/ProductionPublicGallery.jsx") : import("./pages/PublicGallery.jsx"));
 const WebsiteDiagnostics = lazy(() => import("./pages/WebsiteDiagnostics.jsx"));
 const Users = lazy(() => import("./pages/Users.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
@@ -60,6 +64,8 @@ const LiveOperations = lazy(() => import("./pages/LiveOperations.jsx"));
 const SystemHealth = lazy(() => import("./pages/SystemHealth.jsx"));
 const PricingCatalog = lazy(() => import("./pages/PricingCatalog.jsx"));
 
+const GalleryHome=lazy(()=>import('./pages/GalleryHome.jsx'));
+
 function PrivateRoute({ children }) {
   const { user, loading, authError, retryAuth } = useAuth();
   const location = useLocation();
@@ -80,6 +86,28 @@ const PublicCreativeApproval = lazy(() => import("./pages/PublicCreativeApproval
 const PublicContract = lazy(() => import("./pages/PublicContract.jsx"));
 
 export default function App() {
+  if(window.location.hostname==='staginggallery.thelolabooth.com'&&(window.location.pathname==='/'||window.location.pathname==='/find-photos'||window.location.pathname.startsWith('/photos/')||window.location.pathname==='/gallery'||window.location.pathname.startsWith('/gallery/')))return <Suspense fallback={<main className="boot-screen">Opening your gallery…</main>}><Routes>
+   {['/','/find-photos','/photos/check-email','/photos/access','/photos/memories','/photos/transfer'].map(path=><Route key={path} path={path} element={<GalleryHome/>}/>)}
+   <Route path="/gallery" element={<PublicGallery/>}/><Route path="/gallery/:type/:token" element={<PublicGallery/>}/>
+   <Route path="/keepsakes/:type/:token" element={<Keepsakes/>}/><Route path="/keepsakes/orders/:orderToken" element={<Keepsakes/>}/>
+   <Route path="*" element={<Navigate to="/" replace/>}/>
+  </Routes></Suspense>;
+  if(isKeepsakesShopHost(window.location.hostname,import.meta.env.VITE_APP_ENV))return <Suspense fallback={<main className="boot-screen">Opening The Lola Keepsakes…</main>}><Routes>
+    {<>
+      <Route path="/shop" element={<KeepsakesShop/>}/>
+      <Route path="/shop/collection" element={<KeepsakesShop/>}/>
+      <Route path="/shop/find-photos" element={<KeepsakesShop/>}/>
+      <Route path="/shop/check-email" element={<KeepsakesShop/>}/>
+      <Route path="/shop/transfer" element={<KeepsakesShop/>}/>
+      <Route path="/shop/access" element={<KeepsakesShop/>}/>
+      <Route path="/shop/memories" element={<KeepsakesShop/>}/>
+      <Route path="/shop/products/:productKey" element={<KeepsakesShop/>}/>
+      <Route path="/shop/how-it-works" element={<KeepsakesShop/>}/>
+      <Route path="/shop/event-clients" element={<KeepsakesShop/>}/>
+      <Route path="/keepsakes/orders/:orderToken" element={<Keepsakes/>}/>
+    </>}
+    <Route path="*" element={<Navigate to="/shop" replace/>}/>
+  </Routes></Suspense>;
   return (
     <Suspense fallback={<main className="boot-screen">Opening Admin Portal...</main>}>
     <Routes>
@@ -104,6 +132,20 @@ export default function App() {
       {GALLERY_ENABLED && <><Route path="/gallery" element={<PublicGallery />} />
       <Route path="/gallery/:type/:token" element={<PublicGallery />} /></>}
       <Route path="/delivery/:token" element={<PublicDelivery />} />
+      {<>
+        <Route path="/shop" element={<KeepsakesShop/>}/>
+        <Route path="/shop/collection" element={<KeepsakesShop/>}/>
+        <Route path="/shop/find-photos" element={<KeepsakesShop/>}/>
+        <Route path="/shop/check-email" element={<KeepsakesShop/>}/>
+        <Route path="/shop/transfer" element={<KeepsakesShop/>}/>
+      <Route path="/shop/access" element={<KeepsakesShop/>}/>
+        <Route path="/shop/memories" element={<KeepsakesShop/>}/>
+        <Route path="/shop/products/:productKey" element={<KeepsakesShop/>}/>
+        <Route path="/shop/how-it-works" element={<KeepsakesShop/>}/>
+        <Route path="/shop/event-clients" element={<KeepsakesShop/>}/>
+      </>}
+      <Route path="/keepsakes/orders/:orderToken" element={<Keepsakes />} />
+      <Route path="/keepsakes/:type/:token" element={<Keepsakes />} />
       <Route path="/partner-workspace" element={<PartnerWorkspacePublic />} />
       <Route path="/my-events" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
       <Route path="/my-events/:eventId" element={<PrivateRoute><MyEvents /></PrivateRoute>} />
@@ -164,6 +206,7 @@ export default function App() {
         <Route path="content/experiences" element={<ResourcePage title="Experiences" endpoint="/experiences" columns={["name", "base_price", "default_duration", "active"]} fields={experienceFields} />} />
         <Route path="content/addons" element={<ResourcePage title="Add-ons" endpoint="/addons" columns={["name", "price", "pricing_type", "active"]} fields={addonFields} />} />
         <Route path="operations/live" element={<LiveOperations />} />
+        <Route path="operations/keepsakes" element={<KeepsakesAdmin />} />
         <Route path="operations/tasks" element={<ResourcePage title="Tasks" endpoint="/tasks" columns={["title", "owner_name", "event_name", "client_name", "due_date", "priority", "status"]} fields={taskFields} />} />
         <Route path="operations/files" element={<ResourcePage title="Files" endpoint="/files" phase="Metadata model ready" columns={["filename", "category", "storage_provider", "created_at"]} />} />
         {GALLERY_ENABLED && <><Route path="operations/galleries" element={<GalleryAdmin />} />

@@ -1,3 +1,5 @@
+import {clientOpportunities,opportunityPreview,reopenOpportunity,closeOpportunity,bookingHandoffPreview,repairBookingHandoff} from '../services/opportunity-lifecycle-service.js';
+import {keepsakeStationProposalInput} from '../../../shared/keepsake-station-input.js';
 import {audioFulfillment,saveAudioFulfillment,transitionAudioFulfillment} from '../services/audio-fulfillment-service.js';
 import {eventCloseout,saveEventCloseout} from '../services/event-closeout-service.js';
 import {lockBookingReservations} from '../services/booking-hold-service.js';
@@ -215,6 +217,12 @@ adminRouter.use((req,_res,next)=>{
 adminRouter.use('/website/staging',(req,res,next)=>isStaging()?next():next(new AppError('Staging CMS is unavailable in this environment.',404,'NOT_FOUND')),stagingCmsRouter);
 
 const eventStatuses = ["INQUIRY", "TENTATIVE", "CONFIRMED", "PREPARING", "READY", "IN_PROGRESS", "COMPLETED", "CANCELLED", "DRAFT", "PENDING_CONTRACT", "PENDING_DEPOSIT"];
+adminRouter.get('/clients/:id/opportunities',requirePermission('read:sales'),asyncHandler(async(req,res)=>res.json({opportunities:await clientOpportunities(uuid.parse(req.params.id))})));
+adminRouter.get('/leads/:id/lifecycle',requirePermission('read:sales'),asyncHandler(async(req,res)=>res.json(await opportunityPreview(uuid.parse(req.params.id)))));
+adminRouter.post('/leads/:id/reopen',requirePermission('write:sales'),asyncHandler(async(req,res)=>res.json(await reopenOpportunity(uuid.parse(req.params.id),req.body,req))));
+adminRouter.post('/leads/:id/close-opportunity',requirePermission('write:sales'),asyncHandler(async(req,res)=>res.json(await closeOpportunity(uuid.parse(req.params.id),req.body,req))));
+adminRouter.get('/proposals/:id/booking-handoff',requirePermission('read:finance'),asyncHandler(async(req,res)=>res.json(await bookingHandoffPreview(uuid.parse(req.params.id)))));
+adminRouter.post('/proposals/:id/booking-handoff/repair',requirePermission('write:sales'),requirePermission('write:finance'),asyncHandler(async(req,res)=>res.json(await repairBookingHandoff(uuid.parse(req.params.id),req.body,req))));
 const leadStatuses = ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_DRAFT", "PROPOSAL_SENT", "FOLLOW_UP", "WON", "LOST", "ARCHIVED"];
 const taskStatuses = ["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"];
 const taskPriorities = ["LOW", "NORMAL", "HIGH", "URGENT"];
@@ -519,6 +527,7 @@ async function pickerRows(search, sql) {
 }
 
 const proposalSchema = z.object({
+  keepsake_station:keepsakeStationProposalInput.optional().nullable(),
   postcard_mailing_quantity:z.coerce.number().int().min(0).max(10000).optional(),
   pricing_quote_id:uuid.optional().nullable(),
   customer_notes:z.string().max(10000).optional().nullable(),
@@ -865,6 +874,7 @@ adminRouter.post("/leads/:id/merge", requirePermission("write:sales"), validate(
 adminRouter.patch("/leads/:id", requirePermission("write:sales"), asyncHandler(async (req, res) => {
   const before = await query("SELECT * FROM leads WHERE id=$1 AND deleted_at IS NULL", [req.params.id]);
   if (!before.rows[0]) throw notFound("Lead");
+  if(before.rows[0].status==='LOST'&&req.body.status&&req.body.status!=='LOST')throw new AppError("Use Reopen opportunity to review the event and proposal together.",409,"OPPORTUNITY_REVIEW_REQUIRED");
   const allowed = [
     "first_name", "last_name", "email", "phone", "company", "preferred_contact_method",
     "event_type", "event_date", "event_start_time", "event_end_time", "venue_name",
@@ -1504,7 +1514,7 @@ adminRouter.get("/proposals", requirePermission("read:sales"), validate(paginati
 }));
 
 adminRouter.post("/proposals/preview", requirePermission("write:sales"), validate(proposalSchema), asyncHandler(async (req,res)=>{
-  const snapshot=await buildProposalSnapshot({...req.body,scenario_enabled:true});
+  const snapshot=await buildProposalSnapshot({...req.body,scenario_enabled:true},req.user);
   const proposal={content:snapshot.content,pricing_snapshot:snapshot.pricing,line_items_snapshot:snapshot.lineItems,selected_experiences:snapshot.selectedExperiences,proposal_title:snapshot.proposalTitle,proposal_date:snapshot.proposalDate,valid_through:snapshot.validThrough,proposal_type:snapshot.proposalType};
   res.json({scenario:snapshot.content.scenario,pricing:snapshot.pricing,html:proposalHtml(proposal)});
 }));
@@ -1563,7 +1573,7 @@ adminRouter.patch("/proposals/:id", requirePermission("write:sales"), validate(p
   if(req.body.status&&!["DRAFT","READY"].includes(req.body.status))throw new AppError("Use the reviewed send flow to publish a proposal.",422,"PROPOSAL_STATUS_REQUIRED");
   const merged = { ...proposalEditInput(before), ...req.body };
   if (req.body.custom_services && !req.body.custom_line_items) merged.custom_line_items = [];
-  const snapshot = await buildProposalSnapshot(merged);
+  const snapshot = await buildProposalSnapshot(merged,req.user);
   const updated = await transaction(async (client) => {
     await client.query('SELECT id FROM proposals WHERE id=$1 FOR UPDATE',[req.params.id]);
     if((await client.query("SELECT 1 FROM proposal_send_batches WHERE proposal_id=$1 AND status IN ('PROCESSING','UNKNOWN') LIMIT 1",[req.params.id])).rowCount)throw new AppError('Delivery is processing or uncertain. Resolve it before editing.',409,'PROPOSAL_DELIVERY_UNCERTAIN');

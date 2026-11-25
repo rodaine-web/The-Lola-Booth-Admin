@@ -1,3 +1,6 @@
+import {proposalLineDetail} from '../../../shared/proposal-line-details.js';
+import {stationDocumentImages} from './keepsake-station-document.js';
+import {stationProposalQuote,stationProposalLines,assertStationCommercialReady} from './keepsake-station-proposal-service.js';
 import {proposalTaxNote} from '../../../shared/proposal-scenario.js';
 import {bookingSchedule} from '../../../shared/booking-payment-policy.js';
 import {packageEntitlementLabels} from '../../../shared/package-entitlements.js';
@@ -41,8 +44,11 @@ export async function nextNumber(client, column, prefixColumn, fallbackPrefix) {
   }
 }
 
-export async function buildProposalSnapshot(input) {
-  const mailingQuantity=Number(input.postcard_mailing_quantity||0);
+export async function buildProposalSnapshot(input,user=null) {
+  if(input.keepsake_station)input={...input,scenario_enabled:true};
+  const stationPostcards=Number(input.keepsake_station?.optional?.postcard||0);
+  if(stationPostcards&&input.postcard_mailing_quantity&&stationPostcards!==Number(input.postcard_mailing_quantity))throw new AppError('Use the station postcard quantity for the event mailing commitment.',422,'STATION_POSTCARD_QUANTITY');
+  const mailingQuantity=stationPostcards||Number(input.postcard_mailing_quantity||0);
   if(!Number.isSafeInteger(mailingQuantity)||mailingQuantity<0||mailingQuantity>10000)throw new AppError('Postcard allowance must be between 0 and 10,000.',422,'POSTCARD_ALLOWANCE_INVALID');
   const notes=String(input.customer_notes||'').replace(/^Postcard mailing allowance:.*$/gm,'').trim();
   input={...input,customer_notes:[notes,mailingQuantity?`Postcard mailing allowance: up to ${mailingQuantity} US 4×6 postcards, subject to guest mailing consent, valid addresses and approved artwork.`:''].filter(Boolean).join('\n\n')};
@@ -55,6 +61,8 @@ export async function buildProposalSnapshot(input) {
   const campaignOfferOnly=packageSelections.length>0&&packageSelections.every(pkg=>pkg.campaign_id&&pkg.campaign_offer_key);
   if(catalogQuote&&chosenPackageIds.length&&JSON.stringify([...chosenPackageIds].sort())!==JSON.stringify(catalogQuote.entitlements.map(p=>p.packageId).sort()))throw new AppError('Package selections changed. Recalculate the quote.',409,'PRICING_QUOTE_CHANGED');
   if(pricingCatalogEnabled()&&!catalogQuote&&!campaignOfferOnly&&chosenPackageIds.length&&(await query('SELECT 1 FROM packages WHERE id=ANY($1::uuid[]) AND catalog_key IS NOT NULL LIMIT 1',[chosenPackageIds])).rowCount)throw new AppError('Calculate and review the catalog quote before preparing this proposal.',422,'PRICING_QUOTE_REQUIRED');
+  if(input.lead_id){const submitted=(await query('SELECT source_details FROM leads WHERE id=$1',[input.lead_id])).rows[0]?.source_details?.bookingInquiry?.keepsakeStation;
+   if(submitted&&!input.keepsake_station)throw new AppError('The booking request includes a Keepsake Station. Review and include that configuration before preparing the proposal.',422,'STATION_REQUEST_REVIEW_REQUIRED');}
   const visualSections = await validateProposalVisuals(input.visual_sections || []);
   if(input.scenario_enabled && !input.selected_experiences?.length)throw new AppError("Select at least one experience.",422,"EXPERIENCE_REQUIRED");
   if(input.scenario_enabled && (['discount','travel','other_fees','tax_rate','deposit_value'].some(k=>input[k]!=null && (!Number.isFinite(Number(input[k]))||Number(input[k])<0)) || (input.deposit_type!=='FIXED' && Number(input.deposit_value)>100)))throw new AppError("Pricing adjustments must be positive; percentage deposits cannot exceed 100%.",422,"PRICING_INVALID");
@@ -179,7 +187,11 @@ export async function buildProposalSnapshot(input) {
     ...(money(input.other_fees) ? [{ type: "OTHER", description: "Other fees", quantity: 1, unit_price: money(input.other_fees), line_total: money(input.other_fees) }] : [])
   ];
   if(catalogQuote)lines=catalogQuote.lines.map(line=>({type:line.type,description:line.description,package_id:line.packageId,...(line.addonId?{addon_id:line.addonId}: {}),quantity:line.quantity,unit_price:line.unitPriceCents/100,line_total:line.amountCents/100,...(line.stripeTaxCode?{stripe_tax_code:line.stripeTaxCode}: {})}));
-  const subtotal = lines.reduce((sum, item) => sum + item.line_total, 0);
+  const stationQuote=await stationProposalQuote(input.keepsake_station,selectedExperiences,user);
+  if(stationQuote)stationQuote.productImages=await stationDocumentImages(stationQuote);
+  lines.push(...stationProposalLines(stationQuote));
+  lines=lines.map(line=>({...line,detail:proposalLineDetail(line,{experiences:selectedExperiences,entitlements:catalogQuote?.entitlements||[],addons:addons.rows})}));
+  const subtotal = lines.reduce((sum,item)=>sum+Math.round(Number(item.line_total)*100),0)/100;
   const discount = catalogQuote?catalogQuote.discountCents/100:money(input.discount);
   const taxable = Math.max(0, subtotal - discount);
   const taxRate = catalogQuote?0:money(input.tax_rate ?? s.sales_tax_percent);
@@ -210,6 +222,7 @@ export async function buildProposalSnapshot(input) {
     package: pack,
     experience,
     content: {
+      ...(stationQuote?{keepsake_station:stationQuote}:{}),
       postcard_mailing:{quantity:mailingQuantity},
       ...(catalogQuote?{catalog_quote:catalogQuote}:{}),
       introduction: input.introduction || s.proposal_default_intro,
@@ -396,7 +409,7 @@ export async function createProposal(req) {
   const result = await transaction(async (client) => {
     const linkedBody = await ensureProposalLead(client, resolvedBody, req.user.id);
     const proposalNumber = linkedBody.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
-    const snapshot=await buildProposalSnapshot({...resolvedBody,proposal_number:proposalNumber});
+    const snapshot=await buildProposalSnapshot({...resolvedBody,proposal_number:proposalNumber},req.user);
     const inserted = await client.query(
       `INSERT INTO proposals (proposal_number, lead_id, client_id, event_id, owner_user_id, package_id, experience_id, secure_token, status, notes, total, valid_through, content, pricing_snapshot, line_items_snapshot, document_template_key, editable_sections, proposal_source, proposal_title, proposal_date, proposal_type, selected_experiences, proposal_visuals)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'GENERATED',$18,$19,$20,$21,$22) RETURNING *`,
@@ -423,7 +436,7 @@ export async function createUploadedProposal(req) {
     filename: safeFilename(body.filename || "external-proposal.pdf"),
     mimeType: "application/pdf"
   });
-  const snapshot = await buildProposalSnapshot({ ...body, custom_line_items: body.custom_line_items || [], package_amount: body.total_investment ?? body.package_amount ?? body.total ?? 0 });
+  const snapshot = await buildProposalSnapshot({ ...body, custom_line_items: body.custom_line_items || [], package_amount: body.total_investment ?? body.package_amount ?? body.total ?? 0 },req.user);
   const result = await transaction(async (client) => {
     const proposalNumber = body.proposal_number || await nextNumber(client, "next_proposal_number", "proposal_prefix", "PROP");
     const inserted = await client.query(
@@ -528,6 +541,7 @@ export async function proposalPdfBuffer(proposal, type = "pdf") {
 }
 
 export async function sendProposal(req, proposal) {
+  assertStationCommercialReady(proposal);
   if(proposal.content?.catalog_quote?.status==='REVIEW_REQUIRED')throw new AppError('Resolve pricing review before sending.',409,'PRICING_REVIEW_REQUIRED');
   if (!publicProposalUrl(proposal)) throw new AppError("Public access not available. Generate secure access before sending.", 409, "DOCUMENT_ACCESS_UNAVAILABLE");
   const proposalUrl = publicProposalUrl(proposal);

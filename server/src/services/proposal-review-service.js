@@ -1,3 +1,4 @@
+import {assertStationCommercialReady} from './keepsake-station-proposal-service.js';
 import crypto from 'node:crypto';
 import {query,transaction} from '../db/pool.js';
 import {AppError,notFound} from '../utils/errors.js';
@@ -27,7 +28,7 @@ export async function saveSentProposalRevision(req,before){
   const pending=current.draft_version_id?(await client.query('SELECT snapshot FROM proposal_versions WHERE id=$1 AND proposal_id=$2',[current.draft_version_id,current.id])).rows[0]?.snapshot:null;
   const merged={...proposalEditInput({...before,...(pending||{})}),...req.body};
   for(const field of ['lead_id','client_id','event_id'])if((merged[field]||null)!==(current[field]||null))throw failure('Keep the same client, lead and event when revising a sent proposal.');
-  const snapshot=await buildProposalSnapshot(merged);
+  const snapshot=await buildProposalSnapshot(merged,req.user);
   const candidate={...current,package_id:merged.package_id||null,experience_id:merged.experience_id||null,notes:merged.notes||null,total:snapshot.pricing.total,valid_through:snapshot.validThrough,content:snapshot.content,pricing_snapshot:snapshot.pricing,line_items_snapshot:snapshot.lineItems,document_template_key:snapshot.documentTemplateKey,editable_sections:snapshot.editableSections,proposal_title:snapshot.proposalTitle,proposal_date:snapshot.proposalDate,proposal_type:snapshot.proposalType,selected_experiences:snapshot.selectedExperiences,proposal_visuals:snapshot.proposalVisuals,visual_sections:snapshot.visualSections};
   const version=await createProposalVersion(client,candidate,req.user.id);
   await client.query('UPDATE proposals SET draft_version_id=$2,updated_at=now() WHERE id=$1',[current.id,version.id]);
@@ -76,6 +77,7 @@ export async function sendReviewedProposal(req,proposalId,{deliver=sendEmail}={}
   const version=(await client.query('SELECT * FROM proposal_versions WHERE proposal_id=$1 AND id=$2',[proposalId,input.versionId])).rows[0];
   const expected=proposal.draft_version_id||proposal.published_version_id||(await client.query('SELECT id FROM proposal_versions WHERE proposal_id=$1 ORDER BY version_number DESC LIMIT 1',[proposalId])).rows[0]?.id;
   if(!version||(!previous&&version.id!==expected)||(previous&&proposal.published_version_id!==version.id&&proposal.draft_version_id!==version.id&&expected!==version.id))throw failure('The proposal changed after review. Refresh and review the latest version.','PROPOSAL_REVIEW_STALE');
+  assertStationCommercialReady({content:version.snapshot.content});
   if(version.snapshot.content?.catalog_quote?.status==='REVIEW_REQUIRED')throw failure('Resolve the catalog quote’s travel, scope or deliverable review before sending.','PRICING_REVIEW_REQUIRED');
   if(version.snapshot.valid_through&&version.snapshot.valid_through<new Date().toISOString().slice(0,10))throw failure('Update the validity date before sending an expired proposal.','PROPOSAL_EXPIRED');
   const token=proposal.draft_version_id?crypto.randomBytes(24).toString('hex'):proposal.secure_token||crypto.randomBytes(24).toString('hex');

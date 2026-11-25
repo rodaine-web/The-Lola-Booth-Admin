@@ -1,4 +1,5 @@
 import {crmOutlookCallbackRouter} from './routes/crm-contacts.js';
+import {keepsakesPublicRouter,keepsakesAdminRouter} from './routes/keepsakes.js';
 import {externalOAuthRouter} from './routes/external-integrations.js';
 import {pool} from './db/pool.js';
 import {assertDatabaseIdentity} from './config/database-identity.js';
@@ -43,6 +44,8 @@ app.get("/api/health", (_req, res) => res.json({ ok: true, name: "LOLA Admin API
 app.get("/api/setup/status", asyncHandler(async (_req, res) => res.json(await getSetupStatus())));
 app.use("/api/auth", authRouter);
 app.use("/api/gallery", galleryPublicRouter);
+app.use('/api/keepsakes',keepsakesPublicRouter);
+app.use('/api/keepsakes-admin',keepsakesAdminRouter);
 app.use("/api/gallery-admin", galleryAdminRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/partner-workspaces", publicPartnerWorkspaceRouter);

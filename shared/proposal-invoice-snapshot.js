@@ -6,8 +6,9 @@ export function proposalInvoiceSnapshot(proposal) {
   const cents=value=>Math.round(Number(value||0)*100);
   const subtotal=lines.reduce((sum,line)=>sum+cents(line.line_total),0);
   let allocatedDiscount=0,allocatedTax=0;
+  const lastPaid=lines.findLastIndex(line=>cents(line.line_total)>0);
   const items=lines.map((line,index)=>{
-    const last=index===lines.length-1,gross=cents(line.line_total),weight=subtotal?gross/subtotal:0;
+    const last=index===lastPaid,gross=cents(line.line_total),weight=subtotal?gross/subtotal:0;
     const discount=last?cents(pricing.discount)-allocatedDiscount:Math.round(cents(pricing.discount)*weight);
     const tax=last?cents(pricing.tax)-allocatedTax:Math.round(cents(pricing.tax)*weight);
     allocatedDiscount+=discount;allocatedTax+=tax;
