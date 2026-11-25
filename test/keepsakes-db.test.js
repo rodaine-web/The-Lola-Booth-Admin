@@ -532,7 +532,7 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     } finally { localHttpOrigin = undefined; server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
     await query("UPDATE gallery_access_keys SET status='REVOKED' WHERE id=$1", [key.id]); await assert.rejects(shop.keepsakesScope('photo', first.token), { statusCode: 404 });
     const dashboard=await manager.keepsakesDashboard(admin); assert.ok(dashboard.orders.length>0); assert.ok(dashboard.metrics.intervention>0); assert.ok(dashboard.metrics.grossCents>=dashboard.metrics.netCents);
-    process.env.APP_ENV = 'production'; assert.throws(() => shop.assertKeepsakes(), { code: 'KEEPSAKES_DISABLED' }); process.env.APP_ENV = 'test';
+    process.env.APP_ENV = 'production'; assert.doesNotThrow(() => shop.assertKeepsakes()); assert.equal(shop.keepsakesReadiness().checkout,false,'Production discovery must not enable checkout'); const beforeProduction=outbound.length; assert.deepEqual(await worker.processKeepsakesQueue({limit:5}),[]); assert.equal(outbound.length,beforeProduction,'Production worker must not manufacture test orders'); process.env.APP_ENV = 'test';
     assert.ok(outbound.every((request) => ['api.stripe.com', 'api.prodigi.com', 'api.lob.com'].includes(request.host)));
   } finally {
     globalThis.fetch = originalFetch;
