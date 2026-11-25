@@ -95,7 +95,9 @@ export default function App() {
   if(isStagingShopHost(window.location.hostname))return <Suspense fallback={<main className="boot-screen">Opening The Lola Keepsakes…</main>}><Routes>
     {import.meta.env.VITE_APP_ENV !== 'production' && <>
       <Route path="/shop" element={<KeepsakesShop/>}/>
-      <Route path="/shop/collection" element={<KeepsakesShop/>}/>
+      <Route path="/shop/bulk" element={<KeepsakesShop/>}/>
+        <Route path="/shop/cart" element={<KeepsakesShop/>}/>
+        <Route path="/shop/collection" element={<KeepsakesShop/>}/>
       <Route path="/shop/find-photos" element={<KeepsakesShop/>}/>
       <Route path="/shop/check-email" element={<KeepsakesShop/>}/>
       <Route path="/shop/transfer" element={<KeepsakesShop/>}/>
@@ -134,6 +136,8 @@ export default function App() {
       <Route path="/delivery/:token" element={<PublicDelivery />} />
       {import.meta.env.VITE_APP_ENV !== 'production' && <>
         <Route path="/shop" element={<KeepsakesShop/>}/>
+        <Route path="/shop/bulk" element={<KeepsakesShop/>}/>
+        <Route path="/shop/cart" element={<KeepsakesShop/>}/>
         <Route path="/shop/collection" element={<KeepsakesShop/>}/>
         <Route path="/shop/find-photos" element={<KeepsakesShop/>}/>
         <Route path="/shop/check-email" element={<KeepsakesShop/>}/>

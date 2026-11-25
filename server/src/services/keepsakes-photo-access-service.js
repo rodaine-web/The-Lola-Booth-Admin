@@ -120,7 +120,7 @@ export async function sessionAssets(sessionToken){
 }
 export async function photoCollection(sessionToken){
  const {session,assets,albums}=await sessionAssets(sessionToken);
- return {expiresAt:session.expires_at,audience:session.scopes.some(s=>s.client)?'CLIENT':'GUEST',albums,assets:assets.map(a=>({id:a.id,albumId:a.albumId,sessionId:a.session_id||null,label:a.label||'Event photo',kind:a.kind,branded:a.branded===true,width:a.width,height:a.height,included:a.included===true,canDownload:a.canDownload===true,url:`/api/keepsakes/photos/assets/${a.id}`}))};
+ return {expiresAt:session.expires_at,audience:session.scopes.some(s=>s.client)?'CLIENT':'GUEST',albums,assets:assets.map(a=>({id:a.id,albumId:a.albumId,sessionId:a.session_id||null,label:a.label||'Event photo',kind:a.kind,branded:a.branded===true,width:a.width,height:a.height,included:a.included===true,merchandiseEligible:a.merchandise_eligible===true,digitalEligible:a.digital_eligible===true,canDownload:a.canDownload===true,url:`/api/keepsakes/photos/assets/${a.id}`}))};
 }
 export async function collectionPhoto(sessionToken,id){
  const {assets}=await sessionAssets(sessionToken),asset=assets.find(a=>a.id===id);if(!asset)throw unavailable();

@@ -184,6 +184,7 @@ export const api = {
   patch: (path, body) => mutate("PATCH",path,body),
   put: (path, body) => mutate("PUT",path,body),
   delete: (path) => request(path, { method: "DELETE" }),
+  upload: (path,file) => request(path,{method:"POST",headers:{"Content-Type":file.type},body:file}),
   download,
   downloadPost,
   text

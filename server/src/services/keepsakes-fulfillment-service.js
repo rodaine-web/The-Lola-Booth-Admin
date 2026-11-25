@@ -151,6 +151,8 @@ export async function processKeepsakesQueue({limit=5}={}){
    if(f.provider==='DIGITAL')await transaction(()=>fulfillDigital(f,order,item));
    else if(f.provider==='PRODIGI')await fulfillProdigi(f,order,item,contact);
    else if(f.provider==='LOB')await fulfillLob(f,order,item);
+   else if(f.provider==='DIGITAL_EDIT')await query("UPDATE keepsakes_fulfillments SET status='EDITING',lease_until=NULL,updated_at=now() WHERE id=$1",[f.id]);
+   else if(f.provider==='IN_HOUSE'){await savedArtwork(f,item);await query("UPDATE keepsakes_fulfillments SET status='AWAITING_PRODUCTION',lease_until=NULL,updated_at=now() WHERE id=$1",[f.id]);}
    else throw fail('Unknown fulfillment provider.');
    await query('INSERT INTO keepsakes_events(order_id,action,details) VALUES($1,$2,$3)',[order.id,'fulfillment_reconciled',JSON.stringify({fulfillmentId:f.id,provider:f.provider})]);
    results.push({id:f.id,status:'PROCESSED'});
