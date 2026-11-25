@@ -17,3 +17,5 @@ export function photoSourceForProduct(product,assets,selectedId){
  if(product.source==='PHOTO_AND_STRIP')return {asset:original&&strip?original:null,strip,reason:original&&strip?'':'This package needs an unbranded photo and branded strip from this moment.'};
  return {asset:selected,reason:''};
 }
+
+export const PHOTO_LOOKUP_MESSAGE='If we find photos linked to those details, we’ll email you a secure link. Please check your inbox and spam folder.';
