@@ -1,0 +1,4 @@
+import {parseFiestaCsvGrid} from './fiesta-gallery.js';
+export const BULK_COLUMNS=['Recipient Name','Email','Phone Number','Photo ID or Unique Photo Link','Product','Variant','Quantity','Address Line 1','Address Line 2','City','State/Region','Postal Code','Country','Optional Message'];
+export const BULK_TEMPLATE=BULK_COLUMNS.join(',')+'\r\n';
+export function bulkCsvRows(text){if(typeof text!=='string'||text.length>500000)throw Error('Use a CSV spreadsheet under 500 KB.');const grid=parseFiestaCsvGrid(text),header=grid.shift()?.map(s=>s.trim());if(!header||new Set(header).size!==header.length||BULK_COLUMNS.some(c=>!header.includes(c)))throw Error('Use the downloadable template with all required column headings.');if(grid.length>100)throw Error('Use up to 100 recipient rows per batch.');return grid.filter(row=>row.some(Boolean)).map((values,index)=>({row:index+2,...Object.fromEntries(BULK_COLUMNS.map(key=>[key,String(values[header.indexOf(key)]||'').trim()]))}));}

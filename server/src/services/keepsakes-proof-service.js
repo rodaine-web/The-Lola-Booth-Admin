@@ -21,10 +21,10 @@ export async function renderKeepsakesProofThumbnail(buffer) {
 }
 
 export function keepsakesProofDescriptors(type, token, quoteId, items) {
-  if (!['photo', 'p', 'a'].includes(type) || typeof token !== 'string' || !token || !validQuoteId(quoteId) || !Array.isArray(items)) throw unavailable();
-  const root = `/api/keepsakes/access/${encodeURIComponent(type)}/${encodeURIComponent(token)}/quotes/${encodeURIComponent(quoteId)}/proofs`;
+  if (!['photo', 'p', 'a','session'].includes(type) || typeof token !== 'string' || !token || !validQuoteId(quoteId) || !Array.isArray(items)) throw unavailable();
+  const root = type==='session'?`/api/keepsakes/photos/commerce/quotes/${encodeURIComponent(quoteId)}/proofs`:`/api/keepsakes/access/${encodeURIComponent(type)}/${encodeURIComponent(token)}/quotes/${encodeURIComponent(quoteId)}/proofs`;
   return items.flatMap((item, itemIndex) => {
-    if (!['PRODIGI', 'LOB'].includes(item.product?.provider)) return [];
+    if (!['PRODIGI', 'LOB','IN_HOUSE'].includes(item.product?.provider)) return [];
     const proofs = [{label: `${item.product.title || 'Keepsake'} · front`, side: 'front', itemIndex, recipientIndex: 0,
       url: `${root}/${itemIndex}/front/0`}];
     if (item.product.provider === 'LOB') for (const [recipientIndex] of (item.recipients || []).entries()) {
@@ -45,16 +45,16 @@ export async function keepsakesQuoteProof(type, token, quoteId, {itemIndex, side
   ]);
   const scope = await keepsakesScope(type, token);
   const quote = (await query(`SELECT album_id,snapshot FROM keepsakes_quotes
-    WHERE id=$1 AND scope_hash=$2 AND album_id=$3 AND expires_at>now()`, [quoteId, scope.scopeHash, scope.albumId])).rows[0];
+    WHERE id=$1 AND scope_hash=$2 AND expires_at>now()`, [quoteId, scope.scopeHash])).rows[0];
   if(quote?.snapshot)quote.snapshot=keepsakesSnapshot(quote.snapshot);
   const item = quote?.snapshot?.items?.[itemIndex];
-  if (!item || !['PRODIGI', 'LOB'].includes(item.product?.provider) || !Array.isArray(item.assets) || item.assets.length !== 1) throw unavailable();
+  if (!item || !['PRODIGI', 'LOB','IN_HOUSE'].includes(item.product?.provider) || !Array.isArray(item.assets) || item.assets.length !== 1) throw unavailable();
   if (side === 'back' && (item.product.provider !== 'LOB' || !item.recipients?.[recipientIndex])) throw unavailable();
   if (side === 'front' && recipientIndex !== 0) throw unavailable();
 
   const ensureCurrentAccess = async () => {
-    const current = await keepsakesScope(type, token), settings = await keepsakesSettings(current.albumId);
-    if (current.albumId !== quote.album_id || !settings.enabled || !settings.productIds.includes(item.product.id)
+    const current = await keepsakesScope(type, token), selected=current.assets.find(a=>a.id===item.assets[0].id), settings = await keepsakesSettings(selected?.albumId||current.albumId);
+    if (!settings.enabled || !settings.productIds.includes(item.product.id)
         || !item.assets.every(selected => current.assets.some(asset => asset.id === selected.id && asset.media_id === selected.mediaId
           && asset.checksum === selected.checksum && asset.merchandise_eligible && (!asset.branded || settings.brandedMerchandise)))) throw unavailable();
     if (!(await query('SELECT 1 FROM keepsakes_quotes WHERE id=$1 AND scope_hash=$2 AND expires_at>now()', [quoteId, current.scopeHash])).rowCount) throw unavailable();
@@ -65,7 +65,7 @@ export async function keepsakesQuoteProof(type, token, quoteId, {itemIndex, side
   if (side === 'front') {
     const selected = item.assets[0];
     const media = (await query(`SELECT * FROM gallery_media
-      WHERE id=$1 AND album_id=$2 AND checksum=$3 AND status<>'ARCHIVED' AND media_type='IMAGE'`, [selected.mediaId, quote.album_id, selected.checksum])).rows[0];
+      WHERE id=$1 AND album_id=$2 AND checksum=$3 AND status<>'ARCHIVED' AND media_type='IMAGE'`, [selected.mediaId, (await ensureCurrentAccess()).assets.find(a=>a.id===selected.id)?.albumId||quote.album_id, selected.checksum])).rows[0];
     if (!media) throw unavailable();
     const bytes = await verifiedGalleryBytes(media, ensureCurrentAccess, {maxBytes: 20 * 1024 * 1024});
     const customization = item.customization || {};

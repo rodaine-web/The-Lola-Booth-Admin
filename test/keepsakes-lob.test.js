@@ -118,10 +118,11 @@ test('reconciliation uses only the persisted postcard ID and returns raw test st
 });
 
 test('all five bundled message fonts render distinctly with the selected ink, and arbitrary styles are rejected', async () => {
-  const {POSTCARD_FONTS}=await import('../shared/postcard-message-styles.js');
+  const {POSTCARD_FONTS,POSTCARD_EDITOR_FONTS}=await import('../shared/postcard-message-styles.js');
+  assert.equal(POSTCARD_EDITOR_FONTS.length,5);assert.ok(POSTCARD_FONTS.some(f=>f.id==='typewriter'),'Historical typewriter orders remain renderable');
   const {createHash}=await import('node:crypto');
   const input=await back(), hashes=new Set();
-  for(const font of POSTCARD_FONTS){
+  for(const font of POSTCARD_EDITOR_FONTS){
     const rendered=await renderKeepsakesPostcardBack({bytes:input,message:'A favorite memory, with love.',messageZone:zone,messageFont:font.id,messageColor:'#17365d'});
     hashes.add(createHash('sha256').update(rendered).digest('hex'));
     const pixels=await sharp(rendered).extract({left:zone.x,top:zone.y,width:zone.width,height:zone.height}).removeAlpha().raw().toBuffer();

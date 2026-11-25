@@ -1,0 +1,270 @@
+// Exact owner-approved source files. Derivatives are resized copies, never replacement photography.
+export const APPROVED_KEEPSAKES_ASSETS=Object.freeze([
+  {
+    "id": "keychain-mono",
+    "product": "keychain",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_18 PM-1.png",
+    "sha256": "eeeca124162b3974db6b4b7757c4b69c470e2504b9ef25102faba3e2d8103125",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/keychain-mono.png",
+    "src": "/brand/keepsakes-approved/keychain-mono-960.webp",
+    "srcSet": "/brand/keepsakes-approved/keychain-mono-480.webp 480w, /brand/keepsakes-approved/keychain-mono-960.webp 960w, /brand/keepsakes-approved/keychain-mono-1254.webp 1254w",
+    "alt": "Clear acrylic photo keychain with visible metal ring"
+  },
+  {
+    "id": "keychain-color",
+    "product": "keychain",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_58_28 PM-1.png",
+    "sha256": "7f302da481a1733e5a5d5c5651403bd8c7f4d4cb57b1de6a9f14b88988fc3078",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/keychain-color.png",
+    "src": "/brand/keepsakes-approved/keychain-color-960.webp",
+    "srcSet": "/brand/keepsakes-approved/keychain-color-480.webp 480w, /brand/keepsakes-approved/keychain-color-960.webp 960w, /brand/keepsakes-approved/keychain-color-1254.webp 1254w",
+    "alt": "Clear acrylic photo keychain with visible metal ring"
+  },
+  {
+    "id": "magnet-mono",
+    "product": "magnet",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_19 PM-2.png",
+    "sha256": "e1bc066d5d35fa05e4e2d2ca488895a619dc91eac4bd05887a197bed114eb2cf",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/magnet-mono.png",
+    "src": "/brand/keepsakes-approved/magnet-mono-960.webp",
+    "srcSet": "/brand/keepsakes-approved/magnet-mono-480.webp 480w, /brand/keepsakes-approved/magnet-mono-960.webp 960w, /brand/keepsakes-approved/magnet-mono-1254.webp 1254w",
+    "alt": "Clear photo magnet"
+  },
+  {
+    "id": "magnet-color",
+    "product": "magnet",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_58_29 PM-2.png",
+    "sha256": "9c98c905dbf3849051320e557a2e440965cfd6dd4f41f7926a5b4711fe9cbe63",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/magnet-color.png",
+    "src": "/brand/keepsakes-approved/magnet-color-960.webp",
+    "srcSet": "/brand/keepsakes-approved/magnet-color-480.webp 480w, /brand/keepsakes-approved/magnet-color-960.webp 960w, /brand/keepsakes-approved/magnet-color-1254.webp 1254w",
+    "alt": "Clear photo magnet"
+  },
+  {
+    "id": "photo-jacket",
+    "product": "jacketed-print",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_20 PM-3.png",
+    "sha256": "776b34faf925f4f2ce5ae61538c32e5e334f093be4a6c8219aa0488b2bca2432",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/photo-jacket.png",
+    "src": "/brand/keepsakes-approved/photo-jacket-960.webp",
+    "srcSet": "/brand/keepsakes-approved/photo-jacket-480.webp 480w, /brand/keepsakes-approved/photo-jacket-960.webp 960w, /brand/keepsakes-approved/photo-jacket-1254.webp 1254w",
+    "alt": "Folded presentation jacket with four photo retaining corners"
+  },
+  {
+    "id": "acrylic-insert",
+    "product": "acrylic-display",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_21 PM-4.png",
+    "sha256": "5a7cc8dca6a9198766c6983e761bc71ed990bdf059227691d7f19f86b8813890",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/acrylic-insert.png",
+    "src": "/brand/keepsakes-approved/acrylic-insert-960.webp",
+    "srcSet": "/brand/keepsakes-approved/acrylic-insert-480.webp 480w, /brand/keepsakes-approved/acrylic-insert-960.webp 960w, /brand/keepsakes-approved/acrylic-insert-1254.webp 1254w",
+    "alt": "Photo insert held between acrylic panels"
+  },
+  {
+    "id": "acrylic-insert-alternate",
+    "product": "acrylic-display",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_58_32 PM-4.png",
+    "sha256": "790ce1e42ad50c1228e166b751f6f3eb0f7de6ab6ce1dd7777e417eecbeb7b67",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/acrylic-insert-alternate.png",
+    "src": "/brand/keepsakes-approved/acrylic-insert-alternate-960.webp",
+    "srcSet": "/brand/keepsakes-approved/acrylic-insert-alternate-480.webp 480w, /brand/keepsakes-approved/acrylic-insert-alternate-960.webp 960w, /brand/keepsakes-approved/acrylic-insert-alternate-1254.webp 1254w",
+    "alt": "Photo insert held between acrylic panels"
+  },
+  {
+    "id": "guest-photo-book",
+    "product": "photo-book",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_22 PM-5.png",
+    "sha256": "ca8d17a7b94cb368595d539df4980c272c00ed464d5717d1677074907641e63e",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/guest-photo-book.png",
+    "src": "/brand/keepsakes-approved/guest-photo-book-960.webp",
+    "srcSet": "/brand/keepsakes-approved/guest-photo-book-480.webp 480w, /brand/keepsakes-approved/guest-photo-book-960.webp 960w, /brand/keepsakes-approved/guest-photo-book-1254.webp 1254w",
+    "alt": "Guest photo book cover and page layout"
+  },
+  {
+    "id": "premium-album",
+    "product": "photo-book",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_23 PM-6.png",
+    "sha256": "24c0abe09ce6a95f03b2a73f9fcafd58c16555f09e3940009280f0d16a79ee0a",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/premium-album.png",
+    "src": "/brand/keepsakes-approved/premium-album-960.webp",
+    "srcSet": "/brand/keepsakes-approved/premium-album-480.webp 480w, /brand/keepsakes-approved/premium-album-960.webp 960w, /brand/keepsakes-approved/premium-album-1254.webp 1254w",
+    "alt": "Premium photo album cover and interior layout"
+  },
+  {
+    "id": "album-linen",
+    "product": "photo-book",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_58_33 PM-5.png",
+    "sha256": "8b0c5f142a080a30804eab3b38b1e343d3bfeaf45f07d3c362af196e5794b90c",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/album-linen.png",
+    "src": "/brand/keepsakes-approved/album-linen-960.webp",
+    "srcSet": "/brand/keepsakes-approved/album-linen-480.webp 480w, /brand/keepsakes-approved/album-linen-960.webp 960w, /brand/keepsakes-approved/album-linen-1254.webp 1254w",
+    "alt": "Premium photo album cover and interior layout"
+  },
+  {
+    "id": "album-open",
+    "product": "photo-book",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_58_34 PM-6.png",
+    "sha256": "58d8d737044ecb096dd5b60e60579ea7179f1e354de27d94c68dcfee991feffb",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/album-open.png",
+    "src": "/brand/keepsakes-approved/album-open-960.webp",
+    "srcSet": "/brand/keepsakes-approved/album-open-480.webp 480w, /brand/keepsakes-approved/album-open-960.webp 960w, /brand/keepsakes-approved/album-open-1254.webp 1254w",
+    "alt": "Premium photo album cover and interior layout"
+  },
+  {
+    "id": "uv-acrylic-mono",
+    "product": "premium-acrylic",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_24 PM-7.png",
+    "sha256": "13c73969725767cbf50e179ff8a083e48f299777aa12b2d16c753b28d33bbdfd",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/uv-acrylic-mono.png",
+    "src": "/brand/keepsakes-approved/uv-acrylic-mono-960.webp",
+    "srcSet": "/brand/keepsakes-approved/uv-acrylic-mono-480.webp 480w, /brand/keepsakes-approved/uv-acrylic-mono-960.webp 960w, /brand/keepsakes-approved/uv-acrylic-mono-1254.webp 1254w",
+    "alt": "Premium solid UV printed acrylic block"
+  },
+  {
+    "id": "uv-acrylic-color",
+    "product": "premium-acrylic",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_58_35 PM-7.png",
+    "sha256": "1e12f1be9bc7bedd6126d91d8e10351f775212e35da0391bbbebd9967aa6d26e",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/uv-acrylic-color.png",
+    "src": "/brand/keepsakes-approved/uv-acrylic-color-960.webp",
+    "srcSet": "/brand/keepsakes-approved/uv-acrylic-color-480.webp 480w, /brand/keepsakes-approved/uv-acrylic-color-960.webp 960w, /brand/keepsakes-approved/uv-acrylic-color-1254.webp 1254w",
+    "alt": "Premium solid UV printed acrylic block"
+  },
+  {
+    "id": "frame-champagne",
+    "product": "framed-photo",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_25 PM-8.png",
+    "sha256": "fc9d0984144ab710cf39898746d15ad094139e49884a2bd4acc3f4ee459bbfc4",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/frame-champagne.png",
+    "src": "/brand/keepsakes-approved/frame-champagne-960.webp",
+    "srcSet": "/brand/keepsakes-approved/frame-champagne-480.webp 480w, /brand/keepsakes-approved/frame-champagne-960.webp 960w, /brand/keepsakes-approved/frame-champagne-1254.webp 1254w",
+    "alt": "Framed photograph product appearance"
+  },
+  {
+    "id": "frame-ivory",
+    "product": "framed-photo",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_44_26 PM-9.png",
+    "sha256": "bb80047cf6a2ef44592b06ac58423c8175cee77e78277a1ffa2a50e098e37ffd",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/frame-ivory.png",
+    "src": "/brand/keepsakes-approved/frame-ivory-960.webp",
+    "srcSet": "/brand/keepsakes-approved/frame-ivory-480.webp 480w, /brand/keepsakes-approved/frame-ivory-960.webp 960w, /brand/keepsakes-approved/frame-ivory-1254.webp 1254w",
+    "alt": "Framed photograph product appearance"
+  },
+  {
+    "id": "frame-silver",
+    "product": "framed-photo",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_58_36 PM-8.png",
+    "sha256": "3984ad098d2fd42298ffd87b0298ee20f36dd2d226bd634294e399b32f957a12",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/frame-silver.png",
+    "src": "/brand/keepsakes-approved/frame-silver-960.webp",
+    "srcSet": "/brand/keepsakes-approved/frame-silver-480.webp 480w, /brand/keepsakes-approved/frame-silver-960.webp 960w, /brand/keepsakes-approved/frame-silver-1254.webp 1254w",
+    "alt": "Framed photograph product appearance"
+  },
+  {
+    "id": "frame-antique-gold",
+    "product": "framed-photo",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 08_58_37 PM-9.png",
+    "sha256": "b2b5a91f00f47a9022dd928afc53490ded6dafd437cf632a21974534d21c5a95",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/frame-antique-gold.png",
+    "src": "/brand/keepsakes-approved/frame-antique-gold-960.webp",
+    "srcSet": "/brand/keepsakes-approved/frame-antique-gold-480.webp 480w, /brand/keepsakes-approved/frame-antique-gold-960.webp 960w, /brand/keepsakes-approved/frame-antique-gold-1254.webp 1254w",
+    "alt": "Framed photograph product appearance"
+  },
+  {
+    "id": "frame-metal",
+    "product": "framed-photo",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 09_38_01 PM-1.png",
+    "sha256": "84c72f45d406a583c62637db19898d497f6a50f46d5270cab8d027386f22982e",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/frame-metal.png",
+    "src": "/brand/keepsakes-approved/frame-metal-960.webp",
+    "srcSet": "/brand/keepsakes-approved/frame-metal-480.webp 480w, /brand/keepsakes-approved/frame-metal-960.webp 960w, /brand/keepsakes-approved/frame-metal-1254.webp 1254w",
+    "alt": "Framed photograph product appearance"
+  },
+  {
+    "id": "postcard-lifestyle",
+    "product": "postcard",
+    "originalFilename": "ChatGPT Image Nov 24, 2026, 09_38_01 PM-2.png",
+    "sha256": "0f677bb0db5c3d3becae3b001f0e778c241eaefdd4baf15aab9cde8c6d182176",
+    "width": 1254,
+    "height": 1254,
+    "original": "/brand/keepsakes-approved/postcard-lifestyle.png",
+    "src": "/brand/keepsakes-approved/postcard-lifestyle-960.webp",
+    "srcSet": "/brand/keepsakes-approved/postcard-lifestyle-480.webp 480w, /brand/keepsakes-approved/postcard-lifestyle-960.webp 960w, /brand/keepsakes-approved/postcard-lifestyle-1254.webp 1254w",
+    "alt": "Personalized postcard front and back marketing example"
+  }
+]);
+export const approvedKeepsakeAsset=id=>APPROVED_KEEPSAKES_ASSETS.find(a=>a.id===id);
+export const PRODUCT_IMAGE_IDS=Object.freeze({
+  "keychain": [
+    "keychain-mono",
+    "keychain-color"
+  ],
+  "magnet": [
+    "magnet-mono",
+    "magnet-color"
+  ],
+  "jacketed-print": [
+    "photo-jacket"
+  ],
+  "acrylic-display": [
+    "acrylic-insert",
+    "acrylic-insert-alternate"
+  ],
+  "premium-acrylic": [
+    "uv-acrylic-mono",
+    "uv-acrylic-color"
+  ],
+  "framed-photo": [
+    "frame-champagne",
+    "frame-ivory",
+    "frame-silver",
+    "frame-antique-gold",
+    "frame-metal"
+  ],
+  "postcard": [
+    "postcard-lifestyle"
+  ],
+  "photo-book": [
+    "guest-photo-book",
+    "premium-album",
+    "album-linen",
+    "album-open"
+  ]
+});
+export function productMarketingImage(key,index=0){const ids=PRODUCT_IMAGE_IDS[key];return ids?approvedKeepsakeAsset(ids[index%ids.length]):null;}

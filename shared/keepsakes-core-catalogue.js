@@ -1,3 +1,4 @@
+import {PRODUCT_IMAGE_IDS,productMarketingImage} from './keepsakes-product-assets.js';
 // One commercial catalogue shared by storefront, Admin and proposal configuration.
 // Provider names describe intended routes; they never assert integration readiness.
 export const KEEPSAKES_COLLECTIONS = Object.freeze([
@@ -6,15 +7,11 @@ export const KEEPSAKES_COLLECTIONS = Object.freeze([
  {id:'signature',title:'Signature Keepsakes',description:'Elevated statement pieces that turn your memories into lasting treasures.'},
 ]);
 // Owner-supplied design examples, never supplier verification or a guest's photograph.
-export const KEEPSAKES_PRODUCT_EXAMPLES=Object.freeze({
- keychain:['keychain'],magnet:['magnet'],'photo-book':['photo-book','album-open'],
- 'metal-print':['metal-print'],postcard:['postcard'],
- 'premium-acrylic':['premium-acrylic'],'framed-photo':['framed-strip-gold','framed-strip-silver'],
-});
-export const keepsakesExample=(key,index=0)=>{const images=KEEPSAKES_PRODUCT_EXAMPLES[key];return images?'/brand/keepsakes-examples/'+images[index%images.length]+'.png':null;};
+export const KEEPSAKES_PRODUCT_EXAMPLES=PRODUCT_IMAGE_IDS;
+export const keepsakesExample=(key,index=0)=>productMarketingImage(key,index)?.src||null;
 const entries=[
- ['edited-photo','Edited Digital Photo','digital','DIGITAL_EDIT','An edited, unbranded photograph, delivered as a high-resolution download.','ORIGINAL_UNBRANDED'],
- ['edited-strip','Edited Digital Photo Strip','digital','DIGITAL_EDIT','Your branded photo strip, professionally enhanced and ready to download.','BRANDED_STRIP'],
+ ['edited-photo','Edited Digital Photo','digital','DIGITAL_EDIT','Your selected Lola Booth photograph will be professionally enhanced and delivered without the event frame, overlay, or branding.','ORIGINAL_UNBRANDED'],
+ ['edited-strip','Edited Digital Photo Strip','digital','DIGITAL_EDIT','Your selected branded photo strip will be professionally enhanced and delivered as a digital download.','BRANDED_STRIP'],
  ['edited-package','Edited Digital Package','digital','DIGITAL_EDIT','One edited unbranded photo and one edited branded strip, together.','PHOTO_AND_STRIP'],
  ['keychain','Photo Keychain','everyday','IN_HOUSE','Your favorite photo in a beautifully finished keepsake keychain.','SINGLE_PHOTO'],
  ['magnet','Photo Magnet','everyday','IN_HOUSE','A little memory to enjoy every day, printed and assembled with care.','SINGLE_PHOTO'],
@@ -30,5 +27,5 @@ export const KEEPSAKES_CORE_PRODUCTS=Object.freeze(entries.map(([key,title,colle
 export const keepsakesCoreProduct=key=>KEEPSAKES_CORE_PRODUCTS.find(p=>p.key===key);
 export function coreCatalogueView(rows=[]){
  const byKey=new Map(rows.map(row=>[row.catalogue_key,row]));
- return KEEPSAKES_CORE_PRODUCTS.map(p=>{const row=byKey.get(p.key);return {...p,productId:row?.id||null,retailCents:row?.retail_cents??null,currency:'USD',available:false};});
+ return KEEPSAKES_CORE_PRODUCTS.map(p=>{const row=byKey.get(p.key);return {...p,productId:row?.id||null,retailCents:row?.retail_cents??null,currency:'USD',available:!!(row?.active&&row?.verified&&row?.retail_cents&&row?.variants?.length&&['DIGITAL_EDIT','IN_HOUSE','LOB'].includes(p.route)),variants:row?.variants||[]};});
 }

@@ -10,6 +10,7 @@ import {normalizePhotoLookup,photoSourceForProduct} from '../shared/keepsakes-ph
 test('phone/email normalization and explicit source selection',()=>{
  assert.equal(normalizePhotoLookup('SMS','(312) 555-0123'),'+13125550123');assert.equal(normalizePhotoLookup('EMAIL',' Guest@Example.com '),'guest@example.com');assert.equal(normalizePhotoLookup('SMS','abc123'),null);
  const assets=[{id:'a',sessionId:'s',kind:'COMPOSITE',branded:true},{id:'b',sessionId:'s',kind:'ORIGINAL',branded:false},{id:'c',sessionId:'s',kind:'BRANDED_STRIP',branded:true},{id:'other',sessionId:'x',kind:'ORIGINAL',branded:false}];
+ const more=[...assets,{id:'b2',sessionId:'s',kind:'ORIGINAL',branded:false}];assert.equal(photoSourceForProduct({source:'ORIGINAL_UNBRANDED'},more,'b2').asset.id,'b2');assert.equal(photoSourceForProduct({source:'ORIGINAL_UNBRANDED'},more,'a').asset,undefined,'A composite must not arbitrarily choose one of several source photos');
  assert.equal(photoSourceForProduct({source:'ORIGINAL_UNBRANDED'},assets,'a').asset.id,'b');assert.equal(photoSourceForProduct({source:'BRANDED_STRIP'},assets,'a').asset.id,'c');assert.equal(photoSourceForProduct({source:'BRANDED_STRIP'},assets.slice(0,2),'a').asset,undefined);
 });
 test('photo retrieval queues neutral email, matches imported Fiesta contacts across galleries, redeems once and rechecks every scope',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL,timeout:120000},async()=>{

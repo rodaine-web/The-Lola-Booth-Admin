@@ -1,36 +1,24 @@
-import {keepsakesExample} from '../../shared/keepsakes-core-catalogue.js';
 import {useEffect,useRef,useState} from 'react';
-import {useKeepsakesPhotos} from '../contexts/KeepsakesPhotos.jsx';
-import {drawFrame,drawPaper,printTexture} from '../utils/keepsakes-preview.js';
+import {productMarketingImage,approvedKeepsakeAsset} from '../../shared/keepsakes-product-assets.js';
+import {previewTemplateFor} from '../../shared/keepsakes-preview-templates.js';
+import {useKeepsakesPhotos,GuestPhoto} from '../contexts/KeepsakesPhotos.jsx';
+import {drawPersonalizedSurface} from '../utils/product-perspective.js';
+import {printTexture} from '../utils/keepsakes-preview.js';
 const load=src=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=src;});
-function panel(ctx,photo,x,y,w,h,border=12,color='#e1d9cd'){
- ctx.save();ctx.shadowColor='#30261855';ctx.shadowBlur=16;ctx.shadowOffsetY=10;ctx.fillStyle=color;ctx.fillRect(x-border,y-border,w+2*border,h+2*border);ctx.shadowColor='transparent';
- const texture=printTexture(photo,{widthPx:w,heightPx:h},{fit:'contain'});ctx.drawImage(texture,x,y,w,h);ctx.restore();
-}
-export default function CoreKeepsakePreview({product,asset,strip,second,back=false,illustrative=false,exampleIndex=0}){
- const {loadPhoto}=useKeepsakesPhotos()||{},ref=useRef(null),[state,setState]=useState('loading'),example=illustrative?keepsakesExample(product.key,exampleIndex):null;
- useEffect(()=>{let active=true;setState('loading');if(example){setState('ready');return;}
-  if(!asset&&!illustrative){setState('unavailable');return;}
-  Promise.all([illustrative?load('/assets/keepsakes/approved/'+(product.key==='edited-strip'?'sample-strip.svg':'sample-photo.webp')):loadPhoto(asset).then(load),product.key==='framed-photo'?load('/assets/keepsakes/prodigi-classic-frame-gold.png'):null,product.key==='postcard'?load('/assets/keepsakes/lola-postcard-back-v2.svg'):null,illustrative&&product.key==='edited-package'?load('/assets/keepsakes/approved/sample-strip.svg'):strip?loadPhoto(strip).then(load):null,illustrative&&product.key==='photo-book'?load('/assets/keepsakes/approved/sample-photo.webp'):second?loadPhoto(second).then(load):null]).then(([photo,frame,postcard,stripPhoto,secondPhoto])=>{
-   if(!active||!ref.current)return;const c=ref.current.getContext('2d');c.setTransform(illustrative?1:2,0,0,illustrative?1:2,0,0);c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';c.clearRect(0,0,1000,750);
-   const bg=c.createLinearGradient(0,0,1000,750);bg.addColorStop(0,'#eee4d5');bg.addColorStop(1,'#faf6ef');c.fillStyle=bg;c.fillRect(0,0,1000,750);
-   const ratio=photo.width/photo.height,w=ratio>=1?570:400,h=ratio>=1?570/ratio:Math.min(540,400/ratio),x=(1000-w)/2,y=(750-h)/2;
-   if(frame)drawFrame(c,printTexture(photo,{widthPx:800,heightPx:1000},{fit:'contain'}),frame);
-   else if(product.key==='postcard'){if(back)drawPaper(c,postcard,{x:100,y:100,width:800});else{drawPaper(c,postcard,{x:460,y:240,width:440,angle:.05});drawPaper(c,printTexture(photo,{widthPx:1800,heightPx:1200},{fit:'contain'}),{x:70,y:100,width:600,angle:-.04});}}
-   else if(product.key==='keychain'){
-    c.strokeStyle='#b48a50';c.lineWidth=18;c.beginPath();c.ellipse(500,145,58,58,0,0,Math.PI*2);c.stroke();c.beginPath();c.moveTo(500,200);c.lineTo(500,260);c.stroke();panel(c,photo,365,260,270,340,16,'#d6b77a');
-   }else if(product.key==='magnet'){panel(c,photo,275,160,450,430,10,'#242322');}
-   else if(['acrylic-display','premium-acrylic'].includes(product.key)){
-    c.fillStyle='#bec9c677';c.beginPath();c.moveTo(x+w+15,y-15);c.lineTo(x+w+60,y+20);c.lineTo(x+w+60,y+h+40);c.lineTo(x+w+15,y+h+15);c.closePath();c.fill();panel(c,photo,x,y,w,h,15,'#e4eeec');c.strokeStyle='#fff';c.lineWidth=4;c.strokeRect(x-15,y-15,w+30,h+30);
-   }else if(product.key==='jacketed-print'){c.fillStyle='#ded1bb';c.fillRect(170,130,330,490);c.fillStyle='#fdf9ef';c.fillRect(500,130,330,490);panel(c,photo,530,175,270,390,5,'#fff');}
-   else if(product.key==='photo-book'){c.fillStyle='#26221d';c.fillRect(135,140,730,470);panel(c,photo,165,170,320,410,0);if(secondPhoto)panel(c,secondPhoto,515,170,320,410,0);else{c.fillStyle='#fffdf9';c.fillRect(515,170,320,410);c.fillStyle='#817164';c.font='22px Georgia';c.fillText('Choose another photo',555,370);}c.fillStyle='#d6c9b9';c.fillRect(493,140,14,470);}
-   else if(product.key==='metal-print'){panel(c,photo,x,y,w,h,6,'#969c9d');}
-   else if(product.key==='edited-strip'){drawPaper(c,photo,{x:350,y:75,width:Math.min(300,600*photo.width/photo.height)});}
-   else if(product.key==='edited-package'){drawPaper(c,photo,{x:150,y:90,width:Math.min(470,560*photo.width/photo.height),angle:-.03});if(stripPhoto)drawPaper(c,stripPhoto,{x:690,y:90,width:Math.min(200,560*stripPhoto.width/stripPhoto.height),angle:.03});}
-   else{drawPaper(c,photo,{x,y,width:w});}
-   setState('ready');
+export default function CoreKeepsakePreview({product,asset,strip,second,assets=[],back=false,illustrative=false,exampleIndex=0,variant,crop={fit:'contain'}}){
+ const context=useKeepsakesPhotos(),ref=useRef(null),[state,setState]=useState('loading'),digital=product.collection==='digital',marketing=productMarketingImage(product.key,exampleIndex),template=previewTemplateFor(product.key,{assetId:variant?.previewAssetId||(marketing&&marketing.id),variant}),base=template&&approvedKeepsakeAsset(template.assetId),sources=[asset,second,...assets].filter(Boolean);
+ const illustrativeSrc=digital?`/brand/keepsakes-digital/${product.key}.svg`:marketing?.src;
+ useEffect(()=>{let active=true;if(digital||illustrative||back){setState('ready');return;}setState('loading');if(!asset){setState('unavailable');return;}
+  Promise.all([base?load(base.srcSet.split(',').at(-1).trim().split(' ')[0]):null,...sources.map(a=>context.loadPhoto(a).then(load))]).then(([background,...photos])=>{
+   if(!active||!ref.current)return;const canvas=ref.current,c=canvas.getContext('2d');c.setTransform(canvas.width/1254,0,0,canvas.height/1254,0,0);c.clearRect(0,0,1254,1254);c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';
+   if(background&&template){c.drawImage(background,0,0,1254,1254);template.quads.forEach((quad,i)=>{const picture=photos[i]||(!template.multiple?photos[0]:null);if(picture)drawPersonalizedSurface(c,picture,quad,template,crop);else{c.save();c.beginPath();quad.forEach((p,n)=>n?c.lineTo(...p):c.moveTo(...p));c.closePath();c.fillStyle='#fffdf9';c.fill();c.restore();}});}
+   else if(product.key==='metal-print'){c.fillStyle='#f3ede3';c.fillRect(0,0,1254,1254);c.shadowColor='#302a2260';c.shadowBlur=28;c.shadowOffsetY=22;c.fillStyle='#9a9d9e';c.fillRect(224,205,820,865);c.shadowColor='transparent';c.drawImage(printTexture(photos[0],{widthPx:800,heightPx:840},crop),232,213,804,849);const g=c.createLinearGradient(232,213,1036,1062);g.addColorStop(0,'#ffffff40');g.addColorStop(.6,'#ffffff00');g.addColorStop(1,'#ffffff24');c.fillStyle=g;c.fillRect(232,213,804,849);}
+   else{setState('unavailable');return;}setState('ready');
   }).catch(()=>{if(active)setState('unavailable');});return()=>{active=false;};
- },[product.key,asset?.id,strip?.id,second?.id,back,illustrative,loadPhoto,example]);
- if(example)return <div className="shop-own-preview shop-example-preview" data-preview-state={state==='unavailable'?'unavailable':'ready'} data-photo-id="" data-example-image={example}><img className="shop-approved-product-example" src={example} width="1254" height="1254" loading="lazy" alt={`Illustrative product example: ${product.title}`} onError={()=>setState('unavailable')}/><small className="shop-preview-disclosure">Product example</small>{state==='unavailable'&&<p role="status">This product example is unavailable.</p>}</div>;
- return <div className="shop-own-preview" data-preview-state={state} data-photo-id={asset?.id||''}><canvas width={illustrative?1000:2000} height={illustrative?750:1500} ref={ref} hidden={state!=='ready'} role="img" aria-label={`${illustrative?'Illustrative product example:':'Your photo on'} ${product.title}`}/>{state==='ready'&&<small className="shop-preview-disclosure">{illustrative?'Product example':'Photo placement illustration · review final product proof'}</small>}{state!=='ready'&&<p role="status">{state==='loading'?'Preparing your keepsake…':'Your photo preview is unavailable.'}</p>}</div>;
+ },[product.key,asset?.id,second?.id,JSON.stringify(assets.map(a=>a.id)),illustrative,back,template?.assetId,JSON.stringify(crop),context?.loadPhoto]);
+ if(back&&product.key==='postcard')return <div className="shop-own-preview" data-preview-state="ready"><img src="/assets/keepsakes/lola-postcard-back-v2.svg" alt="Approved Lola postcard back template"/><small className="shop-preview-disclosure">Approved back · message and mailing details added during configuration</small></div>;
+ if(digital)return <div className="shop-own-preview shop-digital-preview" data-preview-state="ready" data-photo-id={asset?.id||''}><img src={illustrativeSrc} width="1000" height="750" alt={`${product.title}: editing service illustration, not a completed edit`}/>{asset&&<div className="shop-digital-reference"><GuestPhoto asset={asset} alt="Selected gallery photograph · editing reference"/>{strip&&strip.id!==asset.id&&<GuestPhoto asset={strip} alt="Selected branded strip · editing reference"/>}<span>Selected source reference<br/><strong>We've got your photo. We'll take care of the finishing touches.</strong></span></div>}</div>;
+ if(illustrative&&illustrativeSrc)return <div className="shop-own-preview shop-example-preview" data-preview-state="ready" data-example-image={marketing.original}><img className="shop-approved-product-example" src={marketing.src} srcSet={marketing.srcSet} sizes="(max-width:600px) 95vw,(max-width:1000px) 45vw, 50vw" width={marketing.width} height={marketing.height} loading="lazy" alt={marketing.alt}/><small className="shop-preview-disclosure">{marketing.id==='frame-metal'?'Metal frame · Coming soon':'Product example'}</small></div>;
+ if(illustrative)return <div className="shop-own-preview" data-preview-state="ready"><svg viewBox="0 0 800 600" role="img" aria-label="Aluminum photo print material illustration"><rect width="800" height="600" fill="#f3ede3"/><rect x="180" y="70" width="440" height="450" rx="8" fill="#b1b5b7"/><rect x="187" y="77" width="426" height="436" fill="#e7e8e7"/><path d="M240 400l100-120 80 80 60-70 90 110" stroke="#969c9e" strokeWidth="8" fill="none"/></svg><small className="shop-preview-disclosure">Material illustration · approved metal print photograph pending</small></div>;
+ return <div className="shop-own-preview shop-personalized-product" data-preview-state={state} data-photo-id={asset?.id||''} data-template-id={template?.assetId||'metal-panel-geometry-v1'}><canvas width="1254" height="1254" ref={ref} hidden={state!=='ready'} role="img" aria-label={`Your photo on ${product.title}`}/>{state==='ready'?<small className="shop-preview-disclosure">Personalized product visualization · final print proof follows configuration</small>:<p role="status">{state==='loading'?'Preparing your keepsake…':'An approved preview is unavailable for this configuration.'}</p>}</div>;
 }

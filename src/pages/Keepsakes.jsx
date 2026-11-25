@@ -5,7 +5,7 @@ import "../styles/keepsakes.css";
 import ProductPreview, {canPreviewKeepsake} from "../components/KeepsakesProductPreview.jsx";
 import {keepsakesCartKey,restoreKeepsakesCart,saveKeepsakesCart} from "../utils/keepsakes-cart.js";
 import KeepsakesPostcardPreview from "../components/KeepsakesPostcardPreview.jsx";
-import {POSTCARD_FONTS,POSTCARD_COLORS,DEFAULT_MESSAGE_FONT,DEFAULT_MESSAGE_COLOR} from "../../shared/postcard-message-styles.js";
+import {POSTCARD_EDITOR_FONTS,POSTCARD_FONTS,POSTCARD_COLORS,DEFAULT_MESSAGE_FONT,DEFAULT_MESSAGE_COLOR} from "../../shared/postcard-message-styles.js";
 
 const API = import.meta.env.VITE_API_URL || "/api";
 const EMPTY_ADDRESS = { name: "", address1: "", address2: "", city: "", state: "", zip: "", country: "US" };
@@ -48,7 +48,7 @@ function PostcardContent({ recipient }) {
 }
 
 function NoteFields({recipient,index,onChange}){
- return <div className="ks-note-fields"><label htmlFor={`ks-note-${index}`}>Your message (optional)<textarea id={`ks-note-${index}`} maxLength={600} value={recipient.message||''} onChange={e=>onChange({...recipient,message:e.target.value})}/></label><div className="ks-message-options"><label>Message font<select aria-label="Message font" value={recipient.messageFont||DEFAULT_MESSAGE_FONT} onChange={e=>onChange({...recipient,messageFont:e.target.value})}>{POSTCARD_FONTS.map(font=><option key={font.id} value={font.id}>{font.label}</option>)}</select></label><label>Font color<select aria-label="Font color" value={recipient.messageColor||DEFAULT_MESSAGE_COLOR} onChange={e=>onChange({...recipient,messageColor:e.target.value})}>{POSTCARD_COLORS.map(color=><option key={color.value} value={color.value}>{color.label}</option>)}</select></label></div><p className="ks-font-sample" style={{fontFamily:POSTCARD_FONTS.find(f=>f.id===(recipient.messageFont||DEFAULT_MESSAGE_FONT))?.family,color:recipient.messageColor||DEFAULT_MESSAGE_COLOR}}>A little memory, just for you.</p></div>;
+ return <div className="ks-note-fields"><label htmlFor={`ks-note-${index}`}>Your message (optional)<textarea id={`ks-note-${index}`} maxLength={600} value={recipient.message||''} onChange={e=>onChange({...recipient,message:e.target.value})}/></label><div className="ks-message-options"><label>Message font<select aria-label="Message font" value={recipient.messageFont||DEFAULT_MESSAGE_FONT} onChange={e=>onChange({...recipient,messageFont:e.target.value})}>{POSTCARD_EDITOR_FONTS.map(font=><option key={font.id} value={font.id}>{font.label}</option>)}</select></label><label>Font color<select aria-label="Font color" value={recipient.messageColor||DEFAULT_MESSAGE_COLOR} onChange={e=>onChange({...recipient,messageColor:e.target.value})}>{POSTCARD_COLORS.map(color=><option key={color.value} value={color.value}>{color.label}</option>)}</select></label></div><p className="ks-font-sample" style={{fontFamily:POSTCARD_FONTS.find(f=>f.id===(recipient.messageFont||DEFAULT_MESSAGE_FONT))?.family,color:recipient.messageColor||DEFAULT_MESSAGE_COLOR}}>A little memory, just for you.</p></div>;
 }
 
 function Quantity({ value, onChange, disabled = false }) {

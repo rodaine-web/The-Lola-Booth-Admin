@@ -1,6 +1,7 @@
 // Bundled, licensed font files are shared by the browser and print renderer.
 export const POSTCARD_FONTS = [
- {id:'classic',label:'Classic · typed',family:'LolaPostcardClassic',file:'assets/keepsakes/fonts/LiberationSans-Regular.ttf',size:40},
+ {id:'serif',label:'Classic serif',family:'LolaPostcardSerif',file:'brand/fonts/CormorantGaramond.ttf',size:44},
+ {id:'classic',label:'Clean sans-serif',family:'LolaPostcardClassic',file:'assets/keepsakes/fonts/LiberationSans-Regular.ttf',size:40},
  {id:'typewriter',label:'Typewriter · typed',family:'LolaPostcardTypewriter',file:'assets/keepsakes/fonts/SpecialElite-Regular.ttf',size:40},
  {id:'handwritten',label:'Handwritten',family:'LolaPostcardHandwritten',file:'assets/keepsakes/fonts/Caveat.ttf',size:48},
  {id:'casual',label:'Casual handwriting',family:'LolaPostcardCasual',file:'assets/keepsakes/fonts/PatrickHand-Regular.ttf',size:44},
@@ -12,3 +13,6 @@ export const POSTCARD_COLORS = [
 ];
 export const DEFAULT_MESSAGE_FONT='classic';
 export const DEFAULT_MESSAGE_COLOR='#26221d';
+
+// Legacy typewriter remains renderable for historical orders.
+export const POSTCARD_EDITOR_FONTS=POSTCARD_FONTS.filter(f=>f.id!=='typewriter');

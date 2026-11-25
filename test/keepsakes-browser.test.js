@@ -142,7 +142,7 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
         const recipient = page.getByRole('group', { name: `Recipient ${index}`, exact: true });
         for (const [label, value] of [['Full name', `Synthetic Recipient ${index}`], ['Street address', `${index} Test Street`], ['City', 'Test City'], ['State / province', 'MA'], ['ZIP / postal code', '02134']]) await recipient.getByLabel(label, { exact: true }).fill(value);
         await recipient.getByLabel('Your message (optional)', { exact: true }).fill(`A personal message for recipient ${index}.`);
-        await recipient.getByLabel('Message font', {exact:true}).selectOption(index===1?'typewriter':'handwritten');
+        await recipient.getByLabel('Message font', {exact:true}).selectOption(index===1?'serif':'handwritten');
         await recipient.getByLabel('Font color', {exact:true}).selectOption(index===1?'#17365d':'#703040');
         assert.equal(await recipient.getByLabel('Message font', {exact:true}).locator('option').count(),5);
         assert.equal(await recipient.locator('textarea').inputValue(),`A personal message for recipient ${index}.`);
@@ -156,7 +156,7 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       await dialog.getByRole('heading', { name: 'Your order total', exact: true }).waitFor();
       assert.equal(quotes[3].items[2].returnAddress.name,'Synthetic Sender');assert.equal(quotes[3].items[2].returnAddress.zip,'02134');assert.equal(quotes[3].items[2].recipients.length, 4);assert.equal(quotes[3].items[2].quantity,1);assert.equal(quotes[3].items[2].postcardArtworkColor,'#703040');
       assert.equal(quotes[3].items[2].recipients[1].message, 'A personal message for recipient 2.');
-      assert.equal(quotes[3].items[2].recipients[0].messageFont,'typewriter');
+      assert.equal(quotes[3].items[2].recipients[0].messageFont,'serif');
       assert.equal(quotes[3].items[2].recipients[1].messageFont,'handwritten');
       assert.equal(quotes[3].items[2].recipients[1].messageColor,'#703040');
       // A checkout return restores the cart and recipient drafts but never an
