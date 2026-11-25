@@ -1,3 +1,4 @@
+import {galleryTwilioRouter} from './routes/gallery-twilio.js';
 import {crmOutlookCallbackRouter} from './routes/crm-contacts.js';
 import {keepsakesPublicRouter,keepsakesAdminRouter} from './routes/keepsakes.js';
 import {externalOAuthRouter} from './routes/external-integrations.js';
@@ -36,6 +37,7 @@ app.use(pinoHttp({ logger, genReqId: (_req, res) => { const id = crypto.randomUU
 app.use("/api/integrations",galleryDropboxOAuthRouter);
 app.use("/api/integrations",crmOutlookCallbackRouter);
 app.use("/api/integrations",externalOAuthRouter);
+app.use("/api/gallery-twilio",galleryTwilioRouter);
 app.use("/api/webhooks", express.raw({ type: "application/json", limit: "1mb" }), webhookRouter);
 app.use(express.json({ limit: "14mb" }));
 app.use(createApiRateLimits({windowMs:env.rateLimitWindowMs,limit:env.rateLimitMax}));

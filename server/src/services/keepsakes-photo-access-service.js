@@ -1,5 +1,6 @@
 import {keepsakesPublicOrigin} from '../../../shared/keepsakes-host.js';
 import crypto from 'node:crypto';
+import {stagingEmailPolicy} from '../config/staging-safety.js';
 import sharp from 'sharp';
 import {query,transaction} from '../db/pool.js';
 import {env} from '../config/env.js';
@@ -18,7 +19,8 @@ const token=()=>crypto.randomBytes(32).toString('base64url');
 const unavailable=()=>new AppError('This photo access has expired or is unavailable. Request a new link.',404,'PHOTO_ACCESS_UNAVAILABLE');
 const neutral={accepted:true,message:PHOTO_LOOKUP_MESSAGE};
 // Revalidate grants, gallery publication, retention and person assignments on every read.
-async function scopeAnchors(scope){
+export async function scopeAnchors(scope){
+ if(scope.phoneAccessId&&!(await query('SELECT 1 FROM gallery_phone_access WHERE id=$1 AND consumed_at IS NOT NULL AND revoked_at IS NULL AND expires_at>now()',[scope.phoneAccessId])).rowCount)return [];
  const key=(await query(`SELECT k.id,k.type,k.person_id,COALESCE(p.allow_download,a.allow_personal_download) AS lookup_download_allowed FROM gallery_access_keys k
  JOIN gallery_albums a ON a.id=k.album_id JOIN events e ON e.id=a.event_id
  JOIN gallery_people p ON p.id=$3 AND p.album_id=a.id
@@ -30,7 +32,7 @@ async function scopeAnchors(scope){
  return (await query(`SELECT m.* FROM gallery_media m JOIN gallery_media_people mp ON mp.media_id=m.id AND mp.album_id=m.album_id
  WHERE m.album_id=$1 AND mp.person_id=$2 AND m.status='VISIBLE' AND m.media_type='IMAGE'`,[scope.albumId,scope.personId])).rows.map(m=>({...m,lookup_download_allowed:key.lookup_download_allowed===true}));
 }
-async function contactScopes(channel,recipient){
+export async function contactScopes(channel,recipient){
  const fingerprint=contactHash(channel,recipient);
  const people=(await query(`SELECT DISTINCT p.id,p.album_id,p.external_ref,s.channel,s.recipient_ciphertext
  FROM gallery_people p JOIN fiesta_gallery_shares s ON s.person_id=p.id AND s.album_id=p.album_id
@@ -50,25 +52,30 @@ async function contactScopes(channel,recipient){
 export async function requestPhotoAccess(input){
  assertKeepsakes();
  const channel=input.channel==='PHONE'?'SMS':input.channel==='EMAIL'?'EMAIL':null;
- const recipient=normalizePhotoLookup(channel,input.value),email=normalizePhotoLookup('EMAIL',channel==='EMAIL'?input.value:input.email);
- if(!recipient||!email)throw new AppError('Enter a valid email and, for phone lookup, a phone number including country code.',422,'PHOTO_LOOKUP_INVALID');
+ const recipient=normalizePhotoLookup(channel,input.value);
+ if(!recipient)throw new AppError('Enter a valid email address or phone number.',422,'PHOTO_LOOKUP_INVALID');
+ let email=channel==='EMAIL'?recipient:null;
+ if(channel==='SMS'){
+  const binding=(await query('SELECT email_ciphertext FROM gallery_trusted_phone_emails WHERE phone_hash=$1 AND revoked_at IS NULL',[contactHash('SMS',recipient)])).rows[0];
+  if(binding)email=normalizePhotoLookup('EMAIL',decryptSecretJson(binding.email_ciphertext).email);
+ }
  const targetHash=contactHash(channel,recipient);
  return transaction(async()=>{
   // Serializing each target prevents concurrent requests bypassing the cooldown.
   await query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[targetHash]);
   if((await query("SELECT 1 FROM keepsakes_photo_requests WHERE target_hash=$1 AND created_at>now()-interval '2 minutes' LIMIT 1",[targetHash])).rowCount)return neutral;
-  const scopes=await contactScopes(channel,recipient),code=token();
-  // A matching Fiesta phone record is sufficient for this explicitly unverified
-  // delivery flow. The supplied email need not already appear in Fiesta.
+  const scopes=email?await contactScopes(channel,recipient):[],code=token();
+  // No arbitrary submitted email can claim phone ownership; legacy associations remain untrusted.
   const request=(await query(`INSERT INTO keepsakes_photo_requests(target_hash,token_hash,scopes,expires_at) VALUES($1,$2,$3,now()+interval '30 minutes') RETURNING id`,[targetHash,hash(code),JSON.stringify(scopes)])).rows[0];
-  if(channel==='SMS'&&scopes.length)await query(`INSERT INTO keepsakes_unverified_contacts(phone_hash,email_hash,contact_ciphertext,request_id) VALUES($1,$2,$3,$4)`,[targetHash,contactHash('EMAIL',email),encryptSecretJson({phone:recipient,email}),request.id]);
-  if(scopes.length){
+  let stagingAllowed=true;
+  if(process.env.APP_ENV==='staging'&&scopes.length){try{stagingEmailPolicy({to:email},{...process.env,STAGING_EMAIL_ALLOW_ANY_RECIPIENT:'false'});}catch{stagingAllowed=false;}}
+  if(scopes.length&&stagingAllowed){
    const origin=keepsakesPublicOrigin(process.env);
    const link=`${origin.replace(/\/$/,'')}/photos/access#code=${code}`;
    const communication=await createCommunicationDraft({channel:'EMAIL',recipient:email,subject:'Your Lola Booth photos are waiting',body:`Your Lola Booth memories are ready to explore.\n\nOpen your secure photo collection:\n${link}\n\nThis link expires in 30 minutes and can be opened once. Your photo session lasts up to 7 days, subject to your gallery access.\n\nGood people. Better photos.`,status:'SCHEDULED',scheduled_at:new Date(),trigger_key:'KEEPSAKES_PHOTO_ACCESS'});
    await query('UPDATE keepsakes_photo_requests SET communication_id=$2 WHERE id=$1',[request.id,communication.id]);
   }
-  await writeAudit({req:{},action:'keepsakes_photo_access_requested',entity:'keepsakes_photo_request',entityId:request.id,after:{channel,scopeCount:scopes.length,verificationStatus:channel==='SMS'?'UNVERIFIED':'EMAIL_LINK'}});
+  await writeAudit({req:{},action:'keepsakes_photo_access_requested',entity:'keepsakes_photo_request',entityId:request.id,after:{channel,scopeCount:scopes.length,verificationStatus:channel==='SMS'?'TRUSTED_OWNERSHIP_REQUIRED':'EMAIL_LINK'}});
   return neutral;
  });
 }
@@ -81,6 +88,7 @@ export async function redeemPhotoAccess(code){
   if(!scopes.length)throw unavailable();
   const sessionToken=token();
   const row=(await query(`INSERT INTO keepsakes_photo_sessions(token_hash,scopes,expires_at,request_id) VALUES($1,$2,now()+interval '7 days',$3) RETURNING expires_at`,[hash(sessionToken),JSON.stringify(scopes),request.id])).rows[0];
+  for(const albumId of new Set(scopes.map(s=>s.albumId))){await query("INSERT INTO gallery_notification_events(publication_id,kind) SELECT id,'RETURNING_EMAIL_ACCESS' FROM gallery_notification_publications WHERE album_id=$1",[albumId]);}
   await writeAudit({req:{},action:'keepsakes_photo_access_redeemed',entity:'keepsakes_photo_request',entityId:request.id,after:{scopeCount:scopes.length}});
   return {token:sessionToken,expiresAt:row.expires_at};
  });
@@ -139,6 +147,7 @@ export async function collectionDownload(sessionToken,id){
 export async function createPhotoHandoff(sessionToken,selection,target){
  const {session,assets}=await sessionAssets(sessionToken);
  if(!['SHOP','GALLERY'].includes(target)||!Array.isArray(selection)||!selection.length||selection.length>1000||new Set(selection).size!==selection.length||selection.some(id=>!assets.some(a=>a.id===id)))throw unavailable();
+ if(target==='SHOP'){for(const albumId of new Set(assets.map(a=>a.albumId)))await query("INSERT INTO gallery_notification_events(publication_id,kind) SELECT id,'VOLUNTARY_KEEPSAKES_VISIT' FROM gallery_notification_publications WHERE album_id=$1",[albumId]);}
  const code=token();await query(`INSERT INTO keepsakes_photo_handoffs(token_hash,session_id,selected_asset_ids,target,expires_at) VALUES($1,$2,$3,$4,LEAST($5::timestamptz,now()+interval '2 minutes'))`,[hash(code),session.id,JSON.stringify(selection),target,session.expires_at]);
  return {code};
 }

@@ -87,7 +87,7 @@ const PublicContract = lazy(() => import("./pages/PublicContract.jsx"));
 
 export default function App() {
   if(window.location.hostname==='staginggallery.thelolabooth.com'&&(window.location.pathname==='/'||window.location.pathname==='/find-photos'||window.location.pathname.startsWith('/photos/')||window.location.pathname==='/gallery'||window.location.pathname.startsWith('/gallery/')))return <Suspense fallback={<main className="boot-screen">Opening your gallery…</main>}><Routes>
-   {['/','/find-photos','/photos/check-email','/photos/access','/photos/memories','/photos/transfer'].map(path=><Route key={path} path={path} element={<GalleryHome/>}/>)}
+   {['/','/find-photos','/photos/check-email','/photos/access','/photos/memories','/photos/transfer','/photos/phone-access','/photos/verify-email'].map(path=><Route key={path} path={path} element={<GalleryHome/>}/>)}
    <Route path="/gallery" element={<PublicGallery/>}/><Route path="/gallery/:type/:token" element={<PublicGallery/>}/>
    <Route path="/keepsakes/:type/:token" element={<Keepsakes/>}/><Route path="/keepsakes/orders/:orderToken" element={<Keepsakes/>}/>
    <Route path="*" element={<Navigate to="/" replace/>}/>

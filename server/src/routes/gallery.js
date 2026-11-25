@@ -1,3 +1,4 @@
+import * as guestNotifications from '../services/gallery-notification-service.js';
 import {deleteGalleryAlbum,deleteGalleryPhotos} from '../services/gallery-deletion-service.js';
 import {photoLink,photoLinkView,resolvePhotoLink} from '../services/gallery-photo-link-service.js';
 import {fulfillmentWorkspace,excludeRecipient} from '../services/postcard-fulfillment-service.js';
@@ -194,6 +195,16 @@ galleryAdminRouter.use(
 const write = requirePermission("write:operations");
 galleryAdminRouter.use('/albums/:id',asyncHandler(async(req,_res,next)=>{await assertFiestaReviewAccess(id.parse(req.params.id),req.user);next();}));
 galleryAdminRouter.use('/events/:eventId',asyncHandler(async(req,_res,next)=>{if(!await mailingEventAccess(req.user,id.parse(req.params.eventId)))throw new AppError('Event access denied.',403,'FORBIDDEN');next();}));
+// Album-scoped access above remains mandatory; approvals/settings require integration authority.
+galleryAdminRouter.get('/notifications-report',write,requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await guestNotifications.notificationReport(req.user))));
+galleryAdminRouter.get('/notification-settings',requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await guestNotifications.notificationSettings())));
+galleryAdminRouter.put('/notification-settings',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await guestNotifications.saveNotificationSettings(req.body,req.user))));
+galleryAdminRouter.get('/albums/:id/notifications',write,asyncHandler(async(req,res)=>res.json(await guestNotifications.notificationPanel(id.parse(req.params.id)))));
+galleryAdminRouter.get('/albums/:id/notification-contacts',write,asyncHandler(async(req,res)=>res.json(await guestNotifications.notificationContacts(id.parse(req.params.id)))));
+galleryAdminRouter.put('/albums/:id/notification-authorization',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{const input=z.object({personId:id,channel:z.enum(['EMAIL','SMS']),evidence:z.string().min(10).max(1000),authorized:z.boolean()}).strict().parse(req.body);res.json(await guestNotifications.authorizeNotification(id.parse(req.params.id),input,req.user));}));
+galleryAdminRouter.post('/albums/:id/notifications/:deliveryId/reconcile',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await guestNotifications.reconcileGallerySmsCost(id.parse(req.params.id),id.parse(req.params.deliveryId),req.user))));
+galleryAdminRouter.post('/albums/:id/notifications/review',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await guestNotifications.reviewGallerySms(id.parse(req.params.id),req.user))));
+galleryAdminRouter.post('/albums/:id/notifications/decision',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{const input=z.object({reviewId:id,decision:z.enum(['APPROVED','CANCELED'])}).strict().parse(req.body);res.json(await guestNotifications.decideGallerySms(id.parse(req.params.id),input.reviewId,input.decision,req.user));}));
 galleryAdminRouter.get('/albums/:id/postcard-workspace',write,asyncHandler(async(req,res)=>res.json(await fulfillmentWorkspace(id.parse(req.params.id),req.user))));
 galleryAdminRouter.post('/albums/:id/postcard-reports',write,asyncHandler(async(req,res)=>{
  const report=await createPostcardReport(id.parse(req.params.id),req.user);res.status(201).json({id:report.id,created_at:report.created_at});

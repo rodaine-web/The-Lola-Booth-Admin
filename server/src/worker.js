@@ -1,3 +1,4 @@
+import {processGalleryNotifications,processGalleryVerifications} from './services/gallery-notification-service.js';
 import {processLiveMailingQueue} from './services/gallery-live-mailing-service.js';
 import {processKeepsakesQueue,processKeepsakesNotifications} from './services/keepsakes-fulfillment-service.js';
 import {processKeepsakesTaxRefunds} from './services/keepsakes-refund-tax-service.js';
@@ -43,6 +44,8 @@ async function tick() {
   try {
     await pool.query('SELECT reconcile_sales_lifecycle()');
     await recordWorkerHeartbeat("automation-worker", { pid: process.pid, ...buildInfo(), jobsPaused:stagingJobsPaused(), databaseSystemId });
+    await processGalleryNotifications();
+    await processGalleryVerifications();
     await processKeepsakesQueue({limit:3});
     await processKeepsakesTaxRefunds();
     await processKeepsakesNotifications();

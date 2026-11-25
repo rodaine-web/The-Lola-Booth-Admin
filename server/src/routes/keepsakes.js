@@ -1,3 +1,4 @@
+import * as guestNotifications from '../services/gallery-notification-service.js';
 import * as production from '../services/keepsakes-production-service.js';
 import {premiumSupplierCatalogue} from '../services/keepsakes-premium-suppliers.js';
 import * as books from '../services/keepsakes-book-service.js';
@@ -32,6 +33,9 @@ keepsakesPublicRouter.post('/books/drafts',wrap(r=>books.saveBookDraft(photoBear
 keepsakesPublicRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue()));
 const photoLookupLimit=rateLimit({windowMs:15*60000,limit:10,standardHeaders:true,legacyHeaders:false});
 const photoBearer=req=>{const token=req.get('Authorization')?.match(/^Bearer ([\w-]{43})$/)?.[1];if(!token)throw new AppError('Request a new photo access link.',401,'PHOTO_ACCESS_REQUIRED');return token;};
+keepsakesPublicRouter.post('/photos/phone/inspect',photoLookupLimit,wrap(r=>guestNotifications.inspectPhoneAccess(z.string().max(100).parse(r.body.code))));
+keepsakesPublicRouter.post('/photos/phone/email',photoLookupLimit,wrap(r=>guestNotifications.requestPhoneEmailVerification(z.string().max(100).parse(r.body.code),z.string().max(254).parse(r.body.email))));
+keepsakesPublicRouter.post('/photos/phone/verify',photoLookupLimit,wrap(r=>guestNotifications.verifyPhoneEmail(z.string().max(100).parse(r.body.code))));
 keepsakesPublicRouter.post('/photos/request',photoLookupLimit,wrap(r=>photoAccess.requestPhotoAccess(z.object({channel:z.enum(['EMAIL','PHONE']),value:z.string().max(254),email:z.string().max(254).optional()}).strict().parse(r.body))));
 keepsakesPublicRouter.post('/photos/redeem',photoLookupLimit,wrap(r=>photoAccess.redeemPhotoAccess(z.string().max(100).parse(r.body.code))));
 keepsakesPublicRouter.post('/photos/link',photoLookupLimit,wrap(r=>photoAccess.directPhotoAccess(z.enum(['photo','p','a']).parse(r.body.type),z.string().max(100).parse(r.body.token))));
