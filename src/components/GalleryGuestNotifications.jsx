@@ -52,7 +52,8 @@ export default function GalleryGuestNotifications({
     if (!review) return;
     const old = document.activeElement;
     dialog.current.showModal();
-    cancelButton.current?.focus();
+    cancelButton.current?.focus({ preventScroll: true });
+    dialog.current.querySelector(".gn-dialog-body").scrollTop = 0;
     return () => {
       dialog.current?.close();
       old?.focus();
@@ -541,65 +542,70 @@ export default function GalleryGuestNotifications({
           }}
         >
           <div className="gn-dialog-inner">
-            <p className="eyebrow">GALLERY PUBLISHED</p>
-            <h2 id="gn-review-title">Send Photo Links by SMS?</h2>
-            <p>
-              Your Gallery is published. Eligible automatic email notifications
-              have been queued independently.
-            </p>
-            <h3>{review.eventName}</h3>
-            <small>Event ID: {review.eventId}</small>
-            <dl className="gn-review-grid">
-              {[
-                ["Imported guests", review.totalGuests],
-                ["Valid mobile contacts", review.validMobile],
-                ["Duplicate numbers removed", review.duplicates],
-                [
-                  "Consent / opt-out / access exclusions",
-                  review.consentExcluded,
-                ],
-                ["Already notified", review.alreadyNotified],
-                ["New eligible recipients", review.eligible],
-                ["Rendered SMS segments", review.segments],
-                [
-                  "Average segments",
-                  review.eligible
-                    ? (review.segments / review.eligible).toFixed(2)
-                    : "0",
-                ],
-                ["Estimated Twilio cost", money(review.estimatedMicros)],
-                ["Monthly budget remaining", money(review.remainingMicros)],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="gn-mode">
-              Staging simulation only. Confirming records approval and exercises
-              delivery without sending live SMS.
-            </p>
-            {review.sampleBody && <blockquote>{review.sampleBody}</blockquote>}
-            {review.warning && (
-              <p role="status">
-                This batch meets the configured cost warning threshold. Confirm
-                only after reviewing the estimate.
+            <div className="gn-dialog-body">
+              <p className="eyebrow">GALLERY PUBLISHED</p>
+              <h2 id="gn-review-title">Send Photo Links by SMS?</h2>
+              <p>
+                Your Gallery is published. Eligible automatic email
+                notifications have been queued independently.
               </p>
-            )}
-            {review.reasons.length > 0 && (
-              <ul>
-                {review.reasons.map((reason) => (
-                  <li key={reason}>{reason}</li>
+              <h3>{review.eventName}</h3>
+              <small>Event ID: {review.eventId}</small>
+              <dl className="gn-review-grid">
+                {[
+                  ["Imported guests", review.totalGuests],
+                  ["Valid mobile contacts", review.validMobile],
+                  ["Duplicate numbers removed", review.duplicates],
+                  [
+                    "Consent / opt-out / access exclusions",
+                    review.consentExcluded,
+                  ],
+                  ["Already notified", review.alreadyNotified],
+                  ["New eligible recipients", review.eligible],
+                  ["Rendered SMS segments", review.segments],
+                  [
+                    "Average segments",
+                    review.eligible
+                      ? (review.segments / review.eligible).toFixed(2)
+                      : "0",
+                  ],
+                  ["Estimated Twilio cost", money(review.estimatedMicros)],
+                  ["Monthly budget remaining", money(review.remainingMicros)],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
                 ))}
-              </ul>
-            )}
-            <p>
-              Estimate expires {new Date(review.expiresAt).toLocaleTimeString()}
-              . Actual provider costs may differ. Application limits do not cap
-              your Twilio bill.
-            </p>
-            {error && <p role="alert">{error}</p>}
+              </dl>
+              <p className="gn-mode">
+                Staging simulation only. Confirming records approval and
+                exercises delivery without sending live SMS.
+              </p>
+              {review.sampleBody && (
+                <blockquote>{review.sampleBody}</blockquote>
+              )}
+              {review.warning && (
+                <p role="status">
+                  This batch meets the configured cost warning threshold.
+                  Confirm only after reviewing the estimate.
+                </p>
+              )}
+              {review.reasons.length > 0 && (
+                <ul>
+                  {review.reasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              )}
+              <p>
+                Estimate expires{" "}
+                {new Date(review.expiresAt).toLocaleTimeString()}. Actual
+                provider costs may differ. Application limits do not cap your
+                Twilio bill.
+              </p>
+              {error && <p role="alert">{error}</p>}
+            </div>
             <div className="gn-actions">
               <button
                 ref={cancelButton}

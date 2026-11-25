@@ -168,3 +168,38 @@
     font-size: 19px;
   }
 }
+
+.gn-dialog {
+  overflow: hidden;
+}
+.gn-dialog .gn-dialog-inner {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  max-height: calc(90dvh - 2px);
+  overflow: hidden;
+}
+.gn-dialog .gn-dialog-body {
+  overflow: auto;
+  min-height: 0;
+  padding: 28px;
+  overscroll-behavior: contain;
+}
+.gn-dialog .gn-actions {
+  flex-shrink: 0;
+  background: #fffdfa;
+  padding: 16px 28px;
+  border-top: 1px solid #e6dccd;
+}
+@media (max-width: 650px) {
+  .gn-dialog .gn-dialog-body {
+    padding: 18px;
+  }
+  .gn-dialog .gn-actions {
+    padding: 14px 18px;
+  }
+  .gn-dialog .gn-actions button {
+    flex: 1;
+    min-width: 0;
+  }
+}

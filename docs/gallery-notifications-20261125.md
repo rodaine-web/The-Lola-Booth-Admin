@@ -121,12 +121,12 @@ Main files:
 ## Validation
 
 - Full unit suite: **843 passed, 66 skipped, 0 failed** (909 tests; opt-in database/browser suites run separately).
-- Synthetic 400-recipient lifecycle, pricing and repeated-click/cancel tests passed. Expanded database lifecycle: **19 tests passed**; sequential Gallery notification, Fiesta, Dropbox, deletion and lookup regressions: **22 passed** before the additional CRM opt-out and early-callback cases.
+- Synthetic 400-recipient lifecycle, pricing and repeated-click/cancel tests passed. Expanded database lifecycle: **19 tests passed**; sequential Gallery notification, Fiesta, Dropbox, deletion and lookup regressions: **24 passed**, including the additional CRM opt-out and early-callback cases.
 - Cross-Gallery concurrent approvals cannot reserve over the same monthly budget.
 - Signed Twilio STOP/HELP and forged-signature tests passed; no duplicate compliance response or unrelated SMS sends.
 - Token/email verification, forwarded-token limits, revoked grants, unknown-phone neutrality, trusted-only lookup and arbitrary-email takeover prevention passed.
 - Staging live flags cannot construct a Twilio client. Unapproved email destinations remain blocked even with the legacy broad QA switch enabled. All provider-facing unit tests use stubs/development transport; zero real messages or charges.
-- Responsive browser interaction passed at 1440 and 390 pixels, including Cancel focus, zero premature sends, later fresh review and confirmation.
+- Responsive browser interaction passed at 1440 and 390 pixels, including Cancel focus, initially visible event heading and decision controls, zero premature sends, later fresh review and confirmation.
 - Production build passed. Hosted deployment/CI evidence is appended after rollout.
 
 **Readiness:** ready for staging review/simulation; live SMS and production promotion remain blocked on the setup and independent qualification above. Permanent phone enrollment is deliberately deferred by the owner's instruction.

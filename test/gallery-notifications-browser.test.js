@@ -143,6 +143,17 @@ test(
           true,
         );
         assert.deepEqual(decisions, []);
+        const heading = await page
+          .getByRole("heading", {
+            name: "Send Photo Links by SMS?",
+            exact: true,
+          })
+          .boundingBox();
+        assert.ok(heading.y >= 0 && heading.y + heading.height < 1000);
+        const cancel = await page
+          .getByRole("button", { name: "Cancel SMS", exact: true })
+          .boundingBox();
+        assert.ok(cancel.y >= 0 && cancel.y + cancel.height <= 1000);
         assert.ok(await dialog.getByText("400", { exact: true }).count());
         await page.screenshot({
           path: `/private/tmp/lola-gallery-sms-confirm-${width}.png`,
