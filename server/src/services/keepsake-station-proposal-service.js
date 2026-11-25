@@ -1,3 +1,4 @@
+import {isDeepStrictEqual} from 'node:util';
 import {query} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
 import {assertKeepsakes} from './keepsakes-service.js';
@@ -10,11 +11,15 @@ const authorized=user=>user?.roles?.some(r=>['OWNER','SUPER_ADMIN','ADMIN'].incl
 export async function stationProposalQuote(raw,selections,user){
  if(!raw)return null;assertKeepsakes();const input=keepsakeStationProposalInput.parse(raw);
  const approval=input.priceApprovalReason;if(approval&&!authorized(user))throw new AppError('Commercial station approvals require an administrator.',403,'FORBIDDEN');
- let policy=await publishedStationPolicy();
+ const published=await publishedStationPolicy();let policy=published;
  if(input.policyVersion&&input.policyVersion!==policy.version){
   if(input.policyVersion===DEFAULT_STATION_POLICY.version)policy=DEFAULT_STATION_POLICY;
   else{const row=(await query('SELECT * FROM keepsake_station_policies WHERE version=$1',[input.policyVersion])).rows[0];if(!row)throw issue('The station policy is unavailable. Review the station configuration.');policy={...row.configuration,version:row.version,status:row.status,publishedAt:row.published_at};}
  }
+ // Old booking/draft payloads may name an unpublished copy of the exact approved rates.
+ // Normalize only an identical configuration; different draft rates still require approval.
+ const rates=p=>({packages:p.packages,paidTiers:p.paidTiers,optionalTiers:p.optionalTiers});
+ if(policy.status==='DRAFT'&&published.status==='PUBLISHED'&&isDeepStrictEqual(rates(policy),rates(published))){policy=published;input.policyVersion=published.version;}
  const ids=selections.map(s=>s.experience_id).filter(Boolean),packageIds=selections.flatMap(s=>s.packages||[]).map(p=>p.package_id).filter(Boolean);
  const catalog={experiences:(await query('SELECT id,name,slug FROM experiences WHERE id=ANY($1::uuid[]) AND active AND deleted_at IS NULL',[ids])).rows.map(e=>({...e,key:/mirror/i.test(e.slug||e.name)?'mirror':/vogue/i.test(e.slug||e.name)?'vogue':/glam/i.test(e.slug||e.name)?'glam':'other'})),packages:(await query('SELECT id,experience_id,name,tier_key,pricing_profile FROM packages WHERE id=ANY($1::uuid[]) AND active AND deleted_at IS NULL',[packageIds])).rows};
  const prices=input.unitPrices||{};if(Object.keys(prices).length&&!approval)throw issue('Explain and approve quote-specific unit price overrides.');
