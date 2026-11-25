@@ -36,6 +36,7 @@ keepsakesPublicRouter.post('/photos/link',photoLookupLimit,wrap(r=>photoAccess.d
 keepsakesPublicRouter.post('/photos/handoff',wrap(r=>{const input=z.object({selected:z.array(id).min(1).max(1000),target:z.enum(['SHOP','GALLERY'])}).strict().parse(r.body);return photoAccess.createPhotoHandoff(photoBearer(r),input.selected,input.target);}));
 keepsakesPublicRouter.post('/photos/handoff/redeem',photoLookupLimit,wrap(r=>{const input=z.object({code:z.string().max(100),target:z.enum(['SHOP','GALLERY'])}).strict().parse(r.body);return photoAccess.redeemPhotoHandoff(input.code,input.target);}));
 keepsakesPublicRouter.get('/photos/collection',wrap(r=>photoAccess.photoCollection(photoBearer(r))));
+keepsakesPublicRouter.get('/photos/assets/:id/download',asyncHandler(async(req,res)=>{const file=await photoAccess.collectionDownload(photoBearer(req),id.parse(req.params.id));res.type(file.mime).attachment(file.filename).send(file.bytes);}));
 keepsakesPublicRouter.get('/photos/assets/:id',asyncHandler(async(req,res)=>res.type('image/jpeg').send(await photoAccess.collectionPhoto(photoBearer(req),id.parse(req.params.id)))));
 
 keepsakesPublicRouter.get(access,wrap(r=>shop.keepsakesView(r.params.type,r.params.token)));

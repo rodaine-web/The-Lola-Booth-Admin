@@ -38,3 +38,5 @@
 
 .shop-product-strip .shop-preview-disclosure{display:none}.shop-product-strip .shop-own-preview{aspect-ratio:1}.shop-product-strip .shop-own-preview>img{margin:0}.shop-examples-note{font-size:12px;color:#63574b;text-align:center;margin:-12px 0 24px!important}
 .shop-collection>.shop-own-preview{position:relative;flex-shrink:0}
+
+.shop-photo-actions{display:flex;flex-wrap:wrap;gap:6px;padding:0 8px 10px}.shop-photo-actions button{display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:7px 9px;border:1px solid var(--shop-sand);border-radius:5px;background:var(--shop-white);color:var(--shop-ink);font:inherit;font-size:12px;cursor:pointer}.shop-photo-actions button:disabled{opacity:.6;cursor:wait}

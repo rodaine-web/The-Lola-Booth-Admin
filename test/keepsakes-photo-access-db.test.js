@@ -12,7 +12,7 @@ test('phone/email normalization and explicit source selection',()=>{
  const assets=[{id:'a',sessionId:'s',kind:'COMPOSITE',branded:true},{id:'b',sessionId:'s',kind:'ORIGINAL',branded:false},{id:'c',sessionId:'s',kind:'BRANDED_STRIP',branded:true},{id:'other',sessionId:'x',kind:'ORIGINAL',branded:false}];
  assert.equal(photoSourceForProduct({source:'ORIGINAL_UNBRANDED'},assets,'a').asset.id,'b');assert.equal(photoSourceForProduct({source:'BRANDED_STRIP'},assets,'a').asset.id,'c');assert.equal(photoSourceForProduct({source:'BRANDED_STRIP'},assets.slice(0,2),'a').asset,undefined);
 });
-test('photo retrieval queues neutral email, requires authorized phone/email associations, redeems once and rechecks every scope',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL,timeout:120000},async()=>{
+test('photo retrieval queues neutral email, matches imported Fiesta contacts across galleries, redeems once and rechecks every scope',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL,timeout:120000},async()=>{
  const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['127.0.0.1','localhost'].includes(url.hostname));assert.match(url.pathname,/_qa$/);
  const schema='photo_access_'+crypto.randomBytes(6).toString('hex'),bootstrap=new pg.Pool({connectionString:url.toString()}),storage=await fs.mkdtemp(path.join(os.tmpdir(),'lola-photo-access-'));let db;
  try{
@@ -54,12 +54,15 @@ test('photo retrieval queues neutral email, requires authorized phone/email asso
    await query("UPDATE gallery_media SET status='HIDDEN' WHERE id=ANY($1::uuid[])",[[original.id,strip.id]]);
    await query("UPDATE gallery_albums SET status='PUBLISHED',expires_at=now()+interval '1 year' WHERE id=$1",[album.id]);
    const albumKey=await gallery.createGalleryKey(album.id,'ALBUM',null,null,admin);
+   const csv='Shared via,Email Address,Phone Number,Content Link,File Name,Share Time\n'+
+    `E-mail,guest@example.invalid,,https://boothpics.com/lookup-event-${i}/capture,guest.jpg,2035-11-18 20:30 CST\n`+
+    `Phone number,,+13125550123,https://boothpics.com/lookup-event-${i}/capture,guest.jpg,2035-11-18 20:31 CST`;
+   await importFiestaShares(album.id,csv,`lookup-event-${i}`,admin);
+   await query('UPDATE gallery_albums SET allow_personal_download=true WHERE id=$1',[album.id]);
    const people=[];
    for(const [channel,recipient]of [['EMAIL','guest@example.invalid'],['SMS','+13125550123']]){
     const fingerprint=crypto.createHmac('sha256',process.env.INTEGRATION_SECRET_KEY).update(channel+':'+recipient).digest('hex');
-    const person=await one('INSERT INTO gallery_people(album_id,display_name,external_ref) VALUES($1,$2,$3) RETURNING id',[album.id,'Guest','fiesta:'+fingerprint]);people.push(person);
-    await query('INSERT INTO fiesta_gallery_shares(album_id,person_id,filename,channel,recipient_ciphertext,capture_ref,source_share_time) VALUES($1,$2,$3,$4,$5,$6,$7)',[album.id,person.id,'guest.jpg',channel,encryptSecretJson({recipient}),'capture','now']);
-    await query('INSERT INTO gallery_media_people(album_id,media_id,person_id) VALUES($1,$2,$3)',[album.id,anchor.id,person.id]);
+    people.push(await one('SELECT id FROM gallery_people WHERE album_id=$1 AND external_ref=$2',[album.id,'fiesta:'+fingerprint]));
    }
    await manager.saveKeepsakesSession(album.id,{anchorMediaId:anchor.id,assets:[{mediaId:anchor.id,kind:'COMPOSITE',label:'Included photo',sortOrder:0,branded:true,merchandiseEligible:true,digitalEligible:false,included:true},{mediaId:original.id,kind:'ORIGINAL',label:'Unbranded photo',sortOrder:1,branded:false,merchandiseEligible:true,digitalEligible:true,included:false},{mediaId:strip.id,kind:'BRANDED_STRIP',label:'Branded strip',sortOrder:2,branded:true,merchandiseEligible:true,digitalEligible:false,included:false}]},admin);
    fixtures.push({album,anchor,unrelated,original,people,albumKey});
@@ -74,11 +77,29 @@ test('photo retrieval queues neutral email, requires authorized phone/email asso
   let view=await access.photoCollection(session.token);assert.equal(view.albums.length,2);assert.equal(view.assets.length,6);assert.ok(!JSON.stringify(view).includes('storage_key'));assert.ok(!JSON.stringify(view).includes(session.token));
   await assert.rejects(access.collectionPhoto(session.token,fixtures[0].unrelated.id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
   const image=await access.collectionPhoto(session.token,view.assets[0].id);assert.equal((await sharp(image).metadata()).format,'jpeg');
-  await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'test-recipient@example.invalid'});
-  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,0,'An arbitrary email cannot bind to another guest phone');assert.equal((await one("SELECT count(*)::int n FROM communications WHERE recipient='test-recipient@example.invalid'")).n,0);
+  assert.deepEqual(await access.requestPhotoAccess({channel:'PHONE',value:'3125550000',email:'guest@example.invalid'}),neutral);
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,0,'Unmatched phone must not create an association, even if the email matches');
+  assert.equal((await one('SELECT count(*)::int n FROM communications')).n,1);
+  assert.deepEqual(await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'test-recipient@example.invalid'}),neutral);
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,1);
+  const phoneEmail=await one("SELECT * FROM communications WHERE recipient='test-recipient@example.invalid'");
+  assert.equal(phoneEmail.status,'SCHEDULED');assert.equal(phoneEmail.client_id,null);assert.equal(phoneEmail.lead_id,null);
+  const phoneSession=await access.redeemPhotoAccess(/#code=([\w-]+)/.exec(phoneEmail.rendered_body)[1]);
+  const phoneView=await access.photoCollection(phoneSession.token);assert.equal(phoneView.albums.length,2);assert.equal(phoneView.assets.length,6);
+  assert.equal((await one('SELECT verification_status FROM keepsakes_unverified_contacts')).verification_status,'UNVERIFIED');
+  const included=view.assets.find(a=>a.included);assert.equal(included.canDownload,true);
+  assert.ok((await access.collectionDownload(session.token,included.id)).bytes.length>0);
+  await assert.rejects(access.collectionDownload(session.token,view.assets.find(a=>!a.included).id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  await assert.rejects(access.collectionDownload(session.token,fixtures[0].unrelated.id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  await query('UPDATE gallery_albums SET allow_personal_download=false WHERE id=$1',[fixtures[0].album.id]);
+  await assert.rejects(access.collectionDownload(session.token,included.id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  await query('UPDATE gallery_albums SET allow_personal_download=true WHERE id=$1',[fixtures[0].album.id]);
   await query("UPDATE keepsakes_photo_requests SET created_at=now()-interval '3 minutes'");
   await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'guest@example.invalid'});
-  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,1);
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,2);
+  const automation=await import('../server/src/services/automation-service.js');await automation.processDueJobs({limit:10});
+  assert.equal((await one("SELECT count(*)::int n FROM communications WHERE trigger_key='KEEPSAKES_PHOTO_ACCESS' AND status='SENT_TO_PROVIDER' AND provider='development'")).n,3,'The worker dispatches the queued messages using only the local development transport');
+  assert.equal((await one('SELECT count(*)::int n FROM clients')).n,1);assert.equal((await one('SELECT count(*)::int n FROM leads')).n,0,'Lookups do not create CRM leads or clients');
   const transfer=await access.createPhotoHandoff(session.token,[view.assets[0].id],'SHOP');
   await assert.rejects(access.redeemPhotoHandoff(transfer.code,'GALLERY'),{code:'PHOTO_ACCESS_UNAVAILABLE'});
   const transfers=await Promise.allSettled([access.redeemPhotoHandoff(transfer.code,'SHOP'),access.redeemPhotoHandoff(transfer.code,'SHOP')]);
