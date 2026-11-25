@@ -25,8 +25,15 @@ export function KeepsakesPhotos({children}){
   const pending=fetch(path,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',referrerPolicy:'no-referrer'}).then(async response=>{if(!response.ok)throw Error('Photo preview unavailable');return URL.createObjectURL(await response.blob());});
   cache.current.set(key,pending);pending.catch(()=>cache.current.delete(key));return pending;
  },[token]);
+ const downloadPhoto=useCallback(async asset=>{
+  if(!asset?.canDownload||!token)throw Error('Downloading is not available for this photo.');
+  const response=await fetch(`${API}/keepsakes/photos/assets/${encodeURIComponent(asset.id)}/download`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',referrerPolicy:'no-referrer'});
+  if(!response.ok)throw Error('This photo is no longer available for download.');
+  const blob=await response.blob(),extension=blob.type==='image/png'?'png':blob.type==='image/gif'?'gif':'jpg';
+  return new File([blob],`Lola-Booth-Photo.${extension}`,{type:blob.type});
+ },[token]);
  const commerce=useCallback(async(path,body)=>{const response=await fetch(`${API}/keepsakes/books/${path}`,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store',referrerPolicy:'no-referrer'});const data=await response.json();if(!response.ok)throw Error(data.error?.message||data.message||'Book unavailable.');return data;},[token]);
- return <Photos.Provider value={{commerce,collection,selected,setSelected,accept,handoff,loadPhoto,error,loading,hasSession:Boolean(token)}}>{children}</Photos.Provider>;
+ return <Photos.Provider value={{commerce,collection,selected,setSelected,accept,handoff,loadPhoto,downloadPhoto,error,loading,hasSession:Boolean(token)}}>{children}</Photos.Provider>;
 }
 export const useKeepsakesPhotos=()=>useContext(Photos);
 export function GuestPhoto({asset,...props}){
