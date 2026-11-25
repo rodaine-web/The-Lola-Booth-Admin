@@ -82,3 +82,5 @@ keepsakesAdminRouter.post('/integrations/prodigi/test',wrap(()=>{throw new AppEr
 keepsakesAdminRouter.post('/integrations/prodigi/sync',wrap(()=>{throw new AppError('Prodigi is retired from the new catalogue.',409,'KEEPSAKES_PROVIDER_RETIRED');}));
 
 keepsakesAdminRouter.patch('/books/variants/:id/price',requirePermission('write:integrations'),wrap(r=>books.updateBookPrice(id.parse(r.params.id),r.body,r.user)));
+
+keepsakesAdminRouter.put('/books/variants/:id/mapping',wrap(r=>books.verifyBookMapping(id.parse(r.params.id),r.body,r.user)));
