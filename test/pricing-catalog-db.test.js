@@ -216,10 +216,10 @@ await revision.getByText('Service total:',{exact:false}).waitFor();assert.match(
       await page.screenshot({path:'artifacts/pricing/website-packages-individual-'+width+'.png',fullPage:true});
       await page.getByRole('button',{name:'Business/Corporates',exact:true}).click();
       const business=page.locator('[data-audience-view="BUSINESS"]');await business.waitFor({state:'visible'});
-      assert.equal(await business.locator('[data-business-experience]').count(),5);assert.equal(await business.locator('[data-business-addon]').count(),0);
+      assert.equal(await business.locator('[data-business-experience]').count(),5);await page.locator('[data-business-addons] .package-addon-card').first().waitFor();assert.ok(await page.locator('[data-business-addon]').count()>0,'Business add-ons are visible before selecting an experience');assert.equal(await page.locator('[data-business-addon]:enabled').count(),0);
       assert.equal(await page.locator('.package-grid:visible').count(),0,'Business sees experiences and add-ons, never internal tiers');
       assert.doesNotMatch(await page.locator('body').innerText(),/\$[\d,]+|Event Plus|Event Premium|Most Popular/);
-      await business.locator('[data-business-experience=glam]').check();await business.locator('[data-business-addon]').first().waitFor();
+      await business.locator('[data-business-experience=glam]').check();await page.locator('[data-business-addon]:enabled').first().waitFor();
       const businessLink=await page.locator('[data-business-quote]').getAttribute('href');assert.ok(businessLink.includes('customerType=BUSINESS'));assert.ok(businessLink.includes('experiences=glam'));
       await page.screenshot({path:'artifacts/pricing/website-packages-business-'+width+'.png',fullPage:true});
       await page.goto(new URL(businessLink,web).href);await page.locator('[data-catalog-status]').getByText(/Choose available catalog packages|Select experiences and optional add-ons/).waitFor();
