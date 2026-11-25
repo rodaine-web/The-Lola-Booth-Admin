@@ -6,16 +6,17 @@ export const publicOrigins=lolaOrigins(import.meta.env.VITE_APP_ENV);
 const website=path=>publicOrigins.website+'/'+path;
 const mainLinks=[['Experiences',website('experiences.html')],['Packages',website('packages.html')],['About',website('about.html')],['FAQ',website('faq.html')],['Contact',website('contact.html')],['Gallery',publicOrigins.gallery],['Shop',publicOrigins.shop]];
 const experiences=[['The Lola Glam','experiences.html#glam'],['The Lola 360','experiences.html#360'],['The Lola Magic Mirror','experiences.html#mirror'],['The Lola Vogue','experiences.html#vogue'],['Audio Guestbook','availability.html?experience=audio'],['Business/Corporates','packages.html?customerType=BUSINESS']];
-export function PublicSiteHeader(){
+export function PublicSiteHeader({hideGallery=false}){
+ const links=mainLinks.filter(([label])=>!hideGallery||label!=='Gallery');
  const [open,setOpen]=useState(false),id=useId(),location=useLocation();
  useEffect(()=>setOpen(false),[location.pathname]);
  useEffect(()=>{if(!open)return;const close=e=>{if(e.key==='Escape')setOpen(false);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[open]);
  return <header className="lola-public-chrome lola-site-header"><div className="lola-site-container lola-site-nav">
   <a className="lola-site-brand" href={publicOrigins.website} aria-label="The Lola Booth home"><img src="/brand/lola-web-legible.svg" alt="The Lola Booth" width="245" height="54"/></a>
   <button className="lola-site-menu" type="button" aria-label={open?'Close navigation':'Open navigation'} aria-expanded={open} aria-controls={id} onClick={()=>setOpen(value=>!value)}>☰</button>
-  <nav className="lola-site-links" aria-label="Main navigation">{mainLinks.map(([label,href])=><a key={label} href={href}>{label}</a>)}</nav>
+  <nav className="lola-site-links" aria-label="Main navigation">{links.map(([label,href])=><a key={label} href={href}>{label}</a>)}</nav>
   <a className="lola-site-button lola-site-book" href={website('availability.html')}>Book Now <span aria-hidden="true">→</span></a>
- </div><nav id={id} className="lola-site-mobile" hidden={!open} aria-label="Mobile navigation">{mainLinks.map(([label,href])=><a key={label} href={href}>{label}</a>)}<a className="lola-site-button" href={website('availability.html')}>Book Now <span aria-hidden="true">→</span></a></nav></header>;
+ </div><nav id={id} className="lola-site-mobile" hidden={!open} aria-label="Mobile navigation">{links.map(([label,href])=><a key={label} href={href}>{label}</a>)}<a className="lola-site-button" href={website('availability.html')}>Book Now <span aria-hidden="true">→</span></a></nav></header>;
 }
 export function PublicSiteFooter({settings:provided}){
  const [loaded,setLoaded]=useState(null);

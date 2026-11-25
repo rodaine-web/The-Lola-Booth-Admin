@@ -40,7 +40,7 @@ test('Website, Shop and all Gallery states share navigation and footer; package 
      await page.goto(new URL(href,origin+'/staging-site/').href);await page.locator('[data-addon="addon-4"]').waitFor();assert.equal(await page.locator('[data-addon="addon-4"]').isChecked(),true,'Selected package add-ons must remain selected in booking');
      await page.goto(origin+'/staging-site/packages.html');await page.locator('[data-celebration-addon]').first().waitFor();
      await page.locator('[data-package-experience="360"]').click();assert.equal(await page.getByRole('heading',{name:'Extra Glam hour',exact:true}).count(),0);await page.getByRole('heading',{name:'Extra 360 hour',exact:true}).waitFor();
-    }else{assert.deepEqual(headerLinks,nav);assert.deepEqual(footerLinks,footer);}
+    }else{assert.deepEqual(headerLinks,slug==='shop'?nav.filter(label=>label!=='Gallery'):nav);assert.deepEqual(footerLinks,footer);if(slug==='shop')assert.equal(await page.getByRole('navigation',{name:'Keepsakes navigation'}).getByRole('link',{name:/^(Gallery|For Event Clients)$/}).count(),0);}
     assert.equal(await footerNode.locator('a[href="mailto:info@thelolabooth.com"]').count(),1);
     assert.match(await footerNode.innerText(),/Service area: Chicago & surrounding areas/);
     await page.getByRole('heading',{name:'Good people. Better photos.',exact:true}).waitFor();
