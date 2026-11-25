@@ -1,6 +1,8 @@
+import {keepsakeStationInput} from '../../../shared/keepsake-station-input.js';
 import { z } from "zod";
 export const businessEventTypes=['Corporate Event','Conference','Brand Activation','Product Launch','Trade Show','Company Celebration','Other Business Event'];
 const baseInquirySchema = z.object({
+  keepsakeStation:keepsakeStationInput.optional(),
   eventName: z.string().trim().max(160).optional(),
   bookingVersion: z.literal(2).optional(),
   pricingVersion:z.string().uuid().optional(),

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import sharp from 'sharp';
 import QRCode from "qrcode";
 import { query, transaction } from "../db/pool.js";
 import { env } from "../config/env.js";
@@ -433,6 +434,7 @@ export async function uploadGalleryMedia(albumId, input) {
     throw unavailable();
   const buffer = Buffer.from(input.base64, "base64");
   validateGalleryImage(buffer, input.mime_type);
+  const imageDimensions=input.mime_type==='video/mp4'?{}:await sharp(buffer,{limitInputPixels:60_000_000}).metadata();
   const checksum=crypto.createHash('sha256').update(buffer).digest('hex');
   const existing=(await query("SELECT id,filename,mime_type,status,checksum FROM gallery_media WHERE album_id=$1 AND filename=$2 AND status<>'ARCHIVED'",[albumId,input.filename])).rows;
   if(existing.length){if(existing.length===1&&existing[0].checksum===checksum){const {checksum:_,...safe}=existing[0];return safe;}throw new AppError('A different capture already uses this filename. Resolve it before importing guest access.',409,'GALLERY_FILENAME_CONFLICT');}
@@ -440,7 +442,7 @@ export async function uploadGalleryMedia(albumId, input) {
   const key = await storage.put(buffer, input.mime_type);
   const result=(
     await query(
-      `INSERT INTO gallery_media(album_id,storage_provider,storage_key,filename,mime_type,size_bytes,checksum,captured_at,source_provider,external_capture_id,source_metadata,media_type) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id,filename,mime_type,status`,
+      `INSERT INTO gallery_media(album_id,storage_provider,storage_key,filename,mime_type,size_bytes,checksum,captured_at,source_provider,external_capture_id,source_metadata,media_type,width,height) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id,filename,mime_type,status`,
       [
         albumId,
         storage.provider,
@@ -454,6 +456,8 @@ export async function uploadGalleryMedia(albumId, input) {
         input.external_capture_id || null,
         input.source_metadata || {},
         input.mime_type==='video/mp4'?'VIDEO':'IMAGE',
+        imageDimensions.autoOrient?.width||imageDimensions.width||null,
+        imageDimensions.autoOrient?.height||imageDimensions.height||null,
       ],
     )
   ).rows[0];

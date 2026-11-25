@@ -1,3 +1,4 @@
+import KeepsakeStationConfigurator from '../components/KeepsakeStationConfigurator.jsx';
 import BusinessPlanPicker from '../components/BusinessPlanPicker.jsx';
 import {proposalAddonStatus,removeIncludedProposalAddons} from '../../shared/proposal-catalog.js';
 import {withoutCampaignBundle,removeCampaignExperience} from '../../shared/campaign-selection.js';
@@ -243,6 +244,7 @@ export default function ProposalWizard(){
     client_details:{first_name:form.first_name,last_name:form.last_name,name:[form.first_name,form.last_name].filter(Boolean).join(' '),email:form.email,phone:form.phone,company:form.company},
     event_type:form.event_type,event_details:{event_name:eventTitle(),event_type:actualEventType(),event_date:form.event_date,start_time:form.start_time,end_time:form.end_time,guest_count:form.guest_count,venue_name:form.venue_name,venue_address:form.venue_address,city:form.city,state:form.state,zip:form.zip},
     experience_id:selectedExperiences[0]?.experience_id||null,package_id:selectedExperiences[0]?.packages?.[0]?.package_id||null,
+    keepsake_station:form.keepsake_station,
     selected_experiences:selectedExperiences,addons:selectedAddons,custom_line_items:customLines,
     visual_sections:mappedProposalPhotos(selectedExperiences,photoAssets,()=>crypto.randomUUID(),actualEventType()),
     proposal_title:form.proposal_title||eventTitle(),proposal_type:proposalType(actualEventType()),
@@ -360,6 +362,7 @@ export default function ProposalWizard(){
         {advanced&&<div className="wizard-section"><h3>Selected add-ons</h3>{selectedAddons.map(item=><div className="form-grid" key={item.addon_id}><label>{item.description} — quantity<input type="number" min="1" value={item.quantity} onChange={e=>setSelectedAddons(current=>current.map(row=>row.addon_id===item.addon_id?{...row,quantity:Number(e.target.value)}:row))}/></label>{!requiresCatalogQuote&&<label>Agreed unit price<input type="number" min="0" step="0.01" value={item.unit_price} onChange={e=>setSelectedAddons(current=>current.map(row=>row.addon_id===item.addon_id?{...row,unit_price:Number(e.target.value)}:row))}/></label>}</div>)}</div>}
         {advanced&&<div className="wizard-section"><h3>Custom line items</h3>{customLines.map((line,index)=><div className="form-grid" key={index}>{['description','detail','quantity','unit_price'].map(field=><label key={field}>{field.replaceAll('_',' ')}<input type={['quantity','unit_price'].includes(field)?'number':'text'} min={field==='quantity'?1:0} value={line[field]} onChange={e=>setCustomLines(current=>current.map((v,i)=>i===index?{...v,[field]:['quantity','unit_price'].includes(field)?Number(e.target.value):e.target.value}:v))}/></label>)}<button onClick={()=>setCustomLines(current=>current.filter((_,i)=>i!==index))}>Remove item</button></div>)}<button onClick={()=>setCustomLines(current=>[...current,{description:'',detail:'',quantity:1,unit_price:0}])}>Add line item</button></div>}
       </section>
+      {<KeepsakeStationConfigurator value={form.keepsake_station} onChange={value=>setField('keepsake_station',value)} experiences={selectedExperiences} packages={packages} business={businessMode}/>}
       <CatalogQuoteReview experiences={selectedExperiences} addons={selectedAddons} customLines={customLines} discount={Number(form.discount||0)} otherFees={Number(form.other_fees||0)} travelAmount={form.travel} onTravelChange={value=>setField('travel',value)} onReviewChange={setPricingReview} requestContext={lead?.source_details} initialQuote={lead?.source_details?.bookingInquiry?.pricingQuote} onQuote={quote=>setCatalogQuote(quote?{...quote,selectionKey:quoteSelectionKey}:null)}/>
       {(pricingReview.error||pricingReview.reasons.length>0)&&<div role="alert" className="toast error">{pricingReview.error||pricingReview.reasons.join(' ')}</div>}
       {requiresCatalogQuote&&!hasCatalogQuote&&!pricingReview.busy&&<p role="status"><a href="#package-pricing-review">Totals update automatically. Enter any missing prices below.</a></p>}

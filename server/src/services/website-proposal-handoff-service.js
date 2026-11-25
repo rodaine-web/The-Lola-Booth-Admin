@@ -12,6 +12,7 @@ export const websiteProposalEnabled = () => process.env.BOOKING_WEBSITE_PROPOSAL
 
 // Availability approval authorizes draft preparation only. Customer delivery always requires final Admin review.
 export function automaticWebsiteQuoteDecision(booking, input, config = process.env) {
+  if(booking?.keepsakeStation)return 'Review Keepsake Station quantities, pricing and capacity before preparing the complete proposal';
   if (!booking?.selections?.length) return 'Choose experiences and packages';
   if (!input?.eventDate || !input.eventStartTime || !input.eventEndTime || !input.venueAddress) return 'Complete event date, times and venue address';
   if (booking.selections.some(x => x.pricingMode !== 'FIXED' || !Number.isFinite(x.startingPrice) || x.startingPrice <= 0)) return 'Review custom package pricing';
@@ -44,6 +45,7 @@ async function prepareWebsiteProposal(job) {
     if (!lead || lead.opportunity_type==='PARTNERSHIP' || ['LOST', 'WON', 'ARCHIVED'].includes(lead.status)) return null;
     if (!hasCurrentAvailability(lead, job.payload.approvalFingerprint)) return null;
     const booking = job.payload.booking;
+    if(booking?.keepsakeStation)throw new AppError('This request includes Keepsake Station quantities. Review its complete commercial configuration before preparing a proposal.',409,'KEEPSAKE_STATION_REVIEW_REQUIRED',{retryable:false});
     const input = leadEventInput(lead);
     if (!booking) throw new AppError('The submitted request changed. Review it before sending.', 409, 'WEBSITE_QUOTE_CHANGED', { retryable: false });
     const review = automaticWebsiteQuoteDecision(booking, input);

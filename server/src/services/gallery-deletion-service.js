@@ -13,12 +13,15 @@ async function lockAlbum(albumId) {
 export async function deleteGalleryPhotos(albumId,mediaIds,user) {
   return transaction(async()=>{
     await lockAlbum(albumId);
+    if((await query('SELECT 1 FROM keepsakes_orders WHERE album_id=$1 LIMIT 1',[albumId])).rowCount)throw new AppError('This gallery has Keepsakes orders. Retain its photos for order and download history.',409,'KEEPSAKES_ORDER_HISTORY');
     const ids=[...new Set(mediaIds)];
     const media=(await query('SELECT id FROM gallery_media WHERE album_id=$1 AND id=ANY($2::uuid[]) FOR UPDATE',[albumId,ids])).rows;
     if(media.length!==ids.length)throw new AppError('Select photos from this gallery only.',422,'GALLERY_MEDIA_MISMATCH');
     if((await query('SELECT 1 FROM gallery_postcards WHERE album_id=$1 AND media_id=ANY($2::uuid[]) LIMIT 1',[albumId,ids])).rowCount)
       throw new AppError('A selected photo is used by a postcard. Delete the test album to reset its postcard records, or keep this photo for its mailing history.',409,'GALLERY_PHOTO_IN_USE');
     await query('UPDATE gallery_albums SET cover_media_id=NULL,updated_at=now() WHERE id=$1 AND cover_media_id=ANY($2::uuid[])',[albumId,ids]);
+    await query('DELETE FROM gallery_session_assets WHERE album_id=$1 AND media_id=ANY($2::uuid[])',[albumId,ids]);
+    await query('DELETE FROM gallery_photo_sessions WHERE album_id=$1 AND anchor_media_id=ANY($2::uuid[])',[albumId,ids]);
     await query('DELETE FROM gallery_activity WHERE album_id=$1 AND media_id=ANY($2::uuid[])',[albumId,ids]);
     await query('DELETE FROM gallery_media_people WHERE album_id=$1 AND media_id=ANY($2::uuid[])',[albumId,ids]);
     await query("UPDATE gallery_postcard_recipients SET media_id=NULL,status=CASE WHEN consent THEN 'UNMATCHED' ELSE 'NO_CONSENT' END,updated_at=now() WHERE album_id=$1 AND media_id=ANY($2::uuid[])",[albumId,ids]);
@@ -32,6 +35,9 @@ export async function deleteGalleryPhotos(albumId,mediaIds,user) {
 export async function deleteGalleryAlbum(albumId,user,{recreate=false}={}) {
   return transaction(async()=>{
     const album=await lockAlbum(albumId);
+    if((await query('SELECT 1 FROM keepsakes_orders WHERE album_id=$1 LIMIT 1',[albumId])).rowCount)throw new AppError('This gallery has Keepsakes orders. Retain its gallery for order and download history.',409,'KEEPSAKES_ORDER_HISTORY');
+    await query('DELETE FROM keepsakes_quotes WHERE album_id=$1',[albumId]);
+    await query('DELETE FROM gallery_photo_sessions WHERE album_id=$1',[albumId]);
     if((await query("SELECT 1 FROM gallery_live_mailing_jobs WHERE album_id=$1 AND status<>'CANCELLED' LIMIT 1",[albumId])).rowCount)
       throw new AppError('This gallery has live mailing records. Cancel unsubmitted live mailing jobs or retain the gallery for mailing history.',409,'GALLERY_LIVE_MAILING_EXISTS');
     if((await query("SELECT 1 FROM gallery_mailing_jobs WHERE album_id=$1 AND status='PROCESSING' UNION ALL SELECT 1 FROM gallery_postcards WHERE album_id=$1 AND status='SUBMITTING' LIMIT 1",[albumId])).rowCount)

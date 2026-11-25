@@ -49,6 +49,17 @@ test('Fiesta gallery persistence, privacy, retention and customer access',{skip:
   ({server}=await import('../server/src/index.js'));if(!server.listening)await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
   const invitationToken=crypto.randomBytes(32).toString('hex');await query("INSERT INTO client_workspace_invitations(grant_id,token_hash,token_ciphertext,recipient_email) VALUES($1,$2,'{}',$3)",[grant.id,crypto.createHash('sha256').update(invitationToken).digest('hex'),client.email]);
   const redemption=await fetch(origin+'/api/public/client/access',{method:'POST',headers:{Origin:'http://localhost:5173','Content-Type':'application/json'},body:JSON.stringify({token:invitationToken})});assert.equal(redemption.status,200);const cookie=redemption.headers.get('set-cookie').split(';')[0];
+  const {csrfToken}=await redemption.json();
+  const commercePost=(body={},csrf=csrfToken)=>fetch(origin+'/api/public/client/events/'+event.id+'/keepsakes',{method:'POST',headers:{Cookie:cookie,Origin:'http://localhost:5173','Content-Type':'application/json','X-Client-CSRF':csrf},body:JSON.stringify(body)});
+  assert.equal((await commercePost({},'bad')).status,403);
+  const commerceResponse=await commercePost();assert.equal(commerceResponse.status,200);
+  const photoCommerce=await import('../server/src/services/keepsakes-photo-access-service.js'),books=await import('../server/src/services/keepsakes-book-service.js');
+  const commerceTransfer=await commerceResponse.json(),commerceSession=await photoCommerce.redeemPhotoHandoff(commerceTransfer.code,'GALLERY'),commerceCollection=await photoCommerce.photoCollection(commerceSession.token);
+  assert.equal(commerceCollection.audience,'CLIENT');assert.equal(commerceCollection.assets.length,2);
+  const clientVariants=await books.bookVariants(commerceSession.token);assert.equal(clientVariants.variants.filter(v=>v.kind==='ALBUM').length,2);
+  const premium=clientVariants.variants.find(v=>v.kind==='ALBUM'),clientDraft=await books.saveBookDraft(commerceSession.token,{variantId:premium.id,books:[{title:'Our event',photos:commerceCollection.assets.map(a=>a.id),coverPhoto:commerceCollection.assets[0].id,copies:1,layout:'EDITORIAL'}]});assert.equal(clientDraft.status,'DRAFT');assert.equal(clientDraft.price.demo,true);
+  const guestCommerce=await photoCommerce.directPhotoAccess('p',token);assert.equal((await photoCommerce.photoCollection(guestCommerce.token)).audience,'GUEST');assert.ok((await books.bookVariants(guestCommerce.token)).variants.every(v=>v.kind==='BOOK'));
+  await assert.rejects(books.saveBookDraft(guestCommerce.token,{variantId:premium.id,books:[{title:'Denied',photos:[first.id],coverPhoto:first.id,copies:1,layout:'EDITORIAL'}]}),{code:'BOOK_UNAVAILABLE'});
   const get=(suffix,includeCookie=true)=>fetch(origin+'/api/public/client/events/'+event.id+'/gallery'+suffix,{headers:{...(includeCookie?{Cookie:cookie}:{}),Origin:'http://localhost:5173'}});
   // The pre-read authorization and post-read revocation check must produce one
   // activity entry per successful response, not one entry per security check.
@@ -67,7 +78,7 @@ test('Fiesta gallery persistence, privacy, retention and customer access',{skip:
   const viewerToken=jwt.sign({sub:viewer.id},process.env.JWT_SECRET),denied=await fetch(origin+'/api/gallery-admin/albums/'+album.id+'/fiesta-shares',{method:'POST',headers:{Authorization:'Bearer '+viewerToken,'Content-Type':'application/json'},body:JSON.stringify({eventCode:'QA1',csv})});assert.equal(denied.status,403);
   await query("UPDATE client_workspace_sessions SET verified_at=now()-interval '16 minutes'");assert.equal((await get('/media/'+first.id+'/download')).status,403);await query('UPDATE client_workspace_sessions SET verified_at=now()');
   await assert.rejects(verifiedGalleryBytes({...media,checksum:'invalid'}),{code:'GALLERY_MEDIA_INTEGRITY'});await assert.rejects(verifiedGalleryBytes(media,async()=>{throw Error('Access removed during read');}));
-  await query('UPDATE client_workspace_grants SET revoked_at=now() WHERE id=$1',[grant.id]);await assert.rejects(customerGallery.customerGalleryView(session,event.id));
+  await query('UPDATE client_workspace_grants SET revoked_at=now() WHERE id=$1',[grant.id]);await assert.rejects(customerGallery.customerGalleryView(session,event.id));await assert.rejects(photoCommerce.photoCollection(commerceSession.token));await assert.rejects(books.listBookDrafts(commerceSession.token));
   await query("UPDATE gallery_albums SET expires_at=now()-interval '1 second' WHERE id=$1",[album.id]);await assert.rejects(g.resolveGalleryToken('PERSON',token));
  }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();await fs.rm(root,{recursive:true,force:true});}
 });

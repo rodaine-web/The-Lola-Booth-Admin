@@ -1,0 +1,39 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import sharp from 'sharp';
+import {createServer} from 'vite';
+import react from '@vitejs/plugin-react';
+import {coreCatalogueView} from '../shared/keepsakes-core-catalogue.js';
+test('email/phone journey and a guest photo on all compatible products before options',{skip:process.env.KEEPSAKES_BROWSER_TEST!=='true',timeout:120000},async()=>{
+ const vite=await createServer({configFile:false,root:process.cwd(),cacheDir:path.join(os.tmpdir(),'lola-photo-shop-cache'),plugins:[react(),{name:'photo-shop-qa',configureServer(server){server.middlewares.use(async(req,res,next)=>{if(!req.url?.startsWith('/shop'))return next();res.setHeader('Content-Type','text/html');res.end(await server.transformIndexHtml(req.url,`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}</style></head><body><div id="root"></div><script type="module">import React from'react';import{createRoot}from'react-dom/client';import{BrowserRouter,Routes,Route}from'react-router-dom';import Shop from'/src/pages/KeepsakesShop.jsx';createRoot(document.getElementById('root')).render(React.createElement(BrowserRouter,null,React.createElement(Routes,null,React.createElement(Route,{path:'/shop/products/:productKey',element:React.createElement(Shop)}),React.createElement(Route,{path:'/shop/*',element:React.createElement(Shop)}))));</script></body></html>`));});}}],server:{host:'127.0.0.1',port:0}});
+ let browser;try{await vite.listen();const {chromium}=await import('playwright');browser=await chromium.launch();const origin=`http://127.0.0.1:${vite.httpServer.address().port}`,requests=[];
+ const picture=await sharp({create:{width:900,height:600,channels:3,background:'#b48a50'}}).png().toBuffer();
+ const assets=[{id:'a',kind:'COMPOSITE',branded:true,label:'Included photo'},{id:'b',kind:'ORIGINAL',branded:false,label:'Unbranded source'},{id:'c',kind:'BRANDED_STRIP',branded:true,label:'Branded strip'}].map(a=>({...a,albumId:'album',sessionId:'session',url:'/api/keepsakes/photos/assets/'+a.id}));
+ const output=path.join(process.cwd(),'artifacts/keepsakes-photo-access-20261123');await fs.mkdir(output,{recursive:true});
+ for(const width of [1440,390,320]){
+  const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.route('**/api/keepsakes/catalogue',r=>r.fulfill({json:{products:coreCatalogueView(),branding:{contact_email:"staging-test@example.invalid",phone:"(312) 555-0123",service_area:"Synthetic service area"}}}));
+  await page.route('**/api/keepsakes/photos/request',r=>{requests.push(r.request().postDataJSON());return r.fulfill({json:{accepted:true}});});
+  await page.route('**/api/keepsakes/photos/redeem',r=>r.fulfill({json:{token:'synthetic-photo-session-token-123456789012345'}}));
+  await page.route('**/api/keepsakes/photos/collection',r=>{assert.match(r.request().headers().authorization,/Bearer/);return r.fulfill({json:{expiresAt:'2035-11-30',albums:[{id:'album',title:'Synthetic Lola Event'}],assets}});});
+  await page.route('**/api/keepsakes/photos/assets/*',r=>{assert.match(r.request().headers().authorization,/Bearer/);return r.fulfill({body:picture,contentType:'image/png'});});
+  await page.goto(origin+'/shop/find-photos');await page.locator('.lola-site-header a.lola-site-book').waitFor();assert.equal(await page.locator('.lola-site-book').getAttribute('href'),'https://staging.thelolabooth.com/availability.html');assert.equal(await page.locator('.lola-site-footer a[href="mailto:staging-test@example.invalid"]').count(),1);assert.equal(await page.locator('.lola-site-header .lola-site-brand img').getAttribute('src'),'/brand/lola-web-legible.svg');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.getByRole('tab',{name:'Email',exact:true}).click();await page.getByLabel('Your email address',{exact:true}).fill('guest@example.invalid');await page.getByRole('button',{name:'Send My Secure Link'}).click();await page.getByRole('heading',{name:'Check Your Email',exact:true}).waitFor();
+  await page.goto(origin+'/shop/find-photos');await page.getByRole('tab',{name:'Phone',exact:true}).click();await page.getByLabel('Your phone number',{exact:true}).fill('3125550123');await page.getByRole('button',{name:'Continue',exact:true}).click();await page.getByLabel('Email address for your photo links').fill('guest@example.invalid');await page.getByRole('button',{name:'Send My Secure Link'}).click();await page.getByRole('heading',{name:'Check Your Email',exact:true}).waitFor();
+  await page.goto(origin+'/shop/access#code=synthetic-code');await page.getByRole('button',{name:'View My Photos',exact:true}).click();await page.getByRole('button',{name:'Select Included photo',exact:true}).click();await page.getByRole('link',{name:'Create a Keepsake'}).click();
+  await page.waitForFunction(()=>document.querySelectorAll('[data-preview-state="ready"]').length===12);
+  assert.equal(await page.locator('.shop-product .shop-product-image>img').count(),0,'Illustrative examples must be replaced after selecting own photo');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.screenshot({path:path.join(output,`own-products-${width}.png`),fullPage:true});
+  await page.getByRole('link',{name:'Framed Photos',exact:true}).click();await page.waitForURL('**/shop/products/framed-photo');await page.locator('.shop-detail').waitFor();await page.getByRole('heading',{name:'Framed Photos',exact:true}).waitFor();await page.getByRole('img',{name:'Your photo on Framed Photos'}).waitFor();assert.equal(await page.locator('[data-photo-id="a"]').count(),1);
+  await page.screenshot({path:path.join(output,`own-frame-${width}.png`),fullPage:true});
+  await page.goto(origin+'/shop/event-clients');assert.equal(await page.getByRole('link',{name:'Request an Event Quote'}).getAttribute('href'),'https://staging.thelolabooth.com/availability.html');await page.goto(origin+'/shop/products/framed-photo');await page.reload();await page.getByRole('img',{name:'Your photo on Framed Photos'}).waitFor();
+  await page.getByRole('link',{name:'Choose Photos',exact:true}).click();await page.getByRole('heading',{name:'Your Lola Memories',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Select Included photo',exact:true}).click();await page.getByRole('button',{name:'Select Unbranded source',exact:true}).click();await page.getByRole('link',{name:'Create a Keepsake'}).click();await page.waitForFunction(()=>document.querySelectorAll('[data-preview-state="ready"][data-photo-id="b"]').length===11);
+  assert.deepEqual(errors,[]);await page.close();
+ }
+ assert.equal(requests.filter(r=>r.channel==='PHONE').length,3);assert.equal(requests.filter(r=>r.channel==='EMAIL').length,3);
+ }finally{await browser?.close();await vite.close();}
+});

@@ -139,3 +139,10 @@ test('clearing inclusions stays empty, while genuine package prose remains in HT
  const noHours=model('Corporate Event',[{...base,packages:[{...base.packages[0],features:['Digital sharing included'],description:'Separate setup instructions.'}]}]);
  assert.equal(noHours.experiences[0].duration,'4 hours','Keep duration when no service-hours inclusion exists');
 });
+
+
+test('complimentary final rows never absorb invoice rounding adjustments',async()=>{
+ const {proposalInvoiceSnapshot}=await import('../shared/proposal-invoice-snapshot.js');
+ const result=proposalInvoiceSnapshot({content:{scenario:{pricing:{subtotal:3,discount:.01,tax:.01,total:3},lines:[{description:'Station',quantity:1,line_total:1},{description:'Paid keepsakes',quantity:1,line_total:2},{description:'Complimentary magnet',quantity:50,line_total:0}]}}});
+ assert.equal(result.items[2].discount,0);assert.equal(result.items[2].tax,0);assert.equal(result.items[2].line_total,0);assert.equal(Math.round(result.items.reduce((n,i)=>n+i.line_total,0)*100),300);
+});

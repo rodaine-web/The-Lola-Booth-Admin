@@ -1,3 +1,4 @@
+import {assertStationCommercialReady} from './keepsake-station-proposal-service.js';
 import { transaction } from '../db/pool.js';
 import { AppError } from '../utils/errors.js';
 import { recordActivity } from './activity-service.js';
@@ -16,6 +17,8 @@ export async function acceptProposal(proposalId, acceptedByName, req) {
       const queued = await client.query('SELECT 1 FROM automation_jobs WHERE job_type=$1 AND related_entity_id=$2 LIMIT 1', [INVOICE_HANDOFF_JOB, proposalId]);
       return { proposal, duplicate: true, invoiceQueued: queued.rowCount > 0 };
     }
+    if(proposal.event_id&&(await client.query("SELECT 1 FROM events WHERE id=$1 AND (deleted_at IS NOT NULL OR status='CANCELLED' OR sales_closed_at IS NOT NULL)",[proposal.event_id])).rowCount)throw new AppError('This opportunity must be reopened and reviewed before accepting a proposal.',409,'OPPORTUNITY_REOPEN_REQUIRED');
+    assertStationCommercialReady(proposal);
     if (!['SENT', 'VIEWED'].includes(proposal.status)) throw new AppError('This proposal is not available for acceptance.', 409, 'PROPOSAL_NOT_ACCEPTABLE');
     const version = (await client.query('SELECT id FROM proposal_versions WHERE proposal_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY version_number DESC LIMIT 1', [proposalId,proposal.published_version_id])).rows[0];
     if (!version) throw new AppError('This proposal needs a saved version before acceptance. Contact The LOLA Booth.', 409, 'PROPOSAL_VERSION_REQUIRED');

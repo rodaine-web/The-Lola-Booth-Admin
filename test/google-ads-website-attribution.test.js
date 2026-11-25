@@ -28,7 +28,7 @@ test('contact and quote payloads retain Google click IDs without sending visitor
  let handler,posted;
  const bookingForm={dataset:{},reportValidity:()=>true,addEventListener:(_,fn)=>handler=fn};
  const status={focus(){}},button={textContent:'Submit'};
- vm.runInNewContext(booking.slice(start,end),{...f.context,window:{LOLA_CONFIG:{formsEnabled:true}},form:bookingForm,FormData:function(){return new Map();},el:s=>s.includes('status')?status:s.includes('submit')?button:{checked:false},catalog:{},chosen:new Map([['glam',{packageId:'qa-package'}]]),addons:new Map(),busy:false,ready:true,submissionId:'qa-id',base:'https://api.invalid',business:()=>false,submitLabel:()=> 'Submit',virtualDuration:'',fetch:async(_url,request)=>{posted=JSON.parse(request.body);return {ok:false,status:422,json:async()=>({error:{message:'Synthetic validation stop'}})};}});
+ vm.runInNewContext(booking.slice(start,end),{...f.context,window:{LOLA_CONFIG:{formsEnabled:true}},station:{validate:()=>'',payload:()=>undefined},form:bookingForm,FormData:function(){return new Map();},el:s=>s.includes('status')?status:s.includes('submit')?button:{checked:false},catalog:{},chosen:new Map([['glam',{packageId:'qa-package'}]]),addons:new Map(),busy:false,ready:true,submissionId:'qa-id',base:'https://api.invalid',business:()=>false,submitLabel:()=> 'Submit',virtualDuration:'',fetch:async(_url,request)=>{posted=JSON.parse(request.body);return {ok:false,status:422,json:async()=>({error:{message:'Synthetic validation stop'}})};}});
  await handler({preventDefault(){}});assert.equal(posted.wbraid,'synthetic-ios-click');assert.equal(posted.utm_campaign,'123');
 });
 test('blocked storage does not crash attribution capture; organic Google is not labeled paid',()=>{

@@ -1,0 +1,141 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import pg from 'pg';
+import sharp from 'sharp';
+import {normalizePhotoLookup,photoSourceForProduct} from '../shared/keepsakes-photo-access.js';
+test('phone/email normalization and explicit source selection',()=>{
+ assert.equal(normalizePhotoLookup('SMS','(312) 555-0123'),'+13125550123');assert.equal(normalizePhotoLookup('EMAIL',' Guest@Example.com '),'guest@example.com');assert.equal(normalizePhotoLookup('SMS','abc123'),null);
+ const assets=[{id:'a',sessionId:'s',kind:'COMPOSITE',branded:true},{id:'b',sessionId:'s',kind:'ORIGINAL',branded:false},{id:'c',sessionId:'s',kind:'BRANDED_STRIP',branded:true},{id:'other',sessionId:'x',kind:'ORIGINAL',branded:false}];
+ assert.equal(photoSourceForProduct({source:'ORIGINAL_UNBRANDED'},assets,'a').asset.id,'b');assert.equal(photoSourceForProduct({source:'BRANDED_STRIP'},assets,'a').asset.id,'c');assert.equal(photoSourceForProduct({source:'BRANDED_STRIP'},assets.slice(0,2),'a').asset,undefined);
+});
+test('photo retrieval queues neutral email, requires authorized phone/email associations, redeems once and rechecks every scope',{skip:!process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL,timeout:120000},async()=>{
+ const url=new URL(process.env.BOOKING_LIFECYCLE_TEST_DATABASE_URL);assert.ok(['127.0.0.1','localhost'].includes(url.hostname));assert.match(url.pathname,/_qa$/);
+ const schema='photo_access_'+crypto.randomBytes(6).toString('hex'),bootstrap=new pg.Pool({connectionString:url.toString()}),storage=await fs.mkdtemp(path.join(os.tmpdir(),'lola-photo-access-'));let db;
+ try{
+  await bootstrap.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');
+  Object.assign(process.env,{DATABASE_URL:url.toString(),APP_ENV:'test',NODE_ENV:'test',JWT_SECRET:'synthetic-photo-access-signing-secret',INTEGRATION_SECRET_KEY:'synthetic-photo-access-encryption-key',CLIENT_ORIGIN:'http://localhost:5173',GALLERY_ENABLED:'true',GALLERY_STORAGE_PROVIDER:'local',GALLERY_LOCAL_ROOT:storage,GALLERY_PUBLIC_ORIGIN:'https://staginggallery.thelolabooth.com',EMAIL_PROVIDER:'development',SMS_PROVIDER:'none'});
+  db=await import('../server/src/db/pool.js');const {query,transaction}=db,one=async(s,p=[])=>(await query(s,p)).rows[0];
+  for(const f of (await fs.readdir(new URL('../server/migrations/',import.meta.url))).filter(f=>/^\d{3}_.*\.sql$/.test(f)).sort())await transaction(()=>fs.readFile(new URL('../server/migrations/'+f,import.meta.url),'utf8').then(query));
+  const admin=await one("INSERT INTO users(name,email,password_hash) VALUES('Photo QA','photo-admin@example.invalid','not-a-login') RETURNING id");admin.roles=['ADMIN'];admin.permissions=['*'];
+  const station=await import('../server/src/services/keepsake-station-policy-service.js'),{DEFAULT_STATION_POLICY}=await import('../shared/keepsake-station-policy.js');
+  await assert.rejects(station.stationPolicyAdmin({roles:['ATTENDANT'],permissions:[]}),{code:'FORBIDDEN'});
+  const {packages,paidTiers,optionalTiers}=DEFAULT_STATION_POLICY;
+  const saved=await station.saveStationPolicy({packages,paidTiers,optionalTiers},admin);assert.equal(saved.status,'DRAFT');
+  const q=await station.previewStationPolicy({selections:[{experience:'glam',tier:'SIGNATURE'}],baseCents:89900,complimentary:{keychain:50},paid:{keychain:25,magnet:25},optional:{'framed-photo':5,'jacketed-print':10,'acrylic-display':5,postcard:10}},admin);assert.equal(q.totalCents,209220);assert.equal(q.policyVersion,saved.version);assert.equal(q.purchasable,false);
+  await station.saveStationPolicy({packages,paidTiers:paidTiers.map(t=>({...t,keychain:t.keychain+100})),optionalTiers},admin);assert.equal(q.totalCents,209220);assert.equal((await one('SELECT count(*)::int AS n FROM keepsake_station_policies')).n,2);
+  const stationBooking=await import('../server/src/services/keepsake-station-booking-service.js');
+  const publicDraft=await stationBooking.publicStationPolicy();assert.equal(publicDraft.paidTiers,undefined);assert.equal(publicDraft.optionalTiers,undefined);assert.equal(publicDraft.products.length,6);
+  await station.publishStationPolicy({version:saved.version,approval:'APPROVE_PUBLIC_STATION_RATES'},admin);
+  assert.equal((await stationBooking.publicStationPolicy()).paidTiers[2].keychain,599);
+  const fakeCatalog={experiences:[{id:'glam',key:'glam'},{id:'vogue',key:'vogue'},{id:'360',key:'360'}],packages:[{id:'sig',experience_id:'glam',tier_key:'SIGNATURE'},{id:'ess',experience_id:'vogue',tier_key:'ESSENTIAL'},{id:'video',experience_id:'360',tier_key:'LUXE'}]};
+  const stationConfig={enabled:true,policyVersion:saved.version,complimentary:{keychain:50},paid:{keychain:25,magnet:25},optional:{'framed-photo':5,'jacketed-print':10,'acrylic-display':5,postcard:10}};
+  const bookingInput={customerType:'INDIVIDUAL',selections:[{experienceId:'glam',packageId:'sig'},{experienceId:'vogue',packageId:'ess'}]};
+  const commitment=await stationBooking.bookingStationConfiguration(stationConfig,bookingInput,fakeCatalog);assert.equal(commitment.quote.subtotalCents,119320);assert.equal(commitment.quote.totalProducts,130);assert.equal(commitment.quote.stations,1);assert.equal(commitment.pricingReady,true);
+  await assert.rejects(stationBooking.bookingStationConfiguration({...stationConfig,paid:{keychain:20,magnet:20}},bookingInput,fakeCatalog),{code:'STATION_MINIMUM_REQUIRED'});
+  assert.equal((await stationBooking.bookingStationConfiguration({...stationConfig,paid:{keychain:20,magnet:20}},bookingInput,fakeCatalog,{preview:true})).quote.remaining,10);
+  await assert.rejects(stationBooking.bookingStationConfiguration(stationConfig,{...bookingInput,selections:[{experienceId:'360',packageId:'video'}]},fakeCatalog),{code:'STATION_CONFIGURATION'});
+  await assert.rejects(stationBooking.bookingStationConfiguration({...stationConfig,stationCount:2},bookingInput,fakeCatalog),{code:'STATION_CONFIGURATION'});
+  const businessRequest=await stationBooking.bookingStationConfiguration({enabled:true,stationCount:5,paid:{keychain:500,magnet:500}},{customerType:'BUSINESS',selections:[{experienceId:'glam'}]},fakeCatalog);assert.equal(businessRequest.stationCount,5);assert.equal(businessRequest.quote,undefined);assert.equal(businessRequest.pricingReady,false);
+  const client=await one("INSERT INTO clients(name,email,client_type) VALUES('Photo QA','photo-client@example.invalid','CORPORATE') RETURNING id");
+  const gallery=await import('../server/src/services/private-gallery-service.js'),access=await import('../server/src/services/keepsakes-photo-access-service.js'),manager=await import('../server/src/services/keepsakes-admin-service.js');
+  const {importFiestaShares}=await import('../server/src/services/fiesta-gallery-service.js'),{photoLink}=await import('../server/src/services/gallery-photo-link-service.js');
+  // Seed exactly the imported identity representation; unrelated filenames never confer access.
+  const {encryptSecretJson,decryptSecretJson}=await import('../server/src/services/integration-secrets.js');
+  const fixtures=[];
+  for(let i=0;i<2;i++){
+   const event=await one("INSERT INTO events(event_name,event_type,event_date,client_id) VALUES($1,'CORPORATE','2035-11-18',$2) RETURNING id",['Photo event '+i,client.id]);
+   const album=await gallery.createGalleryAlbum(event.id,'Photo event '+i,admin);
+   const upload=async name=>{const bytes=await sharp({create:{width:800,height:600,channels:3,background:i?'#304050':'#b48a50'}}).jpeg().toBuffer();return gallery.uploadGalleryMedia(album.id,{filename:name,mime_type:'image/jpeg',base64:bytes.toString('base64'),source_provider:'MANUAL'});};
+   const anchor=await upload('guest.jpg'),unrelated=await upload('other.jpg'),original=await upload('unbranded.jpg'),strip=await upload('strip.jpg');
+   await query("UPDATE gallery_media SET status='HIDDEN' WHERE id=ANY($1::uuid[])",[[original.id,strip.id]]);
+   await query("UPDATE gallery_albums SET status='PUBLISHED',expires_at=now()+interval '1 year' WHERE id=$1",[album.id]);
+   const albumKey=await gallery.createGalleryKey(album.id,'ALBUM',null,null,admin);
+   const people=[];
+   for(const [channel,recipient]of [['EMAIL','guest@example.invalid'],['SMS','+13125550123']]){
+    const fingerprint=crypto.createHmac('sha256',process.env.INTEGRATION_SECRET_KEY).update(channel+':'+recipient).digest('hex');
+    const person=await one('INSERT INTO gallery_people(album_id,display_name,external_ref) VALUES($1,$2,$3) RETURNING id',[album.id,'Guest','fiesta:'+fingerprint]);people.push(person);
+    await query('INSERT INTO fiesta_gallery_shares(album_id,person_id,filename,channel,recipient_ciphertext,capture_ref,source_share_time) VALUES($1,$2,$3,$4,$5,$6,$7)',[album.id,person.id,'guest.jpg',channel,encryptSecretJson({recipient}),'capture','now']);
+    await query('INSERT INTO gallery_media_people(album_id,media_id,person_id) VALUES($1,$2,$3)',[album.id,anchor.id,person.id]);
+   }
+   await manager.saveKeepsakesSession(album.id,{anchorMediaId:anchor.id,assets:[{mediaId:anchor.id,kind:'COMPOSITE',label:'Included photo',sortOrder:0,branded:true,merchandiseEligible:true,digitalEligible:false,included:true},{mediaId:original.id,kind:'ORIGINAL',label:'Unbranded photo',sortOrder:1,branded:false,merchandiseEligible:true,digitalEligible:true,included:false},{mediaId:strip.id,kind:'BRANDED_STRIP',label:'Branded strip',sortOrder:2,branded:true,merchandiseEligible:true,digitalEligible:false,included:false}]},admin);
+   fixtures.push({album,anchor,unrelated,original,people,albumKey});
+  }
+  const neutral=await access.requestPhotoAccess({channel:'EMAIL',value:'nobody@example.invalid'});assert.equal((await one('SELECT count(*)::int AS n FROM communications')).n,0);
+  assert.deepEqual(await access.requestPhotoAccess({channel:'EMAIL',value:'guest@example.invalid'}),neutral);
+  const email=await one('SELECT * FROM communications ORDER BY created_at DESC LIMIT 1');assert.equal(email.status,'SCHEDULED');assert.equal(email.recipient,'guest@example.invalid');assert.equal(email.trigger_key,'KEEPSAKES_PHOTO_ACCESS');
+  const code=/#code=([\w-]+)/.exec(email.rendered_body)[1];assert.equal(code.length,43);assert.ok(!email.rendered_body.includes('Photo event'));
+  await Promise.all([access.requestPhotoAccess({channel:'EMAIL',value:'guest@example.invalid'}),access.requestPhotoAccess({channel:'EMAIL',value:'guest@example.invalid'})]);assert.equal((await one('SELECT count(*)::int AS n FROM communications')).n,1);
+  const outcomes=await Promise.allSettled([access.redeemPhotoAccess(code),access.redeemPhotoAccess(code)]);assert.equal(outcomes.filter(o=>o.status==='fulfilled').length,1);
+  const session=outcomes.find(o=>o.status==='fulfilled').value;
+  let view=await access.photoCollection(session.token);assert.equal(view.albums.length,2);assert.equal(view.assets.length,6);assert.ok(!JSON.stringify(view).includes('storage_key'));assert.ok(!JSON.stringify(view).includes(session.token));
+  await assert.rejects(access.collectionPhoto(session.token,fixtures[0].unrelated.id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  const image=await access.collectionPhoto(session.token,view.assets[0].id);assert.equal((await sharp(image).metadata()).format,'jpeg');
+  await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'test-recipient@example.invalid'});
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,0,'An arbitrary email cannot bind to another guest phone');assert.equal((await one("SELECT count(*)::int n FROM communications WHERE recipient='test-recipient@example.invalid'")).n,0);
+  await query("UPDATE keepsakes_photo_requests SET created_at=now()-interval '3 minutes'");
+  await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'guest@example.invalid'});
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,1);
+  const transfer=await access.createPhotoHandoff(session.token,[view.assets[0].id],'SHOP');
+  await assert.rejects(access.redeemPhotoHandoff(transfer.code,'GALLERY'),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  const transfers=await Promise.allSettled([access.redeemPhotoHandoff(transfer.code,'SHOP'),access.redeemPhotoHandoff(transfer.code,'SHOP')]);
+  assert.equal(transfers.filter(x=>x.status==='fulfilled').length,1);const moved=transfers.find(x=>x.status==='fulfilled').value;assert.deepEqual(moved.selected,[view.assets[0].id]);assert.equal((await access.photoCollection(moved.token)).assets.length,6);
+  await assert.rejects(access.createPhotoHandoff(session.token,[fixtures[0].unrelated.id],'SHOP'),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  const bookService=await import('../server/src/services/keepsakes-book-service.js');const variants=await bookService.bookVariants(session.token);assert.equal(variants.audience,'GUEST');assert.equal(variants.startingCents,null);assert.ok(variants.variants.every(v=>v.kind==='BOOK'&&!v.available));
+  process.env.GELATO_API_KEY='synthetic-key';process.env.WHCC_TEST_API_KEY='synthetic-test-key';
+  const uid='photobooks-softcover_pf_140x140-mm-5_5x5_5-inch_pt_170-gsm-65lb-coated-silk_cl_4-4_ccl_4-4_bt_glued-left_ct_matt-lamination_prt_1-0_cpt_250-gsm-100-lb-cover-coated-silk_ver';
+  const providerRead=async url=>({ok:true,json:async()=>url.includes('/prices')?[{country:'US',currency:'USD',quantity:1,pageCount:28,price:7.492242336273193}]:url.includes('/cover-dimensions')?{measureUnit:'mm',pagesCount:32,spineSize:{width:2.72},contentFrontSize:{width:140,height:140},contentBackSize:{width:140,height:140}}:{productUid:uid,attributes:{ProductStatus:'activated',UnifiedPaperFormat:'140x140-mm-5_5x5_5-inch'},supportedCountries:['US'],validPageCounts:[28,30,32]}});
+  await bookService.verifyBookMapping(variants.variants[0].id,{providerProductId:uid,pageCount:28,reason:'Verify an actual supported catalogue mapping.'},admin,{request:providerRead});
+  const verified=await one('SELECT * FROM keepsakes_book_variants WHERE id=$1',[variants.variants[0].id]);assert.equal(verified.status,'DRAFT');assert.equal(verified.provider_cost_cents,749);assert.equal(verified.specification.layoutVerified,false);assert.equal((await bookService.bookVariants(session.token)).startingCents,null,'Catalogue verification alone never enables checkout');
+  await assert.rejects(bookService.verifyBookMapping(variants.variants[0].id,{providerProductId:uid,pageCount:31,reason:'Unsupported page count must remain unavailable.'},admin,{request:providerRead}),{code:'BOOK_MAPPING_UNSUPPORTED'});
+  const albumMapping=await one("SELECT * FROM keepsakes_book_variants WHERE kind='ALBUM' AND size='8×8'");
+  const whccRead=async()=>({ok:true,json:async()=>({ref:'album',completion:'editor',configuration:{fields:[{field:'size',values:[{id:'8x8',enabled:true},{id:'10x10',enabled:true}]},{field:'cover_type',values:[{id:'material_cover',enabled:true}]},{field:'cover_material',values:[{id:'premium_leather_black',enabled:true}]}]}})});
+  const albumInput={providerProductId:'album',size:'8x8',coverType:'material_cover',coverMaterial:'premium_leather_black',reason:'Verify the supported matching album size.'};
+  await assert.rejects(bookService.verifyBookMapping(albumMapping.id,{...albumInput,size:'10x10'},admin,{request:whccRead}),{code:'BOOK_MAPPING_UNSUPPORTED'});
+  await bookService.verifyBookMapping(albumMapping.id,albumInput,admin,{request:whccRead});
+  const mappedAlbum=await one('SELECT * FROM keepsakes_book_variants WHERE id=$1',[albumMapping.id]);assert.equal(mappedAlbum.status,'DRAFT');assert.equal(mappedAlbum.provider_cost_cents,null,'Blank five-spread configuration costs must not masquerade as a finished album quote');
+  const adminBooks=await bookService.bookAdmin(admin);assert.equal(adminBooks.supplierSafety.orderSubmissionEnabled,false);assert.equal(adminBooks.supplierSafety.gelato,'CATALOGUE_ONLY_ACCOUNT_UNCONFIRMED');
+  const chosen=view.assets.slice(0,5).map(a=>a.id),book={title:'QA memories',photos:chosen,coverPhoto:chosen[0],copies:2,layout:'EDITORIAL'};
+  const draft=await bookService.saveBookDraft(session.token,{variantId:variants.variants[0].id,books:[book]});assert.equal(draft.price.totalCents,variants.variants[0].retailCents*2);assert.equal(draft.price.demo,true);assert.equal((await bookService.listBookDrafts(session.token)).drafts.length,1);
+  await assert.rejects(bookService.saveBookDraft(session.token,{id:draft.id,revision:9,variantId:variants.variants[0].id,books:[book]}),{code:'BOOK_CHANGED'});
+  const albumVariant=await one("SELECT id FROM keepsakes_book_variants WHERE kind='ALBUM' LIMIT 1");await assert.rejects(bookService.saveBookDraft(session.token,{variantId:albumVariant.id,books:[book]}),{code:'BOOK_UNAVAILABLE'});
+  const revised=await bookService.saveBookDraft(session.token,{id:draft.id,revision:1,variantId:variants.variants[0].id,books:[{...book,title:'Revised title'}]});assert.equal(revised.revision,2);assert.equal(revised.proofApprovedAt,null);
+  // A newly revoked personal key takes precedence over any album grant.
+  const personal=await gallery.createGalleryKey(fixtures[0].album.id,'PERSON',fixtures[0].people[0].id,null,admin);
+  await query("UPDATE gallery_access_keys SET status='REVOKED' WHERE id=$1",[personal.id]);
+  await query("UPDATE keepsakes_photo_requests SET created_at=now()-interval '3 minutes'");
+  await access.requestPhotoAccess({channel:'EMAIL',value:'guest@example.invalid'});
+  const latest=await one('SELECT * FROM keepsakes_photo_requests ORDER BY created_at DESC LIMIT 1');assert.equal(latest.scopes.length,1);assert.equal(latest.scopes[0].albumId,fixtures[1].album.id);
+  // Existing access also ceases when its original grant or album is revoked.
+  await query("UPDATE gallery_access_keys SET status='REVOKED' WHERE id=$1",[fixtures[0].albumKey.id]);view=await access.photoCollection(session.token);assert.equal(view.albums.length,1);
+  await query("UPDATE gallery_people SET status='ARCHIVED' WHERE id=$1",[fixtures[1].people[0].id]);view=await access.photoCollection(session.token);assert.equal(view.assets.length,0);
+  await assert.rejects(access.collectionPhoto(session.token,fixtures[0].original.id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+  // Proposal snapshots use the same policy and preserve every complimentary/paid line.
+  await query("INSERT INTO business_settings(business_name,timezone,sales_tax_percent) VALUES('Station QA','America/Chicago',0)");
+  const exp=await one("INSERT INTO experiences(name,slug) VALUES('The Lola Glam','glam') RETURNING id"),pkg=await one("INSERT INTO packages(name,experience_id,starting_price,tier_key) VALUES('Signature',$1,899,'SIGNATURE') RETURNING id",[exp.id]);
+  const proposalService=await import('../server/src/services/proposal-service.js'),stationProposal=await import('../server/src/services/keepsake-station-proposal-service.js');
+  const proposalStation={...stationConfig,mode:'CELEBRATION',stations:[{location:'Main Station',hours:4,feeCents:49900}]};
+  const proposalInput={client_id:client.id,event_id:fixtures[0].album.event_id,proposal_title:'Synthetic Station Proposal',event_type:'Corporate Event',selected_experiences:[{experience_id:exp.id,packages:[{package_id:pkg.id,price:899}]}],keepsake_station:proposalStation,tax_rate:0};
+  const snap=await proposalService.buildProposalSnapshot(proposalInput,admin);assert.equal(snap.pricing.total,2092.2);assert.ok(snap.lineItems.every(l=>l.detail?.trim()));assert.ok(snap.content.scenario.lines.every(l=>l.detail?.trim()));assert.equal(snap.content.keepsake_station.totalProducts,130);assert.equal(snap.content.postcard_mailing.quantity,10);assert.equal(snap.lineItems.filter(l=>l.type==='KEEPSAKE'&&l.complimentary).reduce((n,l)=>n+l.quantity,0),50);assert.equal(snap.content.keepsake_station.stations.length,1);
+  const standardQuote=await stationProposal.stationProposalQuote(proposalStation,proposalInput.selected_experiences,admin);assert.equal(standardQuote.commercialReady,true);stationProposal.assertStationCommercialReady({content:{keepsake_station:standardQuote}});
+  const newerDraft=await station.saveStationPolicy({packages,paidTiers,optionalTiers},admin);const editorPolicy=await station.stationPolicyAdmin(admin);assert.equal(editorPolicy.policy.version,newerDraft.version);assert.equal(editorPolicy.quotePolicy.status,'PUBLISHED');
+  await station.publishStationPolicy({version:newerDraft.version,approval:'APPROVE_PUBLIC_STATION_RATES'},admin);
+  const historical=await stationProposal.stationProposalQuote({...proposalStation,policyVersion:saved.version},proposalInput.selected_experiences,admin);assert.equal(historical.commercialReady,true,'Previously approved unchanged policy remains approved after retirement');
+  const identicalDraft=await station.saveStationPolicy({packages,paidTiers,optionalTiers},admin);const normalized=await stationProposal.stationProposalQuote({...proposalStation,policyVersion:identicalDraft.version},proposalInput.selected_experiences,admin);assert.equal(normalized.commercialReady,true);assert.equal(normalized.policyVersion,newerDraft.version);
+  const changedDraft=await station.saveStationPolicy({packages,paidTiers:paidTiers.map(t=>({...t,keychain:t.keychain+1})),optionalTiers},admin);const unapproved=await stationProposal.stationProposalQuote({...proposalStation,policyVersion:changedDraft.version},proposalInput.selected_experiences,admin);assert.equal(unapproved.commercialReady,false,'Different unpublished rates never inherit approval');
+  const {customerPricing}=await import('../shared/customer-pricing.js');const publicSnap=customerPricing(snap.content.keepsake_station);assert.equal(publicSnap.configuration,undefined);assert.equal(publicSnap.internalApproval,undefined);
+  await assert.rejects(stationProposal.stationProposalQuote({...proposalStation,paid:{keychain:20,magnet:20}},proposalInput.selected_experiences,admin),{code:'STATION_MINIMUM_REQUIRED'});
+  const double=await stationProposal.stationProposalQuote({...proposalStation,stationCount:2,stations:[...proposalStation.stations,{location:'Guest Lounge',hours:4,feeCents:40000}],priceApprovalReason:'Approved second station and all-inclusive service fee.'},proposalInput.selected_experiences,admin);assert.equal(double.totalQualifying,100);assert.equal(double.stations.length,2);assert.equal(double.subtotalCents,159320);
+  const businessQuote=await stationProposal.stationProposalQuote({enabled:true,mode:'BUSINESS',stationCount:3,stations:[1,2,3].map(n=>({location:'Activation '+n,hours:6,feeCents:50000})),paid:{keychain:500,magnet:500},unitPrices:{keychain:399,magnet:299},priceApprovalReason:'Approved custom business rates and three staffed stations.'},proposalInput.selected_experiences,admin);assert.equal(businessQuote.stations.length,3);assert.equal(businessQuote.subtotalCents,499000);assert.equal(businessQuote.totalProducts,1000);assert.deepEqual(businessQuote.complimentary,{keychain:0,magnet:0});
+  await assert.rejects(stationProposal.stationProposalQuote({...proposalStation,unitPrices:{keychain:1}},proposalInput.selected_experiences,admin),{code:'STATION_CONFIGURATION'});
+  const html=(await import('../server/src/services/document-service.js')).proposalHtml({proposal_number:'QA-STATION',content:snap.content,pricing_snapshot:snap.pricing,line_items_snapshot:snap.lineItems,selected_experiences:snap.selectedExperiences});assert.ok(html.includes('Your Keepsake Experience'));assert.ok(html.includes('$2,092.20'));assert.ok(html.includes('data:image/png;base64,'));
+  const pdf=await proposalService.proposalPdfBuffer({proposal_number:'QA-STATION',content:snap.content,pricing_snapshot:snap.pricing,line_items_snapshot:snap.lineItems,selected_experiences:snap.selectedExperiences});assert.ok(pdf.length>10000);await fs.writeFile(path.join(os.tmpdir(),'lola-station-signature-qa.pdf'),pdf);
+  // Direct-photo capability stays confined to its explicitly mapped capture session.
+  const directToken=(await photoLink(fixtures[1].album.id,fixtures[1].anchor.id)).url.split('/').at(-1),direct=await access.directPhotoAccess('photo',directToken);
+  const directView=await access.photoCollection(direct.token);assert.equal(directView.assets.length,3);assert.ok(!directView.assets.some(a=>a.id===fixtures[1].unrelated.id));
+  await query("UPDATE keepsakes_photo_sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1",[crypto.createHash('sha256').update(direct.token).digest('hex')]);await assert.rejects(access.photoCollection(direct.token),{code:'PHOTO_ACCESS_UNAVAILABLE'});
+ }finally{await db?.pool.end();await bootstrap.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');await bootstrap.end();await fs.rm(storage,{recursive:true,force:true});}
+});
