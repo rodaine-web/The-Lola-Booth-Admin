@@ -184,6 +184,27 @@ test(
           );
         },
       );
+      await t.test(
+        "queued Gallery email recipients and verification content cannot be retargeted in Communications",
+        async () => {
+          const automation =
+            await import("../server/src/services/automation-service.js");
+          const c = await one(
+            "SELECT id FROM communications WHERE trigger_key='GALLERY_PUBLICATION'",
+          );
+          await assert.rejects(
+            automation.updateCommunicationDraft(
+              c.id,
+              { recipient: "attacker@example.invalid" },
+              user,
+            ),
+            { code: "GALLERY_NOTIFICATION_IMMUTABLE" },
+          );
+          await assert.rejects(automation.sendCommunication(c.id, user), {
+            code: "GALLERY_NOTIFICATION_JOB_REQUIRED",
+          });
+        },
+      );
       let review = await n.reviewGallerySms(album.id, user);
       assert.equal(review.eligible, 400);
       assert.equal(review.duplicates, 1);

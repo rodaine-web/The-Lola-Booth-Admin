@@ -518,6 +518,7 @@ export async function updateCommunicationDraft(id, input = {}, user = {}) {
   return transaction(async (client) => {
     const current = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!current) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
+    if(['GALLERY_PUBLICATION','GALLERY_EMAIL_VERIFICATION'].includes(current.trigger_key))throw new AppError("Gallery photo delivery content and recipients are controlled by the authorized notification job.",409,"GALLERY_NOTIFICATION_IMMUTABLE");
     if (!["DRAFT", "SCHEDULED", "FAILED"].includes(current.status)) throw new AppError("Sent communications are immutable.", 409, "COMMUNICATION_IMMUTABLE");
     const allowed = ["recipient", "subject", "rendered_subject", "rendered_body", "rendered_html", "scheduled_at", "send_mode"];
     const patch = Object.fromEntries(Object.entries(input).filter(([key]) => allowed.includes(key)));

@@ -15,7 +15,7 @@ Staging URLs:
 
 1. Import, upload, match and prepare Gallery records without notification side effects.
 2. Record the existing guest's transactional photo-delivery authorization in **Notifications → Review Contact Authorization** before publication. This records the Admin, time, channel and evidence; imported phone/email details alone are insufficient. Marketing authorization remains separate.
-3. Existing Gallery publication transaction creates a stable publication record and one idempotent email delivery per event/contact. It reuses encrypted Fiesta contacts, existing person/album grants, branded email rendering and communications. The email is queued as a controlled Gallery job; generic communication sends cannot bypass it.
+3. Existing Gallery publication transaction creates a stable publication record and one idempotent email delivery per event/contact. It reuses encrypted Fiesta contacts, existing person/album grants, branded email rendering and communications. The email is queued as a controlled Gallery job; generic communication sends cannot bypass it. Queued Gallery emails and verification messages cannot be edited to retarget their recipients or access links.
 4. Successful publication opens **Send Photo Links by SMS?**. Cancel receives keyboard focus. The dialog shows event identifiers, imported/valid/duplicate/excluded/already-notified/new recipient counts, fully rendered segment counts, estimate, available monthly budget, warning and blocking reasons. Confirm is never automatic.
 5. Confirm locks settings/budget state, rechecks current eligibility, requires an unexpired review and unchanged pricing version, reserves budget, stores immutable reviewed recipients/messages/rates and records the approving Admin. Cancel records a decision and sends nothing; publication/email remain intact. Later reviews are fresh and incremental.
 6. Dedicated worker claims each delivery once and rechecks Gallery grants, authorization and global/CRM opt-outs. Interrupted/unknown submissions are never automatically retried. No failed email triggers SMS.
@@ -121,7 +121,7 @@ Main files:
 ## Validation
 
 - Full unit suite: **843 passed, 66 skipped, 0 failed** (909 tests; opt-in database/browser suites run separately).
-- Synthetic 400-recipient lifecycle, pricing and repeated-click/cancel tests passed. Expanded database lifecycle: **19 tests passed**; sequential Gallery notification, Fiesta, Dropbox, deletion and lookup regressions: **24 passed**, including the additional CRM opt-out and early-callback cases.
+- Synthetic 400-recipient lifecycle, pricing and repeated-click/cancel tests passed. Expanded database lifecycle: **20 tests passed**; sequential Gallery notification, Fiesta, Dropbox, deletion and lookup regressions: **24 passed**, with the additional immutable-recipient case subsequently passing in the expanded lifecycle pack.
 - Cross-Gallery concurrent approvals cannot reserve over the same monthly budget.
 - Signed Twilio STOP/HELP and forged-signature tests passed; no duplicate compliance response or unrelated SMS sends.
 - Token/email verification, forwarded-token limits, revoked grants, unknown-phone neutrality, trusted-only lookup and arbitrary-email takeover prevention passed.
