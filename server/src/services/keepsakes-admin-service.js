@@ -142,6 +142,7 @@ export async function cancelKeepsakesOrder(id,user,{refund=false,reason='request
   if(order.paid_at&&!refund)throw new AppError('Use refund to cancel a paid order after supplier cancellation.',409,'KEEPSAKES_PAID_CANCEL_REQUIRES_REFUND');
   const fulfillments=(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 FOR UPDATE',[id])).rows;
   if(fulfillments.some(f=>f.lease_until&&new Date(f.lease_until)>new Date()))throw new AppError('Fulfillment is processing. Retry after reconciliation.',409,'KEEPSAKES_FULFILLMENT_BUSY');
+  if((await query("SELECT 1 FROM keepsakes_shippo_labels WHERE order_id=$1 AND status NOT IN('QUOTED','VOIDED','ERROR') LIMIT 1",[id])).rowCount)throw new AppError('Review and void or reconcile Shippo labels before refunding this order.',409,'SHIPPO_CANCEL_REVIEW');
   // Preflight every provider before the first irreversible remote action.
   if(fulfillments.some(f=>f.provider_order_id&&f.provider==='LOB'))throw new AppError('A submitted postcard needs provider cancellation review before refund.',409,'KEEPSAKES_LOB_CANCEL_REVIEW');
   try{

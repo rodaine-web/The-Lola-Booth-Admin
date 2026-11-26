@@ -1,3 +1,4 @@
+import {shippingConfig,quoteShippoShipping} from './keepsakes-shipping-service.js';
 import {PRINT_REVIEW_VERSION,PRINT_REVIEW_STATEMENT} from '../../../shared/keepsakes-print-policy.js';
 import {keepsakesCoreProduct,variableInsertProduct} from '../../../shared/keepsakes-core-catalogue.js';
 import {previewTemplateFor} from '../../../shared/keepsakes-preview-templates.js';
@@ -98,6 +99,7 @@ const addressForProdigi=a=>({line1:a.address1,line2:a.address2||'',townOrCity:a.
 export {addressForProdigi};
 export async function quoteKeepsakes(type,token,input){
  const cart=keepsakesCart.parse(input),scope=await keepsakesScope(type,token),{settings,products}=await availableProducts(scope),items=[],issues=[],warnings=[];
+ const shippingSettings=await shippingConfig();let shippingSnapshot=null;
  if(!settings.enabled)throw new AppError('Shopping is not enabled for this gallery.',409,'KEEPSAKES_GALLERY_DISABLED');
  if(cart.items.reduce((sum,item)=>sum+item.quantity*Math.max(1,item.recipients.length),0)>100)throw new AppError('Use up to 100 physical units per purchase.',422,'KEEPSAKES_CART_LIMIT');
  let subtotal=0,shipping=0;
@@ -139,8 +141,8 @@ export async function quoteKeepsakes(type,token,input){
    const operational=product.operational_config||{};
    if(!item.shippingAddress&&!cart.shippingAddress)throw new AppError('Enter a delivery address for your physical keepsakes.',422,'KEEPSAKES_SHIPPING_REQUIRED');
    if(!operational.productionReady||!operational.stockConfirmed&&operational.stockUnits==null||operational.stockUnits!=null&&(!Number.isSafeInteger(operational.stockUnits)||operational.stockUnits<units))throw new AppError('Stock, production capacity and delivery must be confirmed for this product.',409,'KEEPSAKES_PRODUCTION_NOT_READY');
-   if(!Number.isSafeInteger(operational.shippingCents)||operational.shippingCents<0)issues.push('Delivery pricing is being updated. Please try again shortly.');
-   shipping+=operational.shippingCents||0;item.shippingCents=operational.shippingCents||0;
+   if(!shippingSettings.enabled&&(!Number.isSafeInteger(operational.shippingCents)||operational.shippingCents<0))issues.push('Delivery pricing is being updated. Please try again shortly.');
+   if(!shippingSettings.enabled){shipping+=operational.shippingCents||0;item.shippingCents=operational.shippingCents||0;}
   }
   if(product.provider==='PRODIGI'){
    if(!cart.shippingAddress)throw new AppError('A shipping address is required.',422,'KEEPSAKES_SHIPPING_REQUIRED');
@@ -174,6 +176,9 @@ export async function quoteKeepsakes(type,token,input){
   const stock=(await query('SELECT id,operational_config FROM keepsakes_products WHERE id=ANY($1::uuid[])',[[...totals.keys()]])).rows;
   if([...totals].some(([id,n])=>stock.some(p=>p.id===id&&p.operational_config.stockUnits!=null&&p.operational_config.stockUnits<n)))throw new AppError('The combined quantities exceed the available stock. Reduce this product quantity before checkout.',409,'KEEPSAKES_PRODUCTION_NOT_READY');
  }
+ if(shippingSettings.enabled&&items.some(i=>i.product.provider==='IN_HOUSE')){
+  try{shippingSnapshot=await quoteShippoShipping(items,cart.shippingAddress,shippingSettings);for(const parcel of shippingSnapshot.parcels){shipping+=parcel.rate.cents;const item=items[parcel.itemIndices[0]];item.shippingCents=(item.shippingCents||0)+parcel.rate.cents;}}catch(error){if(!String(error.code||'').startsWith('SHIPPO_'))throw error;issues.push(error.message);}
+ }
  let tax=0,taxCalculationId=null;const taxCalculations=[];
  const readiness=keepsakesReadiness();
  if(!readiness.checkout)issues.push(readiness.message);
@@ -204,11 +209,11 @@ export async function quoteKeepsakes(type,token,input){
   }
   taxCalculationId=taxCalculations[0]?.id||null;
  }
- const snapshot={items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues,warnings},total=subtotal+shipping+tax;
+ const snapshot={items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues,warnings,...(shippingSnapshot?{shipping:shippingSnapshot}:{})},total=subtotal+shipping+tax;
  const row=(await query(`INSERT INTO keepsakes_quotes(album_id,scope_hash,snapshot,contact_ciphertext,subtotal_cents,shipping_cents,tax_cents,total_cents,checkout_ready)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,expires_at`,[scope.albumId,scope.scopeHash,JSON.stringify(snapshot),encryptSecretJson({email:cart.email,shippingAddress:cart.shippingAddress,billingAddress:cart.billingAddress}),subtotal,shipping,tax,total,issues.length===0])).rows[0];
  const {keepsakesProofDescriptors}=await import('./keepsakes-proof-service.js');
- return {quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,warnings,...(items.some(i=>i.printReviewPolicy)?{printApprovalVersion:PRINT_REVIEW_VERSION,printApprovalStatement:PRINT_REVIEW_STATEMENT}:{}),proofs:keepsakesProofDescriptors(type,token,row.id,items)};
+ return {quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,warnings,deliveryServices:shippingSnapshot?.parcels.map(p=>({carrier:p.rate.carrier,service:p.rate.service,cents:p.rate.cents,estimatedDays:p.rate.estimatedDays}))||[],...(items.some(i=>i.printReviewPolicy)?{printApprovalVersion:PRINT_REVIEW_VERSION,printApprovalStatement:PRINT_REVIEW_STATEMENT}:{}),proofs:keepsakesProofDescriptors(type,token,row.id,items)};
 }
 export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false,printApprovalVersion}={}){
  const scope=await keepsakesScope(type,token);
@@ -219,6 +224,7 @@ export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false,
   if(quote.snapshot.items.some(item=>!['DIGITAL','DIGITAL_EDIT'].includes(item.product.provider))&&!proofReviewed)throw new AppError('Review the print layouts and recipient details before checkout.',422,'KEEPSAKES_PROOF_REVIEW_REQUIRED');
   const printApprovalRequired=quote.snapshot.items.some(i=>i.printReviewPolicy);
   if(printApprovalRequired&&(!proofReviewed||printApprovalVersion!==PRINT_REVIEW_VERSION))throw new AppError('Review and accept the current print-size, crop and image-quality confirmation before checkout.',422,'KEEPSAKES_PRINT_APPROVAL_REQUIRED');
+  if(quote.snapshot.shipping?.provider==='SHIPPO'&&(await shippingConfig()).version!==quote.snapshot.shipping.configVersion)throw new AppError('Shipping settings changed. Refresh your cart total.',409,'KEEPSAKES_QUOTE_CHANGED');
   const {settings,products}=await availableProducts(scope);
   if(type==='session'){
    for(const i of quote.snapshot.items){
