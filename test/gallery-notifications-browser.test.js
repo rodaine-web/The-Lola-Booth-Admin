@@ -156,7 +156,7 @@ test(
         assert.ok(cancel.y >= 0 && cancel.y + cancel.height <= 1000);
         assert.ok(await dialog.getByText("400", { exact: true }).count());
         await page.screenshot({
-          path: `/private/tmp/lola-gallery-sms-confirm-${width}.png`,
+          path: path.join(os.tmpdir(), `lola-gallery-sms-confirm-${width}.png`),
           fullPage: true,
         });
         await page
@@ -174,7 +174,10 @@ test(
         await dialog.waitFor({ state: "detached" });
         assert.deepEqual(decisions, ["CANCELED", "APPROVED"]);
         await page.screenshot({
-          path: `/private/tmp/lola-gallery-notification-dashboard-${width}.png`,
+          path: path.join(
+            os.tmpdir(),
+            `lola-gallery-notification-dashboard-${width}.png`,
+          ),
           fullPage: true,
         });
         assert.equal(
