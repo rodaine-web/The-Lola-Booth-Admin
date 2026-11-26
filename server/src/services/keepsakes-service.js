@@ -1,3 +1,4 @@
+import {keepsakesCoreProduct} from '../../../shared/keepsakes-core-catalogue.js';
 import {previewTemplateFor} from '../../../shared/keepsakes-preview-templates.js';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
@@ -101,12 +102,11 @@ export async function quoteKeepsakes(type,token,input){
  let subtotal=0,shipping=0;
  for(const item of cart.items){
   const product=products.find(p=>p.id===item.productId),variant=product?.variants.find(v=>v.id===item.variantId);
-  if(!product||!variant){const current=(await query('SELECT catalogue_key,title,active,verified FROM keepsakes_products WHERE id=$1',[item.productId])).rows[0];const label=current?.title||'This keepsake';throw new AppError(`${label}: ${product&&!variant?'the selected style changed. Edit this item and choose a current style.':current?.active&&current?.verified?'ordering is not enabled for these Gallery photos. Choose an eligible photo or remove this item.':'ordering is currently unavailable. Remove this item to continue with the rest of your cart.'}`,409,'KEEPSAKES_PRODUCT_UNAVAILABLE');}
+  if(!product||!variant){const current=(await query('SELECT catalogue_key,title,active,verified FROM keepsakes_products WHERE id=$1',[item.productId])).rows[0];const label=keepsakesCoreProduct(current?.catalogue_key)?.title||current?.title||'This keepsake';throw new AppError(`${label}: ${product&&!variant?'the selected style changed. Edit this item and choose a current style.':current?.active&&current?.verified?'ordering is not enabled for these Gallery photos. Choose an eligible photo or remove this item.':'ordering is currently unavailable. Remove this item to continue with the rest of your cart.'}`,409,'KEEPSAKES_PRODUCT_UNAVAILABLE');}
   const assets=item.assetIds.map(id=>scope.assets.find(a=>a.id===id));
   if(assets.some(a=>!a||a.allowedProductIds&&!a.allowedProductIds.includes(product.id)))throw unavailable();
   if(new Set(item.assetIds).size!==item.assetIds.length)throw new AppError('Select each photo once per item.',422,'KEEPSAKES_ASSET_DUPLICATE');
   if(product.provider==='DIGITAL_EDIT'){
-   const {keepsakesCoreProduct}=await import('../../../shared/keepsakes-core-catalogue.js');
    const {photoSourceForProduct}=await import('../../../shared/keepsakes-photo-access.js');
    const core=keepsakesCoreProduct(product.catalogue_key),required=core&&photoSourceForProduct(core,assets.map(a=>({...a,sessionId:a.session_id})),assets[0]?.id);
    if(!required?.asset||assets.some(a=>!a.digital_eligible)||item.quantity!==1||assets.length!==(core.source==='PHOTO_AND_STRIP'?2:1))throw new AppError(required?.reason||'Suitable original editing sources are required.',422,'KEEPSAKES_EDIT_SOURCE');
@@ -164,7 +164,7 @@ export async function quoteKeepsakes(type,token,input){
    const {renderKeepsakesPostcardBack}=await import('./keepsakes-lob.js');
    for(const recipient of item.recipients)await renderKeepsakesPostcardBack({bytes,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:variant.messageZone,backTemplate:variant.backTemplate,postcardArtworkColor:item.postcardArtworkColor});
   }
-  items.push({...item,units,previewTemplate:previewTemplateFor(product.catalogue_key,{variant}),backArtworkId,backArtworkChecksum,product:{id:product.id,key:product.catalogue_key,configurationVersion:product.updated_at,title:product.title,category:product.category,provider:product.provider,retailCents:product.retail_cents,taxCode:product.tax_code},variant,assets:assets.map(a=>({id:a.id,mediaId:a.media_id,checksum:a.checksum,label:a.label,kind:a.kind})),returnAddress:product.provider==='LOB'?item.returnAddress:undefined});
+  items.push({...item,units,previewTemplate:previewTemplateFor(product.catalogue_key,{variant}),backArtworkId,backArtworkChecksum,product:{id:product.id,key:product.catalogue_key,configurationVersion:product.updated_at,title:keepsakesCoreProduct(product.catalogue_key)?.title||product.title,category:product.category,provider:product.provider,retailCents:product.retail_cents,taxCode:product.tax_code},variant,assets:assets.map(a=>({id:a.id,mediaId:a.media_id,checksum:a.checksum,label:a.label,kind:a.kind})),returnAddress:product.provider==='LOB'?item.returnAddress:undefined});
  }
  if(type==='session'){
   const totals=new Map();for(const i of items.filter(i=>i.product.provider==='IN_HOUSE'))totals.set(i.product.id,(totals.get(i.product.id)||0)+i.units);
