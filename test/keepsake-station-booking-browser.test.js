@@ -20,7 +20,7 @@ test('Step 4 station configuration shares allowance, enforces minimum, and price
   await page.getByLabel('Photo Keychain quantity',{exact:true}).fill('20');await page.getByLabel('Photo Magnet quantity',{exact:true}).fill('20');await page.locator('[data-station-minimum]').getByText('10 more paid keychains or magnets required',{exact:true}).waitFor();
   await page.getByLabel('Photo Keychain quantity',{exact:true}).fill('25');await page.getByLabel('Photo Magnet quantity',{exact:true}).fill('25');
   await page.locator('[data-booking-summary]').getByRole('heading',{name:'$1,672.50',exact:true}).waitFor();
-  await page.getByLabel('Framed Photos quantity',{exact:true}).fill('5');await page.getByLabel('Photo Prints in Jackets quantity',{exact:true}).fill('10');await page.getByLabel('Simple Acrylic Photo Display quantity',{exact:true}).fill('5');await page.getByLabel('Personalized Postcards quantity',{exact:true}).fill('10');
+  await page.getByLabel('Framed Photos quantity',{exact:true}).fill('5');await page.getByLabel('Photo in a Jacket quantity',{exact:true}).fill('10');await page.getByLabel('Simple Acrylic Block quantity',{exact:true}).fill('5');await page.getByLabel('Postcards quantity',{exact:true}).fill('10');
   await page.locator('[data-booking-summary]').getByRole('heading',{name:'$2,092.20',exact:true}).waitFor();
   assert.equal(await page.locator('[data-station-unit="framed-photo"]').textContent(),'$29.99 per unit · $149.95 total');assert.equal(await page.locator('[data-station-unit="jacketed-print"]').textContent(),'$7.99 per unit · $79.90 total');
   await page.locator('[data-experience="vogue"]').check();await page.locator('[data-experience-package="vogue"]').selectOption('essential');
