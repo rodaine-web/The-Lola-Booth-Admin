@@ -1,3 +1,4 @@
+import * as shipping from '../services/keepsakes-shipping-service.js';
 import * as guestRetrieval from '../services/guest-photo-retrieval-service.js';
 import * as guestNotifications from '../services/gallery-notification-service.js';
 import * as production from '../services/keepsakes-production-service.js';
@@ -85,6 +86,14 @@ keepsakesAdminRouter.post('/station-proposal/preview',wrap(r=>{const selections=
 keepsakesAdminRouter.get('/station-policy',wrap(r=>stationPolicyAdmin(r.user)));
 keepsakesAdminRouter.post('/station-policy/preview',wrap(r=>previewStationPolicy(r.body,r.user)));
 keepsakesAdminRouter.get('/books/suppliers/:provider',wrap(r=>premiumSupplierCatalogue(z.enum(['WHCC','GELATO']).parse(r.params.provider),z.object({product:z.string().max(400).optional(),catalog:z.string().max(100).optional(),search:z.coerce.boolean().optional(),offset:z.coerce.number().int().min(0).max(10000).optional(),operation:z.enum(['DETAIL','PRICES','COVER']).optional(),pageCount:z.coerce.number().int().min(1).max(1000).optional(),cursor:z.string().max(200).optional()}).strict().parse(r.query),r.user)));
+keepsakesAdminRouter.get('/shipping',wrap(r=>shipping.shippingAdmin(r.user)));
+keepsakesAdminRouter.get('/shipping/orders',wrap(r=>shipping.shippingOrders(r.user)));
+keepsakesAdminRouter.put('/shipping',requirePermission('write:integrations'),wrap(r=>shipping.saveShipping(r.body,r.user)));
+keepsakesAdminRouter.post('/shipping/orders/:id/parcels/:index/rate',requirePermission('write:operations'),wrap(r=>shipping.quoteLabel(id.parse(r.params.id),z.coerce.number().int().min(0).max(24).parse(r.params.index),r.user)));
+keepsakesAdminRouter.post('/shipping/orders/:id/parcels/:index/label',requirePermission('write:operations'),wrap(r=>shipping.createLabel(id.parse(r.params.id),z.coerce.number().int().min(0).max(24).parse(r.params.index),r.body,r.user)));
+keepsakesAdminRouter.post('/shipping/labels/:id/refresh',requirePermission('write:operations'),wrap(r=>shipping.refreshLabel(id.parse(r.params.id),r.user)));
+keepsakesAdminRouter.post('/shipping/labels/:id/reconcile',requirePermission('write:operations'),wrap(r=>shipping.reconcileLabel(id.parse(r.params.id),r.body,r.user)));
+keepsakesAdminRouter.post('/shipping/labels/:id/verify-void',requirePermission('write:operations'),wrap(r=>shipping.verifyLabelVoid(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.get('/production',wrap(r=>production.productionJobs(r.user)));
 keepsakesAdminRouter.get('/production/:id/artwork',asyncHandler(async(req,res)=>res.type('image/png').attachment('Lola-print-artwork.png').send(await production.productionArtwork(id.parse(req.params.id),req.user))));
 keepsakesAdminRouter.post('/production/:id/progress',requirePermission('write:operations'),wrap(r=>production.progressProduction(id.parse(r.params.id),r.body,r.user)));

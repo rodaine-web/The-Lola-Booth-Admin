@@ -1,3 +1,4 @@
+import {pollShippoLabels} from './services/keepsakes-shipping-service.js';
 import {processGuestRetrievalEmails} from './services/guest-photo-retrieval-service.js';
 import {processGalleryNotifications,processGalleryVerifications} from './services/gallery-notification-service.js';
 import {processLiveMailingQueue} from './services/gallery-live-mailing-service.js';
@@ -50,6 +51,7 @@ async function tick() {
     await processGalleryVerifications();
     await processKeepsakesQueue({limit:3});
     await processKeepsakesTaxRefunds();
+    await pollShippoLabels();
     await processKeepsakesNotifications();
     const formNotifications=await processFormOwnerNotifications();
     if(formNotifications.processed.length){
