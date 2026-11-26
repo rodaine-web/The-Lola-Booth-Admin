@@ -4,6 +4,8 @@ Scope: corrected attachment `1bd78047-c8cd-4025-83da-fab373dd639f`. The previous
 
 ## Customer experience
 
+Owner follow-up: removed customer-facing Product example labels, the sample-photo note and book inspiration captions. Editing-service/source and final-proof explanations remain.
+
 - The twelve stable product keys retain pricing and history, with the requested display names and order below. `signature` remains the internal collection key; its display name is Premium Keepsakes.
 - A sole eligible photo resolves automatically. Otherwise the selected Gallery capture carries through, with an authorized, in-place Change Photo picker. Changing a photo preserves crop, style, quantity and postcard personalization. The cart stores each item's source IDs and customization separately.
 - Add to Cart stays on the product page and announces success with Continue Shopping and View Cart. Cart contact/delivery/recipient forms open only after Checkout is selected. Postcard message/font/accent customization stays on the product page; validated sender/recipient mailing details are entered at checkout.
