@@ -72,7 +72,7 @@ export async function keepsakesQuoteProof(type, token, quoteId, {itemIndex, side
     if (!media) throw unavailable();
     const bytes = await verifiedGalleryBytes(media, ensureCurrentAccess, {maxBytes: 20 * 1024 * 1024});
     const customization = item.customization || {};
-    artwork = variableInsertProduct(item.product,item.variant)?(await renderVariableInsertArtwork({bytes,key:item.product.key,customization,ratio:previewTemplateFor(item.product.key,{variant:item.variant})?.physicalAspectRatio})).buffer:(await renderKeepsakesArtwork({bytes, spec: item.variant?.printSpec,
+    artwork = variableInsertProduct(item.product,item.variant)?(await renderVariableInsertArtwork({bytes,key:item.product.key,customization,ratio:previewTemplateFor(item.product.key,{variant:item.variant})?.physicalAspectRatio})).buffer:(await renderKeepsakesArtwork({bytes, spec: item.variant?.printSpec, allowUpscale:item.printReviewPolicy?.allowUpscale===true,
       customization: {...customization, positionX: customization.x, positionY: customization.y}})).buffer;
   } else {
     const [{galleryStorage}, {renderKeepsakesPostcardBack}] = await Promise.all([import('./gallery-storage.js'), import('./keepsakes-lob.js')]);

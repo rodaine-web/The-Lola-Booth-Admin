@@ -102,3 +102,36 @@ test('variable in-house inserts preserve native pixels without inventing print d
  const cropped=await renderVariableInsertArtwork({bytes,key,ratio:1,customization:{fit:'cover',zoom:2,x:.2,y:.7}});assert.deepEqual(cropped.renderedSize,{widthPx:300,heightPx:300});assert.notEqual(cropped.sha256,whole.sha256);}
  await assert.rejects(renderVariableInsertArtwork({bytes:await source(),key:'metal-print'}),/Only in-house/);
 });
+
+
+test('booth photos and strips fit owner insert sizes, including approved zoomed upscales',async()=>{
+ const {INSERT_PRINTS}=await import('../shared/keepsakes-print-policy.js');
+ for(const [width,height] of [[1200,1800],[600,1800]])for(const preset of Object.values(INSERT_PRINTS)){
+  const bytes=await source(width,height);
+  for(const customization of [{fit:'contain'},{fit:'cover',zoom:4,positionX:.2,positionY:.8}]){
+   const output=await renderKeepsakesArtwork({bytes,spec:preset.printSpec,customization,allowUpscale:true});
+   const meta=await sharp(output.buffer).metadata();
+   assert.equal(meta.width,600);assert.equal(meta.height,preset.printSpec.heightPx);assert.equal(meta.density,300);assert.ok(output.buffer.length<20*1024*1024);
+   if(customization.fit==='contain'){
+    const {data,info}=await sharp(output.buffer).raw().toBuffer({resolveWithObject:true});
+    if(width/height!==preset.printSpec.widthPx/preset.printSpec.heightPx)assert.deepEqual([...data.subarray(0,3)],[255,255,255]);
+    const center=(Math.floor(info.height/2)*info.width+300)*info.channels;
+    assert.deepEqual([...data.subarray(center,center+3)],[160,32,48]);
+   }else assert.ok(output.crop.width<600);
+  }
+ }
+});
+
+test('large detailed sources produce bounded insert artwork instead of a native-size PNG',async()=>{
+ const {INSERT_PRINTS}=await import('../shared/keepsakes-print-policy.js');
+ const pixels=Buffer.alloc(3000*3000*3);let seed=13;
+ for(let n=0;n<pixels.length;n++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;pixels[n]=seed>>>24;}
+ const image=sharp(pixels,{raw:{width:3000,height:3000,channels:3}});
+ const native=await image.clone().png().toBuffer();assert.ok(native.length>20*1024*1024);
+ const bytes=await image.jpeg({quality:90}).toBuffer();
+ for(const preset of Object.values(INSERT_PRINTS)){
+  const result=await renderKeepsakesArtwork({bytes,spec:preset.printSpec,allowUpscale:true});
+  assert.ok(result.buffer.length<2*1024*1024);
+  const meta=await sharp(result.buffer).metadata();assert.equal(meta.width,600);assert.equal(meta.height,preset.printSpec.heightPx);
+ }
+});

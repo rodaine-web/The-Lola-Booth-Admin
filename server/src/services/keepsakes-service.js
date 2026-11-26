@@ -1,3 +1,4 @@
+import {PRINT_REVIEW_VERSION,PRINT_REVIEW_STATEMENT} from '../../../shared/keepsakes-print-policy.js';
 import {keepsakesCoreProduct,variableInsertProduct} from '../../../shared/keepsakes-core-catalogue.js';
 import {previewTemplateFor} from '../../../shared/keepsakes-preview-templates.js';
 import crypto from 'node:crypto';
@@ -96,7 +97,7 @@ export async function keepsakesPostcardPreview(type,token,input){
 const addressForProdigi=a=>({line1:a.address1,line2:a.address2||'',townOrCity:a.city,stateOrCounty:a.state,postalOrZipCode:a.zip,countryCode:a.country});
 export {addressForProdigi};
 export async function quoteKeepsakes(type,token,input){
- const cart=keepsakesCart.parse(input),scope=await keepsakesScope(type,token),{settings,products}=await availableProducts(scope),items=[],issues=[];
+ const cart=keepsakesCart.parse(input),scope=await keepsakesScope(type,token),{settings,products}=await availableProducts(scope),items=[],issues=[],warnings=[];
  if(!settings.enabled)throw new AppError('Shopping is not enabled for this gallery.',409,'KEEPSAKES_GALLERY_DISABLED');
  if(cart.items.reduce((sum,item)=>sum+item.quantity*Math.max(1,item.recipients.length),0)>100)throw new AppError('Use up to 100 physical units per purchase.',422,'KEEPSAKES_CART_LIMIT');
  let subtotal=0,shipping=0;
@@ -122,8 +123,10 @@ export async function quoteKeepsakes(type,token,input){
    if(!variant.printSpec&&!variableInsertProduct(product,variant))throw new AppError('A verified print specification is required.',409,'KEEPSAKES_PRINT_SPEC');
    // Render before taking payment, using verified private source bytes.
    const {renderKeepsakesArtwork,renderVariableInsertArtwork}=await import('./keepsakes-artwork.js');
-   const bytes=await verifiedGalleryBytes(assets[0]),artwork=variableInsertProduct(product,variant)?await renderVariableInsertArtwork({bytes,key:product.catalogue_key,customization:item.customization,ratio:previewTemplateFor(product.catalogue_key,{variant})?.physicalAspectRatio}):await renderKeepsakesArtwork({bytes,spec:variant.printSpec,customization:{...item.customization,positionX:item.customization.x,positionY:item.customization.y}});
-   if(type==='session'&&!variableInsertProduct(product,variant)){const inchesW=artwork.renderedSize.widthPx/variant.printSpec.dpi,inchesH=artwork.renderedSize.heightPx/variant.printSpec.dpi;const dpi=Math.min(artwork.crop.width/inchesW,artwork.crop.height/inchesH);if(dpi<150)throw new AppError('This photo does not have enough resolution for the selected print size. Choose another photo or a smaller size.',422,'KEEPSAKES_PRINT_RESOLUTION');}
+   const allowUpscale=type==='session'&&['IN_HOUSE','LOB'].includes(product.provider);
+   if(allowUpscale)item.printReviewPolicy={version:PRINT_REVIEW_VERSION,allowUpscale:true};
+   const bytes=await verifiedGalleryBytes(assets[0]),artwork=variableInsertProduct(product,variant)?await renderVariableInsertArtwork({bytes,key:product.catalogue_key,customization:item.customization,ratio:previewTemplateFor(product.catalogue_key,{variant})?.physicalAspectRatio}):await renderKeepsakesArtwork({bytes,spec:variant.printSpec,allowUpscale,customization:{...item.customization,positionX:item.customization.x,positionY:item.customization.y}});
+   if(type==='session'&&!variableInsertProduct(product,variant)){const inchesW=artwork.renderedSize.widthPx/variant.printSpec.dpi,inchesH=artwork.renderedSize.heightPx/variant.printSpec.dpi;const dpi=Math.min(artwork.crop.width/inchesW,artwork.crop.height/inchesH);if(dpi<150){if(allowUpscale)warnings.push(`${keepsakesCoreProduct(product.catalogue_key)?.title||product.title}: this crop may print soft or pixelated. Review the proof carefully before approving.`);else throw new AppError('This photo does not have enough resolution for the selected print size. Choose another photo or a smaller size.',422,'KEEPSAKES_PRINT_RESOLUTION');}}
    if(artwork.buffer.length>20*1024*1024)throw new AppError('The configured print file exceeds the supported artwork size.',422,'KEEPSAKES_ARTWORK_SIZE');
   }
   if(product.provider!=='DIGITAL_EDIT'&&product.category!=='bundle'&&assets.length!==1)throw new AppError('Select one photo for this product.',422,'KEEPSAKES_ASSET_COUNT');
@@ -201,19 +204,21 @@ export async function quoteKeepsakes(type,token,input){
   }
   taxCalculationId=taxCalculations[0]?.id||null;
  }
- const snapshot={items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues},total=subtotal+shipping+tax;
+ const snapshot={items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues,warnings},total=subtotal+shipping+tax;
  const row=(await query(`INSERT INTO keepsakes_quotes(album_id,scope_hash,snapshot,contact_ciphertext,subtotal_cents,shipping_cents,tax_cents,total_cents,checkout_ready)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,expires_at`,[scope.albumId,scope.scopeHash,JSON.stringify(snapshot),encryptSecretJson({email:cart.email,shippingAddress:cart.shippingAddress,billingAddress:cart.billingAddress}),subtotal,shipping,tax,total,issues.length===0])).rows[0];
  const {keepsakesProofDescriptors}=await import('./keepsakes-proof-service.js');
- return {quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,proofs:keepsakesProofDescriptors(type,token,row.id,items)};
+ return {quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,warnings,...(items.some(i=>i.printReviewPolicy)?{printApprovalVersion:PRINT_REVIEW_VERSION,printApprovalStatement:PRINT_REVIEW_STATEMENT}:{}),proofs:keepsakesProofDescriptors(type,token,row.id,items)};
 }
-export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false}={}){
+export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false,printApprovalVersion}={}){
  const scope=await keepsakesScope(type,token);
  if(!keepsakesReadiness().checkout)throw new AppError('Test checkout is not ready.',409,'KEEPSAKES_CHECKOUT_NOT_READY');
  const order=await transaction(async()=>{
   const quote=(await query('SELECT * FROM keepsakes_quotes WHERE id=$1 AND scope_hash=$2 AND expires_at>now() FOR UPDATE',[quoteId,scope.scopeHash])).rows[0];
   if(!quote?.checkout_ready)throw new AppError('Refresh the cart quote before checkout.',409,'KEEPSAKES_QUOTE_EXPIRED');
   if(quote.snapshot.items.some(item=>!['DIGITAL','DIGITAL_EDIT'].includes(item.product.provider))&&!proofReviewed)throw new AppError('Review the print layouts and recipient details before checkout.',422,'KEEPSAKES_PROOF_REVIEW_REQUIRED');
+  const printApprovalRequired=quote.snapshot.items.some(i=>i.printReviewPolicy);
+  if(printApprovalRequired&&(!proofReviewed||printApprovalVersion!==PRINT_REVIEW_VERSION))throw new AppError('Review and accept the current print-size, crop and image-quality confirmation before checkout.',422,'KEEPSAKES_PRINT_APPROVAL_REQUIRED');
   const {settings,products}=await availableProducts(scope);
   if(type==='session'){
    for(const i of quote.snapshot.items){
@@ -233,7 +238,7 @@ export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false}
   let existing=(await query('SELECT * FROM keepsakes_orders WHERE quote_id=$1',[quote.id])).rows[0];
   if(existing)return existing;
   const statusToken=crypto.randomBytes(32).toString('base64url'),contact=decryptSecretJson(quote.contact_ciphertext);
-  const snapshot={...quote.snapshot,...(proofReviewed?{proofReviewedAt:new Date().toISOString()}:{})};
+  const snapshot={...quote.snapshot,...(proofReviewed?{proofReviewedAt:new Date().toISOString(),...(printApprovalRequired?{printApproval:{version:PRINT_REVIEW_VERSION,statement:PRINT_REVIEW_STATEMENT,acceptedAt:new Date().toISOString()}}:{})}:{})};
   existing=(await query(`INSERT INTO keepsakes_orders(quote_id,album_id,token_hash,contact_ciphertext,snapshot,subtotal_cents,shipping_cents,tax_cents,total_cents)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[quote.id,quote.album_id,keepsakesHash(statusToken),encryptSecretJson({...contact,statusToken}),snapshot,quote.subtotal_cents,quote.shipping_cents,quote.tax_cents,quote.total_cents])).rows[0];
   return existing;
