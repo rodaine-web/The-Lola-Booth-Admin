@@ -11,6 +11,7 @@ import { writeAudit } from "./audit-service.js";
 import {
   createCommunicationDraft,
   sendCommunication,
+  brandedEmailHtml,
 } from "./automation-service.js";
 import { stagingEmailPolicy } from "../config/staging-safety.js";
 import {
@@ -298,11 +299,25 @@ async function emailRequest(recipient, scopes, subject, bodyMaker, trigger) {
       )
     ).rows[0];
   const link = origin() + "/photos/access#code=" + code;
+  const body = bodyMaker(link);
   const message = await createCommunicationDraft({
     channel: "EMAIL",
     recipient,
     subject,
-    body: bodyMaker(link),
+    body,
+    html: brandedEmailHtml(body, {
+      kicker: "YOUR LOLA BOOTH PHOTOS",
+      ctaUrl: link,
+      ctaLabel: "View My Photos",
+      secondaryCta: {
+        url:
+          (process.env.APP_ENV === "staging"
+            ? "https://stagingshop.thelolabooth.com"
+            : "https://shop.thelolabooth.com") + "/shop",
+        label: "Explore Keepsakes",
+        copyLabel: "Explore the Lola Keepsakes collection:",
+      },
+    }),
     status: "DRAFT",
     trigger_key: trigger,
   });

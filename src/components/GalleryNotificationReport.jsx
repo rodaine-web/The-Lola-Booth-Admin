@@ -11,7 +11,7 @@ export default function GalleryNotificationReport() {
     api
       .get("/gallery-admin/notifications-report")
       .then((d) => {
-        if (active) setRows(d.rows);
+        if (active) setRows(Array.isArray(d.rows) ? d.rows : []);
       })
       .catch((e) => {
         if (active) setError(e.message);

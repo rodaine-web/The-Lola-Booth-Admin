@@ -115,8 +115,9 @@ export default function GalleryAdmin() {
   useEffect(() => {
     setData(null);
     setSelected([]);
+    if(['Postcards','Notifications'].includes(params.get('tab')))setTab(params.get('tab'));
     load().catch((e) => setError(e.message));
-  }, [id]);
+  }, [id,params.get('tab')]);
   async function action(fn, message) {
     if (busy) return;
     setBusy(true);
