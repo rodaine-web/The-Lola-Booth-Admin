@@ -1,3 +1,4 @@
+import * as guestRetrieval from '../services/guest-photo-retrieval-service.js';
 import * as guestNotifications from '../services/gallery-notification-service.js';
 import {deleteGalleryAlbum,deleteGalleryPhotos} from '../services/gallery-deletion-service.js';
 import {photoLink,photoLinkView,resolvePhotoLink} from '../services/gallery-photo-link-service.js';
@@ -199,6 +200,9 @@ galleryAdminRouter.use('/events/:eventId',asyncHandler(async(req,_res,next)=>{if
 galleryAdminRouter.get('/notifications-report',write,requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await guestNotifications.notificationReport(req.user))));
 galleryAdminRouter.get('/notification-settings',requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await guestNotifications.notificationSettings())));
 galleryAdminRouter.put('/notification-settings',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>res.json(await guestNotifications.saveNotificationSettings(req.body,req.user))));
+galleryAdminRouter.get('/albums/:id/guest-retrieval',write,requirePermission('read:integrations'),asyncHandler(async(req,res)=>res.json(await guestRetrieval.guestRetrievalAdmin(id.parse(req.params.id)))));
+galleryAdminRouter.put('/albums/:id/guest-retrieval/restriction',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{const input=z.object({restricted:z.boolean()}).strict().parse(req.body);res.json(await guestRetrieval.setGuestRetrievalRestriction(id.parse(req.params.id),input.restricted,req.user));}));
+galleryAdminRouter.put('/albums/:id/guest-retrieval/:addressId',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{const input=z.object({email:z.string().max(254),reviewed:z.boolean(),evidence:z.string().min(20).max(1000)}).strict().parse(req.body);res.json(await guestRetrieval.correctGuestRetrievalAddress(id.parse(req.params.id),id.parse(req.params.addressId),input,req.user));}));
 galleryAdminRouter.get('/albums/:id/notifications',write,asyncHandler(async(req,res)=>res.json(await guestNotifications.notificationPanel(id.parse(req.params.id)))));
 galleryAdminRouter.get('/albums/:id/notification-contacts',write,asyncHandler(async(req,res)=>res.json(await guestNotifications.notificationContacts(id.parse(req.params.id)))));
 galleryAdminRouter.put('/albums/:id/notification-authorization',write,requirePermission('write:integrations'),asyncHandler(async(req,res)=>{const input=z.object({personId:id,channel:z.enum(['EMAIL','SMS']),evidence:z.string().min(10).max(1000),authorized:z.boolean()}).strict().parse(req.body);res.json(await guestNotifications.authorizeNotification(id.parse(req.params.id),input,req.user));}));

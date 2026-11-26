@@ -1,3 +1,4 @@
+import * as guestRetrieval from '../services/guest-photo-retrieval-service.js';
 import * as guestNotifications from '../services/gallery-notification-service.js';
 import * as production from '../services/keepsakes-production-service.js';
 import {premiumSupplierCatalogue} from '../services/keepsakes-premium-suppliers.js';
@@ -36,6 +37,9 @@ const photoBearer=req=>{const token=req.get('Authorization')?.match(/^Bearer ([\
 keepsakesPublicRouter.post('/photos/phone/inspect',photoLookupLimit,wrap(r=>guestNotifications.inspectPhoneAccess(z.string().max(100).parse(r.body.code))));
 keepsakesPublicRouter.post('/photos/phone/email',photoLookupLimit,wrap(r=>guestNotifications.requestPhoneEmailVerification(z.string().max(100).parse(r.body.code),z.string().max(254).parse(r.body.email))));
 keepsakesPublicRouter.post('/photos/phone/verify',photoLookupLimit,wrap(r=>guestNotifications.verifyPhoneEmail(z.string().max(100).parse(r.body.code))));
+const guestRetrievalLimiter=rateLimit({windowMs:15*60000,limit:60,standardHeaders:true,legacyHeaders:false,message:{error:{message:'Please wait before trying again, or contact support.'}}});
+keepsakesPublicRouter.post('/photos/phone/retrieval/start',guestRetrievalLimiter,wrap(r=>guestRetrieval.beginGuestRetrieval(z.object({phone:z.string().max(40),sessionToken:z.string().max(100).optional()}).strict().parse(r.body),{ip:r.ip})));
+keepsakesPublicRouter.post('/photos/phone/retrieval/confirm',guestRetrievalLimiter,wrap(r=>guestRetrieval.confirmGuestRetrieval(z.object({challenge:z.string().max(100),sessionToken:z.string().max(100),email:z.string().max(254)}).strict().parse(r.body),{ip:r.ip})));
 keepsakesPublicRouter.post('/photos/request',photoLookupLimit,wrap(r=>photoAccess.requestPhotoAccess(z.object({channel:z.enum(['EMAIL','PHONE']),value:z.string().max(254),email:z.string().max(254).optional()}).strict().parse(r.body))));
 keepsakesPublicRouter.post('/photos/redeem',photoLookupLimit,wrap(r=>photoAccess.redeemPhotoAccess(z.string().max(100).parse(r.body.code))));
 keepsakesPublicRouter.post('/photos/link',photoLookupLimit,wrap(r=>photoAccess.directPhotoAccess(z.enum(['photo','p','a']).parse(r.body.type),z.string().max(100).parse(r.body.token))));

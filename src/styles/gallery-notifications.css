@@ -203,3 +203,18 @@
     min-width: 0;
   }
 }
+
+.guest-retrieval-admin .checkbox-field,
+.guest-retrieval-admin .gn-settings label:has(input[type="checkbox"]) {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  grid-column: 1/-1;
+}
+.guest-retrieval-admin input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-top: 2px;
+}

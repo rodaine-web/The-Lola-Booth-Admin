@@ -19,4 +19,4 @@ export function photoSourceForProduct(product,assets,selectedId){
  return {asset:selected,reason:''};
 }
 
-export const PHOTO_LOOKUP_MESSAGE='If these details have authorized email delivery, we’ll email a secure photo link. For phone searches without verified ownership, use your original photo link, search by email or contact support.';
+export {GUEST_RETRIEVAL_MESSAGE as PHOTO_LOOKUP_MESSAGE} from './guest-retrieval-policy.js';

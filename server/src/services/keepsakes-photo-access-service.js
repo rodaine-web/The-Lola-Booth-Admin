@@ -20,6 +20,8 @@ const unavailable=()=>new AppError('This photo access has expired or is unavaila
 const neutral={accepted:true,message:PHOTO_LOOKUP_MESSAGE};
 // Revalidate grants, gallery publication, retention and person assignments on every read.
 export async function scopeAnchors(scope){
+ if(scope.retrievalAssociationId&&!(await query("SELECT 1 FROM guest_photo_retrieval_addresses a JOIN gallery_albums g ON g.id=a.album_id WHERE a.id=$1 AND a.version=$2 AND a.status='ACTIVE' AND a.album_id=$3 AND a.person_id=$4 AND a.key_id=$5 AND g.guest_retrieval_restricted=false",[scope.retrievalAssociationId,scope.retrievalAssociationVersion,scope.albumId,scope.personId,scope.keyId])).rowCount)return [];
+ if(scope.retrievalAssociationId){const preferred=(await query("SELECT id,status,expires_at FROM gallery_access_keys WHERE album_id=$1 AND (person_id=$2 OR type='ALBUM') ORDER BY COALESCE(person_id=$2,false) DESC,created_at DESC,id DESC LIMIT 1",[scope.albumId,scope.personId])).rows[0];if(!preferred||preferred.id!==scope.keyId||preferred.status!=='ACTIVE'||preferred.expires_at&&new Date(preferred.expires_at)<=new Date())return [];}
  if(scope.phoneAccessId&&!(await query('SELECT 1 FROM gallery_phone_access WHERE id=$1 AND consumed_at IS NOT NULL AND revoked_at IS NULL AND expires_at>now()',[scope.phoneAccessId])).rowCount)return [];
  const key=(await query(`SELECT k.id,k.type,k.person_id,COALESCE(p.allow_download,a.allow_personal_download) AS lookup_download_allowed FROM gallery_access_keys k
  JOIN gallery_albums a ON a.id=k.album_id JOIN events e ON e.id=a.event_id
@@ -56,6 +58,7 @@ export async function requestPhotoAccess(input){
  if(!recipient)throw new AppError('Enter a valid email address or phone number.',422,'PHOTO_LOOKUP_INVALID');
  let email=channel==='EMAIL'?recipient:null;
  if(channel==='SMS'){
+  if((await query('SELECT 1 FROM guest_photo_retrieval_addresses WHERE phone_hash=$1 LIMIT 1',[contactHash('SMS',recipient)])).rowCount)return neutral;
   const binding=(await query('SELECT email_ciphertext FROM gallery_trusted_phone_emails WHERE phone_hash=$1 AND revoked_at IS NULL',[contactHash('SMS',recipient)])).rows[0];
   if(binding)email=normalizePhotoLookup('EMAIL',decryptSecretJson(binding.email_ciphertext).email);
  }
@@ -65,6 +68,7 @@ export async function requestPhotoAccess(input){
   await query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[targetHash]);
   if((await query("SELECT 1 FROM keepsakes_photo_requests WHERE target_hash=$1 AND created_at>now()-interval '2 minutes' LIMIT 1",[targetHash])).rowCount)return neutral;
   const scopes=email?await contactScopes(channel,recipient):[],code=token();
+  if(channel==='EMAIL'){const {guestRetrievalEmailScopes}=await import('./guest-photo-retrieval-service.js');for(const scope of await guestRetrievalEmailScopes(email))if(!scopes.some(s=>s.keyId===scope.keyId&&s.personId===scope.personId))scopes.push(scope);}
   // No arbitrary submitted email can claim phone ownership; legacy associations remain untrusted.
   const request=(await query(`INSERT INTO keepsakes_photo_requests(target_hash,token_hash,scopes,expires_at) VALUES($1,$2,$3,now()+interval '30 minutes') RETURNING id`,[targetHash,hash(code),JSON.stringify(scopes)])).rows[0];
   let stagingAllowed=true;

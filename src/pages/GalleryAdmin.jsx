@@ -1,3 +1,4 @@
+import GalleryGuestRetrieval from '../components/GalleryGuestRetrieval.jsx';
 import GalleryNotificationReport from '../components/GalleryNotificationReport.jsx';
 import GalleryGuestNotifications from '../components/GalleryGuestNotifications.jsx';
 import {useAuth} from '../context/AuthContext.jsx';
@@ -833,6 +834,7 @@ export default function GalleryAdmin() {
           )}
           {tab === "Match Review" && <Gallery20Review albumId={data.album.id} onUpdated={load}/>}
           {tab === "Postcards" && <GalleryPostcards key={data.album.id} album={data.album} data={data} />}
+          {tab === 'Settings'&&canWrite&&can('read:integrations')&&<GalleryGuestRetrieval albumId={id} canCorrect={can('write:integrations')}/>}
           {tab === "Settings" && <FiestaGalleryImport album={data.album} onImported={load}/>}
           {tab === 'Settings' && <GalleryKeepsakes album={data.album}/>}
           {tab === "Settings" && <DropboxGalleryImport key={data.album.id} album={data.album} onImported={load}/>}
