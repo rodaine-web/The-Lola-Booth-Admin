@@ -562,6 +562,7 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     await manager.saveKeepsakesSettings(retailAlbum.id,{enabled:true,brandedMerchandise:false,originalSales:true,productIds:configured.map(p=>p.id)},admin);
     const stripScope=await shop.keepsakesScope('session',retailToken),stripProduct=configured.find(p=>p.catalogue_key==='edited-strip');
     assert.ok((await shop.availableProducts({...stripScope,assets:stripScope.assets.filter(a=>a.id===ids.BRANDED_STRIP)})).products.some(p=>p.id===stripProduct.id));
+    const stripView=(await photoAccess.photoCollection(retailToken)).assets.find(a=>a.id===ids.BRANDED_STRIP);assert.equal(stripView.retailDigitalEligible,true);assert.equal(stripView.retailMerchandiseEligible,false);
     assert.ok(stripScope.assets.find(a=>a.id===ids.BRANDED_STRIP).digital_eligible);assert.equal(stripScope.assets.find(a=>a.id===ids.BRANDED_STRIP).merchandise_eligible,false);
     const stripQuote=await shop.quoteKeepsakes('session',retailToken,{email:cart.email,billingAddress:address,items:[lines[1]]});assert.equal(stripQuote.checkoutReady,true);
     await manager.saveKeepsakesSettings(retailAlbum.id,{enabled:true,brandedMerchandise:true,originalSales:true,productIds:[...configured.map(p=>p.id),frame.id]},admin);

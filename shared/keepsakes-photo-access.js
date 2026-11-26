@@ -27,7 +27,7 @@ export function eligibleProductPhotos(product,assets=[]){
  const result=new Map();
  for(const a of assets){const source=photoSourceForProduct(product,assets,a.id);
   if(source.asset&&(!Object.hasOwn(source.asset,'merchandiseEligible')||source.asset.merchandiseEligible)&&
-   [source.asset,source.strip].filter(Boolean).every(a=>!Array.isArray(a.allowedProductIds)||a.allowedProductIds.includes(product.productId)))result.set(source.asset.id,source.asset);
+   [source.asset,source.strip].filter(Boolean).every(a=>(product.collection==='digital'?a.retailDigitalEligible!==false:a.retailMerchandiseEligible!==false)&&(!Array.isArray(a.allowedProductIds)||a.allowedProductIds.includes(product.productId))))result.set(source.asset.id,source.asset);
  }
  return [...result.values()];
 }

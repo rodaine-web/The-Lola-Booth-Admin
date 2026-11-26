@@ -21,3 +21,10 @@ test('postcard cart retains a validated sender address with leading-zero ZIP and
  assert.equal(keepsakesCart.parse(input).items[0].returnAddress.zip,'02134');
  assert.equal(keepsakesCart.safeParse({...input,items:[{...input.items[0],returnAddress:{...address,name:''}}]}).success,false);
 });
+
+test('editing and merchandise pickers use their distinct scoped permissions',async()=>{
+ const {eligibleProductPhotos}=await import('../shared/keepsakes-photo-access.js');
+ const a={id:'strip',sessionId:'capture',kind:'BRANDED_STRIP',branded:true,merchandiseEligible:true,retailDigitalEligible:true,retailMerchandiseEligible:false,allowedProductIds:['edit','frame']};
+ assert.equal(eligibleProductPhotos({...KEEPSAKES_CORE_PRODUCTS.find(p=>p.key==='edited-strip'),productId:'edit'},[a]).length,1);
+ assert.equal(eligibleProductPhotos({...KEEPSAKES_CORE_PRODUCTS.find(p=>p.key==='framed-photo'),productId:'frame'},[a]).length,0);
+});
