@@ -58,8 +58,8 @@ export async function keepsakesScope(type,token){
  JOIN gallery_media m ON m.id=a.media_id AND m.album_id=a.album_id
  WHERE s.album_id=$1 AND s.anchor_media_id=ANY($2::uuid[]) AND m.status<>'ARCHIVED'
  ORDER BY s.created_at,a.sort_order,a.id`,[albumId,anchors.map(m=>m.id)])).rows:[];
- const represented=new Set(assets.map(a=>a.media_id));
- for(const media of anchors)if(!represented.has(media.id))assets.push({...media,id:media.id,media_id:media.id,label:'Available photo',kind:'COMPOSITE',branded:true,merchandise_eligible:false,digital_eligible:false,included:true});
+ const represented=new Set(assets.map(a=>a.media_id)),commerce=await keepsakesSettings(albumId);
+ for(const media of anchors)if(!represented.has(media.id))assets.push({...media,id:media.id,media_id:media.id,label:'Available photo',kind:'COMPOSITE',branded:true,merchandise_eligible:commerce.enabled&&commerce.brandedMerchandise,digital_eligible:false,included:true});
  return {grant:resolved.grant,albumId,assets,scopeHash:keepsakesHash(`${type}:${token}`)};
 }
 export async function keepsakesSettings(albumId){

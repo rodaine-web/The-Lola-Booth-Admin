@@ -11,7 +11,7 @@ import {createCommunicationDraft} from './automation-service.js';
 import {customerGalleryAccess} from './customer-gallery-service.js';
 import {downloadAllowed} from './gallery-policy.js';
 import {verifiedGalleryBytes} from './gallery-media-delivery.js';
-import {assertKeepsakes,keepsakesScope} from './keepsakes-service.js';
+import {assertKeepsakes,keepsakesScope,keepsakesSettings} from './keepsakes-service.js';
 import {normalizePhotoLookup,PHOTO_LOOKUP_MESSAGE} from '../../../shared/keepsakes-photo-access.js';
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const contactHash=(channel,value)=>crypto.createHmac('sha256',env.integrationSecretKey).update(channel+':'+value).digest('hex');
@@ -121,7 +121,7 @@ export async function sessionAssets(sessionToken){
     WHERE s.album_id=$1 AND s.anchor_media_id=ANY($2::uuid[]) AND m.status<>'ARCHIVED'`,[albumId,anchors.map(a=>a.id)])).rows;
    const includedDownloads=new Set(anchors.filter(a=>a.lookup_download_allowed).map(a=>a.id));
    mapped=mapped.map(a=>({...a,canDownload:a.included===true&&includedDownloads.has(a.media_id)}));
-   const represented=new Set(mapped.map(a=>a.media_id));for(const a of anchors)if(!represented.has(a.id))mapped.push({...a,media_id:a.id,kind:'COMPOSITE',branded:true,label:'Event photo',included:true,canDownload:a.lookup_download_allowed===true});
+   const represented=new Set(mapped.map(a=>a.media_id)),commerce=await keepsakesSettings(albumId);for(const a of anchors)if(!represented.has(a.id))mapped.push({...a,media_id:a.id,kind:'COMPOSITE',branded:true,label:'Event photo',included:true,merchandise_eligible:commerce.enabled&&commerce.brandedMerchandise,digital_eligible:false,canDownload:a.lookup_download_allowed===true});
   }
   const album=(await query('SELECT id,title FROM gallery_albums WHERE id=$1',[albumId])).rows[0];
   if(!mapped.length)continue;

@@ -122,6 +122,13 @@ test('photo retrieval queues neutral email, matches imported Fiesta contacts acr
   const albumVariant=await one("SELECT id FROM keepsakes_book_variants WHERE kind='ALBUM' LIMIT 1");await assert.rejects(bookService.saveBookDraft(session.token,{variantId:albumVariant.id,books:[book]}),{code:'BOOK_UNAVAILABLE'});
   const revised=await bookService.saveBookDraft(session.token,{id:draft.id,revision:1,variantId:variants.variants[0].id,books:[{...book,title:'Revised title'}]});assert.equal(revised.revision,2);assert.equal(revised.proofApprovedAt,null);
   // A newly revoked personal key takes precedence over any album grant.
+  // Phone/email scopes also inherit physical eligibility only for already-authorized
+  // unmapped captures, after explicit Gallery commerce and branded-merchandise opt-in.
+  const coreKeychain=await one("SELECT id FROM keepsakes_products WHERE catalogue_key='keychain'");
+  await query('DELETE FROM gallery_photo_sessions WHERE album_id=$1',[fixtures[0].album.id]);
+  await manager.saveKeepsakesSettings(fixtures[0].album.id,{enabled:true,brandedMerchandise:true,originalSales:false,productIds:[coreKeychain.id]},admin);
+  let fallback=(await access.photoCollection(session.token)).assets.filter(a=>a.albumId===fixtures[0].album.id);assert.equal(fallback.length,1);assert.equal(fallback[0].id,fixtures[0].anchor.id);assert.equal(fallback[0].retailMerchandiseEligible,true);assert.equal(fallback[0].retailDigitalEligible,false);assert.deepEqual(fallback[0].allowedProductIds,[coreKeychain.id]);
+  await manager.saveKeepsakesSettings(fixtures[0].album.id,{enabled:true,brandedMerchandise:false,originalSales:false,productIds:[coreKeychain.id]},admin);fallback=(await access.photoCollection(session.token)).assets.filter(a=>a.albumId===fixtures[0].album.id);assert.equal(fallback[0].retailMerchandiseEligible,false);
   const personal=await gallery.createGalleryKey(fixtures[0].album.id,'PERSON',fixtures[0].people[0].id,null,admin);
   await query("UPDATE gallery_access_keys SET status='REVOKED' WHERE id=$1",[personal.id]);
   await query("UPDATE keepsakes_photo_requests SET created_at=now()-interval '3 minutes'");
