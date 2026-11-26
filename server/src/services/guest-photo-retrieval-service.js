@@ -352,7 +352,7 @@ export async function confirmGuestRetrieval(input, context = {}) {
           keepsakesPublicOrigin(process.env).replace(/\/$/, "") +
           "/photos/access#code=" +
           code,
-        body = `Your Lola Booth photos are ready.\n\nView My Photos:\n${link}\n\nThis secure link expires in 30 minutes and can be used once. Your guest-provided retrieval email is unverified and is not proof of phone ownership or marketing consent.\n\nIf you did not request this email, you can ignore it or contact The Lola Booth.`;
+        body = `Your Lola Booth photos are ready.\n\nView My Photos:\n${link}\n\nThis secure link expires in 30 minutes and can be used once. This email is only for the photo link you requested.\n\nIf you did not request this email, you can ignore it or contact The Lola Booth.`;
       const message = await createCommunicationDraft({
         channel: "EMAIL",
         recipient: saved,
