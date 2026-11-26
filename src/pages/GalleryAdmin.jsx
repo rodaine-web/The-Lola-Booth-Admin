@@ -1,3 +1,5 @@
+import GalleryNotificationReport from '../components/GalleryNotificationReport.jsx';
+import GalleryGuestNotifications from '../components/GalleryGuestNotifications.jsx';
 import {useAuth} from '../context/AuthContext.jsx';
 import GalleryKeepsakes from '../components/GalleryKeepsakes.jsx';
 import DropboxGalleryImport from '../components/DropboxGalleryImport.jsx';
@@ -49,7 +51,7 @@ export default function GalleryAdmin() {
     [params] = useSearchParams();
   const [albums, setAlbums] = useState([]),
     [data, setData] = useState(null),
-    [tab, setTab] = useState(params.get('tab')==='Postcards'?'Postcards':'Overview'),
+    [tab, setTab] = useState(['Postcards','Notifications'].includes(params.get('tab'))?params.get('tab'):'Overview'),
     [selected, setSelected] = useState([]),
     [person, setPerson] = useState(""),
     [error, setError] = useState(""),
@@ -61,6 +63,7 @@ export default function GalleryAdmin() {
     [name, setName] = useState(""),
     [recipient, setRecipient] = useState(""),
     [expiry, setExpiry] = useState("");
+  const [notificationReviewRequest,setNotificationReviewRequest]=useState(0);
   const accessDialog = useRef(null);
   useEffect(() => {
     if (!access) return;
@@ -112,15 +115,17 @@ export default function GalleryAdmin() {
   useEffect(() => {
     setData(null);
     setSelected([]);
+    if(['Postcards','Notifications'].includes(params.get('tab')))setTab(params.get('tab'));
     load().catch((e) => setError(e.message));
-  }, [id]);
+  }, [id,params.get('tab')]);
   async function action(fn, message) {
     if (busy) return;
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await fn();
+      const result=await fn();
+      if(result?.notificationReviewRequired){setTab('Notifications');setNotificationReviewRequest(v=>v+1);}
       await load();
       if (message) setNotice(message);
     } catch (e) {
@@ -271,6 +276,7 @@ export default function GalleryAdmin() {
           </div>
         </section>
       )}
+      {!id&&canWrite&&can('read:integrations')&&<GalleryNotificationReport/>}
       {!id && (
         <div className="album-admin-grid">
           {albums.map((a) => (
@@ -358,6 +364,7 @@ export default function GalleryAdmin() {
                 "People",
                 "Access",
                 "Activity",
+                "Notifications",
                 "Postcards",
                 "Match Review",
                 "Settings",
@@ -408,6 +415,7 @@ export default function GalleryAdmin() {
               </button>
             </div>
           </div>
+          {tab === 'Notifications' && <GalleryGuestNotifications albumId={id} canApprove={canWrite&&can('write:integrations')} reviewRequest={notificationReviewRequest}/>}
           {tab === "Overview" && (
             <GalleryOverview data={data} onTab={setTab} onAccess={setAccess} />
           )}

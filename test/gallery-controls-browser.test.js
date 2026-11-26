@@ -19,6 +19,7 @@ test('album, photo, reset and Dropbox controls work on desktop and mobile',{skip
    if(p.startsWith('/api/')){
     let json={data:[]};
     if(p==='/api/auth/me')json={user:{id:'qa',name:'Synthetic QA',roles:['ADMIN'],permissions:['*']}};
+    else if(p==='/api/gallery-admin/notifications-report')json={rows:[],mode:'SIMULATED'};
     else if(p==='/api/gallery-admin/albums')json={data:[{...album,photos:media.length,people:0}]};
     else if(p.endsWith('/media/delete')){const ids=req.postDataJSON().media_ids;deleted.push(...ids);media=media.filter(m=>!ids.includes(m.id));json={deleted:ids.length};}
     else if(p.endsWith('/reset')){reset=true;album={...album,id:'44444444-4444-4444-8444-444444444444'};media=[];json={album};}
@@ -29,7 +30,7 @@ test('album, photo, reset and Dropbox controls work on desktop and mobile',{skip
    }
    if(url.origin!==origin)return route.abort();return route.continue();
   });
-  await page.goto(origin+'/operations/galleries');await page.getByRole('button',{name:'Delete album Synthetic QA Gallery',exact:true}).waitFor();
+  await page.goto(origin+'/operations/galleries');await page.getByRole('button',{name:'Delete album Synthetic QA Gallery',exact:true}).waitFor().catch(async error=>{console.error('Gallery controls UI errors',errors,await page.locator('body').innerText());throw error;});
   await page.getByRole('link',{name:/Synthetic QA Gallery/}).click();await page.getByRole('button',{name:'Photos',exact:true}).click();
   await page.getByRole('button',{name:'Delete photo 1',exact:true}).click();await page.getByRole('status').filter({hasText:'Photos deleted'}).waitFor();assert.equal(deleted.length,1);
   await page.getByRole('button',{name:'Select all photos',exact:true}).click();await page.getByRole('button',{name:'Delete selected photos',exact:true}).click();await page.getByRole('heading',{name:'A blank canvas for a great night.'}).waitFor();assert.equal(deleted.length,2);

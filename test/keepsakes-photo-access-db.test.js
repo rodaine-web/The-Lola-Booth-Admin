@@ -82,12 +82,8 @@ test('photo retrieval queues neutral email, matches imported Fiesta contacts acr
   assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,0,'Unmatched phone must not create an association, even if the email matches');
   assert.equal((await one('SELECT count(*)::int n FROM communications')).n,1);
   assert.deepEqual(await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'test-recipient@example.invalid'}),neutral);
-  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,1);
-  const phoneEmail=await one("SELECT * FROM communications WHERE recipient='test-recipient@example.invalid'");
-  assert.equal(phoneEmail.status,'SCHEDULED');assert.equal(phoneEmail.client_id,null);assert.equal(phoneEmail.lead_id,null);
-  const phoneSession=await access.redeemPhotoAccess(/#code=([\w-]+)/.exec(phoneEmail.rendered_body)[1]);
-  const phoneView=await access.photoCollection(phoneSession.token);assert.equal(phoneView.albums.length,2);assert.equal(phoneView.assets.length,6);
-  assert.equal((await one('SELECT verification_status FROM keepsakes_unverified_contacts')).verification_status,'UNVERIFIED');
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,0);
+  assert.equal((await one("SELECT count(*)::int n FROM communications WHERE recipient='test-recipient@example.invalid'")).n,0,'Arbitrary email cannot claim a matching phone');
   const included=view.assets.find(a=>a.included&&a.albumId===fixtures[0].album.id);assert.equal(included.canDownload,true);
   assert.ok((await access.collectionDownload(session.token,included.id)).bytes.length>0);
   await assert.rejects(access.collectionDownload(session.token,view.assets.find(a=>!a.included).id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
@@ -97,9 +93,9 @@ test('photo retrieval queues neutral email, matches imported Fiesta contacts acr
   await query('UPDATE gallery_albums SET allow_personal_download=true WHERE id=$1',[fixtures[0].album.id]);
   await query("UPDATE keepsakes_photo_requests SET created_at=now()-interval '3 minutes'");
   await access.requestPhotoAccess({channel:'PHONE',value:'(312) 555-0123',email:'guest@example.invalid'});
-  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,2);
+  assert.equal((await one('SELECT count(*)::int n FROM keepsakes_unverified_contacts')).n,0);
   const automation=await import('../server/src/services/automation-service.js');await automation.processDueJobs({limit:10});
-  assert.equal((await one("SELECT count(*)::int n FROM communications WHERE trigger_key='KEEPSAKES_PHOTO_ACCESS' AND status='SENT_TO_PROVIDER' AND provider='development'")).n,3,'The worker dispatches the queued messages using only the local development transport');
+  assert.equal((await one("SELECT count(*)::int n FROM communications WHERE trigger_key='KEEPSAKES_PHOTO_ACCESS' AND status='SENT_TO_PROVIDER' AND provider='development'")).n,1,'The worker dispatches the queued messages using only the local development transport');
   assert.equal((await one('SELECT count(*)::int n FROM clients')).n,1);assert.equal((await one('SELECT count(*)::int n FROM leads')).n,0,'Lookups do not create CRM leads or clients');
   const transfer=await access.createPhotoHandoff(session.token,[view.assets[0].id],'SHOP');
   await assert.rejects(access.redeemPhotoHandoff(transfer.code,'GALLERY'),{code:'PHOTO_ACCESS_UNAVAILABLE'});

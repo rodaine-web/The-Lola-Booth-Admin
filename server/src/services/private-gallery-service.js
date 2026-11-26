@@ -318,7 +318,9 @@ export async function transitionGalleryAlbum(id, status, user) {
     });
     if (status === "PUBLISHED")
       await galleryActivity({ album_id: id }, "PUBLISHED");
-    return adminGalleryAlbum(id);
+    if(status==='PUBLISHED'){const {onGalleryPublished}=await import('./gallery-notification-service.js');await onGalleryPublished(id,user);}
+    const result=await adminGalleryAlbum(id);
+    return {...result,notificationReviewRequired:status==='PUBLISHED'};
   });
 }
 export async function createGalleryPerson(albumId, name) {

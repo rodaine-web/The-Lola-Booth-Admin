@@ -518,6 +518,7 @@ export async function updateCommunicationDraft(id, input = {}, user = {}) {
   return transaction(async (client) => {
     const current = (await client.query("SELECT * FROM communications WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [id])).rows[0];
     if (!current) throw new AppError("Communication not found.", 404, "COMMUNICATION_NOT_FOUND");
+    if(['GALLERY_PUBLICATION','GALLERY_EMAIL_VERIFICATION'].includes(current.trigger_key))throw new AppError("Gallery photo delivery content and recipients are controlled by the authorized notification job.",409,"GALLERY_NOTIFICATION_IMMUTABLE");
     if (!["DRAFT", "SCHEDULED", "FAILED"].includes(current.status)) throw new AppError("Sent communications are immutable.", 409, "COMMUNICATION_IMMUTABLE");
     const allowed = ["recipient", "subject", "rendered_subject", "rendered_body", "rendered_html", "scheduled_at", "send_mode"];
     const patch = Object.fromEntries(Object.entries(input).filter(([key]) => allowed.includes(key)));
@@ -619,7 +620,7 @@ export async function createCommunicationDraft(input = {}, user = {}) {
   return result.rows[0];
 }
 
-export async function sendCommunication(id, user = {}, { workerClaim = false, qualificationClaim = false } = {}) {
+export async function sendCommunication(id, user = {}, { workerClaim = false, qualificationClaim = false, galleryClaim = false } = {}) {
   if(stagingJobsPaused()&&!qualificationClaim&&(await query('SELECT 1 FROM staging_email_qualification_jobs WHERE communication_id=$1',[id])).rowCount)throw new AppError('This QA message is controlled by its qualification job.',409,'STAGING_JOB_REQUIRED');
 
   const claim = await transaction(async (client) => {
@@ -643,6 +644,7 @@ export async function sendCommunication(id, user = {}, { workerClaim = false, qu
     }
     if(communication.failure_code==="DELIVERY_OUTCOME_UNKNOWN")throw new AppError("Delivery outcome is unknown. Review provider history before any retry.",409,"DELIVERY_OUTCOME_UNKNOWN",{retryable:false});
     if (!["DRAFT", "SCHEDULED", "FAILED", ...(workerClaim ? ["PROCESSING"] : [])].includes(communication.status)) throw new AppError("This communication cannot be sent.", 409, "COMMUNICATION_IMMUTABLE");
+    if(['GALLERY_PUBLICATION','GALLERY_EMAIL_VERIFICATION'].includes(communication.trigger_key)&&!galleryClaim)throw new AppError('Gallery delivery is controlled by its authorized notification job.',409,'GALLERY_NOTIFICATION_JOB_REQUIRED');
     if (communication.channel === "SMS") throw new AppError("SMS provider is disabled or not configured. Message was not sent.", 422, "SMS_PROVIDER_DISABLED", { retryable: false });
     if (communication.channel !== "EMAIL") throw new AppError("Only email sending is currently enabled.", 422, "CHANNEL_NOT_IMPLEMENTED", { retryable: false });
     if (!communication.recipient) throw new AppError("Recipient is required before sending.", 422, "COMMUNICATION_RECIPIENT_REQUIRED", { retryable: false });
