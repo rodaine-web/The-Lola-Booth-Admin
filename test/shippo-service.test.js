@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {shippoRequest,shippoRate,shippoCents} from '../server/src/services/shippo-service.js';
+import {shippoRequest,shippoRate,shippoCents,shippoAddress} from '../server/src/services/shippo-service.js';
 const response=json=>new Response(JSON.stringify(json),{status:200});
 
 test('Shippo rejects live keys, production and non-test responses before using shipping data',async()=>{
@@ -25,3 +25,5 @@ test('Shippo compares validated USD rates with exact cents and respects allowed 
   assert.equal(shippoCents('0.29'),29);for(const bad of ['1e2','1.001','-1','NaN','1001.00'])assert.throws(()=>shippoCents(bad));
  }finally{for(const [k,v]of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;}
 });
+
+test('Shippo retains supplied shipper contacts without inventing recipient contacts',()=>{const address={name:'Synthetic',address1:'1 Test Street',city:'Chicago',state:'IL',zip:'60601',country:'US'};assert.equal(shippoAddress(address).email,undefined);assert.equal(shippoAddress(address).phone,undefined);const mapped=shippoAddress({...address,email:'sender@example.invalid',phone:'+14155550100'});assert.equal(mapped.email,'sender@example.invalid');assert.equal(mapped.phone,'+14155550100');});
