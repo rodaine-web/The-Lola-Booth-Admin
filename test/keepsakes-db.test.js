@@ -592,6 +592,7 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     process.env.SHIPPO_TEST_API_KEY='shippo_test_synthetic';
     const shipping=await import('../server/src/services/keepsakes-shipping-service.js');
     const shippingSetup={enabled:true,origin:{...address,email:'qa-shipping@example.invalid',phone:'+14155550100'},services:[],profiles:[{id:'small',name:'Synthetic package',products:['keychain','acrylic-display'],length:6,width:4,height:2,emptyWeightOz:1,unitWeightOz:2,capacity:5}]};
+    assert.equal(shipping.shippingConfiguration.safeParse({...shippingSetup,origin:address}).success,false);await assert.rejects(shipping.quoteShippoShipping([],address,{...shippingSetup,origin:address}),{code:'SHIPPO_SENDER_CONTACT_REQUIRED'});
     await shipping.saveShipping(shippingSetup,admin);
     const parcelPlans=shipping.packShippoParcels([{product:{provider:'IN_HOUSE',key:'keychain'},units:4},{product:{provider:'IN_HOUSE',key:'keychain'},units:3},{product:{provider:'LOB',key:'postcard'},units:10}],address,shippingSetup);assert.equal(parcelPlans.length,2);assert.equal(parcelPlans[0].payload.parcels[0].weight,'11');assert.equal(parcelPlans[1].payload.parcels[0].weight,'5');
     assert.equal(shipping.packShippoParcels([{product:{provider:'IN_HOUSE',key:'keychain'},units:1,shippingAddress:address},{product:{provider:'IN_HOUSE',key:'keychain'},units:1,shippingAddress:{...address,name:'Different Recipient'}}],address,shippingSetup).length,2);
