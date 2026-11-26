@@ -549,6 +549,24 @@ test('Keepsakes isolates photo sessions, protects included originals, and fulfil
     await assert.rejects(core.configureCoreRetail('premium-acrylic',{active:true},admin),{code:'KEEPSAKES_CONFIGURATION_PENDING'});
     const {reviewBulkCsv}=await import('../server/src/services/keepsakes-bulk-service.js');await assert.rejects(reviewBulkCsv(retailToken,''),{code:'KEEPSAKES_CLIENT_REQUIRED'});
     await assert.rejects(shop.quoteKeepsakes('session',retailToken,{...cart,items:[{...lines[3],quantity:6},{...lines[3],quantity:6}]}),{code:'KEEPSAKES_PRODUCTION_NOT_READY'});
+    // Regression: a current in-house frame and style must survive Review Total;
+    // a general catalog listing never grants a Gallery permission implicitly.
+    await core.saveCoreCataloguePrice('framed-photo',{retailCents:1000},admin);
+    await core.configureCoreRetail('framed-photo',{active:true,taxCode:'txcd_99999999',reason:'Synthetic framed-photo checkout regression fixture.',productionReady:true,shippingCents:100,stockUnits:10,variants:[{id:'test-frame',label:'QA frame',dimensions:'4 × 6',previewAssetId:'frame-champagne',printSpec:{widthPx:1200,heightPx:1800,dpi:300,bleedPx:0,safePx:0}}]},admin);
+    const frame=await one("SELECT * FROM keepsakes_products WHERE catalogue_key='framed-photo'"),frameLine={...lines[3],productId:frame.id,variantId:'test-frame'};
+    await assert.rejects(shop.quoteKeepsakes('session',retailToken,{...cart,items:[frameLine]}),e=>e.code==='KEEPSAKES_PRODUCT_UNAVAILABLE'&&/not enabled for these Gallery photos/.test(e.message));
+    await manager.saveKeepsakesSettings(retailAlbum.id,{enabled:true,brandedMerchandise:true,originalSales:true,productIds:[...configured.map(p=>p.id),frame.id]},admin);
+    const frameCollection=await photoAccess.photoCollection(retailToken);assert.ok(frameCollection.assets.every(a=>a.allowedProductIds.includes(frame.id)));
+    const frameQuote=await shop.quoteKeepsakes('session',retailToken,{...cart,items:[frameLine]});assert.equal(frameQuote.checkoutReady,true);assert.equal(frameQuote.subtotalCents,frame.retail_cents);
+    await assert.rejects(shop.quoteKeepsakes('session',retailToken,{...cart,items:[{...frameLine,variantId:'removed-style'}]}),e=>e.code==='KEEPSAKES_PRODUCT_UNAVAILABLE'&&/selected style changed/.test(e.message));
+    await manager.saveKeepsakesSettings(retailAlbum.id,{enabled:true,brandedMerchandise:false,originalSales:true,productIds:configured.map(p=>p.id)},admin);
+    const stripScope=await shop.keepsakesScope('session',retailToken),stripProduct=configured.find(p=>p.catalogue_key==='edited-strip');
+    assert.ok((await shop.availableProducts({...stripScope,assets:stripScope.assets.filter(a=>a.id===ids.BRANDED_STRIP)})).products.some(p=>p.id===stripProduct.id));
+    assert.ok(stripScope.assets.find(a=>a.id===ids.BRANDED_STRIP).digital_eligible);assert.equal(stripScope.assets.find(a=>a.id===ids.BRANDED_STRIP).merchandise_eligible,false);
+    const stripQuote=await shop.quoteKeepsakes('session',retailToken,{email:cart.email,billingAddress:address,items:[lines[1]]});assert.equal(stripQuote.checkoutReady,true);
+    await manager.saveKeepsakesSettings(retailAlbum.id,{enabled:true,brandedMerchandise:true,originalSales:true,productIds:[...configured.map(p=>p.id),frame.id]},admin);
+    const digitalQuote=await shop.quoteKeepsakes('session',retailToken,{email:cart.email,billingAddress:address,items:[lines[0]]});assert.equal(digitalQuote.checkoutReady,true);assert.equal(digitalQuote.shippingCents,0);
+    await assert.rejects(shop.quoteKeepsakes('session',retailToken,{email:cart.email,billingAddress:address,items:[frameLine]}),{code:'KEEPSAKES_SHIPPING_REQUIRED'});
     const proofService=await import('../server/src/services/keepsakes-proof-service.js');await proofService.keepsakesQuoteProof('session',retailToken,quote.quoteId,{itemIndex:3,side:'front'});
     await shop.checkoutKeepsakes('session',retailToken,quote.quoteId,{proofReviewed:true});const newOrder=await one('SELECT * FROM keepsakes_orders WHERE quote_id=$1',[quote.quoteId]);assert.equal(newOrder.paid_at,null);assert.equal((await one('SELECT count(*)::int n FROM keepsakes_fulfillments WHERE order_id=$1',[newOrder.id])).n,0);
     const paid={...paidEvent,id:'evt_approvedMixedPaid',data:{object:{...paidEvent.data.object,id:newOrder.stripe_session_id,amount_total:quote.totalCents,payment_intent:'pi_approvedMixed',metadata:{keepsakes_order_id:newOrder.id}}}};await deliver(paid);await deliver({...paid,id:'evt_approvedMixedReplay'});

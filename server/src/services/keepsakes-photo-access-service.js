@@ -132,7 +132,13 @@ export async function sessionAssets(sessionToken){
 }
 export async function photoCollection(sessionToken){
  const {session,assets,albums}=await sessionAssets(sessionToken);
- return {expiresAt:session.expires_at,audience:session.scopes.some(s=>s.client)?'CLIENT':'GUEST',albums,assets:assets.map(a=>({id:a.id,albumId:a.albumId,sessionId:a.session_id||null,label:a.label||'Event photo',kind:a.kind,branded:a.branded===true,width:a.width,height:a.height,included:a.included===true,merchandiseEligible:a.merchandise_eligible===true,digitalEligible:a.digital_eligible===true,canDownload:a.canDownload===true,url:`/api/keepsakes/photos/assets/${a.id}`}))};
+ const settings=new Map();for(const a of albums){const {keepsakesSettings}=await import('./keepsakes-service.js');settings.set(a.id,await keepsakesSettings(a.id));}
+ const emails=new Set();
+ if(session.request_id){const row=(await query("SELECT c.recipient FROM keepsakes_photo_requests r JOIN communications c ON c.id=r.communication_id WHERE r.id=$1 AND c.channel='EMAIL'",[session.request_id])).rows[0];if(row?.recipient)emails.add(row.recipient.trim().toLowerCase());}
+ for(const scope of session.scopes){if(scope.client)emails.add((await validClientPhotoScope(scope.client)).email);if(scope.phoneAccessId){const row=(await query('SELECT email_ciphertext FROM gallery_phone_email_verifications WHERE access_id=$1 AND verified_at IS NOT NULL ORDER BY verified_at DESC LIMIT 1',[scope.phoneAccessId])).rows[0];if(row)emails.add(decryptSecretJson(row.email_ciphertext).email);}}
+ // A contact hint belongs to this bearer session only. It is never an identity grant.
+ const contactEmail=emails.size===1?[...emails][0]:null;
+ return {contactEmail,expiresAt:session.expires_at,audience:session.scopes.some(s=>s.client)?'CLIENT':'GUEST',albums,assets:assets.map(a=>({id:a.id,albumId:a.albumId,allowedProductIds:settings.get(a.albumId)?.enabled?settings.get(a.albumId).productIds:[],sessionId:a.session_id||null,label:a.label||'Event photo',kind:a.kind,branded:a.branded===true,width:a.width,height:a.height,included:a.included===true,merchandiseEligible:a.merchandise_eligible===true,digitalEligible:a.digital_eligible===true,canDownload:a.canDownload===true,url:`/api/keepsakes/photos/assets/${a.id}`}))};
 }
 export async function collectionPhoto(sessionToken,id){
  const {assets}=await sessionAssets(sessionToken),asset=assets.find(a=>a.id===id);if(!asset)throw unavailable();

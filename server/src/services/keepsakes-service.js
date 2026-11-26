@@ -68,8 +68,8 @@ export async function keepsakesSettings(albumId){
 export async function availableProducts(scope){
  const settings=scope.settingsByAlbum?{enabled:[...scope.settingsByAlbum.values()].some(s=>s.enabled),originalSales:true,brandedMerchandise:true,productIds:[...new Set([...scope.settingsByAlbum.values()].flatMap(s=>s.enabled?s.productIds:[]))]}:await keepsakesSettings(scope.albumId);
  if(!settings.enabled)return {settings,products:[]};
- const products=(await query('SELECT * FROM keepsakes_products WHERE active AND verified AND id=ANY($1::uuid[]) ORDER BY title',[settings.productIds])).rows;
- return {settings,products:products.filter(p=>p.provider==='DIGITAL'?settings.originalSales&&scope.assets.some(a=>a.digital_eligible&&!a.included):scope.assets.some(a=>a.merchandise_eligible&&(!a.branded||settings.brandedMerchandise)))};
+ const products=(await query('SELECT * FROM keepsakes_products WHERE active AND verified AND retired_at IS NULL AND id=ANY($1::uuid[]) ORDER BY title',[settings.productIds])).rows;
+ return {settings,products:products.filter(p=>p.provider==='DIGITAL_EDIT'?scope.assets.some(a=>a.digital_eligible):p.provider==='DIGITAL'?settings.originalSales&&scope.assets.some(a=>a.digital_eligible&&!a.included):scope.assets.some(a=>a.merchandise_eligible&&(!a.branded||settings.brandedMerchandise)))};
 }
 export async function keepsakesView(type,token){
  const scope=await keepsakesScope(type,token),{settings,products}=await availableProducts(scope);
@@ -101,7 +101,7 @@ export async function quoteKeepsakes(type,token,input){
  let subtotal=0,shipping=0;
  for(const item of cart.items){
   const product=products.find(p=>p.id===item.productId),variant=product?.variants.find(v=>v.id===item.variantId);
-  if(!product||!variant)throw new AppError('A selected product is no longer available.',409,'KEEPSAKES_PRODUCT_UNAVAILABLE');
+  if(!product||!variant){const current=(await query('SELECT catalogue_key,title,active,verified FROM keepsakes_products WHERE id=$1',[item.productId])).rows[0];const label=current?.title||'This keepsake';throw new AppError(`${label}: ${product&&!variant?'the selected style changed. Edit this item and choose a current style.':current?.active&&current?.verified?'ordering is not enabled for these Gallery photos. Choose an eligible photo or remove this item.':'ordering is currently unavailable. Remove this item to continue with the rest of your cart.'}`,409,'KEEPSAKES_PRODUCT_UNAVAILABLE');}
   const assets=item.assetIds.map(id=>scope.assets.find(a=>a.id===id));
   if(assets.some(a=>!a||a.allowedProductIds&&!a.allowedProductIds.includes(product.id)))throw unavailable();
   if(new Set(item.assetIds).size!==item.assetIds.length)throw new AppError('Select each photo once per item.',422,'KEEPSAKES_ASSET_DUPLICATE');
@@ -134,6 +134,7 @@ export async function quoteKeepsakes(type,token,input){
   if(scope.settingsByAlbum&&!['DIGITAL_EDIT','IN_HOUSE','LOB'].includes(product.provider))throw new AppError('This configuration is awaiting verified ordering support.',409,'KEEPSAKES_CONFIGURATION_PENDING');
   if(product.provider==='IN_HOUSE'){
    const operational=product.operational_config||{};
+   if(!item.shippingAddress&&!cart.shippingAddress)throw new AppError('Enter a delivery address for your physical keepsakes.',422,'KEEPSAKES_SHIPPING_REQUIRED');
    if(!operational.productionReady||!operational.stockConfirmed&&operational.stockUnits==null||operational.stockUnits!=null&&(!Number.isSafeInteger(operational.stockUnits)||operational.stockUnits<units))throw new AppError('Stock, production capacity and delivery must be confirmed for this product.',409,'KEEPSAKES_PRODUCTION_NOT_READY');
    if(!Number.isSafeInteger(operational.shippingCents)||operational.shippingCents<0)issues.push('Delivery pricing is being updated. Please try again shortly.');
    shipping+=operational.shippingCents||0;item.shippingCents=operational.shippingCents||0;
@@ -173,7 +174,7 @@ export async function quoteKeepsakes(type,token,input){
  let tax=0,taxCalculationId=null;const taxCalculations=[];
  const readiness=keepsakesReadiness();
  if(!readiness.checkout)issues.push(readiness.message);
- const billingAddress=cart.shippingAddress||cart.items.find(i=>i.recipients.length)?.recipients[0];
+ const billingAddress=cart.billingAddress||cart.shippingAddress||cart.items.find(i=>i.recipients.length)?.recipients[0];
  if(!billingAddress)issues.push('Enter a billing address for tax calculation.');
  if(items.some(i=>!/^txcd_\d{8}$/.test(i.product.taxCode||'')))issues.push('Tax pricing is being updated. Please try again shortly.');
  if(readiness.checkout&&billingAddress&&!issues.length){
@@ -188,7 +189,7 @@ export async function quoteKeepsakes(type,token,input){
   };
   items.forEach((item,index)=>{
    if(item.product.provider==='LOB')item.recipients.forEach((recipient,n)=>add(recipient,item,item.product.retailCents*item.quantity,0,`${index}:${n}`,'shipping'));
-   else add(item.shippingAddress||cart.shippingAddress,item,item.product.retailCents*item.units,item.product.provider==='PRODIGI'?prodigiMoneyCents(item.supplierQuote.shipping):(item.shippingCents||0),String(index),['DIGITAL','DIGITAL_EDIT'].includes(item.product.provider)?'billing':'shipping');
+   else add(item.shippingAddress||cart.shippingAddress||billingAddress,item,item.product.retailCents*item.units,item.product.provider==='PRODIGI'?prodigiMoneyCents(item.supplierQuote.shipping):(item.shippingCents||0),String(index),['DIGITAL','DIGITAL_EDIT'].includes(item.product.provider)?'billing':'shipping');
   });
   if(groups.size>25)throw new AppError('Use up to 25 tax destinations per purchase.',422,'KEEPSAKES_DESTINATION_LIMIT');
   for(const group of groups.values()){
@@ -202,7 +203,7 @@ export async function quoteKeepsakes(type,token,input){
  }
  const snapshot={items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues},total=subtotal+shipping+tax;
  const row=(await query(`INSERT INTO keepsakes_quotes(album_id,scope_hash,snapshot,contact_ciphertext,subtotal_cents,shipping_cents,tax_cents,total_cents,checkout_ready)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,expires_at`,[scope.albumId,scope.scopeHash,JSON.stringify(snapshot),encryptSecretJson({email:cart.email,shippingAddress:cart.shippingAddress}),subtotal,shipping,tax,total,issues.length===0])).rows[0];
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,expires_at`,[scope.albumId,scope.scopeHash,JSON.stringify(snapshot),encryptSecretJson({email:cart.email,shippingAddress:cart.shippingAddress,billingAddress:cart.billingAddress}),subtotal,shipping,tax,total,issues.length===0])).rows[0];
  const {keepsakesProofDescriptors}=await import('./keepsakes-proof-service.js');
  return {quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,proofs:keepsakesProofDescriptors(type,token,row.id,items)};
 }

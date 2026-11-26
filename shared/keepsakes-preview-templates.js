@@ -16,7 +16,7 @@ export const KEEPSAKES_PREVIEW_TEMPLATES=Object.freeze({
  'frame-ivory':template('frame-ivory',.46,[[[462,330],[758,331],[758,965],[462,965]]],{material:'FRAMED_PAPER'}),
  'frame-silver':template('frame-silver',.48,[[[456,258],[788,260],[788,955],[456,953]]],{material:'FRAMED_PAPER'}),
  'frame-antique-gold':template('frame-antique-gold',.48,[[[467,248],[784,250],[784,925],[467,924]]],{material:'FRAMED_PAPER'}),
- 'frame-metal':template('frame-metal',.72,[[[329,149],[989,143],[1014,1105],[335,1116]]],{material:'METAL_FRAME',variant:'metal-frame'}),
+ 'frame-metal':template('frame-metal',.72,[[[329,149],[989,143],[1014,1105],[335,1116]]],{material:'METAL_PANEL'}),
  'postcard-lifestyle':template('postcard-lifestyle',1.65,[[[118,495],[938,572],[898,1046],[60,989]]],{material:'PAPER',marketingOnlyBack:true}),
  'guest-photo-book':template('guest-photo-book',1.5,[
   [[284,696],[533,728],[520,840],[271,809]],[[273,819],[520,851],[506,966],[258,931]],[[259,941],[506,977],[491,1089],[246,1055]],
@@ -27,6 +27,6 @@ export const KEEPSAKES_PREVIEW_TEMPLATES=Object.freeze({
  ],{material:'ALBUM_PAPER',multiple:true,clientOnly:true})
 });
 export function previewTemplateFor(productKey,{assetId,variant}={}){
- const defaults={keychain:'keychain-mono',magnet:'magnet-mono','jacketed-print':'photo-jacket','acrylic-display':'acrylic-insert','premium-acrylic':'uv-acrylic-mono','framed-photo':'frame-champagne',postcard:'postcard-lifestyle','photo-book':'guest-photo-book'};
+ const defaults={'metal-print':'frame-metal',keychain:'keychain-mono',magnet:'magnet-mono','jacketed-print':'photo-jacket','acrylic-display':'acrylic-insert','premium-acrylic':'uv-acrylic-mono','framed-photo':'frame-champagne',postcard:'postcard-lifestyle','photo-book':'guest-photo-book'};
  return KEEPSAKES_PREVIEW_TEMPLATES[assetId||variant?.previewAssetId||defaults[productKey]]||null;
 }

@@ -7,7 +7,7 @@ export function normalizePhotoLookup(channel,value){
  return /^[1-9]\d{7,14}$/.test(digits)?'+'+digits:null;
 }
 export function photoSourceForProduct(product,assets,selectedId){
- const selected=assets.find(a=>a.id===selectedId);
+ const selected=assets.find(a=>a.id===selectedId)||(!selectedId&&assets.length===1?assets[0]:null);
  if(!selected)return {asset:null,reason:'Choose your photo first.'};
  const related=assets.filter(a=>a.sessionId&&a.sessionId===selected.sessionId||a.id===selected.id);
  const originals=related.filter(a=>!a.branded&&['ORIGINAL','PROCESSED'].includes(a.kind)),strips=related.filter(a=>a.kind==='BRANDED_STRIP'&&a.branded);
@@ -20,3 +20,18 @@ export function photoSourceForProduct(product,assets,selectedId){
 }
 
 export {GUEST_RETRIEVAL_MESSAGE as PHOTO_LOOKUP_MESSAGE} from './guest-retrieval-policy.js';
+
+// Only authorized collection assets enter this function. Source-kind and per-gallery
+// product permissions are separate from customer contact/checkout email.
+export function eligibleProductPhotos(product,assets=[]){
+ const result=new Map();
+ for(const a of assets){const source=photoSourceForProduct(product,assets,a.id);
+  if(source.asset&&(!Object.hasOwn(source.asset,'merchandiseEligible')||source.asset.merchandiseEligible)&&
+   [source.asset,source.strip].filter(Boolean).every(a=>!Array.isArray(a.allowedProductIds)||a.allowedProductIds.includes(product.productId)))result.set(source.asset.id,source.asset);
+ }
+ return [...result.values()];
+}
+export function selectedProductPhoto(product,assets=[],selectedId){
+ const eligible=eligibleProductPhotos(product,assets);
+ return eligible.some(a=>a.id===photoSourceForProduct(product,assets,selectedId).asset?.id)?selectedId:(eligible.length===1?eligible[0].id:selectedId);
+}

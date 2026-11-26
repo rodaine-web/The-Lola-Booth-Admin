@@ -206,7 +206,7 @@ export const APPROVED_KEEPSAKES_ASSETS=Object.freeze([
   },
   {
     "id": "frame-metal",
-    "product": "framed-photo",
+    "product": "metal-print",
     "originalFilename": "ChatGPT Image Nov 24, 2026, 09_38_01 PM-1.png",
     "sha256": "84c72f45d406a583c62637db19898d497f6a50f46d5270cab8d027386f22982e",
     "width": 1254,
@@ -214,7 +214,7 @@ export const APPROVED_KEEPSAKES_ASSETS=Object.freeze([
     "original": "/brand/keepsakes-approved/frame-metal.png",
     "src": "/brand/keepsakes-approved/frame-metal-960.webp",
     "srcSet": "/brand/keepsakes-approved/frame-metal-480.webp 480w, /brand/keepsakes-approved/frame-metal-960.webp 960w, /brand/keepsakes-approved/frame-metal-1254.webp 1254w",
-    "alt": "Framed photograph product appearance"
+    "alt": "Photograph printed directly onto a brushed metal panel"
   },
   {
     "id": "postcard-lifestyle",
@@ -231,6 +231,7 @@ export const APPROVED_KEEPSAKES_ASSETS=Object.freeze([
 ]);
 export const approvedKeepsakeAsset=id=>APPROVED_KEEPSAKES_ASSETS.find(a=>a.id===id);
 export const PRODUCT_IMAGE_IDS=Object.freeze({
+  "metal-print": ["frame-metal"],
   "keychain": [
     "keychain-mono",
     "keychain-color"
@@ -254,8 +255,7 @@ export const PRODUCT_IMAGE_IDS=Object.freeze({
     "frame-champagne",
     "frame-ivory",
     "frame-silver",
-    "frame-antique-gold",
-    "frame-metal"
+    "frame-antique-gold"
   ],
   "postcard": [
     "postcard-lifestyle"
@@ -267,4 +267,4 @@ export const PRODUCT_IMAGE_IDS=Object.freeze({
     "album-open"
   ]
 });
-export function productMarketingImage(key,index=0){const ids=PRODUCT_IMAGE_IDS[key];return ids?approvedKeepsakeAsset(ids[index%ids.length]):null;}
+export function productMarketingImage(key,index=0){if(['edited-strip','edited-photo','edited-package'].includes(key))return {id:key,src:`/brand/keepsakes-digital/${key}.svg`,srcSet:`/brand/keepsakes-digital/${key}.svg 1000w`,original:`/brand/keepsakes-digital/${key}.svg`,width:1000,height:750,alt:'Editing service illustration using approved example photography'};const ids=PRODUCT_IMAGE_IDS[key];return ids?approvedKeepsakeAsset(ids[index%ids.length]):null;}
