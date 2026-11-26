@@ -7,15 +7,18 @@ export async function photoRequest(path,body,token){
 }
 export function KeepsakesPhotos({children}){
  const [token,setToken]=useState(()=>sessionStorage.getItem(storage)||''),[collection,setCollection]=useState(null),[selected,setSelected]=useState(()=>{try{return JSON.parse(sessionStorage.getItem(storage+'-selection')||'[]');}catch{return [];}}),[error,setError]=useState(''),[loading,setLoading]=useState(false);
+ const [orderEmail,setOrderEmail]=useState(()=>sessionStorage.getItem(storage+'-order-email')||'');
+ useEffect(()=>{sessionStorage.setItem(storage+'-order-email',orderEmail);},[orderEmail]);
+ useEffect(()=>{if(collection?.contactEmail)setOrderEmail(old=>old||collection.contactEmail);},[collection?.contactEmail]);
  const [cart,setCart]=useState(()=>{try{return JSON.parse(sessionStorage.getItem(storage+'-cart')||'[]');}catch{return [];}});
  useEffect(()=>{sessionStorage.setItem(storage+'-cart',JSON.stringify(cart));},[cart]);
  const cache=useRef(new Map()),generation=useRef(0);
  useEffect(()=>{sessionStorage.setItem(storage+'-selection',JSON.stringify(selected));},[selected]);
- const accept=useCallback(value=>{sessionStorage.setItem(storage,value);setToken(value);setSelected([]);setCart([]);},[]);
+ const accept=useCallback(value=>{sessionStorage.setItem(storage,value);setToken(value);setSelected([]);setCart([]);setOrderEmail('');},[]);
  useEffect(()=>{
   const current=++generation.current;setCollection(null);setError('');setLoading(Boolean(token));
   for(const pending of cache.current.values())pending.then(url=>URL.revokeObjectURL(url)).catch(()=>{});cache.current.clear();
-  if(token)photoRequest('collection',null,token).then(value=>{if(current!==generation.current)return;setCollection(value);setSelected(ids=>ids.filter(id=>value.assets.some(a=>a.id===id)));}).catch(e=>{if(current===generation.current)setError(e.message);}).finally(()=>{if(current===generation.current)setLoading(false);});
+  if(token)photoRequest('collection',null,token).then(value=>{if(current!==generation.current)return;setCollection(value);setSelected(ids=>{const valid=ids.filter(id=>value.assets.some(a=>a.id===id));return valid.length?valid:value.assets.length===1?[value.assets[0].id]:[];});}).catch(e=>{if(current===generation.current)setError(e.message);}).finally(()=>{if(current===generation.current)setLoading(false);});
   return()=>{generation.current++;};
  },[token]);
  useEffect(()=>()=>{for(const pending of cache.current.values())pending.then(url=>URL.revokeObjectURL(url)).catch(()=>{});},[]);
@@ -37,7 +40,7 @@ export function KeepsakesPhotos({children}){
  const commerce=useCallback(async(path,body)=>{const response=await fetch(`${API}/keepsakes/books/${path}`,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store',referrerPolicy:'no-referrer'});const data=await response.json();if(!response.ok)throw Error(data.error?.message||data.message||'Book unavailable.');return data;},[token]);
  const retail=useCallback((path,body)=>photoRequest('commerce/'+path,body,token),[token]);
  const retailImage=useCallback(async(path,body)=>{const response=await fetch(`${API}/keepsakes/photos/commerce/${path}`,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});if(!response.ok){const e=await response.json();throw Error(e.error?.message||'Preview unavailable');}return URL.createObjectURL(await response.blob());},[token]);
- return <Photos.Provider value={{commerce,retail,retailImage,cart,setCart,collection,selected,setSelected,accept,handoff,loadPhoto,downloadPhoto,error,loading,hasSession:Boolean(token)}}>{children}</Photos.Provider>;
+ return <Photos.Provider value={{orderEmail,setOrderEmail,commerce,retail,retailImage,cart,setCart,collection,selected,setSelected,accept,handoff,loadPhoto,downloadPhoto,error,loading,hasSession:Boolean(token)}}>{children}</Photos.Provider>;
 }
 export const useKeepsakesPhotos=()=>useContext(Photos);
 export function GuestPhoto({asset,...props}){

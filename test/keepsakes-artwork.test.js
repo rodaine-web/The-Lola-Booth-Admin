@@ -95,3 +95,10 @@ test('multiple print areas require unique names', async () => {
   const bytes = await source();
   await assert.rejects(renderKeepsakesPrintAreas({areas: [{name: 'front', bytes, spec}, {name: 'front', bytes, spec}]}), {code: 'KEEPSAKES_ARTWORK_INVALID'});
 });
+
+test('variable in-house inserts preserve native pixels without inventing print dimensions or supplier DPI',async()=>{
+ const {renderVariableInsertArtwork}=await import('../server/src/services/keepsakes-artwork.js');
+ for(const key of ['keychain','magnet']){const bytes=await source(900,600),whole=await renderVariableInsertArtwork({bytes,key,customization:{fit:'contain'}}),meta=await sharp(whole.buffer).metadata();assert.equal(meta.width,900);assert.equal(meta.height,600);assert.notEqual(meta.density,300);assert.equal(whole.spec,null);assert.equal(whole.productionSizing,'IN_HOUSE_AT_PRINT');assert.equal(meta.exif,undefined);
+ const cropped=await renderVariableInsertArtwork({bytes,key,ratio:1,customization:{fit:'cover',zoom:2,x:.2,y:.7}});assert.deepEqual(cropped.renderedSize,{widthPx:300,heightPx:300});assert.notEqual(cropped.sha256,whole.sha256);}
+ await assert.rejects(renderVariableInsertArtwork({bytes:await source(),key:'metal-print'}),/Only in-house/);
+});

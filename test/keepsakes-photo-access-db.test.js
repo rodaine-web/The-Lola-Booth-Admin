@@ -75,7 +75,7 @@ test('photo retrieval queues neutral email, matches imported Fiesta contacts acr
   await Promise.all([access.requestPhotoAccess({channel:'EMAIL',value:'guest@example.invalid'}),access.requestPhotoAccess({channel:'EMAIL',value:'guest@example.invalid'})]);assert.equal((await one('SELECT count(*)::int AS n FROM communications')).n,1);
   const outcomes=await Promise.allSettled([access.redeemPhotoAccess(code),access.redeemPhotoAccess(code)]);assert.equal(outcomes.filter(o=>o.status==='fulfilled').length,1);
   const session=outcomes.find(o=>o.status==='fulfilled').value;
-  let view=await access.photoCollection(session.token);assert.equal(view.albums.length,2);assert.equal(view.assets.length,6);assert.ok(!JSON.stringify(view).includes('storage_key'));assert.ok(!JSON.stringify(view).includes(session.token));
+  let view=await access.photoCollection(session.token);assert.equal(view.contactEmail,'guest@example.invalid');assert.equal(view.albums.length,2);assert.equal(view.assets.length,6);assert.ok(!JSON.stringify(view).includes('storage_key'));assert.ok(!JSON.stringify(view).includes(session.token));
   await assert.rejects(access.collectionPhoto(session.token,fixtures[0].unrelated.id),{code:'PHOTO_ACCESS_UNAVAILABLE'});
   const image=await access.collectionPhoto(session.token,view.assets[0].id);assert.equal((await sharp(image).metadata()).format,'jpeg');
   assert.deepEqual(await access.requestPhotoAccess({channel:'PHONE',value:'3125550000',email:'guest@example.invalid'}),neutral);
@@ -100,7 +100,7 @@ test('photo retrieval queues neutral email, matches imported Fiesta contacts acr
   const transfer=await access.createPhotoHandoff(session.token,[view.assets[0].id],'SHOP');
   await assert.rejects(access.redeemPhotoHandoff(transfer.code,'GALLERY'),{code:'PHOTO_ACCESS_UNAVAILABLE'});
   const transfers=await Promise.allSettled([access.redeemPhotoHandoff(transfer.code,'SHOP'),access.redeemPhotoHandoff(transfer.code,'SHOP')]);
-  assert.equal(transfers.filter(x=>x.status==='fulfilled').length,1);const moved=transfers.find(x=>x.status==='fulfilled').value;assert.deepEqual(moved.selected,[view.assets[0].id]);assert.equal((await access.photoCollection(moved.token)).assets.length,6);
+  assert.equal(transfers.filter(x=>x.status==='fulfilled').length,1);const moved=transfers.find(x=>x.status==='fulfilled').value;assert.deepEqual(moved.selected,[view.assets[0].id]);assert.equal((await access.photoCollection(moved.token)).assets.length,6);assert.equal((await access.photoCollection(moved.token)).contactEmail,'guest@example.invalid');
   await assert.rejects(access.createPhotoHandoff(session.token,[fixtures[0].unrelated.id],'SHOP'),{code:'PHOTO_ACCESS_UNAVAILABLE'});
   const bookService=await import('../server/src/services/keepsakes-book-service.js');const variants=await bookService.bookVariants(session.token);assert.equal(variants.audience,'GUEST');assert.equal(variants.startingCents,null);assert.ok(variants.variants.every(v=>v.kind==='BOOK'&&!v.available));
   process.env.GELATO_API_KEY='synthetic-key';process.env.WHCC_TEST_API_KEY='synthetic-test-key';
