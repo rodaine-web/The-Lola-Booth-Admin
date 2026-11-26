@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import {variableInsertProduct} from '../../../shared/keepsakes-core-catalogue.js';
+import {previewTemplateFor} from '../../../shared/keepsakes-preview-templates.js';
+import {renderVariableInsertArtwork} from './keepsakes-artwork.js';
 import sharp from 'sharp';
 import {AppError} from '../utils/errors.js';
 import {STANDARD_POSTCARD_TEMPLATE,STANDARD_POSTCARD_SHA256} from '../../../shared/postcard-template.js';
@@ -25,7 +28,7 @@ export function keepsakesProofDescriptors(type, token, quoteId, items) {
   const root = type==='session'?`/api/keepsakes/photos/commerce/quotes/${encodeURIComponent(quoteId)}/proofs`:`/api/keepsakes/access/${encodeURIComponent(type)}/${encodeURIComponent(token)}/quotes/${encodeURIComponent(quoteId)}/proofs`;
   return items.flatMap((item, itemIndex) => {
     if (!['PRODIGI', 'LOB','IN_HOUSE'].includes(item.product?.provider)) return [];
-    const proofs = [{label: `${item.product.title || 'Keepsake'} · front`, side: 'front', itemIndex, recipientIndex: 0,
+    const proofs = [{label: `${item.product.title || 'Keepsake'} · ${variableInsertProduct(item.product,item.variant)?'photo and crop review · sized in-house':'front'}`, side: 'front', itemIndex, recipientIndex: 0,
       url: `${root}/${itemIndex}/front/0`}];
     if (item.product.provider === 'LOB') for (const [recipientIndex] of (item.recipients || []).entries()) {
       proofs.push({label: `Postcard back · recipient ${recipientIndex + 1} (printer adds address and postage)`,
@@ -69,7 +72,7 @@ export async function keepsakesQuoteProof(type, token, quoteId, {itemIndex, side
     if (!media) throw unavailable();
     const bytes = await verifiedGalleryBytes(media, ensureCurrentAccess, {maxBytes: 20 * 1024 * 1024});
     const customization = item.customization || {};
-    artwork = (await renderKeepsakesArtwork({bytes, spec: item.variant?.printSpec,
+    artwork = variableInsertProduct(item.product,item.variant)?(await renderVariableInsertArtwork({bytes,key:item.product.key,customization,ratio:previewTemplateFor(item.product.key,{variant:item.variant})?.physicalAspectRatio})).buffer:(await renderKeepsakesArtwork({bytes, spec: item.variant?.printSpec,
       customization: {...customization, positionX: customization.x, positionY: customization.y}})).buffer;
   } else {
     const [{galleryStorage}, {renderKeepsakesPostcardBack}] = await Promise.all([import('./gallery-storage.js'), import('./keepsakes-lob.js')]);

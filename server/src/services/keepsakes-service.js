@@ -1,4 +1,4 @@
-import {keepsakesCoreProduct} from '../../../shared/keepsakes-core-catalogue.js';
+import {keepsakesCoreProduct,variableInsertProduct} from '../../../shared/keepsakes-core-catalogue.js';
 import {previewTemplateFor} from '../../../shared/keepsakes-preview-templates.js';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
@@ -119,11 +119,11 @@ export async function quoteKeepsakes(type,token,input){
    if(assets.some(a=>!a.merchandise_eligible||(a.branded&&!settings.brandedMerchandise)))throw new AppError('Merchandise permission is missing for this photo.',422,'KEEPSAKES_MERCHANDISE_PERMISSION');
    if(assets.length!==1)throw new AppError('This product supports one print area. Select one available photo.',422,'KEEPSAKES_PRINT_AREA');
    if(product.catalogue_key==='framed-photo'&&variant.previewAssetId==='frame-metal')throw new AppError('Metal frames are coming soon.',409,'KEEPSAKES_CONFIGURATION_PENDING');
-   if(!variant.printSpec)throw new AppError('A verified print specification is required.',409,'KEEPSAKES_PRINT_SPEC');
+   if(!variant.printSpec&&!variableInsertProduct(product,variant))throw new AppError('A verified print specification is required.',409,'KEEPSAKES_PRINT_SPEC');
    // Render before taking payment, using verified private source bytes.
-   const {renderKeepsakesArtwork}=await import('./keepsakes-artwork.js');
-   const artwork=await renderKeepsakesArtwork({bytes:await verifiedGalleryBytes(assets[0]),spec:variant.printSpec,customization:{...item.customization,positionX:item.customization.x,positionY:item.customization.y}});
-   if(type==='session'){const inchesW=artwork.renderedSize.widthPx/variant.printSpec.dpi,inchesH=artwork.renderedSize.heightPx/variant.printSpec.dpi;const dpi=Math.min(artwork.crop.width/inchesW,artwork.crop.height/inchesH);if(dpi<150)throw new AppError('This photo does not have enough resolution for the selected print size. Choose another photo or a smaller size.',422,'KEEPSAKES_PRINT_RESOLUTION');}
+   const {renderKeepsakesArtwork,renderVariableInsertArtwork}=await import('./keepsakes-artwork.js');
+   const bytes=await verifiedGalleryBytes(assets[0]),artwork=variableInsertProduct(product,variant)?await renderVariableInsertArtwork({bytes,key:product.catalogue_key,customization:item.customization,ratio:previewTemplateFor(product.catalogue_key,{variant})?.physicalAspectRatio}):await renderKeepsakesArtwork({bytes,spec:variant.printSpec,customization:{...item.customization,positionX:item.customization.x,positionY:item.customization.y}});
+   if(type==='session'&&!variableInsertProduct(product,variant)){const inchesW=artwork.renderedSize.widthPx/variant.printSpec.dpi,inchesH=artwork.renderedSize.heightPx/variant.printSpec.dpi;const dpi=Math.min(artwork.crop.width/inchesW,artwork.crop.height/inchesH);if(dpi<150)throw new AppError('This photo does not have enough resolution for the selected print size. Choose another photo or a smaller size.',422,'KEEPSAKES_PRINT_RESOLUTION');}
    if(artwork.buffer.length>20*1024*1024)throw new AppError('The configured print file exceeds the supported artwork size.',422,'KEEPSAKES_ARTWORK_SIZE');
   }
   if(product.provider!=='DIGITAL_EDIT'&&product.category!=='bundle'&&assets.length!==1)throw new AppError('Select one photo for this product.',422,'KEEPSAKES_ASSET_COUNT');

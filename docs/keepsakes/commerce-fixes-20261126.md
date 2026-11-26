@@ -33,7 +33,7 @@ Digital imagery previously used generic geometric placeholders instead of the ap
 
 ## Validation failures and fixes
 
-The storefront used the general commercial catalog, while quote/checkout used active, verified products allowed by the source Gallery. Thus a general available listing could offer Add to Cart for an item the Gallery did not permit. The collection now exposes its existing per-photo product allowlist; Add to Cart checks those same permissions (both inputs for a package). A valid sole source no longer fails because selection state was empty. Physical styles still require their real print specifications; premium supplier configurations remain unavailable.
+The storefront used the general commercial catalog, while quote/checkout used active, verified products allowed by the source Gallery. Thus a general available listing could offer Add to Cart for an item the Gallery did not permit. The collection now exposes its existing per-photo product allowlist; Add to Cart checks those same permissions (both inputs for a package). A valid sole source no longer fails because selection state was empty. Fixed-size physical styles still require their real print specifications; keychain/magnet inserts are sized in-house per the owner’s latest instruction. Premium supplier configurations remain unavailable.
 
 An additional source mismatch treated DIGITAL_EDIT as physical merchandise in `availableProducts`. It now uses digital eligibility, so an authorized branded strip can be edited even when physical branded merchandise is disabled.
 
@@ -51,7 +51,7 @@ Before quoting, cart items resolve their stable product key against the current 
 
 ## Limits and deployment boundary
 
-WHCC/Gelato products remain Coming Soon. It would contradict the supplier verification rules to make all twelve purchasable for this UI release; the nine existing ordering routes are exercised with configured synthetic fixtures, and the other three are tested for safe blocking. Real in-house ordering still depends on saved insert dimensions, shipping, tax and operational configuration in Admin; no dimensions, prices or availability grants were invented.
+WHCC/Gelato products remain Coming Soon. It would contradict the supplier verification rules to make all twelve purchasable for this UI release; the nine existing ordering routes are exercised with configured synthetic fixtures, and the other three are tested for safe blocking. Keychain and magnet checkout does not require fixed insert dimensions: supplies vary. Their reviewed source/crop is retained at native resolution without assigning invented print dimensions or DPI, and paid production jobs retain the existing artwork, fit, stock and capacity review before manual sizing/printing. Shipping, tax and operational configuration remain in Admin. Fixed-size prints/postcards and supplier products retain their specification checks. No prices or Gallery availability grants were invented.
 
 A real hosted Stripe test-card payment is not represented by the deterministic test fixtures. It requires a synthetic staging collection and configured delivery/tax settings; this report does not claim such a card payment occurred. No live supplier manufacturing or customer delivery was performed.
 

@@ -107,3 +107,23 @@ export async function renderKeepsakesPrintAreas({areas} = {}) {
     sha256: area.sha256, sourceSha256: area.sourceSha256, spec: area.spec, customization: area.customization})))).digest('hex');
   return {areas: result, snapshotHash};
 }
+
+// Native-pixel in-house source file, with no invented inches, DPI or supplier spec.
+// Production staff fit this reviewed crop to their current keychain/magnet stock.
+export async function renderVariableInsertArtwork({bytes,key,customization={},ratio}={}){
+ if(!['keychain','magnet'].includes(key))fail('Only in-house keychains and magnets support production sizing.');
+ const c=normalizeKeepsakesCustomization({fit:customization.fit,zoom:customization.zoom,positionX:customization.x??customization.positionX,positionY:customization.y??customization.positionY},{allowedFits:['contain','cover']});
+ if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>30*1024*1024)fail('Provide the authorized source image bytes.');
+ const source=sharp(bytes,{limitInputPixels:MAX_PIXELS}),meta=await source.metadata();
+ if(!['jpeg','png','webp'].includes(meta.format)||(meta.pages??1)>1)fail('Use a static photograph.');
+ const normalized=await source.rotate().flatten({background:'#ffffff'}).toColourspace('srgb').png().toBuffer(),size=await sharp(normalized).metadata();
+ let crop={left:0,top:0,width:size.width,height:size.height};
+ if(c.fit==='cover'){
+  if(!Number.isFinite(ratio)||ratio<=0)fail('The approved product preview is required for this crop.');
+  let w=size.width,h=w/ratio;if(h>size.height){h=size.height;w=h*ratio;}
+  w=Math.max(1,Math.floor(w/c.zoom));h=Math.max(1,Math.floor(h/c.zoom));
+  crop={left:Math.round((size.width-w)*c.positionX),top:Math.round((size.height-h)*c.positionY),width:w,height:h};
+ }
+ const buffer=await sharp(normalized).extract(crop).png().toBuffer();
+ return {buffer,sha256:crypto.createHash('sha256').update(buffer).digest('hex'),spec:null,crop,renderedSize:{widthPx:crop.width,heightPx:crop.height},productionSizing:'IN_HOUSE_AT_PRINT'};
+}

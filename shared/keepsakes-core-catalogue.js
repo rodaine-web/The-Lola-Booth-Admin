@@ -30,3 +30,6 @@ export function coreCatalogueView(rows=[]){
  const byKey=new Map(rows.map(row=>[row.catalogue_key,row]));
  return KEEPSAKES_CORE_PRODUCTS.map(p=>{const row=byKey.get(p.key);return {...p,productId:row?.id||null,retailCents:row?.retail_cents??null,currency:'USD',available:!!(row?.active&&row?.verified&&row?.retail_cents&&row?.variants?.length&&['DIGITAL_EDIT','IN_HOUSE','LOB'].includes(p.route)),variants:row?.variants||[]};});
 }
+
+// These in-house inserts are sized to current supplies by production staff.
+export const variableInsertProduct=(product,variant)=>['keychain','magnet'].includes(product?.key||product?.catalogue_key)&&!variant?.printSpec;
