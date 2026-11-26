@@ -1,3 +1,4 @@
+import {sizedInsertVariant} from '../../../shared/keepsakes-print-policy.js';
 import {startingBookPrice} from '../../../shared/keepsakes-books.js';
 import {z} from 'zod';
 import {query,transaction} from '../db/pool.js';
@@ -34,7 +35,7 @@ export async function configureCoreRetail(key,raw,user){
  if(new Set(data.variants.map(v=>v.id)).size!==data.variants.length)throw new AppError('Use unique variant identifiers.',422,'KEEPSAKES_VARIANTS');
  for(const v of data.variants){if(v.previewAssetId==='frame-metal')throw new AppError('Metal frames are coming soon; the supplier ordering configuration is not ready.',409,'KEEPSAKES_CONFIGURATION_PENDING');if(v.previewAssetId&&!PRODUCT_IMAGE_IDS[key]?.includes(v.previewAssetId))throw new AppError('Use an approved image belonging to this product.',422,'KEEPSAKES_VARIANT_IMAGE');if(core.route!=='DIGITAL_EDIT'&&!['keychain','magnet'].includes(key)&&(!v.printSpec||!v.dimensions))throw new AppError('Physical products need their confirmed dimensions and print specification.',422,'KEEPSAKES_PRINT_SPEC');}
  if(data.active&&((core.route==='IN_HOUSE'&&(!data.productionReady||data.stockUnits!=null&&data.stockUnits<1))||(core.route==='DIGITAL_EDIT'&&!data.editingReady)))throw new AppError('Confirm the editing or stock and production capacity before activation.',422,'KEEPSAKES_OPERATIONS');
- const variants=data.variants.map(v=>({...v,...(core.route==='LOB'?{backTemplate:'lola-connect-v2'}:{})}));
+ const variants=data.variants.map(v=>sizedInsertVariant(core,{...v,...(core.route==='LOB'?{backTemplate:'lola-connect-v2'}:{})}));
  return transaction(async()=>{const row=(await query('SELECT * FROM keepsakes_products WHERE catalogue_key=$1 AND retired_at IS NULL FOR UPDATE',[key])).rows[0];if(!row||!row.retail_cents)throw new AppError('Save the retail price first.',409,'KEEPSAKES_PRICE_REQUIRED');
  await query('UPDATE keepsakes_products SET active=$2,verified=true,verified_at=now(),tax_code=$3,variants=$4,operational_config=$5,updated_at=now() WHERE id=$1',[row.id,data.active,data.taxCode,JSON.stringify(variants),JSON.stringify({productionReady:data.productionReady,editingReady:data.editingReady,stockConfirmed:true,stockUnits:data.stockUnits,shippingCents:data.shippingCents,reason:data.reason})]);
  await writeAudit({req:{user},action:'keepsakes_retail_configured',entity:'keepsakes',entityId:row.id,after:{key,...data}});return {saved:true};});

@@ -41,7 +41,7 @@ export function normalizeKeepsakesCustomization(input = {}, spec) {
  * authorization/integrity layer. URLs and arbitrary remote fetches are rejected.
  * widthPx/heightPx include bleed; safePx is the inset inside the trim boundary.
  */
-export async function renderKeepsakesArtwork({bytes, spec: inputSpec, customization: inputCustomization = {}} = {}) {
+export async function renderKeepsakesArtwork({bytes, spec: inputSpec, customization: inputCustomization = {}, allowUpscale=false} = {}) {
   const spec = validateKeepsakesPrintSpec(inputSpec);
   const customization = normalizeKeepsakesCustomization(inputCustomization, spec);
   if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > 30 * 1024 * 1024) fail('Provide the authorized source image bytes.');
@@ -69,8 +69,8 @@ export async function renderKeepsakesArtwork({bytes, spec: inputSpec, customizat
     cropHeight = Math.max(1, Math.floor(cropHeight / customization.zoom));
     crop = {left: Math.round((sourceWidth - cropWidth) * customization.positionX),
       top: Math.round((sourceHeight - cropHeight) * customization.positionY), width: cropWidth, height: cropHeight};
-    if (cropWidth < widthPx || cropHeight < heightPx) fail('The selected crop is below the product print resolution. Choose less zoom or a larger original.', 'KEEPSAKES_RESOLUTION_TOO_LOW');
-    canvas = sharp(normalized).extract(crop).resize(widthPx, heightPx, {fit: 'fill', withoutEnlargement: true});
+    if (!allowUpscale && (cropWidth < widthPx || cropHeight < heightPx)) fail('The selected crop is below the product print resolution. Choose less zoom or a larger original.', 'KEEPSAKES_RESOLUTION_TOO_LOW');
+    canvas = sharp(normalized).extract(crop).resize(widthPx, heightPx, {fit: 'fill', withoutEnlargement: !allowUpscale});
     renderedSize = {widthPx, heightPx};
   } else {
     // A finished composite's borders and text must survive the physical trim.
@@ -80,8 +80,8 @@ export async function renderKeepsakesArtwork({bytes, spec: inputSpec, customizat
     const safeWidth = widthPx - 2 * inset, safeHeight = heightPx - 2 * inset;
     const scale = Math.min(safeWidth / sourceWidth, safeHeight / sourceHeight);
     const width = Math.max(1, Math.round(sourceWidth * scale)), height = Math.max(1, Math.round(sourceHeight * scale));
-    if (scale > 1) fail('The image is below the product print resolution. Import a larger original.', 'KEEPSAKES_RESOLUTION_TOO_LOW');
-    const image = await sharp(normalized).resize(width, height, {fit: 'fill', withoutEnlargement: true}).png().toBuffer();
+    if (scale > 1 && !allowUpscale) fail('The image is below the product print resolution. Import a larger original.', 'KEEPSAKES_RESOLUTION_TOO_LOW');
+    const image = await sharp(normalized).resize(width, height, {fit: 'fill', withoutEnlargement: !allowUpscale}).png().toBuffer();
     canvas = sharp({create: {width: widthPx, height: heightPx, channels: 3, background: '#ffffff'}})
       .composite([{input: image, left: inset + Math.round((safeWidth - width) * customization.positionX), top: inset + Math.round((safeHeight - height) * customization.positionY)}]);
     renderedSize = {widthPx: width, heightPx: height};
