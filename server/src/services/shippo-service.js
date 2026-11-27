@@ -12,7 +12,7 @@ export async function shippoRequest(path,body,request=fetch){
  return data;
 }
 export function shippoCents(amount){if(typeof amount!=='string'||!/^\d{1,6}(\.\d{1,2})?$/.test(amount))throw fail();const [whole,fraction='']=amount.split('.');const cents=Number(whole)*100+Number(fraction.padEnd(2,'0'));if(cents>100000)throw fail();return cents;}
-export const shippoAddress=a=>({name:a.name,street1:a.address1,street2:a.address2||'',city:a.city,state:a.state,zip:a.zip,country:a.country});
+export const shippoAddress=a=>({name:a.name,street1:a.address1,street2:a.address2||'',city:a.city,state:a.state,zip:a.zip,country:a.country,...(a.email?{email:a.email}:{}),...(a.phone?{phone:a.phone}:{})});
 export async function shippoRate(payload,services,request){
  const shipment=await shippoRequest('/shipments/',{...payload,async:false},request);
  if(!shipment.object_id||[shipment.address_from,shipment.address_to].some(a=>a?.validation_results?.is_valid===false))throw fail('Check the shipping address before requesting a rate.','SHIPPO_ADDRESS_INVALID');
