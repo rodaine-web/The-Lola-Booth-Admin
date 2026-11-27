@@ -19,12 +19,12 @@ const audit=(user,action,id,after)=>writeAudit({req:{user},action,entity:'keepsa
 export async function keepsakesDashboard(user){
  assertKeepsakesManager(user);
  const orders=(await query(`SELECT o.id,o.status,o.total_cents,o.paid_at,o.created_at,o.last_error,a.title album_title,
- COALESCE((SELECT jsonb_agg(jsonb_build_object('provider',f.provider,'status',f.status,'provider_order_id',f.provider_order_id,'last_error',f.last_error,'tracking',f.tracking)) FROM keepsakes_fulfillments f WHERE f.order_id=o.id),'[]') fulfillments
+ COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'provider',f.provider,'status',f.status,'provider_order_id',f.provider_order_id,'last_error',f.last_error,'tracking',f.tracking)) FROM keepsakes_fulfillments f WHERE f.order_id=o.id),'[]') fulfillments
  FROM keepsakes_orders o JOIN gallery_albums a ON a.id=o.album_id ORDER BY o.created_at DESC LIMIT 300`)).rows;
  const m=(await query(`SELECT COALESCE(sum(subtotal_cents+shipping_cents) FILTER(WHERE paid_at IS NOT NULL),0)::bigint gross,
  COALESCE(sum(CASE WHEN refunded_cents>=total_cents THEN 0 ELSE subtotal_cents+shipping_cents-refunded_cents END) FILTER(WHERE paid_at IS NOT NULL),0)::bigint net,
  count(*) FILTER(WHERE paid_at IS NOT NULL)::int orders,
- count(*) FILTER(WHERE status='AWAITING_PAYMENT')::int awaiting,
+ count(*) FILTER(WHERE paid_at IS NOT NULL AND refunded_cents=0 AND status IN('PAID','FULFILLING','FULFILLED','REQUIRES_REVIEW'))::int awaiting,
  count(*) FILTER(WHERE status='REQUIRES_REVIEW' OR tax_refund_status='REQUIRES_REVIEW' OR EXISTS(SELECT 1 FROM keepsakes_fulfillments f WHERE f.order_id=keepsakes_orders.id AND f.status='REQUIRES_REVIEW'))::int intervention,
  sum(stripe_fee_cents) fees,count(*) FILTER(WHERE paid_at IS NOT NULL AND stripe_fee_cents IS NULL)::int missing_fees
  FROM keepsakes_orders`)).rows[0];
@@ -115,7 +115,8 @@ export async function keepsakesAdminOrder(id,user){
  const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1',[id])).rows[0];if(!order)throw new AppError('Order unavailable.',404,'NOT_FOUND');
  const contact=decryptSecretJson(order.contact_ciphertext);delete contact.statusToken;delete order.contact_ciphertext;delete order.token_hash;delete order.checkout_url;
  order.snapshot=keepsakesSnapshot(order.snapshot);
- return {order,contact,fulfillments:(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[id])).rows,events:(await query('SELECT * FROM keepsakes_events WHERE order_id=$1 ORDER BY created_at DESC',[id])).rows};
+ const emails=(await query("SELECT id,subject,status,failure_code,created_at FROM communications WHERE trigger_key='KEEPSAKES_TRANSACTIONAL' AND idempotency_key LIKE 'keepsakes:'||$1::text||':%' ORDER BY created_at",[id])).rows;
+ return {order,contact,emails,notificationPolicy:{testOnly:true,emailAllowed:String(process.env.KEEPSAKES_TEST_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(v=>v.trim()).includes(contact.email?.toLowerCase())},fulfillments:(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[id])).rows,events:(await query('SELECT * FROM keepsakes_events WHERE order_id=$1 ORDER BY created_at DESC',[id])).rows};
 }
 export async function retryKeepsakesOrder(id,user){
  assertKeepsakesManager(user);

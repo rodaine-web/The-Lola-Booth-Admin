@@ -4,7 +4,7 @@ const fail=(message='Shipping is temporarily unavailable. Please try again short
 export function shippoReadiness(){return {mode:'TEST',configured:keepsakesStaging()&&/^shippo_test_\S+$/.test(process.env.SHIPPO_TEST_API_KEY||'')};}
 export async function shippoRequest(path,body,request=fetch){
  if(!shippoReadiness().configured)throw fail('Add a Shippo test token to the staging service.','SHIPPO_NOT_CONFIGURED');
- if(!/^\/(?:shipments\/|transactions\/(?:[\w-]+\/)?|refunds\/[\w-]+\/)$/.test(path))throw fail();
+ if(!/^\/(?:shipments\/|transactions\/(?:[\w-]+\/)?|refunds\/[\w-]+\/|tracks\/shippo\/SHIPPO_(?:TRANSIT|DELIVERED|FAILURE)\/)$/.test(path))throw fail();
  let response,data;try{response=await request('https://api.goshippo.com'+path,{method:body?'POST':'GET',headers:{Authorization:`ShippoToken ${process.env.SHIPPO_TEST_API_KEY}`,'Content-Type':'application/json','Shippo-API-Version':'2018-02-08'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000),redirect:'error'});data=await response.json();}catch{throw fail();}
  if(!response.ok)throw fail();
  // Never trust a misconfigured account or response to perform live operations.

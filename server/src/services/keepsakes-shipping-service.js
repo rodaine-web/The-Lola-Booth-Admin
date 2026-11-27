@@ -1,3 +1,4 @@
+import {syncKeepsakesOrder} from './keepsakes-lifecycle-service.js';
 import {z} from 'zod';
 import {query,transaction} from '../db/pool.js';
 import {keepsakesAddress} from '../../../shared/keepsakes.js';
@@ -27,18 +28,16 @@ export async function quoteShippoShipping(items,address,config){
  return {provider:'SHIPPO',mode:'TEST',configVersion:config.version,services:config.services,parcels:quoted};
 }
 const unavailable=()=>new AppError('This paid production shipment is unavailable.',409,'SHIPPO_ORDER_UNAVAILABLE');
-async function orderParcel(orderId,index,{forPurchase=false}={}){const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1',[orderId])).rows[0],parcel=order?.snapshot.shipping?.parcels[index];if(!order?.paid_at||order.refunded_cents||['CANCELLED','REFUND_PENDING','REFUNDED'].includes(order.status)||order.snapshot.shipping?.provider!=='SHIPPO'||!parcel)throw unavailable();const jobs=(await query("SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 AND item_index=ANY($2::int[]) AND provider='IN_HOUSE'",[orderId,parcel.itemIndices])).rows;if(!parcel.itemIndices.every(i=>jobs.some(j=>j.item_index===i&&(forPurchase?['IN_PRODUCTION']:['IN_PRODUCTION','SHIPPED','COMPLETE']).includes(j.status))))throw unavailable();return {order,parcel};}
+async function orderParcel(orderId,index,{forPurchase=false}={}){const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1',[orderId])).rows[0],parcel=order?.snapshot.shipping?.parcels[index];if(!order?.paid_at||order.refunded_cents||['CANCELLED','REFUND_PENDING','REFUNDED'].includes(order.status)||order.snapshot.shipping?.provider!=='SHIPPO'||!parcel)throw unavailable();const jobs=(await query("SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 AND item_index=ANY($2::int[]) AND provider='IN_HOUSE'",[orderId,parcel.itemIndices])).rows;if(!parcel.itemIndices.every(i=>jobs.some(j=>j.item_index===i&&(forPurchase?['IN_PRODUCTION','FULFILLED']:['IN_PRODUCTION','FULFILLED','SHIPPED','COMPLETE']).includes(j.status))))throw unavailable();return {order,parcel};}
 export async function quoteLabel(orderId,index,user){assertKeepsakes();assertKeepsakesManager(user);return withKeepsakesOrderLock(orderId,async()=>{const {order,parcel}=await orderParcel(orderId,index,{forPurchase:true}),existing=(await query('SELECT * FROM keepsakes_shippo_labels WHERE order_id=$1 AND parcel_index=$2',[orderId,index])).rows[0];if(existing&&existing.status!=='QUOTED')throw new AppError('Refresh this label or review its existing reservation. Do not create a duplicate.',409,'SHIPPO_LABEL_RESERVED');const rate=await shippoRate(decryptSecretJson(parcel.shipmentCiphertext),order.snapshot.shipping.services);await query("INSERT INTO keepsakes_shippo_labels(order_id,parcel_index,status,rate) VALUES($1,$2,'QUOTED',$3) ON CONFLICT(order_id,parcel_index) DO UPDATE SET rate=$3,quoted_at=now(),updated_at=now()",[orderId,index,rate]);await writeAudit({req:{user},action:'shippo_label_quoted',entity:'keepsakes',entityId:orderId,after:{parcelIndex:index,rate}});return {rate};});}
 async function recordLabel(row,result){
  await query("UPDATE keepsakes_shippo_labels SET transaction_id=$2,status='PENDING',updated_at=now() WHERE id=$1",[row.id,result.object_id]);
  if(result.status==='SUCCESS'&&(!shippoHttps(result.label_url)||typeof result.tracking_number!=='string'||!result.tracking_number||!shippoHttps(result.tracking_url_provider)))throw new AppError('The label response is incomplete. Refresh its confirmed transaction.',502,'SHIPPO_LABEL_INCOMPLETE');
- const status=result.status==='SUCCESS'?'READY':result.status==='ERROR'?'ERROR':'PENDING',tracking={carrier:row.rate.carrier,trackingNumber:result.tracking_number,trackingUrl:shippoHttps(result.tracking_url_provider),status:result.tracking_status||'PRE_TRANSIT',test:true};
+ const status=result.status==='SUCCESS'?'READY':result.status==='ERROR'?'ERROR':'PENDING',tracking={carrier:row.rate.carrier,trackingNumber:result.tracking_number,trackingUrl:shippoHttps(result.tracking_url_provider),status:row.tracking?.status==='DELIVERED'?'DELIVERED':result.tracking_status||'PRE_TRANSIT',test:true};
  await query('UPDATE keepsakes_shippo_labels SET status=$2,transaction_id=$3,label_url=$4,tracking=$5,updated_at=now() WHERE id=$1',[row.id,status,result.object_id,shippoHttps(result.label_url),tracking]);
- const {parcel}=await orderParcel(row.order_id,row.parcel_index);
- // Keep every parcel's tracking on each covered line, including split quantities.
- for(const index of parcel.itemIndices){const labels=(await query("SELECT tracking,parcel_index FROM keepsakes_shippo_labels WHERE order_id=$1 AND status='READY'",[row.order_id])).rows;const order=(await query('SELECT snapshot FROM keepsakes_orders WHERE id=$1',[row.order_id])).rows[0];const all=labels.filter(l=>order.snapshot.shipping.parcels[l.parcel_index].itemIndices.includes(index)).map(l=>l.tracking);await query("UPDATE keepsakes_fulfillments SET tracking=$3,updated_at=now() WHERE order_id=$1 AND item_index=$2 AND provider='IN_HOUSE'",[row.order_id,index,JSON.stringify(all)]);}
- return {status};
+await reconcileShippoDelivery(row.order_id);return {status};
 }
+
 export async function createLabel(orderId,index,input,user){assertKeepsakes();assertKeepsakesManager(user);const approval=z.object({approved:z.literal(true),rateId:z.string().min(1).max(100),maxCents:z.number().int().min(0).max(100000)}).strict().parse(input);return withKeepsakesOrderLock(orderId,async()=>{
  await orderParcel(orderId,index,{forPurchase:true});const row=(await query('SELECT * FROM keepsakes_shippo_labels WHERE order_id=$1 AND parcel_index=$2',[orderId,index])).rows[0];if(!row||row.status!=='QUOTED'||Date.now()-new Date(row.quoted_at).getTime()>10*60000||row.rate.id!==approval.rateId||row.rate.cents!==approval.maxCents)throw new AppError('Refresh the label rate and review its cost before approval.',409,'SHIPPO_LABEL_REVIEW_REQUIRED');
  // Commit reservation BEFORE the external POST. A timeout never triggers another purchase.
@@ -52,3 +51,46 @@ export async function reconcileLabel(id,input,user){assertKeepsakes();assertKeep
 export async function pollShippoLabels(){if(!shippoReadiness().configured)return;const rows=(await query("SELECT id FROM keepsakes_shippo_labels WHERE status IN('READY','PENDING') AND updated_at<now()-interval '15 minutes' ORDER BY updated_at LIMIT 10")).rows;for(const row of rows){try{const label=(await query('SELECT * FROM keepsakes_shippo_labels WHERE id=$1',[row.id])).rows[0];await withKeepsakesOrderLock(label.order_id,async()=>{const current=(await query('SELECT status FROM keepsakes_shippo_labels WHERE id=$1',[label.id])).rows[0];if(!['READY','PENDING'].includes(current.status))return;await orderParcel(label.order_id,label.parcel_index);const result=await shippoRequest(`/transactions/${label.transaction_id}/`);if(result.object_id!==label.transaction_id)throw unavailable();await recordLabel(label,result);});}catch{await query('UPDATE keepsakes_shippo_labels SET updated_at=now() WHERE id=$1',[row.id]);/* Back off without creating labels or notifications. */}}}
 
 export async function verifyLabelVoid(id,input,user){assertKeepsakes();assertKeepsakesManager(user);const refundId=z.string().regex(/^[\w-]{1,100}$/).parse(input.refundId),row=(await query('SELECT * FROM keepsakes_shippo_labels WHERE id=$1',[id])).rows[0];if(!row?.transaction_id)throw unavailable();return withKeepsakesOrderLock(row.order_id,async()=>{const {order,parcel}=await orderParcel(row.order_id,row.parcel_index),refund=await shippoRequest(`/refunds/${refundId}/`);if(refund.transaction!==row.transaction_id||refund.status!=='SUCCESS')throw new AppError('Shippo has not confirmed a completed void for this label.',409,'SHIPPO_VOID_UNCONFIRMED');await query("UPDATE keepsakes_shippo_labels SET status='VOIDED',label_url=NULL,tracking=NULL,updated_at=now() WHERE id=$1",[row.id]);const labels=(await query("SELECT parcel_index,tracking FROM keepsakes_shippo_labels WHERE order_id=$1 AND status='READY'",[row.order_id])).rows;for(const index of parcel.itemIndices)await query("UPDATE keepsakes_fulfillments SET tracking=$3,updated_at=now() WHERE order_id=$1 AND item_index=$2 AND provider='IN_HOUSE'",[row.order_id,index,JSON.stringify(labels.filter(l=>order.snapshot.shipping.parcels[l.parcel_index].itemIndices.includes(index)).map(l=>l.tracking))]);await writeAudit({req:{user},action:'shippo_label_void_verified',entity:'keepsakes',entityId:row.order_id,after:{labelId:id,refundId}});return {status:'VOIDED'};});}
+
+async function reconcileShippoDelivery(orderId){
+ await transaction(async()=>{
+  const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1 FOR UPDATE',[orderId])).rows[0];
+  if(!order?.paid_at||order.refunded_cents||['CANCELLED','REFUND_PENDING','REFUNDED'].includes(order.status))throw unavailable();
+  const labels=(await query("SELECT parcel_index,tracking FROM keepsakes_shippo_labels WHERE order_id=$1 AND status='READY'",[orderId])).rows;
+  const jobs=(await query("SELECT id,item_index,status FROM keepsakes_fulfillments WHERE order_id=$1 AND provider='IN_HOUSE'",[orderId])).rows;
+  for(const job of jobs){
+   const expected=order.snapshot.shipping.parcels.map((p,index)=>({...p,index})).filter(p=>p.itemIndices.includes(job.item_index));
+   const matching=expected.map(p=>labels.find(l=>l.parcel_index===p.index));
+   const allPresent=expected.length>0&&matching.every(Boolean),tracking=matching.filter(Boolean).map(l=>l.tracking);
+   // A label alone is not dispatch. Require every covered parcel, and never
+   // replace completed delivery with an older carrier response.
+   let next=job.status;
+   if(allPresent&&['FULFILLED','SHIPPED'].includes(job.status)){
+    if(tracking.every(t=>t.status==='DELIVERED'))next='COMPLETE';
+    else if(tracking.every(t=>['TRANSIT','DELIVERED'].includes(t.status)))next='SHIPPED';
+   }
+   await query('UPDATE keepsakes_fulfillments SET status=$2,tracking=$3,updated_at=now() WHERE id=$1',[job.id,next,JSON.stringify(tracking)]);
+  }
+  await syncKeepsakesOrder(orderId);
+ });
+}
+
+export async function simulateLabelTracking(id,input,user){
+ assertKeepsakes();assertKeepsakesManager(user);
+ const status=z.enum(['TRANSIT','DELIVERED','FAILURE']).parse(input.status);
+ const label=(await query("SELECT l.*,o.mode FROM keepsakes_shippo_labels l JOIN keepsakes_orders o ON o.id=l.order_id WHERE l.id=$1",[id])).rows[0];
+ if(label?.status!=='READY'||label.mode!=='TEST'||label.tracking?.test!==true)throw unavailable();
+ return withKeepsakesOrderLock(label.order_id,async()=>{
+  await orderParcel(label.order_id,label.parcel_index);
+  const jobs=(await query("SELECT status FROM keepsakes_fulfillments WHERE order_id=$1 AND item_index=ANY($2::int[]) AND provider='IN_HOUSE'",[label.order_id,(await orderParcel(label.order_id,label.parcel_index)).parcel.itemIndices])).rows;
+  if(!jobs.length||jobs.some(j=>!['FULFILLED','SHIPPED','COMPLETE'].includes(j.status)))throw new AppError('Finish and pack the covered items before testing carrier movement.',409,'SHIPPO_PRODUCTION_REQUIRED');
+  const result=await shippoRequest(`/tracks/shippo/SHIPPO_${status}/`);
+  if(result.carrier!=='shippo'||result.tracking_number!==`SHIPPO_${status}`||result.tracking_status?.status!==status)throw new AppError('Shippo did not confirm the requested test tracking status.',502,'SHIPPO_TEST_TRACKING_INVALID');
+  const current=(await query("SELECT * FROM keepsakes_shippo_labels WHERE id=$1 AND status='READY'",[id])).rows[0];if(!current)throw unavailable();
+  if(current.tracking.status==='DELIVERED'&&status!=='DELIVERED')throw new AppError('Delivered shipments cannot be moved backwards.',409,'SHIPPO_TRACKING_STATE');
+  await query('UPDATE keepsakes_shippo_labels SET tracking=$2,updated_at=now() WHERE id=$1',[id,{...current.tracking,status,simulated:true}]);
+  await query('INSERT INTO keepsakes_events(order_id,action,details) VALUES($1,$2,$3)',[label.order_id,'shippo_test_tracking',{labelId:id,status,message:`Shippo Sandbox tracking simulation: ${status}`}]);
+  await writeAudit({req:{user},action:'shippo_tracking_simulated',entity:'keepsakes',entityId:label.order_id,after:{labelId:id,status,test:true}});
+  await reconcileShippoDelivery(label.order_id);return {status,test:true};
+ });
+}

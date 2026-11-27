@@ -337,5 +337,6 @@ export async function handleKeepsakesStripeEvent(event){
    if(object.amount_refunded!==row.total_cents)await query("UPDATE keepsakes_orders SET last_error='Partial refund requires item and tax allocation review.' WHERE id=$1",[row.id]);
   }
   await query('INSERT INTO keepsakes_events(order_id,action,provider_event_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[row.id,event.type,event.id]);
- });return true;
+ });
+ const {syncKeepsakesOrder}=await import('./keepsakes-lifecycle-service.js');await syncKeepsakesOrder(order.id);return true;
 }
