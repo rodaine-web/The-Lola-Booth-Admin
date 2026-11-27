@@ -153,7 +153,8 @@ export async function sendKeepsakesLob({idempotencyKey, front, back, to, from, q
   if (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{1,256}$/.test(idempotencyKey)) fail('A persisted postcard idempotency key is required.', 'KEEPSAKES_LOB_IDEMPOTENCY');
   const recipient = keepsakesLobAddress(to), sender = keepsakesLobAddress(from);
   if (!Buffer.isBuffer(front) || !front.length || front.length > 18 * 1024 * 1024) fail('Print-resolution front artwork bytes are required.', 'KEEPSAKES_LOB_FRONT_SPEC');
-  const frontPng = await renderPhoto(front), backPng = await (await backCanvas(back)).png({compressionLevel: 9}).toBuffer();
+  // Preserve every print pixel; adaptive PNG filtering greatly reduces photographic uploads.
+  const frontPng = await sharp(await renderPhoto(front)).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer(), backPng = await (await backCanvas(back)).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();
   if (frontPng.length + backPng.length > 4_800_000) fail('The complete print files exceed the safe Lob upload budget.', 'KEEPSAKES_LOB_ARTWORK_SIZE');
   const form = new FormData();
   for (const [prefix, address] of [['to', recipient], ['from', sender]]) for (const [key, value] of Object.entries(address)) if (value) form.append(`${prefix}[${key}]`, value);

@@ -1,3 +1,4 @@
+import {refundedOrderHold,remainingItemUnits} from '../../../shared/keepsakes-refunds.js';
 import {shippingConfig,quoteShippoShipping} from './keepsakes-shipping-service.js';
 import {PRINT_REVIEW_VERSION,PRINT_REVIEW_STATEMENT} from '../../../shared/keepsakes-print-policy.js';
 import {keepsakesCoreProduct,variableInsertProduct} from '../../../shared/keepsakes-core-catalogue.js';
@@ -182,8 +183,10 @@ export async function quoteKeepsakes(type,token,input){
  let tax=0,taxCalculationId=null;const taxCalculations=[];
  const readiness=keepsakesReadiness();
  if(!readiness.checkout)issues.push(readiness.message);
+ const digitalOnly=items.every(i=>['DIGITAL','DIGITAL_EDIT'].includes(i.product.provider));
  const billingAddress=cart.billingAddress||cart.shippingAddress||cart.items.find(i=>i.recipients.length)?.recipients[0];
- if(!billingAddress)issues.push('Enter a billing address for tax calculation.');
+ const taxAtCheckout=digitalOnly&&!billingAddress;
+ if(!billingAddress&&!taxAtCheckout)issues.push('Enter a billing address for tax calculation.');
  if(items.some(i=>!/^txcd_\d{8}$/.test(i.product.taxCode||'')))issues.push('Tax pricing is being updated. Please try again shortly.');
  if(readiness.checkout&&billingAddress&&!issues.length){
   await verifyStripeAccount();
@@ -209,11 +212,11 @@ export async function quoteKeepsakes(type,token,input){
   }
   taxCalculationId=taxCalculations[0]?.id||null;
  }
- const snapshot={items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues,warnings,...(shippingSnapshot?{shipping:shippingSnapshot}:{})},total=subtotal+shipping+tax;
+ const snapshot={taxAtCheckout,items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues,warnings,...(shippingSnapshot?{shipping:shippingSnapshot}:{})},total=subtotal+shipping+tax;
  const row=(await query(`INSERT INTO keepsakes_quotes(album_id,scope_hash,snapshot,contact_ciphertext,subtotal_cents,shipping_cents,tax_cents,total_cents,checkout_ready)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,expires_at`,[scope.albumId,scope.scopeHash,JSON.stringify(snapshot),encryptSecretJson({email:cart.email,shippingAddress:cart.shippingAddress,billingAddress:cart.billingAddress}),subtotal,shipping,tax,total,issues.length===0])).rows[0];
  const {keepsakesProofDescriptors}=await import('./keepsakes-proof-service.js');
- return {quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,warnings,deliveryServices:shippingSnapshot?.parcels.map(p=>({carrier:p.rate.carrier,service:p.rate.service,cents:p.rate.cents,estimatedDays:p.rate.estimatedDays}))||[],...(items.some(i=>i.printReviewPolicy)?{printApprovalVersion:PRINT_REVIEW_VERSION,printApprovalStatement:PRINT_REVIEW_STATEMENT}:{}),proofs:keepsakesProofDescriptors(type,token,row.id,items)};
+ return {taxAtCheckout,quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,warnings,deliveryServices:shippingSnapshot?.parcels.map(p=>({carrier:p.rate.carrier,service:p.rate.service,cents:p.rate.cents,estimatedDays:p.rate.estimatedDays}))||[],...(items.some(i=>i.printReviewPolicy)?{printApprovalVersion:PRINT_REVIEW_VERSION,printApprovalStatement:PRINT_REVIEW_STATEMENT}:{}),proofs:keepsakesProofDescriptors(type,token,row.id,items)};
 }
 export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false,printApprovalVersion}={}){
  const scope=await keepsakesScope(type,token);
@@ -252,6 +255,12 @@ export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false,
  if(order.checkout_url)return {url:order.checkout_url};
  const contact=decryptSecretJson(order.contact_ciphertext),origin=(process.env.GALLERY_PUBLIC_ORIGIN||process.env.CLIENT_ORIGIN||'http://localhost:5173').replace(/\/$/,'');
  const body={mode:'payment',customer_email:contact.email,success_url:`${origin}/keepsakes/orders/${contact.statusToken}`,cancel_url:type==='session'?`${(process.env.SHOP_PUBLIC_ORIGIN||origin).replace(/\/$/,'')}/shop/cart`:`${origin}/keepsakes/${type}/${token}`,'metadata[keepsakes_order_id]':order.id,'payment_intent_data[metadata][keepsakes_order_id]':order.id,'billing_address_collection':'required','line_items[0][price_data][currency]':'usd','line_items[0][price_data][product_data][name]':'The Lola Keepsakes — configured order (including shipping and calculated tax)','line_items[0][price_data][unit_amount]':String(order.total_cents),'line_items[0][quantity]':'1',expires_at:String(Math.floor(Date.now()/1000)+1800)};
+ if(order.snapshot.taxAtCheckout){
+  if(!order.snapshot.items.every(i=>['DIGITAL','DIGITAL_EDIT'].includes(i.product.provider)))throw unavailable();
+  for(const key of Object.keys(body))if(key.startsWith('line_items['))delete body[key];
+  body['automatic_tax[enabled]']='true';body.billing_address_collection='auto';
+  order.snapshot.items.forEach((item,index)=>{body[`line_items[${index}][price_data][currency]`]='usd';body[`line_items[${index}][price_data][product_data][name]`]=item.product.title;body[`line_items[${index}][price_data][product_data][tax_code]`]=item.product.taxCode;body[`line_items[${index}][price_data][tax_behavior]`]='exclusive';body[`line_items[${index}][price_data][unit_amount]`]=String(item.product.retailCents);body[`line_items[${index}][quantity]`]=String(item.units);});
+ }
  const session=await keepsakesStripe('checkout/sessions',body,`keepsakes:${order.id}`);
  if(!session.id||!session.url||session.livemode!==false)throw new AppError('Stripe returned an invalid test checkout.',502,'KEEPSAKES_CHECKOUT_INVALID');
  await query('UPDATE keepsakes_orders SET stripe_session_id=$2,checkout_url=$3,updated_at=now() WHERE id=$1',[order.id,session.id,session.url]);
@@ -268,16 +277,16 @@ export async function keepsakesOrderView(token){
  const fulfillments=(await query('SELECT id,item_index,provider,status,recipient_index,tracking,last_error,submitted_at FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[order.id])).rows;
  const downloads=(await query(`SELECT e.id,m.filename,e.expires_at FROM keepsakes_entitlements e JOIN gallery_media m ON m.id=e.media_id WHERE e.order_id=$1 AND e.revoked_at IS NULL AND e.expires_at>now()`,[order.id])).rows.map(d=>({...d,url:`/api/keepsakes/orders/${token}/downloads/${d.id}`}));
  const edits=(await query('SELECT e.id,e.deliverable,e.expires_at FROM keepsakes_edit_outputs e JOIN keepsakes_fulfillments f ON f.id=e.fulfillment_id WHERE f.order_id=$1 AND e.revoked_at IS NULL AND e.expires_at>now()',[order.id])).rows;
- if(order.paid_at&&!order.refunded_cents)downloads.push(...edits.map(e=>({...e,filename:`Edited ${e.deliverable.toLowerCase()}`,url:`/api/keepsakes/orders/${token}/edited/${e.id}`})));
+ if(order.paid_at&&!refundedOrderHold(order))downloads.push(...edits.map(e=>({...e,filename:`Edited ${e.deliverable.toLowerCase()}`,url:`/api/keepsakes/orders/${token}/edited/${e.id}`})));
  const snapshot=keepsakesSnapshot(order.snapshot);
- return {id:order.id,quoteId:order.quote_id,status:order.status,mode:'TEST',subtotalCents:order.subtotal_cents,shippingCents:order.shipping_cents,taxCents:order.tax_cents,totalCents:order.total_cents,currency:order.currency,createdAt:order.created_at,paidAt:order.paid_at,items:snapshot.items.map((i,index)=>{
+ return {id:order.id,quoteId:order.quote_id,status:order.status,mode:'TEST',subtotalCents:order.subtotal_cents,shippingCents:order.shipping_cents,taxCents:order.tax_cents,totalCents:order.total_cents,refundedCents:order.refunded_cents,currency:order.currency,createdAt:order.created_at,paidAt:order.paid_at,items:snapshot.items.map((i,index)=>{
   const jobs=fulfillments.filter(f=>f.item_index===index),tracking=jobs.flatMap(f=>f.tracking||[]);
-  return {id:`${order.id}:${index}`,recipients:i.product.provider==='LOB'?i.recipients.map((r,n)=>({...r,status:jobs.find(j=>j.recipient_index===n)?.status||'QUEUED'})):[],category:i.product.category,provider:i.product.provider,variant:i.variant,customization:i.customization,amountCents:i.product.retailCents*i.units,previewUrl:order.paid_at&&!order.refunded_cents?`/api/keepsakes/orders/${token}/items/${index}/preview`:null,title:i.product.title,quantity:i.units,photos:i.assets.map(a=>a.label),status:jobs.some(f=>f.status==='REQUIRES_REVIEW')?'REQUIRES_REVIEW':jobs.length&&jobs.every(f=>f.status==='COMPLETE')?'COMPLETE':jobs[0]?.status||order.status,trackingUrl:tracking.find(t=>t.trackingUrl)?.trackingUrl,estimatedDelivery:tracking.find(t=>t.expectedDelivery)?.expectedDelivery,failureReason:jobs.find(f=>f.last_error)?.last_error};
+  return {id:`${order.id}:${index}`,recipients:i.product.provider==='LOB'?i.recipients.map((r,n)=>({...r,status:jobs.find(j=>j.recipient_index===n)?.status||'QUEUED'})):[],category:i.product.category,provider:i.product.provider,variant:i.variant,customization:i.customization,amountCents:i.product.retailCents*i.units,cancelledQuantity:i.cancelledUnits||0,remainingQuantity:remainingItemUnits(i),previewUrl:order.paid_at&&!refundedOrderHold(order)&&remainingItemUnits(i)>0?`/api/keepsakes/orders/${token}/items/${index}/preview`:null,title:i.product.title,quantity:i.units,photos:i.assets.map(a=>a.label),status:jobs.some(f=>f.status==='REQUIRES_REVIEW')?'REQUIRES_REVIEW':jobs.length&&jobs.every(f=>f.status==='COMPLETE')?'COMPLETE':jobs[0]?.status||order.status,trackingUrl:tracking.find(t=>t.trackingUrl)?.trackingUrl,estimatedDelivery:tracking.find(t=>t.expectedDelivery)?.expectedDelivery,failureReason:jobs.find(f=>f.last_error)?.last_error};
  }),fulfillments,downloads};
 }
 export async function keepsakesOrderPreview(token,index){
  const order=await keepsakesOrderForToken(token);
- if(!Number.isInteger(index)||index<0||!order.paid_at||order.refunded_cents)throw unavailable();
+ if(!Number.isInteger(index)||index<0||!order.paid_at||refundedOrderHold(order)||!remainingItemUnits(order.snapshot.items[index]||{}))throw unavailable();
  const source=order.snapshot.items[index]?.assets[0];if(!source)throw unavailable();
  const media=(await query('SELECT * FROM gallery_media WHERE id=$1 AND checksum=$2',[source.mediaId,source.checksum])).rows[0];if(!media)throw unavailable();
  const bytes=await verifiedGalleryBytes(media);const {savedProductPreview}=await import('./keepsakes-product-preview.js');const personalized=await savedProductPreview(order.snapshot.items[index],bytes);if(personalized)return personalized;
@@ -286,7 +295,7 @@ export async function keepsakesOrderPreview(token,index){
 export async function keepsakesDownload(token,id){
  const order=await keepsakesOrderForToken(token);
  const media=(await query(`SELECT m.* FROM keepsakes_entitlements e JOIN gallery_media m ON m.id=e.media_id WHERE e.id=$1 AND e.order_id=$2 AND e.revoked_at IS NULL AND e.expires_at>now() AND m.checksum=e.checksum`,[id,order.id])).rows[0];
- if(!order.paid_at||order.refunded_cents||!media)throw unavailable();
+ if(!order.paid_at||refundedOrderHold(order)||!media)throw unavailable();
  return {bytes:await verifiedGalleryBytes(media),mime:media.mime_type,filename:media.filename};
 }
 // Called exclusively after the existing Stripe signature/account/event ledger checks.
@@ -300,40 +309,50 @@ export async function handleKeepsakesStripeEvent(event){
  await transaction(async()=>{
   await lockKeepsakesOrder(order.id);
   const row=(await query('SELECT * FROM keepsakes_orders WHERE id=$1 FOR UPDATE',[order.id])).rows[0];
-  row.snapshot=keepsakesSnapshot(row.snapshot);
+  const persistedSnapshot=structuredClone(row.snapshot);row.snapshot=keepsakesSnapshot(row.snapshot);
   if(['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)){
    if(object.payment_status!=='paid')return;
+   if(row.snapshot.taxAtCheckout){
+    if(!row.snapshot.items.every(i=>['DIGITAL','DIGITAL_EDIT'].includes(i.product.provider))||object.automatic_tax?.status!=='complete'||!Number.isSafeInteger(object.total_details?.amount_tax)||object.total_details.amount_tax<0||object.amount_subtotal!==row.subtotal_cents||object.amount_total!==row.subtotal_cents+object.total_details.amount_tax)throw new AppError('Digital tax total requires reconciliation.',409,'KEEPSAKES_PAYMENT_MISMATCH');
+    row.tax_cents=object.total_details.amount_tax;row.total_cents=object.amount_total;await query('UPDATE keepsakes_orders SET tax_cents=$2,total_cents=$3 WHERE id=$1',[row.id,row.tax_cents,row.total_cents]);
+   }
    if(row.stripe_session_id!==object.id||row.total_cents!==object.amount_total||object.currency!=='usd'||!object.payment_intent)throw new AppError('Payment does not match the Keepsakes checkout.',409,'KEEPSAKES_PAYMENT_MISMATCH');
    if(!row.paid_at){
     if(['CANCELLED','REFUNDED','REFUND_PENDING'].includes(row.status))throw new AppError('Payment requires reconciliation for this closed order.',409,'KEEPSAKES_PAYMENT_REVIEW');
     // Lock products in a stable order and aggregate repeated product lines.
     const reservations=new Map();for(const i of row.snapshot.items.filter(i=>i.product.provider==='IN_HOUSE'))reservations.set(i.product.id,(reservations.get(i.product.id)||0)+i.units);
     const stock=(await query('SELECT id,active,verified,operational_config FROM keepsakes_products WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...reservations.keys()]])).rows;
-    if([...reservations].some(([id,n])=>!stock.some(p=>p.id===id&&p.active&&p.verified&&p.operational_config.productionReady&&(p.operational_config.stockUnits==null?p.operational_config.stockConfirmed:p.operational_config.stockUnits>=n)))){
-     await query("UPDATE keepsakes_orders SET status='REQUIRES_REVIEW',stripe_payment_intent=$2,paid_at=now(),last_error='Paid order needs stock review.',updated_at=now() WHERE id=$1",[row.id,object.payment_intent]);
-     await query('INSERT INTO keepsakes_events(order_id,action,provider_event_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[row.id,'paid_stock_review',event.id]);return;
-    }
-    for(const [id,n]of reservations)if(stock.find(p=>p.id===id)?.operational_config.stockUnits!=null)await query("UPDATE keepsakes_products SET operational_config=jsonb_set(operational_config,'{stockUnits}',to_jsonb((operational_config->>'stockUnits')::integer-$2)) WHERE id=$1",[id,n]);
-    await query("UPDATE keepsakes_orders SET status='PAID',stripe_payment_intent=$2,paid_at=now(),updated_at=now() WHERE id=$1",[row.id,object.payment_intent]);
+    const blocked=[...reservations].filter(([id,n])=>!stock.some(p=>p.id===id&&p.active&&p.verified&&p.operational_config.productionReady&&(p.operational_config.stockUnits==null?p.operational_config.stockConfirmed:p.operational_config.stockUnits>=n))).map(([id])=>id);
+    for(const [id,n]of reservations)if(!blocked.includes(id)&&stock.find(p=>p.id===id)?.operational_config.stockUnits!=null)await query("UPDATE keepsakes_products SET operational_config=jsonb_set(operational_config,'{stockUnits}',to_jsonb((operational_config->>'stockUnits')::integer-$2)) WHERE id=$1",[id,n]);
+    for(const item of row.snapshot.items)if(item.product.provider==='IN_HOUSE'){item.inventoryReserved=!blocked.includes(item.product.id);item.stockReview=blocked.includes(item.product.id);const saved=persistedSnapshot.items[row.snapshot.items.indexOf(item)];saved.inventoryReserved=item.inventoryReserved;saved.stockReview=item.stockReview;}
+    await query("UPDATE keepsakes_orders SET status=$2,stripe_payment_intent=$3,paid_at=now(),snapshot=$4,last_error=$5,updated_at=now() WHERE id=$1",[row.id,blocked.length?'REQUIRES_REVIEW':'PAID',object.payment_intent,JSON.stringify(persistedSnapshot),blocked.length?'Some in-house items need stock review.':null]);
     for(const [index,item]of row.snapshot.items.entries()){
      const recipients=item.product.provider==='LOB'?item.recipients.length:1,copies=item.product.provider==='LOB'?item.quantity:1;
-     for(let recipient=0;recipient<recipients;recipient++)for(let copy=0;copy<copies;copy++)await query('INSERT INTO keepsakes_fulfillments(order_id,item_index,provider,recipient_index,copy_index) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',[row.id,index,item.product.provider,recipient,copy]);
+     for(let recipient=0;recipient<recipients;recipient++)for(let copy=0;copy<copies;copy++)await query('INSERT INTO keepsakes_fulfillments(order_id,item_index,provider,recipient_index,copy_index,status,last_error) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',[row.id,index,item.product.provider,recipient,copy,item.stockReview?'REQUIRES_REVIEW':'QUEUED',item.stockReview?'KEEPSAKES_STOCK_REVIEW':null]);
     }
    }
   }else if(['checkout.session.expired','checkout.session.async_payment_failed'].includes(event.type)&&object.id===row.stripe_session_id&&!row.paid_at){
    await query("UPDATE keepsakes_orders SET status=$2,updated_at=now() WHERE id=$1",[row.id,event.type.endsWith('expired')?'EXPIRED':'PAYMENT_FAILED']);
+  }else if(object.metadata?.keepsakes_adjustment_id&&['refund.failed','refund.updated','refund.created'].includes(event.type)&&object.payment_intent===row.stripe_payment_intent){
+   const {handleManagedRefundEvent}=await import('./keepsakes-adjustment-service.js');await handleManagedRefundEvent(row,object);
   }else if(['refund.failed','refund.updated'].includes(event.type)&&object.status==='failed'&&object.payment_intent===row.stripe_payment_intent){
-   await query("UPDATE keepsakes_orders SET status='REQUIRES_REVIEW',last_error='Stripe refund failed. Review provider history before retrying.',updated_at=now() WHERE id=$1 AND refunded_cents=0",[row.id]);
+   await query("UPDATE keepsakes_orders SET status='REQUIRES_REVIEW',last_error='Stripe refund failed. Review provider history before retrying.',updated_at=now() WHERE id=$1 AND (refunded_cents=0 OR (item_refunds_managed AND refunded_cents<total_cents))",[row.id]);
   }else if(event.type==='charge.dispute.created'&&object.payment_intent===row.stripe_payment_intent){
    await query("UPDATE keepsakes_orders SET status='REQUIRES_REVIEW',last_error='Payment dispute requires review.',updated_at=now() WHERE id=$1",[row.id]);
    await query("UPDATE keepsakes_fulfillments SET status='REQUIRES_REVIEW',last_error='Payment dispute requires review.' WHERE order_id=$1 AND status IN('QUEUED','RETRY')",[row.id]);
    await query('UPDATE keepsakes_entitlements SET revoked_at=now() WHERE order_id=$1',[row.id]);
   }else if(event.type==='charge.refunded'&&object.payment_intent===row.stripe_payment_intent){
+   if(row.item_refunds_managed&&object.amount_refunded<row.total_cents){
+    const {handleManagedChargeRefund}=await import('./keepsakes-adjustment-service.js');if(await handleManagedChargeRefund(row,object))return;
+   }
+   if(object.amount_refunded===row.total_cents)await query("UPDATE keepsakes_adjustments SET status='SUCCEEDED',updated_at=now() WHERE order_id=$1 AND scope='ORDER' AND status='PENDING'",[row.id]);
    // Refund access changes must not depend on Stripe Tax being available.
-   const taxRefund=row.tax_transaction_id&&object.amount_refunded===row.total_cents&&row.tax_refund_status!=='COMPLETE'?'PENDING':row.tax_refund_status;
-   await query("UPDATE keepsakes_orders SET refunded_cents=$2,status='REFUNDED',tax_refund_status=$3,updated_at=now() WHERE id=$1",[row.id,object.amount_refunded,taxRefund]);
+   let taxRefund=row.tax_transaction_id&&object.amount_refunded===row.total_cents&&row.tax_refund_status!=='COMPLETE'?'PENDING':row.tax_refund_status;
+   if(row.item_refunds_managed&&object.amount_refunded===row.total_cents&&row.tax_transaction_id&&!(await query("SELECT 1 FROM keepsakes_adjustments WHERE order_id=$1 AND scope='ORDER' AND status='SUCCEEDED'",[row.id])).rowCount)taxRefund='REQUIRES_REVIEW';
+   await query("UPDATE keepsakes_orders SET item_refunds_managed=CASE WHEN $2<total_cents THEN false ELSE item_refunds_managed END,refunded_cents=$2,status='REFUNDED',tax_refund_status=$3,updated_at=now() WHERE id=$1",[row.id,object.amount_refunded,taxRefund]);
    await query('UPDATE keepsakes_entitlements SET revoked_at=now() WHERE order_id=$1',[row.id]);
    await query("UPDATE keepsakes_fulfillments SET status=CASE WHEN status IN('QUEUED','RETRY') THEN 'CANCELLED' ELSE 'REQUIRES_REVIEW' END,updated_at=now() WHERE order_id=$1",[row.id]);
+   if(taxRefund==='REQUIRES_REVIEW')await query("UPDATE keepsakes_orders SET last_error='Refund confirmed; prior item tax allocations need accounting review.' WHERE id=$1",[row.id]);
    if(object.amount_refunded!==row.total_cents)await query("UPDATE keepsakes_orders SET last_error='Partial refund requires item and tax allocation review.' WHERE id=$1",[row.id]);
   }
   await query('INSERT INTO keepsakes_events(order_id,action,provider_event_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[row.id,event.type,event.id]);

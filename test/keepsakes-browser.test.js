@@ -175,7 +175,7 @@ test('Keepsakes customizer preserves photo/crop/cart choices and requires an aut
       await page.getByRole('button', { name: 'Add to cart', exact: true }).click();
       await page.getByRole('button', { name: 'Cart (1)', exact: true }).click();
       await page.getByRole('button',{name:'Proceed to checkout',exact:true}).click();
-      await dialog.getByRole('button', { name: 'Calculate shipping & tax', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Review digital order', exact: true }).click();
       await dialog.getByRole('heading', { name: 'Your order total', exact: true }).waitFor();
       assert.equal(await dialog.getByRole('checkbox', {name: 'I reviewed these print layouts and recipient details', exact: true}).count(), 0);
       assert.equal(await dialog.getByRole('button', { name: 'Continue to secure checkout', exact: true }).isDisabled(), false);

@@ -1,3 +1,5 @@
+import {orderHasGlobalHold} from '../../../shared/keepsakes-order-workflow.js';
+import {refundedOrderHold,remainingItemUnits} from '../../../shared/keepsakes-refunds.js';
 import {syncKeepsakesOrder} from './keepsakes-lifecycle-service.js';
 import {variableInsertProduct} from '../../../shared/keepsakes-core-catalogue.js';
 import {previewTemplateFor} from '../../../shared/keepsakes-preview-templates.js';
@@ -27,8 +29,8 @@ export async function keepsakesSupplierArtwork(token){
  if(!payload||payload.length>1000||!/^[-\w]{43}$/.test(signature||'')||extra.length||!crypto.timingSafeEqual(Buffer.from(signature),Buffer.from(sign(payload))))throw fail('Artwork unavailable.','KEEPSAKES_ARTWORK_UNAVAILABLE');
  let data;try{data=JSON.parse(Buffer.from(payload,'base64url').toString());}catch{throw fail('Artwork unavailable.');}
  if(!Number.isInteger(data.expires)||data.expires<Date.now()/1000||!Number.isInteger(data.index)||data.index<0)throw fail('Artwork link expired.');
- const f=(await query(`SELECT f.artwork,o.paid_at,o.refunded_cents,o.status FROM keepsakes_fulfillments f JOIN keepsakes_orders o ON o.id=f.order_id WHERE f.id=$1`,[data.id])).rows[0],art=f?.artwork?.[data.index];
- if(!f?.paid_at||f.refunded_cents||['CANCELLED','REFUNDED','REFUND_PENDING'].includes(f.status)||!art||art.checksum!==data.checksum)throw fail('Artwork unavailable.');
+ const f=(await query(`SELECT f.artwork,o.paid_at,o.refunded_cents,o.item_refunds_managed,o.total_cents,o.status FROM keepsakes_fulfillments f JOIN keepsakes_orders o ON o.id=f.order_id WHERE f.id=$1`,[data.id])).rows[0],art=f?.artwork?.[data.index];
+ if(!f?.paid_at||refundedOrderHold(f)||['CANCELLED','REFUNDED','REFUND_PENDING'].includes(f.status)||!art||art.checksum!==data.checksum)throw fail('Artwork unavailable.');
  return verifiedGalleryBytes({...art,mime_type:'image/png'},async()=>{},{maxBytes:20*1024*1024});
 }
 async function savedArtwork(f,item){
@@ -94,7 +96,7 @@ async function fulfillLob(f,order,item){
   const events=status.tracking_events||[],failed=Boolean(status.failure_code)||['failed','rejected','deleted'].includes(status.status),delivered=events.some(e=>e.name==='Delivered'||e.type==='postcard.delivered');
   await query("UPDATE keepsakes_fulfillments SET status=$3,tracking=$2,lease_until=NULL,next_attempt_at=now()+interval '1 day',last_error=$4,updated_at=now() WHERE id=$1",[f.id,JSON.stringify([{expectedDelivery:status.expected_delivery_date,mailingDate:status.send_date,events}]),failed?'REQUIRES_REVIEW':delivered?'COMPLETE':'SUBMITTED',failed?'Lob reported a postcard failure.':null]);return;
  }
- if(f.attempts>1&&Date.now()-new Date(f.created_at).getTime()>23*3600000)throw fail('Lob idempotency window expired. Reconcile the original request before retry.');
+ if(f.attempts>1&&Date.now()-new Date(f.created_at).getTime()>23*3600000&&!['KEEPSAKES_LOB_ARTWORK_SIZE','KEEPSAKES_LOB_FRONT_SPEC','KEEPSAKES_LOB_BACK_SPEC'].includes(f.last_error))throw fail('Lob idempotency window expired. Reconcile the original request before retry.');
  const art=await savedArtwork(f,item),front=await verifiedGalleryBytes({...art[0],mime_type:'image/png'},async()=>{},{maxBytes:20*1024*1024});
  let source;
  if(item.variant.backTemplate===STANDARD_POSTCARD_TEMPLATE){
@@ -141,7 +143,7 @@ export async function processKeepsakesQueue({limit=5}={}){
  for(let n=0;n<Math.min(limit,10);n++){
   const f=await transaction(async()=>{
    const row=(await query(`SELECT f.* FROM keepsakes_fulfillments f JOIN keepsakes_orders o ON o.id=f.order_id
-   WHERE f.status IN('QUEUED','RETRY','SUBMITTED','SHIPPED') AND (f.provider IN('PRODIGI','LOB') OR f.status IN('QUEUED','RETRY')) AND f.next_attempt_at<=now() AND o.paid_at IS NOT NULL AND o.refunded_cents=0 AND o.status NOT IN('CANCELLED','REFUNDED','REFUND_PENDING')
+   WHERE f.status IN('QUEUED','RETRY','SUBMITTED','SHIPPED') AND (f.provider IN('PRODIGI','LOB') OR f.status IN('QUEUED','RETRY')) AND f.next_attempt_at<=now() AND o.paid_at IS NOT NULL AND (o.refunded_cents=0 OR (o.item_refunds_managed AND o.refunded_cents<o.total_cents)) AND o.status NOT IN('CANCELLED','REFUNDED','REFUND_PENDING')
    ORDER BY f.next_attempt_at FOR UPDATE OF f SKIP LOCKED LIMIT 1`)).rows[0];
    if(!row)return null;
    return (await query("UPDATE keepsakes_fulfillments SET status='PROCESSING',attempts=attempts+1,lease_until=now()+interval '5 minutes',updated_at=now() WHERE id=$1 RETURNING *",[row.id])).rows[0];
@@ -149,7 +151,9 @@ export async function processKeepsakesQueue({limit=5}={}){
   try{await withKeepsakesOrderLock(f.order_id,async()=>{
    const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1',[f.order_id])).rows[0];order.snapshot=keepsakesSnapshot(order.snapshot);
    const item=order.snapshot.items[f.item_index],contact=decryptSecretJson(order.contact_ciphertext);
-   if(!order.paid_at||order.refunded_cents||['CANCELLED','REFUNDED','REFUND_PENDING'].includes(order.status))return;
+   if(!order.paid_at||refundedOrderHold(order)||['CANCELLED','REFUNDED','REFUND_PENDING'].includes(order.status))return;
+   const allOrderJobs=(await query('SELECT status FROM keepsakes_fulfillments WHERE order_id=$1',[order.id])).rows;if(orderHasGlobalHold(order,allOrderJobs)){await query("UPDATE keepsakes_fulfillments SET status='REQUIRES_REVIEW',last_error='Resolve the order payment hold before fulfillment.',lease_until=NULL WHERE id=$1 AND status='PROCESSING'",[f.id]);return;}
+   const currentJob=(await query('SELECT status FROM keepsakes_fulfillments WHERE id=$1',[f.id])).rows[0];if(currentJob?.status!=='PROCESSING'||!remainingItemUnits(item))return;
    await reconcileKeepsakesPayment(order);
    if(f.provider==='DIGITAL')await transaction(()=>fulfillDigital(f,order,item));
    else if(f.provider==='PRODIGI')await fulfillProdigi(f,order,item,contact);
@@ -157,16 +161,17 @@ export async function processKeepsakesQueue({limit=5}={}){
    else if(f.provider==='DIGITAL_EDIT')await query("UPDATE keepsakes_fulfillments SET status='EDITING',lease_until=NULL,updated_at=now() WHERE id=$1",[f.id]);
    else if(f.provider==='IN_HOUSE'){await savedArtwork(f,item);await query("UPDATE keepsakes_fulfillments SET status='AWAITING_PRODUCTION',lease_until=NULL,updated_at=now() WHERE id=$1",[f.id]);}
    else throw fail('Unknown fulfillment provider.');
+   await query("UPDATE keepsakes_fulfillments SET last_error=NULL WHERE id=$1 AND status NOT IN('RETRY','REQUIRES_REVIEW','FAILED')",[f.id]);
    await query('INSERT INTO keepsakes_events(order_id,action,details) VALUES($1,$2,$3)',[order.id,'fulfillment_reconciled',JSON.stringify({fulfillmentId:f.id,provider:f.provider})]);
    results.push({id:f.id,status:'PROCESSED'});
    });
   }catch(error){
-   await query("UPDATE keepsakes_fulfillments f SET status='REQUIRES_REVIEW',lease_until=NULL,last_error=$2,updated_at=now() WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM keepsakes_orders o WHERE o.id=f.order_id AND (o.refunded_cents>0 OR o.status IN('CANCELLED','REFUNDED','REFUND_PENDING')))",[f.id,error.code||'KEEPSAKES_FULFILLMENT_ERROR']);
-   await query("UPDATE keepsakes_orders SET status='REQUIRES_REVIEW',last_error=$2,updated_at=now() WHERE id=$1 AND refunded_cents=0 AND status NOT IN('CANCELLED','REFUNDED','REFUND_PENDING')",[f.order_id,error.code||'KEEPSAKES_FULFILLMENT_ERROR']);
+   await query("UPDATE keepsakes_fulfillments f SET status='REQUIRES_REVIEW',lease_until=NULL,last_error=$2,updated_at=now() WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM keepsakes_orders o WHERE o.id=f.order_id AND ((o.refunded_cents>0 AND (NOT o.item_refunds_managed OR o.refunded_cents>=o.total_cents)) OR o.status IN('CANCELLED','REFUNDED','REFUND_PENDING')))",[f.id,error.code||'KEEPSAKES_FULFILLMENT_ERROR']);
+   await query("UPDATE keepsakes_orders SET status='REQUIRES_REVIEW',last_error=$2,updated_at=now() WHERE id=$1 AND (refunded_cents=0 OR (item_refunds_managed AND refunded_cents<total_cents)) AND status NOT IN('CANCELLED','REFUNDED','REFUND_PENDING')",[f.order_id,error.code||'KEEPSAKES_FULFILLMENT_ERROR']);
    results.push({id:f.id,status:'REQUIRES_REVIEW'});
   }
  }
- const pending=(await query("SELECT id FROM keepsakes_orders WHERE paid_at IS NOT NULL AND refunded_cents=0 AND status IN('PAID','FULFILLING','FULFILLED','REQUIRES_REVIEW','SHIPPED')")).rows;
+ const pending=(await query("SELECT id FROM keepsakes_orders WHERE paid_at IS NOT NULL AND (refunded_cents=0 OR (item_refunds_managed AND refunded_cents<total_cents)) AND status IN('PAID','FULFILLING','FULFILLED','REQUIRES_REVIEW','SHIPPED')")).rows;
  for(const order of pending)await syncKeepsakesOrder(order.id);
  return results;
 }
@@ -174,16 +179,16 @@ export async function queueKeepsakesNotification(orderId,milestone='CONFIRMATION
  const order=(await query("SELECT * FROM keepsakes_orders WHERE id=$1 AND (paid_at IS NOT NULL OR status IN('EXPIRED','PAYMENT_FAILED','CANCELLED'))",[orderId])).rows[0];if(!order)return;
  const terminal=['REFUNDED','EXPIRED','PAYMENT_FAILED','CANCELLED'].includes(milestone)&&order.status===milestone;
  if(!terminal&&(!['CONFIRMATION','SHIPPED','DELIVERED'].includes(milestone)||!(await query('SELECT 1 FROM keepsakes_order_milestones WHERE order_id=$1 AND kind=$2',[orderId,milestone])).rowCount))return;
- if(!terminal&&order.refunded_cents)return;
+ if(!terminal&&refundedOrderHold(order))return;
  const contact=decryptSecretJson(order.contact_ciphertext),allowed=String(process.env.KEEPSAKES_TEST_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(v=>v.trim());
  if(!allowed.includes(contact.email.toLowerCase()))return;
  const url=`${(process.env.GALLERY_PUBLIC_ORIGIN||process.env.CLIENT_ORIGIN).replace(/\/$/,'')}/keepsakes/orders/${contact.statusToken}`;
  const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n/100),reference=order.id.slice(0,8).toUpperCase();
- const items=(order.snapshot.items||[]).map(i=>`${i.product.title} × ${i.units}`).join('\n');
+ const items=(order.snapshot.items||[]).filter(i=>remainingItemUnits(i)>0).filter(i=>milestone==='CONFIRMATION'||!['SHIPPED','DELIVERED'].includes(milestone)||i.product.provider==='IN_HOUSE').map(i=>`${i.product.title} × ${remainingItemUnits(i)}`).join('\n');
  const tracking=(await query('SELECT tracking FROM keepsakes_fulfillments WHERE order_id=$1',[orderId])).rows.flatMap(r=>r.tracking||[]);
  const seen=new Set(),details=tracking.filter(t=>{if(!t.trackingNumber||seen.has(t.trackingNumber))return false;seen.add(t.trackingNumber);return true;}).map(t=>`${t.carrier}: ${t.trackingNumber}${t.trackingUrl?' · '+t.trackingUrl:''}`).join('\n');
  const subject=milestone==='CONFIRMATION'?'Your Lola Keepsakes order confirmation':milestone==='SHIPPED'?'Your Lola Keepsakes order has shipped':milestone==='DELIVERED'?'Your Lola Keepsakes order has been delivered':'Your Lola Keepsakes order update';
- const intro=milestone==='CONFIRMATION'?'Thank you! We received your payment and your keepsakes order.':milestone==='SHIPPED'?'Your physical keepsakes are on their way. Track your shipment below.':milestone==='DELIVERED'?'Delivery has been confirmed for your physical keepsakes. We hope you enjoy your Lola Booth memories.':`Your order status is ${order.status.toLowerCase().replaceAll('_',' ')}.`;
+ const intro=milestone==='CONFIRMATION'?'Thank you! We received your payment and your keepsakes order.':milestone==='SHIPPED'?'Your in-house keepsakes are on their way. Other items in this order are processed separately. Track this shipment below.':milestone==='DELIVERED'?'Delivery has been confirmed for your in-house keepsakes. Other items in this order have their own progress and delivery updates.':`Your order status is ${order.status.toLowerCase().replaceAll('_',' ')}.`;
  const body=`${intro}\n\nOrder ${reference}\n${items}\n\nProducts: ${money(order.subtotal_cents)}\nShipping: ${money(order.shipping_cents)}\nTax: ${money(order.tax_cents)}\nTotal: ${money(order.total_cents)}\n${milestone==='CONFIRMATION'?'':`\n${details}\n`}\nView your order: ${url}\n\nSandbox test order. No live payment or physical shipment.`;
  const htmlBody=`${intro}\n\nOrder ${reference}\n${items}\n\nProducts: ${money(order.subtotal_cents)}\nShipping: ${money(order.shipping_cents)}\nTax: ${money(order.tax_cents)}\nTotal: ${money(order.total_cents)}\n\nUse the links below to view your order or track its progress.\n\nSandbox test order. No live payment or physical shipment.`;
  const communication=(await query(`INSERT INTO communications(type,channel,direction,subject,recipient,rendered_body,rendered_html,message_summary,status,send_mode,idempotency_key,trigger_key)
@@ -197,10 +202,10 @@ export async function processKeepsakesNotifications(){
  if(!(await query("SELECT to_regclass('keepsakes_orders') table_name")).rows[0].table_name)return [];
  // Catch up paid orders that predate milestone support; derive physical states
  // from actual fulfillment jobs, rather than guessing from an order label.
- for(const order of (await query("SELECT id FROM keepsakes_orders WHERE paid_at IS NOT NULL AND refunded_cents=0 AND status NOT IN('CANCELLED','REFUND_PENDING','REFUNDED') AND NOT EXISTS(SELECT 1 FROM keepsakes_order_milestones m WHERE m.order_id=keepsakes_orders.id AND m.kind='CONFIRMATION') ORDER BY created_at LIMIT 100")).rows)await syncKeepsakesOrder(order.id);
+ for(const order of (await query("SELECT id FROM keepsakes_orders WHERE paid_at IS NOT NULL AND (refunded_cents=0 OR (item_refunds_managed AND refunded_cents<total_cents)) AND status NOT IN('CANCELLED','REFUND_PENDING','REFUNDED') AND NOT EXISTS(SELECT 1 FROM keepsakes_order_milestones m WHERE m.order_id=keepsakes_orders.id AND m.kind='CONFIRMATION') ORDER BY created_at LIMIT 100")).rows)await syncKeepsakesOrder(order.id);
  const milestones=(await query(`SELECT m.order_id,m.kind FROM keepsakes_order_milestones m JOIN keepsakes_orders o ON o.id=m.order_id
  LEFT JOIN communications c ON c.idempotency_key='keepsakes:'||m.order_id::text||':'||m.kind
- WHERE o.refunded_cents=0 AND o.status NOT IN('CANCELLED','REFUND_PENDING','REFUNDED')
+ WHERE (o.refunded_cents=0 OR (o.item_refunds_managed AND o.refunded_cents<o.total_cents)) AND o.status NOT IN('CANCELLED','REFUND_PENDING','REFUNDED')
  AND (c.id IS NULL OR (c.status IN('DRAFT','FAILED') AND c.failure_code IS DISTINCT FROM 'DELIVERY_OUTCOME_UNKNOWN'))
  ORDER BY m.created_at,m.order_id,CASE m.kind WHEN 'CONFIRMATION' THEN 0 WHEN 'SHIPPED' THEN 1 ELSE 2 END LIMIT 300`)).rows,results=[];
  const blockedOrders=new Set();
@@ -210,5 +215,24 @@ export async function processKeepsakesNotifications(){
   if(previous&&!(await query("SELECT 1 FROM communications WHERE idempotency_key=$1 AND status IN('SENT_TO_PROVIDER','DELIVERED')",[`keepsakes:${m.order_id}:${previous}`])).rowCount)continue;
   try{const sent=await queueKeepsakesNotification(m.order_id,m.kind);if(sent){results.push({id:m.order_id,milestone:m.kind,status:sent.status});if(!['SENT_TO_PROVIDER','DELIVERED'].includes(sent.status))blockedOrders.add(m.order_id);}if(results.length>=10)break;}
   catch(error){blockedOrders.add(m.order_id);await query("INSERT INTO keepsakes_events(order_id,action,provider_event_id,details) VALUES($1,'notification_requires_review',$2,$3) ON CONFLICT DO NOTHING",[m.order_id,`notification-review:${m.order_id}:${m.kind}`,JSON.stringify({code:error.code||'NOTIFICATION_ERROR'})]);}
- }return results;
+ }await queueKeepsakesItemNotifications();return results;
+}
+
+export async function queueKeepsakesItemNotifications(){
+ const rows=(await query(`SELECT f.id,f.order_id,f.provider,f.status FROM keepsakes_fulfillments f JOIN keepsakes_orders o ON o.id=f.order_id WHERE o.paid_at IS NOT NULL AND (o.refunded_cents=0 OR (o.item_refunds_managed AND o.refunded_cents<o.total_cents)) AND o.status NOT IN('CANCELLED','REFUND_PENDING','REFUNDED') AND ((f.provider IN('DIGITAL','DIGITAL_EDIT') AND f.status='COMPLETE') OR (f.provider NOT IN('DIGITAL','DIGITAL_EDIT','IN_HOUSE') AND f.status IN('SUBMITTED','COMPLETE'))) AND EXISTS(SELECT 1 FROM communications c WHERE c.idempotency_key='keepsakes:'||o.id::text||':CONFIRMATION' AND c.status IN('SENT_TO_PROVIDER','DELIVERED')) AND NOT EXISTS(SELECT 1 FROM keepsakes_item_notices n WHERE n.fulfillment_id=f.id AND n.kind=CASE WHEN f.provider IN('DIGITAL','DIGITAL_EDIT') THEN 'DIGITAL_READY' WHEN f.status='COMPLETE' THEN 'INTEGRATION_DELIVERED' ELSE 'INTEGRATION_SUBMITTED' END) ORDER BY f.updated_at LIMIT 50`)).rows;
+ for(const f of rows){
+ const kinds=['DIGITAL','DIGITAL_EDIT'].includes(f.provider)?['DIGITAL_READY']:f.status==='COMPLETE'?['INTEGRATION_SUBMITTED','INTEGRATION_DELIVERED']:['INTEGRATION_SUBMITTED'];
+ for(const kind of kinds){
+ if((await query('SELECT 1 FROM keepsakes_item_notices WHERE fulfillment_id=$1 AND kind=$2',[f.id,kind])).rowCount)continue;
+ const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1',[f.order_id])).rows[0],item=order.snapshot.items[(await query('SELECT item_index FROM keepsakes_fulfillments WHERE id=$1',[f.id])).rows[0].item_index];
+ const contact=decryptSecretJson(order.contact_ciphertext),allowed=String(process.env.KEEPSAKES_TEST_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(v=>v.trim());if(!allowed.includes(contact.email.toLowerCase()))continue;
+ const url=`${(process.env.GALLERY_PUBLIC_ORIGIN||process.env.CLIENT_ORIGIN).replace(/\/$/,'')}/keepsakes/orders/${contact.statusToken}`;
+ const title=kind==='DIGITAL_READY'?'Your edited Lola Keepsakes images are ready':kind==='INTEGRATION_DELIVERED'?'Your Lola Keepsakes provider item has been delivered':'Your Lola Keepsakes item is being fulfilled';
+ const body=`${kind==='DIGITAL_READY'?'Your images are ready to download as JPEG files.':kind==='INTEGRATION_DELIVERED'?'Delivery is confirmed for this item.':'This item has been accepted by its fulfillment provider.'}\n\n${item.product.title}\nOrder ${order.id.slice(0,8).toUpperCase()}\n\nOther items in your order are processed separately.\n\nSandbox test order.`;
+ const communication=(await query(`INSERT INTO communications(type,channel,direction,subject,recipient,rendered_body,rendered_html,message_summary,status,send_mode,idempotency_key,trigger_key) VALUES('EMAIL','EMAIL','OUTBOUND',$1,$2,$3,$4,$3,'DRAFT','SEND_NOW',$5,'KEEPSAKES_TRANSACTIONAL') ON CONFLICT(idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key RETURNING id,status`,[title,contact.email,body+'\n'+url,brandedEmailHtml(body,{ctaLabel:kind==='DIGITAL_READY'?'Download my images':'View item progress',ctaUrl:url+(kind==='DIGITAL_READY'?'#digital':'#tracking'),hideCopyLinks:true}),`keepsakes:${order.id}:item:${f.id}:${kind}`])).rows[0];
+ if(['DRAFT','FAILED'].includes(communication.status))await sendCommunication(communication.id);
+ const fresh=(await query('SELECT status,failure_code FROM communications WHERE id=$1',[communication.id])).rows[0];if(['DRAFT','FAILED'].includes(fresh.status)&&fresh.failure_code!=='DELIVERY_OUTCOME_UNKNOWN')continue;
+ await query('INSERT INTO keepsakes_item_notices(fulfillment_id,kind) VALUES($1,$2) ON CONFLICT DO NOTHING',[f.id,kind]);
+ }
+ }
 }
