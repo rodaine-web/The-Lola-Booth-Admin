@@ -1,3 +1,4 @@
+import * as postcardProofs from '../services/keepsakes-postcard-proof-service.js';
 import * as adjustments from '../services/keepsakes-adjustment-service.js';
 import * as shipping from '../services/keepsakes-shipping-service.js';
 import * as guestRetrieval from '../services/guest-photo-retrieval-service.js';
@@ -90,12 +91,18 @@ keepsakesAdminRouter.get('/books/suppliers/:provider',wrap(r=>premiumSupplierCat
 keepsakesAdminRouter.get('/shipping',wrap(r=>shipping.shippingAdmin(r.user)));
 keepsakesAdminRouter.get('/shipping/orders',wrap(r=>shipping.shippingOrders(r.user)));
 keepsakesAdminRouter.put('/shipping',requirePermission('write:integrations'),wrap(r=>shipping.saveShipping(r.body,r.user)));
+keepsakesAdminRouter.post('/shipping/orders/:id/package',requirePermission('write:operations'),wrap(r=>shipping.saveOrderPackage(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.post('/shipping/orders/:id/parcels/:index/rate',requirePermission('write:operations'),wrap(r=>shipping.quoteLabel(id.parse(r.params.id),z.coerce.number().int().min(0).max(24).parse(r.params.index),r.user)));
 keepsakesAdminRouter.post('/shipping/orders/:id/parcels/:index/label',requirePermission('write:operations'),wrap(r=>shipping.createLabel(id.parse(r.params.id),z.coerce.number().int().min(0).max(24).parse(r.params.index),r.body,r.user)));
 keepsakesAdminRouter.post('/shipping/labels/:id/simulate-tracking',requirePermission('write:operations'),wrap(r=>shipping.simulateLabelTracking(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.post('/shipping/labels/:id/refresh',requirePermission('write:operations'),wrap(r=>shipping.refreshLabel(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.post('/shipping/labels/:id/reconcile',requirePermission('write:operations'),wrap(r=>shipping.reconcileLabel(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.post('/shipping/labels/:id/verify-void',requirePermission('write:operations'),wrap(r=>shipping.verifyLabelVoid(id.parse(r.params.id),r.body,r.user)));
+keepsakesAdminRouter.get('/postcards/:id',wrap(r=>postcardProofs.postcardProofView(id.parse(r.params.id),r.user)));
+keepsakesAdminRouter.get('/postcards/:id/:side',asyncHandler(async(req,res)=>res.type('image/png').attachment('Lola-postcard-'+req.params.side+'.png').send(await postcardProofs.postcardProofBytes(id.parse(req.params.id),z.enum(['front','back']).parse(req.params.side),req.user))));
+keepsakesAdminRouter.put('/postcards/:id/:side',requirePermission('write:operations'),raw({type:['image/png','image/jpeg'],limit:'18mb'}),wrap(r=>postcardProofs.replacePostcardProof(id.parse(r.params.id),z.enum(['front','back']).parse(r.params.side),r.body,r.user)));
+keepsakesAdminRouter.post('/postcards/:id/approve',requirePermission('write:operations'),wrap(r=>postcardProofs.approvePostcardProof(id.parse(r.params.id),r.body,r.user)));
+keepsakesAdminRouter.post('/postcards/:id/refresh',requirePermission('write:operations'),wrap(r=>postcardProofs.refreshPostcardStatus(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.get('/production',wrap(r=>production.productionJobs(r.user)));
 keepsakesAdminRouter.get('/production/:id/artwork',asyncHandler(async(req,res)=>res.type('image/png').attachment('Lola-print-artwork.png').send(await production.productionArtwork(id.parse(req.params.id),req.user))));
 keepsakesAdminRouter.post('/production/:id/progress',requirePermission('write:operations'),wrap(r=>production.progressProduction(id.parse(r.params.id),r.body,r.user)));

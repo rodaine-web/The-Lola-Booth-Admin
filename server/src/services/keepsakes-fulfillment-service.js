@@ -94,23 +94,20 @@ async function fulfillLob(f,order,item){
  if(f.provider_order_id){
   const status=await reconcileKeepsakesLob(f.provider_order_id);
   const events=status.tracking_events||[],failed=Boolean(status.failure_code)||['failed','rejected','deleted'].includes(status.status),delivered=events.some(e=>e.name==='Delivered'||e.type==='postcard.delivered');
-  await query("UPDATE keepsakes_fulfillments SET status=$3,tracking=$2,lease_until=NULL,next_attempt_at=now()+interval '1 day',last_error=$4,updated_at=now() WHERE id=$1",[f.id,JSON.stringify([{expectedDelivery:status.expected_delivery_date,mailingDate:status.send_date,events}]),failed?'REQUIRES_REVIEW':delivered?'COMPLETE':'SUBMITTED',failed?'Lob reported a postcard failure.':null]);return;
+  await query("UPDATE keepsakes_fulfillments SET status=$3,tracking=$2,lease_until=NULL,next_attempt_at=now()+interval '1 day',last_error=$4,updated_at=now() WHERE id=$1",[f.id,JSON.stringify([{providerStatus:status.status,expectedDelivery:status.expected_delivery_date,mailingDate:status.send_date,events}]),failed?'REQUIRES_REVIEW':delivered?'COMPLETE':'SUBMITTED',failed?'Lob reported a postcard failure.':null]);return;
  }
- if(f.attempts>1&&Date.now()-new Date(f.created_at).getTime()>23*3600000&&!['KEEPSAKES_LOB_ARTWORK_SIZE','KEEPSAKES_LOB_FRONT_SPEC','KEEPSAKES_LOB_BACK_SPEC'].includes(f.last_error))throw fail('Lob idempotency window expired. Reconcile the original request before retry.');
- const art=await savedArtwork(f,item),front=await verifiedGalleryBytes({...art[0],mime_type:'image/png'},async()=>{},{maxBytes:20*1024*1024});
- let source;
- if(item.variant.backTemplate===STANDARD_POSTCARD_TEMPLATE){
-  if(item.backArtworkChecksum!==STANDARD_POSTCARD_SHA256)throw fail('The purchased postcard template changed.');
-  source=await standardPostcardBack();
- }else{
- const back=(await query("SELECT * FROM gallery_postcard_back_artworks WHERE album_id=$1 AND id=$2 AND status='APPROVED'",[order.album_id,item.backArtworkId])).rows[0];
- if(!back||back.sha256!==item.backArtworkChecksum)throw fail('The approved postcard back changed. Review the purchased artwork.');
- const storage=galleryStorage(),chunks=[];for await(const chunk of await storage.get(back.storage_key))chunks.push(chunk);source=Buffer.concat(chunks);
- if(storage.provider!==back.storage_provider||crypto.createHash('sha256').update(source).digest('hex')!==back.sha256)throw fail('Postcard back integrity could not be verified.');
- }
- const recipient=item.recipients[f.recipient_index],backBytes=await renderKeepsakesPostcardBack({bytes:source,backTemplate:item.variant.backTemplate,postcardArtworkColor:item.postcardArtworkColor,message:recipient.message,messageFont:recipient.messageFont,messageColor:recipient.messageColor,messageZone:item.variant.messageZone});
- const result=await sendKeepsakesLob({idempotencyKey:`keepsakes:${f.id}`,front,back:backBytes,to:recipient,from:item.returnAddress});
- await query("UPDATE keepsakes_fulfillments SET provider_order_id=$2,status='SUBMITTED',lease_until=NULL,submitted_at=now(),tracking=$3,next_attempt_at=now()+interval '1 day',updated_at=now() WHERE id=$1",[f.id,result.id,JSON.stringify([{expectedDelivery:result.expected_delivery_date,mailingDate:result.send_date}])]);
+ const {postcardRecord,ensurePostcardProof,postcardProofFingerprint}=await import('./keepsakes-postcard-proof-service.js');
+ await savedArtwork(f,item);const record=await postcardRecord(f.id),proof=await ensurePostcardProof(record),fingerprint=postcardProofFingerprint(proof);
+ if(proof.address_fingerprint!==record.addressFingerprint)throw fail('The mailing addresses changed. Review a new postcard proof.','KEEPSAKES_POSTCARD_PROOF_CHANGED');
+ if(proof.approved_revision!==proof.revision||proof.approved_fingerprint!==fingerprint){await query("UPDATE keepsakes_fulfillments SET status='AWAITING_ARTWORK_APPROVAL',lease_until=NULL,last_error=NULL,updated_at=now() WHERE id=$1",[f.id]);return;}
+ if(proof.dispatch_started_at&&Date.now()-new Date(proof.dispatch_started_at).getTime()>23*3600000)throw fail('Lob idempotency window expired. Reconcile the original request before retry.');
+ const front=await verifiedGalleryBytes(proof.front),back=await verifiedGalleryBytes(proof.back);
+ await query("UPDATE keepsakes_postcard_proofs SET dispatch_started_at=COALESCE(dispatch_started_at,now()),dispatch_state='SENDING' WHERE fulfillment_id=$1",[f.id]);
+ try{const result=await sendKeepsakesLob({idempotencyKey:`keepsakes:${f.id}${proof.revision===1?'':':r'+proof.revision}`,front,back,to:record.item.recipients[f.recipient_index],from:record.item.returnAddress,prepared:true});
+ await query("UPDATE keepsakes_fulfillments SET provider_order_id=$2,status='SUBMITTED',lease_until=NULL,submitted_at=now(),tracking=$3,next_attempt_at=now()+interval '15 minutes',updated_at=now() WHERE id=$1",[f.id,result.id,JSON.stringify([{providerStatus:result.status,expectedDelivery:result.expected_delivery_date,mailingDate:result.send_date}])]);
+ await query("UPDATE keepsakes_postcard_proofs SET dispatch_state='SENT',submitted_at=now(),submitted_fingerprint=$2 WHERE fulfillment_id=$1",[f.id,fingerprint]);
+ }catch(error){await query("UPDATE keepsakes_postcard_proofs SET dispatch_state=$2 WHERE fulfillment_id=$1",[f.id,error.details?.outcomeUnknown?'UNKNOWN':'REJECTED']);throw error;}
+
 }
 async function fulfillDigital(f,order,item){
  for(const asset of item.assets){
@@ -137,13 +134,13 @@ async function reconcileKeepsakesPayment(order){
 }
 export async function processKeepsakesQueue({limit=5}={}){
  if(!keepsakesStaging()||process.env.KEEPSAKES_FULFILLMENT_ENABLED!=='true')return [];
- if(!(await query("SELECT to_regclass('keepsakes_fulfillments') table_name")).rows[0].table_name)return [];
+ if(!(await query("SELECT to_regclass('keepsakes_fulfillments') table_name")).rows[0].table_name||!(await query("SELECT to_regclass('keepsakes_postcard_proofs') table_name")).rows[0].table_name)return [];
  await query("UPDATE keepsakes_fulfillments SET status='REQUIRES_REVIEW',last_error='Worker lease expired; reconcile before retry.',lease_until=NULL WHERE status='PROCESSING' AND lease_until<now()");
  const results=[];
  for(let n=0;n<Math.min(limit,10);n++){
   const f=await transaction(async()=>{
    const row=(await query(`SELECT f.* FROM keepsakes_fulfillments f JOIN keepsakes_orders o ON o.id=f.order_id
-   WHERE f.status IN('QUEUED','RETRY','SUBMITTED','SHIPPED') AND (f.provider IN('PRODIGI','LOB') OR f.status IN('QUEUED','RETRY')) AND f.next_attempt_at<=now() AND o.paid_at IS NOT NULL AND (o.refunded_cents=0 OR (o.item_refunds_managed AND o.refunded_cents<o.total_cents)) AND o.status NOT IN('CANCELLED','REFUNDED','REFUND_PENDING')
+   WHERE f.status IN('QUEUED','AWAITING_ARTWORK_PREPARATION','RETRY','SUBMITTED','SHIPPED') AND (f.provider IN('PRODIGI','LOB') OR f.status IN('QUEUED','RETRY')) AND f.next_attempt_at<=now() AND o.paid_at IS NOT NULL AND (o.refunded_cents=0 OR (o.item_refunds_managed AND o.refunded_cents<o.total_cents)) AND o.status NOT IN('CANCELLED','REFUNDED','REFUND_PENDING')
    ORDER BY f.next_attempt_at FOR UPDATE OF f SKIP LOCKED LIMIT 1`)).rows[0];
    if(!row)return null;
    return (await query("UPDATE keepsakes_fulfillments SET status='PROCESSING',attempts=attempts+1,lease_until=now()+interval '5 minutes',updated_at=now() WHERE id=$1 RETURNING *",[row.id])).rows[0];

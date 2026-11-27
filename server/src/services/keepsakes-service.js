@@ -328,7 +328,7 @@ export async function handleKeepsakesStripeEvent(event){
     await query("UPDATE keepsakes_orders SET status=$2,stripe_payment_intent=$3,paid_at=now(),snapshot=$4,last_error=$5,updated_at=now() WHERE id=$1",[row.id,blocked.length?'REQUIRES_REVIEW':'PAID',object.payment_intent,JSON.stringify(persistedSnapshot),blocked.length?'Some in-house items need stock review.':null]);
     for(const [index,item]of row.snapshot.items.entries()){
      const recipients=item.product.provider==='LOB'?item.recipients.length:1,copies=item.product.provider==='LOB'?item.quantity:1;
-     for(let recipient=0;recipient<recipients;recipient++)for(let copy=0;copy<copies;copy++)await query('INSERT INTO keepsakes_fulfillments(order_id,item_index,provider,recipient_index,copy_index,status,last_error) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',[row.id,index,item.product.provider,recipient,copy,item.stockReview?'REQUIRES_REVIEW':'QUEUED',item.stockReview?'KEEPSAKES_STOCK_REVIEW':null]);
+     for(let recipient=0;recipient<recipients;recipient++)for(let copy=0;copy<copies;copy++)await query('INSERT INTO keepsakes_fulfillments(order_id,item_index,provider,recipient_index,copy_index,status,last_error) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',[row.id,index,item.product.provider,recipient,copy,item.stockReview?'REQUIRES_REVIEW':item.product.provider==='LOB'?'AWAITING_ARTWORK_PREPARATION':'QUEUED',item.stockReview?'KEEPSAKES_STOCK_REVIEW':null]);
     }
    }
   }else if(['checkout.session.expired','checkout.session.async_payment_failed'].includes(event.type)&&object.id===row.stripe_session_id&&!row.paid_at){

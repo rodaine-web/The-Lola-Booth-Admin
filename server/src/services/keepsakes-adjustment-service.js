@@ -13,15 +13,16 @@ async function orderAndJobs(id){const order=(await query('SELECT * FROM keepsake
 async function planItems(order,jobs,input){
  const selected=input.scope==='ORDER'?order.snapshot.items.map((item,index)=>({index,quantity:remainingItemUnits(item)})).filter(i=>i.quantity):input.items;
  if((!selected.length&&!(input.scope==='ORDER'&&order.item_refunds_managed))||new Set(selected.map(i=>i.index)).size!==selected.length)fail('Choose each item once and enter the quantity to remove.');
+ const unsentProofs=new Set((await query("SELECT p.fulfillment_id FROM keepsakes_postcard_proofs p JOIN keepsakes_fulfillments f ON f.id=p.fulfillment_id WHERE f.order_id=$1 AND p.dispatch_state='PREPARED' AND p.dispatch_started_at IS NULL",[order.id])).rows.map(p=>p.fulfillment_id));
  const items=[];
  for(const chosen of selected){const item=order.snapshot.items[chosen.index],current=item&&remainingItemUnits(item);if(!item||chosen.quantity>current)fail('Item quantities changed. Review this order again.');
  const relevant=jobs.filter(j=>j.item_index===chosen.index&&j.status!=='CANCELLED');
  const covered=item.product.provider==='LOB'?relevant.slice(0,chosen.quantity):relevant;
  if(covered.some(j=>j.lease_until&&new Date(j.lease_until)>new Date()))fail('This item is being processed. Wait for its provider response before cancellation.');
- if(covered.some(j=>['LOB','PRODIGI','WHCC','GELATO'].includes(j.provider)&&j.attempts>0&&!j.provider_order_id&&!['KEEPSAKES_LOB_ARTWORK_SIZE','KEEPSAKES_LOB_FRONT_SPEC','KEEPSAKES_LOB_BACK_SPEC'].includes(j.last_error)))fail('The supplier request outcome is unresolved. Reconcile it before cancellation or refund.');
+ if(covered.some(j=>['LOB','PRODIGI','WHCC','GELATO'].includes(j.provider)&&j.attempts>0&&!j.provider_order_id&&!unsentProofs.has(j.id)&&!['KEEPSAKES_LOB_ARTWORK_SIZE','KEEPSAKES_LOB_FRONT_SPEC','KEEPSAKES_LOB_BACK_SPEC'].includes(j.last_error)))fail('The supplier request outcome is unresolved. Reconcile it before cancellation or refund.');
  if(covered.some(j=>j.provider_order_id&&!['DIGITAL','DIGITAL_EDIT','IN_HOUSE'].includes(j.provider)))fail('This item was submitted to its supplier. Review provider cancellation before issuing a refund.');
  if(covered.some(j=>['SHIPPED','COMPLETE'].includes(j.status))&&input.action==='CANCEL')fail('A shipped or completed item cannot be cancelled. Use refund after reviewing its delivery and return.');
- const labels=await query("SELECT 1 FROM keepsakes_shippo_labels WHERE order_id=$1 AND status NOT IN('QUOTED','VOIDED','ERROR') AND parcel_index=ANY($2::int[]) LIMIT 1",[order.id,(order.snapshot.shipping?.parcels||[]).flatMap((p,index)=>p.itemIndices.includes(chosen.index)?[index]:[])]);
+ const labels=await query("SELECT 1 FROM keepsakes_shippo_labels WHERE order_id=$1 AND archived_at IS NULL AND status NOT IN('QUOTED','VOIDED','ERROR') AND parcel_index=ANY($2::int[]) LIMIT 1",[order.id,(order.snapshot.shipping?.parcels||[]).flatMap((p,index)=>p.itemIndices.includes(chosen.index)?[index]:[])]);
  if(labels.rowCount)fail('Review and void or reconcile the shipping label covering this item before cancelling or refunding it.','SHIPPO_CANCEL_REVIEW');
  items.push({...chosen,previousCancelled:item.cancelledUnits||0,unitCents:item.product.retailCents,jobIds:covered.map(j=>j.id)});
  }return items;

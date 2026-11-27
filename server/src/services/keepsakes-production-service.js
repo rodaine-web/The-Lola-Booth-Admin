@@ -24,7 +24,7 @@ export async function progressProduction(id,raw,user){assertKeepsakes();assertKe
  if(input.action==='SHIPPED'){
   if(shippo){
    const parcels=order.snapshot.shipping.parcels.map((p,index)=>({...p,index})).filter(p=>p.itemIndices.includes(row.item_index));
-   const labels=(await query("SELECT parcel_index,tracking FROM keepsakes_shippo_labels WHERE order_id=$1 AND status='READY'",[job.order_id])).rows;
+   const labels=(await query("SELECT parcel_index,tracking FROM keepsakes_shippo_labels WHERE order_id=$1 AND archived_at IS NULL AND status='READY'",[job.order_id])).rows;
    if(!parcels.length||!parcels.every(p=>labels.some(l=>l.parcel_index===p.index&&l.tracking?.trackingNumber)))throw new AppError('Create reviewed Shippo labels for every package covering this item before marking shipped.',409,'KEEPSAKES_TRACKING_REQUIRED');
    const covered=[...new Set(parcels.flatMap(p=>p.itemIndices))].filter(index=>remainingItemUnits(order.snapshot.items[index])>0),jobs=(await query("SELECT item_index,status FROM keepsakes_fulfillments WHERE order_id=$1 AND provider='IN_HOUSE' AND status<>'CANCELLED' AND item_index=ANY($2::int[])",[job.order_id,covered])).rows;
    if(!covered.every(index=>jobs.some(j=>j.item_index===index&&['FULFILLED','SHIPPED','COMPLETE'].includes(j.status))))throw new AppError('Finish and pack every item sharing these packages before marking shipped.',409,'KEEPSAKES_PACKAGE_NOT_READY');
