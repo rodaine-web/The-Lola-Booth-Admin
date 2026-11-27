@@ -18,13 +18,13 @@ export async function saveShipping(input,user){assertKeepsakes();assertKeepsakes
 const normalized=a=>JSON.stringify([a.name,a.address1,a.address2||'',a.city,a.state,a.zip,a.country].map(s=>s.trim().toLowerCase().replace(/\s+/g,' ')));
 export function packShippoParcels(items,defaultAddress,config){
  const groups=new Map();items.forEach((item,index)=>{if(item.product.provider!=='IN_HOUSE')return;const address=item.shippingAddress||defaultAddress,profile=config.profiles.find(p=>p.products.includes(item.product.key));if(!address||!profile)throw new AppError('Shipping packaging is not configured for this product.',409,'SHIPPO_PACKAGING_REQUIRED');const key=normalized(address)+'|'+profile.id;if(!groups.has(key))groups.set(key,{address,profile,units:[]});const group=groups.get(key);for(let n=0;n<item.units;n++)group.units.push(index);});
- const parcels=[];for(const {address,profile,units}of groups.values())for(let n=0;n<units.length;n+=profile.capacity){const included=units.slice(n,n+profile.capacity);parcels.push({itemIndices:[...new Set(included)],payload:{address_from:shippoAddress(config.origin),address_to:shippoAddress(address),parcels:[{length:String(profile.length),width:String(profile.width),height:String(profile.height),distance_unit:'in',weight:String(Number((profile.emptyWeightOz+profile.unitWeightOz*included.length).toFixed(3))),mass_unit:'oz'}]}});}
+ const parcels=[];for(const {address,profile,units}of groups.values())for(let n=0;n<units.length;n+=profile.capacity){const included=units.slice(n,n+profile.capacity);parcels.push({itemIndices:[...new Set(included)],itemQuantities:included.reduce((counts,index)=>({...counts,[index]:(counts[index]||0)+1}),{}),payload:{address_from:shippoAddress(config.origin),address_to:shippoAddress(address),parcels:[{length:String(profile.length),width:String(profile.width),height:String(profile.height),distance_unit:'in',weight:String(Number((profile.emptyWeightOz+profile.unitWeightOz*included.length).toFixed(3))),mass_unit:'oz'}]}});}
  if(parcels.length>25)throw new AppError('Use up to 25 shipping packages per order.',422,'SHIPPO_PACKAGE_LIMIT');return parcels;
 }
 export async function quoteShippoShipping(items,address,config){
  if(!config.origin?.email||!config.origin?.phone)throw new AppError('Delivery configuration is being updated. Please try again shortly.',409,'SHIPPO_SENDER_CONTACT_REQUIRED');
  const parcels=packShippoParcels(items,address,config);const quoted=[];
- for(const parcel of parcels){const rate=await shippoRate(parcel.payload,config.services);quoted.push({itemIndices:parcel.itemIndices,rate,shipmentCiphertext:encryptSecretJson(parcel.payload)});}
+ for(const parcel of parcels){const rate=await shippoRate(parcel.payload,config.services);quoted.push({itemIndices:parcel.itemIndices,itemQuantities:parcel.itemQuantities,rate,shipmentCiphertext:encryptSecretJson(parcel.payload)});}
  return {provider:'SHIPPO',mode:'TEST',configVersion:config.version,services:config.services,parcels:quoted};
 }
 const unavailable=()=>new AppError('This paid production shipment is unavailable.',409,'SHIPPO_ORDER_UNAVAILABLE');

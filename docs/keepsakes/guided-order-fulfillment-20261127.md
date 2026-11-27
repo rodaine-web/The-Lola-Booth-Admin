@@ -1,0 +1,13 @@
+# Guided Keepsakes order fulfillment — staging
+
+Keepsakes & Orders opens on pending paid orders. Each order opens a full-page workspace with four stages: confirm the order, fulfill all items, ship the order, and follow delivery. Product configuration and shipping settings remain separate from normal order processing. Operations staff can progress orders without receiving integration/refund permissions.
+
+Confirmation displays private print previews and requires artwork, delivery, stock and capacity review. Fulfillment requires all items to be printed, assembled and packed. Each action advances every eligible in-house line atomically, with existing production guards and order locking. A failed line rolls back the whole action; retries do not repeat completed transitions.
+
+Shipping is scoped to the order. Compatible items already share the saved checkout parcel: a keychain and magnet in one package require one label. The shipping step shows the package contents and delivery address, obtains a current rate, requires explicit cost approval, creates the label once, and then requires carrier handoff confirmation. Existing labels are reused. Orders that genuinely require multiple packages because of configured capacity, packaging or explicit recipient deliveries display those packages inside the same order. Separate orders are never grouped by address. Paid packing snapshots and shipping charges are not rewritten.
+
+Shippo tracking and explicit staging test-delivery controls remain in the order workspace. Order history and customer email status are available below the current step. New-order, shipment and delivery notifications keep the existing durable, deduplicated milestone flow. Customer HTML emails use named View order and Track order hyperlinks; the latter opens the tracking section of the secure order page. Plain-text MIME retains usable URLs. Other branded templates keep their existing defaults.
+
+Validation: eight focused database/service/desktop/mobile tests passed, including two items progressed together, all-or-nothing approval, shared-package readiness, exactly one label purchase, no out-of-order shipping, approved-inbox milestones and delivery deduplication. Nine email template regressions passed. Production build passed. Responsive screenshots were reviewed at 1440px and 390px with no horizontal overflow. Browser tests use synthetic records; database tests use disposable local QA schemas. No customer order was advanced during verification.
+
+This release is staging-only. No production promotion, live payment, real postage or customer Gallery publication is authorized.

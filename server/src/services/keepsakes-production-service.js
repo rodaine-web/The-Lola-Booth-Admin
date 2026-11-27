@@ -34,3 +34,26 @@ export async function progressProduction(id,raw,user){assertKeepsakes();assertKe
  const status=input.action==='APPROVE_PRODUCTION'?'IN_PRODUCTION':input.action;
  await query('UPDATE keepsakes_fulfillments SET status=$2,tracking=$3,updated_at=now() WHERE id=$1',[id,status,JSON.stringify(tracking)]);
  await writeAudit({req:{user},action:'keepsakes_production_'+input.action.toLowerCase(),entity:'keepsakes_fulfillment',entityId:id,after:input});await query('INSERT INTO keepsakes_events(order_id,action,details) VALUES($1,$2,$3)',[job.order_id,'production_'+input.action.toLowerCase(),{fulfillmentId:id,message:input.action==='FULFILLED'?'Item fulfilled and ready to ship.':input.action==='SHIPPED'?'Admin confirmed carrier handoff.':input.action==='COMPLETE'?'Admin confirmed delivery.':'Artwork, stock and capacity reviewed; production approved.'}]);await syncKeepsakesOrder(job.order_id);return {saved:true,status};});}
+
+// Advance the order, not each product separately. A transaction rolls every
+// line back if any covered item is not ready; existing item guards stay final.
+export async function progressOrderProduction(orderId,raw,user){
+ assertKeepsakes();assertKeepsakesManager(user);
+ const input=z.object({action:z.enum(['CONFIRM','FULFILL','SHIP']),confirmed:z.literal(true),tracking:z.array(z.object({jobId:z.uuid(),carrier:z.string().trim().min(1).max(100),trackingNumber:z.string().trim().min(1).max(150),trackingUrl:z.url().refine(v=>new URL(v).protocol==='https:')})).max(100).default([])}).strict().parse(raw);
+ return transaction(async()=>{
+  await lockKeepsakesOrder(orderId);
+  const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1 FOR UPDATE',[orderId])).rows[0];
+  if(!order?.paid_at||order.refunded_cents||['CANCELLED','REFUNDED','REFUND_PENDING','REQUIRES_REVIEW'].includes(order.status))throw denied();
+  const jobs=(await query("SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 AND provider='IN_HOUSE' ORDER BY item_index FOR UPDATE",[orderId])).rows;
+  if(!jobs.length)throw new AppError('This order has no in-house items ready for this workflow.',409,'KEEPSAKES_WORKFLOW_UNAVAILABLE');
+  const expected={CONFIRM:'AWAITING_PRODUCTION',FULFILL:'IN_PRODUCTION',SHIP:'FULFILLED'};
+  const later={CONFIRM:['IN_PRODUCTION','FULFILLED','SHIPPED','COMPLETE'],FULFILL:['FULFILLED','SHIPPED','COMPLETE'],SHIP:['SHIPPED','COMPLETE']};
+  if(jobs.some(j=>j.status!==expected[input.action]&&!later[input.action].includes(j.status)))throw new AppError('Complete the previous step for all items before continuing. Refresh this order to see its current stage.',409,'KEEPSAKES_WORKFLOW_STATE');
+  if(input.tracking.some(t=>!jobs.some(j=>j.id===t.jobId)))throw denied();
+  for(const job of jobs.filter(j=>j.status===expected[input.action])){
+   const manual=input.tracking.find(t=>t.jobId===job.id);const {jobId,...tracking}=manual||{};
+   await progressProduction(job.id,{action:{CONFIRM:'APPROVE_PRODUCTION',FULFILL:'FULFILLED',SHIP:'SHIPPED'}[input.action],...(input.action==='CONFIRM'?{stockAndCapacityConfirmed:true,proofReviewed:true}:input.action==='SHIP'?tracking:{})},user);
+  }
+  return {saved:true,status:(await query('SELECT status FROM keepsakes_orders WHERE id=$1',[orderId])).rows[0].status};
+ });
+}
