@@ -1,3 +1,4 @@
+import EventPhotoCampaign from '../components/campaigns/EventPhotoCampaign.jsx';
 import CampaignDashboard from '../components/campaigns/CampaignDashboard.jsx';
 import '../styles/campaign-module.css';
 import { useEffect, useState, useRef } from 'react';
@@ -50,6 +51,7 @@ export default function Campaigns() {
       user,
       can
     } = useAuth();
+  const [eventPhotoMode,setEventPhotoMode]=useState(()=>new URLSearchParams(window.location.search).get('mode')==='event-photos');
   const [list, setList] = useState([]),
     [campaign, setCampaign] = useState(null),
     [contacts, setContacts] = useState([]),
@@ -166,10 +168,11 @@ export default function Campaigns() {
   const permitted = permission => can('campaigns.' + permission);
   const editable = campaign && ['DRAFT', 'READY'].includes(campaign.status);
   if (!permitted('read')) return <main className="page"><h1>Campaigns</h1><p>You do not have access to campaigns.</p></main>;
+  if(eventPhotoMode&&!id)return <main className="page campaign-module"><h1>Campaigns</h1><EventPhotoCampaign can={can} onClose={()=>{setEventPhotoMode(false);window.history.replaceState(null,'',window.location.pathname);}}/></main>;
   return <main className="page campaign-module"><div className="page-header"><div><p className="eyebrow">COMMUNICATIONS</p><h1>{editing ? id ? 'Edit campaign' : 'Create campaign' : campaign?.name || 'Campaigns'}</h1><p className="campaign-lede">{editing?"Build, personalize, preview and send with ease.":"Thoughtful outreach. Real connections."}</p></div><div className="campaign-toolbar">{id && <Link to="/communications/campaigns" onClick={() => {
           setEditing(false);
           setPreview(null);
-        }}>All campaigns</Link>}{!id && !editing && permitted('create') && <><button className="primary-action" onClick={()=>startCampaign()}>+ Create Campaign</button><button onClick={()=>startCampaign('HTML','',false,true)}>↑ Import Contacts</button>{can('read:sales')&&<Link className="campaign-header-link" to="/sales/communications?section=Templates">New Template</Link>}</>}{editable && !editing && permitted('edit') && <button onClick={() => {
+        }}>All campaigns</Link>}{!id&&!editing&&can('read:events')&&<button onClick={()=>{setEventPhotoMode(true);window.history.replaceState(null,'',window.location.pathname+'?mode=event-photos');}}>Event photo delivery</button>}{!id && !editing && permitted('create') && <><button className="primary-action" onClick={()=>startCampaign()}>+ Create Campaign</button><button onClick={()=>startCampaign('HTML','',false,true)}>↑ Import Contacts</button>{can('read:sales')&&<Link className="campaign-header-link" to="/sales/communications?section=Templates">New Template</Link>}</>}{editable && !editing && permitted('edit') && <button onClick={() => {
           setEditing(true);
           setStep(0);
         }}>Edit campaign</button>}{campaign && !editing && permitted('create') && <button onClick={() => run(async () => {
