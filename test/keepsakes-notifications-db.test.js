@@ -96,9 +96,9 @@ test('Keepsakes notifications drain batches, deduplicate milestones and respect 
     assert.equal((await one("SELECT count(*)::int n FROM keepsakes_order_milestones WHERE order_id=$1 AND kind='DELIVERED'",[physical.id])).n,0,'One delivered line cannot complete another shipment');
     await query("UPDATE keepsakes_fulfillments SET status='COMPLETE' WHERE order_id=$1",[physical.id]);await syncKeepsakesOrder(physical.id);
     await processKeepsakesNotifications();await syncKeepsakesOrder(physical.id);await processKeepsakesNotifications();
-    const physicalEmails=(await query("SELECT subject,rendered_body,status FROM communications WHERE idempotency_key LIKE $1 ORDER BY created_at",[`keepsakes:${physical.id}:%`])).rows;
+    const physicalEmails=(await query("SELECT subject,rendered_body,rendered_html,status FROM communications WHERE idempotency_key LIKE $1 ORDER BY created_at",[`keepsakes:${physical.id}:%`])).rows;
     assert.deepEqual(physicalEmails.map(e=>e.subject),['Your Lola Keepsakes order confirmation','Your Lola Keepsakes order has shipped','Your Lola Keepsakes order has been delivered']);
-    assert.ok(physicalEmails.every(e=>e.status==='SENT_TO_PROVIDER'));assert.ok(physicalEmails[1].rendered_body.includes('SYNTHETIC'));
+    assert.ok(physicalEmails.every(e=>e.status==='SENT_TO_PROVIDER'));for(const email of physicalEmails){assert.match(email.rendered_html,/>View order &rarr;<\/a>/);assert.match(email.rendered_html,/>Track order<\/a>/);assert.ok(!email.rendered_html.includes('Or copy and paste'));assert.match(email.rendered_html,/href="https:\/\/staginggallery[.]thelolabooth[.]com\/keepsakes\/orders\/[^"]+#tracking"/);}assert.ok(physicalEmails[1].rendered_body.includes('SYNTHETIC'));
     assert.equal((await one("SELECT count(*)::int n FROM keepsakes_events WHERE order_id=$1 AND action='order_delivered'",[physical.id])).n,1);
     const marketingAfter = await one(`SELECT (SELECT count(*)::int FROM campaign_recipients) AS campaign_recipients,
       (SELECT count(*)::int FROM crm_contacts WHERE marketing_consent='OPTED_IN') AS opted_in_contacts,

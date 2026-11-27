@@ -104,6 +104,7 @@ keepsakesAdminRouter.post('/editing/:id/:deliverable',requirePermission('write:o
 keepsakesAdminRouter.get('/books',wrap(r=>books.bookAdmin(r.user)));
 keepsakesAdminRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue({admin:true})));
 keepsakesAdminRouter.get('/',wrap(r=>admin.keepsakesDashboard(r.user)));
+keepsakesAdminRouter.post('/orders/:id/progress',requirePermission('write:operations'),wrap(r=>production.progressOrderProduction(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.get('/orders/:id',wrap(r=>admin.keepsakesAdminOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.get('/integrations/prodigi',wrap(()=>keepsakesProdigiIntegration()));
 keepsakesAdminRouter.use(requirePermission('write:integrations'));

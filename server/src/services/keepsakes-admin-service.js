@@ -18,7 +18,7 @@ export function assertKeepsakesManager(user){assertKeepsakes();if(!user?.roles?.
 const audit=(user,action,id,after)=>writeAudit({req:{user},action,entity:'keepsakes',entityId:id,after});
 export async function keepsakesDashboard(user){
  assertKeepsakesManager(user);
- const orders=(await query(`SELECT o.id,o.status,o.total_cents,o.paid_at,o.created_at,o.last_error,a.title album_title,
+ const orders=(await query(`SELECT o.id,o.status,o.total_cents,o.paid_at,o.created_at,o.fulfilled_at,o.shipped_at,o.delivered_at,o.last_error,a.title album_title,(SELECT jsonb_agg(jsonb_build_object('title',i->'product'->>'title','quantity',i->'units')) FROM jsonb_array_elements(o.snapshot->'items') i) line_items,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'provider',f.provider,'status',f.status,'provider_order_id',f.provider_order_id,'last_error',f.last_error,'tracking',f.tracking)) FROM keepsakes_fulfillments f WHERE f.order_id=o.id),'[]') fulfillments
  FROM keepsakes_orders o JOIN gallery_albums a ON a.id=o.album_id ORDER BY o.created_at DESC LIMIT 300`)).rows;
  const m=(await query(`SELECT COALESCE(sum(subtotal_cents+shipping_cents) FILTER(WHERE paid_at IS NOT NULL),0)::bigint gross,
@@ -116,7 +116,9 @@ export async function keepsakesAdminOrder(id,user){
  const contact=decryptSecretJson(order.contact_ciphertext);delete contact.statusToken;delete order.contact_ciphertext;delete order.token_hash;delete order.checkout_url;
  order.snapshot=keepsakesSnapshot(order.snapshot);
  const emails=(await query("SELECT id,subject,status,failure_code,created_at FROM communications WHERE trigger_key='KEEPSAKES_TRANSACTIONAL' AND idempotency_key LIKE 'keepsakes:'||$1::text||':%' ORDER BY created_at",[id])).rows;
- return {order,contact,emails,notificationPolicy:{testOnly:true,emailAllowed:String(process.env.KEEPSAKES_TEST_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(v=>v.trim()).includes(contact.email?.toLowerCase())},fulfillments:(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[id])).rows,events:(await query('SELECT * FROM keepsakes_events WHERE order_id=$1 ORDER BY created_at DESC',[id])).rows};
+ const labels=(await query('SELECT id,parcel_index,status,rate,quoted_at,label_url,tracking FROM keepsakes_shippo_labels WHERE order_id=$1 ORDER BY parcel_index',[id])).rows;
+ const packages=(order.snapshot.shipping?.parcels||[]).map((p,index)=>({index,itemIndices:p.itemIndices,itemQuantities:p.itemQuantities,checkoutRate:p.rate,address:order.snapshot.items[p.itemIndices[0]]?.shippingAddress||contact.shippingAddress,label:labels.find(l=>l.parcel_index===index)||null}));
+ return {order,contact,emails,packages,notificationPolicy:{testOnly:true,emailAllowed:String(process.env.KEEPSAKES_TEST_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(v=>v.trim()).includes(contact.email?.toLowerCase())},fulfillments:(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[id])).rows,events:(await query('SELECT * FROM keepsakes_events WHERE order_id=$1 ORDER BY created_at DESC',[id])).rows};
 }
 export async function retryKeepsakesOrder(id,user){
  assertKeepsakesManager(user);
