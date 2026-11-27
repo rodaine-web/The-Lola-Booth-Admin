@@ -97,6 +97,7 @@ export default function App() {
       <Route path="/shop" element={<KeepsakesShop/>}/>
       <Route path="/shop/bulk" element={<KeepsakesShop/>}/>
         <Route path="/shop/cart" element={<KeepsakesShop/>}/>
+        <Route path="/shop/review" element={<KeepsakesShop/>}/>
         <Route path="/shop/collection" element={<KeepsakesShop/>}/>
       <Route path="/shop/find-photos" element={<KeepsakesShop/>}/>
       <Route path="/shop/check-email" element={<KeepsakesShop/>}/>
@@ -138,6 +139,7 @@ export default function App() {
         <Route path="/shop" element={<KeepsakesShop/>}/>
         <Route path="/shop/bulk" element={<KeepsakesShop/>}/>
         <Route path="/shop/cart" element={<KeepsakesShop/>}/>
+        <Route path="/shop/review" element={<KeepsakesShop/>}/>
         <Route path="/shop/collection" element={<KeepsakesShop/>}/>
         <Route path="/shop/find-photos" element={<KeepsakesShop/>}/>
         <Route path="/shop/check-email" element={<KeepsakesShop/>}/>

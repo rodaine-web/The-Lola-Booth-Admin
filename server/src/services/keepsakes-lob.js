@@ -133,7 +133,7 @@ async function lobRequest(path, options, request, config, expectedId) {
     fail('Lob sandbox outcome is unconfirmed. Reconcile provider history before retrying.', 'KEEPSAKES_LOB_OUTCOME_UNKNOWN', 502, {outcomeUnknown: true, retryable: false});
   }
   if (!response.ok) {
-    const uncertain = response.status >= 500;
+    const uncertain = response.status >= 500 || response.status === 409;
     fail(uncertain ? 'Lob sandbox outcome is unconfirmed. Reconcile provider history before retrying.' : 'Lob rejected the sandbox request. Review artwork, address and account settings.',
       uncertain ? 'KEEPSAKES_LOB_OUTCOME_UNKNOWN' : 'KEEPSAKES_LOB_REJECTED', 502, {providerStatus: response.status, outcomeUnknown: uncertain, retryable: false});
   }
@@ -147,15 +147,14 @@ async function lobRequest(path, options, request, config, expectedId) {
  * Lob keys expire after 24 hours: ambiguous older attempts require operator
  * reconciliation, never a fresh key or an automatic replay.
  */
-export async function sendKeepsakesLob({idempotencyKey, front, back, to, from, quantity = 1} = {}, request = fetch, config = process.env) {
+export async function sendKeepsakesLob({idempotencyKey, front, back, to, from, quantity = 1,prepared=false} = {}, request = fetch, config = process.env) {
   assertSandbox(config);
   if (quantity !== 1) fail('Persist a separate recipient/copy reservation for each postcard.', 'KEEPSAKES_LOB_QUANTITY');
   if (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{1,256}$/.test(idempotencyKey)) fail('A persisted postcard idempotency key is required.', 'KEEPSAKES_LOB_IDEMPOTENCY');
   const recipient = keepsakesLobAddress(to), sender = keepsakesLobAddress(from);
   if (!Buffer.isBuffer(front) || !front.length || front.length > 18 * 1024 * 1024) fail('Print-resolution front artwork bytes are required.', 'KEEPSAKES_LOB_FRONT_SPEC');
   // Preserve every print pixel; adaptive PNG filtering greatly reduces photographic uploads.
-  const frontPng = await sharp(await renderPhoto(front)).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer(), backPng = await (await backCanvas(back)).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();
-  if (frontPng.length + backPng.length > 4_800_000) fail('The complete print files exceed the safe Lob upload budget.', 'KEEPSAKES_LOB_ARTWORK_SIZE');
+  const {front:frontPng,back:backPng}=prepared?await validatePreparedKeepsakesLob(front,back):await prepareKeepsakesLobFiles(front,back);
   const form = new FormData();
   for (const [prefix, address] of [['to', recipient], ['from', sender]]) for (const [key, value] of Object.entries(address)) if (value) form.append(`${prefix}[${key}]`, value);
   form.append('size', '4x6'); form.append('mail_type', 'usps_first_class'); form.append('use_type', 'operational');
@@ -170,4 +169,17 @@ export async function reconcileKeepsakesLob(id, request = fetch, config = proces
   assertSandbox(config);
   if (!/^psc_[a-zA-Z0-9]+$/.test(id || '')) fail('A persisted Lob postcard reference is required.', 'KEEPSAKES_LOB_REFERENCE');
   return lobRequest(`postcards/${encodeURIComponent(id)}`, {method: 'GET'}, request, config, id);
+}
+
+export async function validatePreparedKeepsakesLob(front,back){
+ if(!Buffer.isBuffer(front)||!Buffer.isBuffer(back)||front.length+back.length>4_800_000)fail('The complete print files exceed the safe Lob upload budget.','KEEPSAKES_LOB_ARTWORK_SIZE');
+ for(const bytes of [front,back]){const m=await sharp(bytes,{limitInputPixels:10000000}).metadata();if(m.format!=='png'||m.width!==WIDTH||m.height!==HEIGHT||(m.pages||1)!==1||!m.density||m.density<299)fail('Prepared postcard artwork must be 1875 × 1275 pixels at 300 DPI.','KEEPSAKES_LOB_PREPARED_SPEC');}
+ return {front,back};
+}
+export async function prepareKeepsakesLobFiles(front,back){
+ const image=await renderPhoto(front),canvas=await backCanvas(back);
+ const normalize=async input=>sharp(input,{limitInputPixels:10000000}).flatten({background:'#fff'}).removeAlpha().toColourspace('srgb').png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();
+ const frontPng=await sharp(await normalize(image)).withMetadata({density:300}).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();
+ const backPng=await sharp(await normalize(await canvas.toBuffer())).withMetadata({density:300}).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();
+ return validatePreparedKeepsakesLob(frontPng,backPng);
 }
