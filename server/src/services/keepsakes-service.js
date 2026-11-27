@@ -1,3 +1,5 @@
+import {resolveKeepsakesDiscount} from './keepsakes-discount-service.js';
+import {allocateKeepsakesDiscount,itemNetCents,itemRangeCents} from '../../../shared/keepsakes-discounts.js';
 import {refundedOrderHold,remainingItemUnits} from '../../../shared/keepsakes-refunds.js';
 import {shippingConfig,quoteShippoShipping} from './keepsakes-shipping-service.js';
 import {PRINT_REVIEW_VERSION,PRINT_REVIEW_STATEMENT} from '../../../shared/keepsakes-print-policy.js';
@@ -180,6 +182,7 @@ export async function quoteKeepsakes(type,token,input){
  if(shippingSettings.enabled&&items.some(i=>i.product.provider==='IN_HOUSE')){
   try{shippingSnapshot=await quoteShippoShipping(items,cart.shippingAddress,shippingSettings);for(const parcel of shippingSnapshot.parcels){shipping+=parcel.rate.cents;const item=items[parcel.itemIndices[0]];item.shippingCents=(item.shippingCents||0)+parcel.rate.cents;}}catch(error){if(!String(error.code||'').startsWith('SHIPPO_'))throw error;issues.push(error.message);}
  }
+ const discount=await resolveKeepsakesDiscount(cart.discountCode,subtotal);if(discount)allocateKeepsakesDiscount(items,discount.cents);
  let tax=0,taxCalculationId=null;const taxCalculations=[];
  const readiness=keepsakesReadiness();
  if(!readiness.checkout)issues.push(readiness.message);
@@ -199,8 +202,8 @@ export async function quoteKeepsakes(type,token,input){
    const group=groups.get(key);group.lines.push({amount,reference,taxCode:item.product.taxCode});group.subtotal+=amount;group.shipping+=shippingCents;
   };
   items.forEach((item,index)=>{
-   if(item.product.provider==='LOB')item.recipients.forEach((recipient,n)=>add(recipient,item,item.product.retailCents*item.quantity,0,`${index}:${n}`,'shipping'));
-   else add(item.shippingAddress||cart.shippingAddress||billingAddress,item,item.product.retailCents*item.units,item.product.provider==='PRODIGI'?prodigiMoneyCents(item.supplierQuote.shipping):(item.shippingCents||0),String(index),['DIGITAL','DIGITAL_EDIT'].includes(item.product.provider)?'billing':'shipping');
+   if(item.product.provider==='LOB')item.recipients.forEach((recipient,n)=>add(recipient,item,itemRangeCents(item,n*item.quantity,item.quantity),0,`${index}:${n}`,'shipping'));
+   else add(item.shippingAddress||cart.shippingAddress||billingAddress,item,itemNetCents(item),item.product.provider==='PRODIGI'?prodigiMoneyCents(item.supplierQuote.shipping):(item.shippingCents||0),String(index),['DIGITAL','DIGITAL_EDIT'].includes(item.product.provider)?'billing':'shipping');
   });
   if(groups.size>25)throw new AppError('Use up to 25 tax destinations per purchase.',422,'KEEPSAKES_DESTINATION_LIMIT');
   for(const group of groups.values()){
@@ -212,11 +215,11 @@ export async function quoteKeepsakes(type,token,input){
   }
   taxCalculationId=taxCalculations[0]?.id||null;
  }
- const snapshot={taxAtCheckout,items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues,warnings,...(shippingSnapshot?{shipping:shippingSnapshot}:{})},total=subtotal+shipping+tax;
+ const snapshot={taxAtCheckout,...(discount?{discount}:{}),items:items.map(item=>{const {recipients,returnAddress,shippingAddress,...rest}=item;return {...rest,recipientsCiphertext:encryptSecretJson({recipients,returnAddress,shippingAddress})};}),taxCalculationId,taxCalculations,issues,warnings,...(shippingSnapshot?{shipping:shippingSnapshot}:{})},total=subtotal-(discount?.cents||0)+shipping+tax;
  const row=(await query(`INSERT INTO keepsakes_quotes(album_id,scope_hash,snapshot,contact_ciphertext,subtotal_cents,shipping_cents,tax_cents,total_cents,checkout_ready)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,expires_at`,[scope.albumId,scope.scopeHash,JSON.stringify(snapshot),encryptSecretJson({email:cart.email,shippingAddress:cart.shippingAddress,billingAddress:cart.billingAddress}),subtotal,shipping,tax,total,issues.length===0])).rows[0];
  const {keepsakesProofDescriptors}=await import('./keepsakes-proof-service.js');
- return {taxAtCheckout,quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,warnings,deliveryServices:shippingSnapshot?.parcels.map(p=>({carrier:p.rate.carrier,service:p.rate.service,cents:p.rate.cents,estimatedDays:p.rate.estimatedDays}))||[],...(items.some(i=>i.printReviewPolicy)?{printApprovalVersion:PRINT_REVIEW_VERSION,printApprovalStatement:PRINT_REVIEW_STATEMENT}:{}),proofs:keepsakesProofDescriptors(type,token,row.id,items)};
+ return {discountCode:discount?.code||null,discountCents:discount?.cents||0,items:items.map(i=>({title:i.product.title,variant:i.variant.label,quantity:i.units,grossCents:i.product.retailCents*i.units,netCents:itemNetCents(i)})),taxAtCheckout,quoteId:row.id,subtotalCents:subtotal,shippingCents:shipping,taxCents:tax,totalCents:total,currency:'USD',expiresAt:row.expires_at,checkoutReady:!issues.length,issues,warnings,deliveryServices:shippingSnapshot?.parcels.map(p=>({carrier:p.rate.carrier,service:p.rate.service,cents:p.rate.cents,estimatedDays:p.rate.estimatedDays}))||[],...(items.some(i=>i.printReviewPolicy)?{printApprovalVersion:PRINT_REVIEW_VERSION,printApprovalStatement:PRINT_REVIEW_STATEMENT}:{}),proofs:keepsakesProofDescriptors(type,token,row.id,items)};
 }
 export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false,printApprovalVersion}={}){
  const scope=await keepsakesScope(type,token);
@@ -244,6 +247,7 @@ export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false,
    const stock=(await query('SELECT id,operational_config FROM keepsakes_products WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[[...totals.keys()]])).rows;
    if([...totals].some(([id,n])=>stock.some(p=>p.id===id&&p.operational_config.stockUnits!=null&&p.operational_config.stockUnits<n)))throw new AppError('Available stock changed. Reduce the combined product quantity and refresh your cart.',409,'KEEPSAKES_PRODUCTION_NOT_READY');
   }
+  if(quote.snapshot.discount){const current=await resolveKeepsakesDiscount(quote.snapshot.discount.code,quote.subtotal_cents,{lock:true});if(Object.keys(current).some(key=>current[key]!==quote.snapshot.discount[key]))throw new AppError('This discount changed. Review an updated total before payment.',409,'KEEPSAKES_QUOTE_CHANGED');}
   let existing=(await query('SELECT * FROM keepsakes_orders WHERE quote_id=$1',[quote.id])).rows[0];
   if(existing)return existing;
   const statusToken=crypto.randomBytes(32).toString('base64url'),contact=decryptSecretJson(quote.contact_ciphertext);
@@ -259,7 +263,7 @@ export async function checkoutKeepsakes(type,token,quoteId,{proofReviewed=false,
   if(!order.snapshot.items.every(i=>['DIGITAL','DIGITAL_EDIT'].includes(i.product.provider)))throw unavailable();
   for(const key of Object.keys(body))if(key.startsWith('line_items['))delete body[key];
   body['automatic_tax[enabled]']='true';body.billing_address_collection='auto';
-  order.snapshot.items.forEach((item,index)=>{body[`line_items[${index}][price_data][currency]`]='usd';body[`line_items[${index}][price_data][product_data][name]`]=item.product.title;body[`line_items[${index}][price_data][product_data][tax_code]`]=item.product.taxCode;body[`line_items[${index}][price_data][tax_behavior]`]='exclusive';body[`line_items[${index}][price_data][unit_amount]`]=String(item.product.retailCents);body[`line_items[${index}][quantity]`]=String(item.units);});
+  order.snapshot.items.forEach((item,index)=>{body[`line_items[${index}][price_data][currency]`]='usd';body[`line_items[${index}][price_data][product_data][name]`]=item.product.title;body[`line_items[${index}][price_data][product_data][tax_code]`]=item.product.taxCode;body[`line_items[${index}][price_data][tax_behavior]`]='exclusive';body[`line_items[${index}][price_data][unit_amount]`]=String(itemNetCents(item));body[`line_items[${index}][quantity]`]='1';});
  }
  const session=await keepsakesStripe('checkout/sessions',body,`keepsakes:${order.id}`);
  if(!session.id||!session.url||session.livemode!==false)throw new AppError('Stripe returned an invalid test checkout.',502,'KEEPSAKES_CHECKOUT_INVALID');
@@ -279,9 +283,9 @@ export async function keepsakesOrderView(token){
  const edits=(await query('SELECT e.id,e.deliverable,e.expires_at FROM keepsakes_edit_outputs e JOIN keepsakes_fulfillments f ON f.id=e.fulfillment_id WHERE f.order_id=$1 AND e.revoked_at IS NULL AND e.expires_at>now()',[order.id])).rows;
  if(order.paid_at&&!refundedOrderHold(order))downloads.push(...edits.map(e=>({...e,filename:`Edited ${e.deliverable.toLowerCase()}`,url:`/api/keepsakes/orders/${token}/edited/${e.id}`})));
  const snapshot=keepsakesSnapshot(order.snapshot);
- return {id:order.id,quoteId:order.quote_id,status:order.status,mode:'TEST',subtotalCents:order.subtotal_cents,shippingCents:order.shipping_cents,taxCents:order.tax_cents,totalCents:order.total_cents,refundedCents:order.refunded_cents,currency:order.currency,createdAt:order.created_at,paidAt:order.paid_at,items:snapshot.items.map((i,index)=>{
+ return {id:order.id,quoteId:order.quote_id,status:order.status,mode:'TEST',discountCode:order.snapshot.discount?.code||null,discountCents:order.snapshot.discount?.cents||0,subtotalCents:order.subtotal_cents,shippingCents:order.shipping_cents,taxCents:order.tax_cents,totalCents:order.total_cents,refundedCents:order.refunded_cents,currency:order.currency,createdAt:order.created_at,paidAt:order.paid_at,items:snapshot.items.map((i,index)=>{
   const jobs=fulfillments.filter(f=>f.item_index===index),tracking=jobs.flatMap(f=>f.tracking||[]);
-  return {id:`${order.id}:${index}`,recipients:i.product.provider==='LOB'?i.recipients.map((r,n)=>({...r,status:jobs.find(j=>j.recipient_index===n)?.status||'QUEUED'})):[],category:i.product.category,provider:i.product.provider,variant:i.variant,customization:i.customization,amountCents:i.product.retailCents*i.units,cancelledQuantity:i.cancelledUnits||0,remainingQuantity:remainingItemUnits(i),previewUrl:order.paid_at&&!refundedOrderHold(order)&&remainingItemUnits(i)>0?`/api/keepsakes/orders/${token}/items/${index}/preview`:null,title:i.product.title,quantity:i.units,photos:i.assets.map(a=>a.label),status:jobs.some(f=>f.status==='REQUIRES_REVIEW')?'REQUIRES_REVIEW':jobs.length&&jobs.every(f=>f.status==='COMPLETE')?'COMPLETE':jobs[0]?.status||order.status,trackingUrl:tracking.find(t=>t.trackingUrl)?.trackingUrl,estimatedDelivery:tracking.find(t=>t.expectedDelivery)?.expectedDelivery,failureReason:jobs.find(f=>f.last_error)?.last_error};
+  return {id:`${order.id}:${index}`,recipients:i.product.provider==='LOB'?i.recipients.map((r,n)=>({...r,status:jobs.find(j=>j.recipient_index===n)?.status||'QUEUED'})):[],category:i.product.category,provider:i.product.provider,variant:i.variant,customization:i.customization,amountCents:itemNetCents(i),cancelledQuantity:i.cancelledUnits||0,remainingQuantity:remainingItemUnits(i),previewUrl:order.paid_at&&!refundedOrderHold(order)&&remainingItemUnits(i)>0?`/api/keepsakes/orders/${token}/items/${index}/preview`:null,title:i.product.title,quantity:i.units,photos:i.assets.map(a=>a.label),status:jobs.some(f=>f.status==='REQUIRES_REVIEW')?'REQUIRES_REVIEW':jobs.length&&jobs.every(f=>f.status==='COMPLETE')?'COMPLETE':jobs[0]?.status||order.status,trackingUrl:tracking.find(t=>t.trackingUrl)?.trackingUrl,estimatedDelivery:tracking.find(t=>t.expectedDelivery)?.expectedDelivery,failureReason:jobs.find(f=>f.last_error)?.last_error};
  }),fulfillments,downloads};
 }
 export async function keepsakesOrderPreview(token,index){
@@ -313,7 +317,7 @@ export async function handleKeepsakesStripeEvent(event){
   if(['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)){
    if(object.payment_status!=='paid')return;
    if(row.snapshot.taxAtCheckout){
-    if(!row.snapshot.items.every(i=>['DIGITAL','DIGITAL_EDIT'].includes(i.product.provider))||object.automatic_tax?.status!=='complete'||!Number.isSafeInteger(object.total_details?.amount_tax)||object.total_details.amount_tax<0||object.amount_subtotal!==row.subtotal_cents||object.amount_total!==row.subtotal_cents+object.total_details.amount_tax)throw new AppError('Digital tax total requires reconciliation.',409,'KEEPSAKES_PAYMENT_MISMATCH');
+    if(!row.snapshot.items.every(i=>['DIGITAL','DIGITAL_EDIT'].includes(i.product.provider))||object.automatic_tax?.status!=='complete'||!Number.isSafeInteger(object.total_details?.amount_tax)||object.total_details.amount_tax<0||object.amount_subtotal!==row.subtotal_cents-(row.snapshot.discount?.cents||0)||object.amount_total!==row.subtotal_cents-(row.snapshot.discount?.cents||0)+object.total_details.amount_tax)throw new AppError('Digital tax total requires reconciliation.',409,'KEEPSAKES_PAYMENT_MISMATCH');
     row.tax_cents=object.total_details.amount_tax;row.total_cents=object.amount_total;await query('UPDATE keepsakes_orders SET tax_cents=$2,total_cents=$3 WHERE id=$1',[row.id,row.tax_cents,row.total_cents]);
    }
    if(row.stripe_session_id!==object.id||row.total_cents!==object.amount_total||object.currency!=='usd'||!object.payment_intent)throw new AppError('Payment does not match the Keepsakes checkout.',409,'KEEPSAKES_PAYMENT_MISMATCH');

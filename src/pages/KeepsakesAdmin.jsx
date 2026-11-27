@@ -1,3 +1,4 @@
+import KeepsakesDiscountsAdmin from '../components/KeepsakesDiscountsAdmin.jsx';
 import KeepsakesOrderWorkflow from '../components/KeepsakesOrderWorkflow.jsx';
 import {keepsakesOrderStage,orderLane} from '../../shared/keepsakes-order-workflow.js';
 import KeepsakesShippingAdmin from '../components/KeepsakesShippingAdmin.jsx';
@@ -46,7 +47,8 @@ export default function KeepsakesAdmin() {
   return <main className="page ka-admin">
     <header className="ka-heading"><div><p className="ka-eyebrow">THE LOLA KEEPSAKES</p><h1><Gift size={28}/> Keepsakes &amp; Orders</h1><p>Photo products, guest purchases and fulfillment in one place.</p></div><button onClick={refresh} disabled={loading}><RefreshCw size={16}/> Refresh</button></header>
     <div className="ka-sandbox"><ShieldCheck size={18}/><span><strong>Staging · sandbox fulfillment</strong> Test purchases and supplier validation stay separate from production.</span></div>
-    <nav className="ka-tabs" aria-label="Keepsakes management">{['Orders', 'Overview', 'Products', 'Books & Albums', 'Shipping', 'Integrations'].map(name => <button key={name} aria-pressed={tab === name} className={tab === name ? 'active' : ''} onClick={() => setTab(name)}>{name}</button>)}</nav>
+    <nav className="ka-tabs" aria-label="Keepsakes management">{['Orders', 'Overview', 'Products', 'Books & Albums', 'Shipping', 'Discounts', 'Integrations'].map(name => <button key={name} aria-pressed={tab === name} className={tab === name ? 'active' : ''} onClick={() => setTab(name)}>{name}</button>)}</nav>
+    {tab==='Discounts'&&<KeepsakesDiscountsAdmin writable={writable}/>}
     {tab==='Books & Albums'&&<KeepsakesBooksAdmin writable={writable}/>}
     {notice && <p role="status" className="ka-notice">{notice}</p>}
     {error && <AsyncState error={error} noun="Keepsakes" onRetry={refresh}/>}

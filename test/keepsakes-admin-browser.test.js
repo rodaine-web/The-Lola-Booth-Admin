@@ -39,6 +39,7 @@ test('Keepsakes Admin and gallery controls save explicit product/source permissi
         if(pathname.endsWith('/station-policy'))return route.fulfill({json:{policy:DEFAULT_STATION_POLICY,products:coreCatalogueView([]).filter(p=>p.stationEligible)}});
         if (req.method() !== 'GET') {writes.push({pathname, body: req.postDataJSON()}); return route.fulfill({json: pathname.endsWith('/test') ? {configured: true, mode: 'SANDBOX', status: 'CONNECTED'} : {ok: true}});}
         if (pathname.endsWith('/auth/me')) return route.fulfill({json: {user: {id: 'qa-admin', permissions: ['*']}}});
+        if (pathname.endsWith('/discounts')) return route.fulfill({json:{discounts:[{id:'qa-discount',code:'OLD10',kind:'PERCENT',value:1000,minimum_cents:0,active:true}]}});
         if (pathname.endsWith('/catalogue')) return route.fulfill({json:{products:coreCatalogueView([])}});
         if (pathname.endsWith('/integrations/prodigi')) return route.fulfill({json: {configured: true, mode: 'SANDBOX', status: 'NOT_TESTED'}});
         if (pathname.endsWith('/albums/album-1')) return route.fulfill({json: {settings: {enabled: false, brandedMerchandise: false, originalSales: false, productIds: []}, products, sessions: [], media: [{id: 'media-1', filename: 'GuestComposite.jpg'}, {id: 'media-2', filename: 'GenuineOriginal.jpg'}]}});
@@ -67,6 +68,7 @@ test('Keepsakes Admin and gallery controls save explicit product/source permissi
       await page.getByRole('status').filter({hasText:'Photo Keychain price saved'}).waitFor();
       assert.equal(writes[0].body.retailCents,2499);
       assert.ok(writes[0].pathname.endsWith('/catalogue/keychain/price'));
+      await page.getByRole('button',{name:'Discounts',exact:true}).click();await page.getByRole('heading',{name:'Guest discount codes',exact:true}).waitFor();await page.getByLabel('Discount code',{exact:true}).fill('GUEST10');await page.getByLabel('Percentage (%)',{exact:true}).fill('10');await page.getByRole('button',{name:'Create discount code',exact:true}).click();await page.getByRole('status').filter({hasText:'Discount code created'}).waitFor();const codeWrite=writes.find(r=>r.pathname.endsWith('/discounts'));assert.equal(codeWrite.body.code,'GUEST10');assert.equal(codeWrite.body.value,1000);await page.getByRole('button',{name:'Disable',exact:true}).click();await page.getByRole('status').filter({hasText:'Code disabled'}).waitFor();assert.deepEqual(writes.find(r=>r.pathname.endsWith('/discounts/qa-discount')).body,{active:false});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(output,`discounts-${width}.png`),fullPage:true});
       await page.getByRole('button',{name:'Integrations',exact:true}).click();
       await page.getByText('Standby · no automatic routing',{exact:true}).waitFor();
       assert.equal(writes.filter(row=>row.pathname.includes('/integrations/prodigi')).length,0);

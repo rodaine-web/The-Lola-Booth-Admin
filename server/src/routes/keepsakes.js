@@ -1,3 +1,4 @@
+import * as discounts from '../services/keepsakes-discount-service.js';
 import * as postcardProofs from '../services/keepsakes-postcard-proof-service.js';
 import * as adjustments from '../services/keepsakes-adjustment-service.js';
 import * as shipping from '../services/keepsakes-shipping-service.js';
@@ -88,6 +89,9 @@ keepsakesAdminRouter.post('/station-proposal/preview',wrap(r=>{const selections=
 keepsakesAdminRouter.get('/station-policy',wrap(r=>stationPolicyAdmin(r.user)));
 keepsakesAdminRouter.post('/station-policy/preview',wrap(r=>previewStationPolicy(r.body,r.user)));
 keepsakesAdminRouter.get('/books/suppliers/:provider',wrap(r=>premiumSupplierCatalogue(z.enum(['WHCC','GELATO']).parse(r.params.provider),z.object({product:z.string().max(400).optional(),catalog:z.string().max(100).optional(),search:z.coerce.boolean().optional(),offset:z.coerce.number().int().min(0).max(10000).optional(),operation:z.enum(['DETAIL','PRICES','COVER']).optional(),pageCount:z.coerce.number().int().min(1).max(1000).optional(),cursor:z.string().max(200).optional()}).strict().parse(r.query),r.user)));
+keepsakesAdminRouter.get('/discounts',wrap(r=>discounts.listKeepsakesDiscounts(r.user)));
+keepsakesAdminRouter.post('/discounts',requirePermission('write:integrations'),wrap(r=>discounts.createKeepsakesDiscount(r.body,r.user)));
+keepsakesAdminRouter.put('/discounts/:id',requirePermission('write:integrations'),wrap(r=>discounts.toggleKeepsakesDiscount(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.get('/shipping',wrap(r=>shipping.shippingAdmin(r.user)));
 keepsakesAdminRouter.get('/shipping/orders',wrap(r=>shipping.shippingOrders(r.user)));
 keepsakesAdminRouter.put('/shipping',requirePermission('write:integrations'),wrap(r=>shipping.saveShipping(r.body,r.user)));
