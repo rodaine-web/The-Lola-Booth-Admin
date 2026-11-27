@@ -1,3 +1,5 @@
+import {orderHasGlobalHold} from '../../../shared/keepsakes-order-workflow.js';
+import {refundedOrderHold,remainingItemUnits} from '../../../shared/keepsakes-refunds.js';
 import {z} from 'zod';
 import {query,transaction} from '../db/pool.js';
 import {AppError} from '../utils/errors.js';
@@ -18,13 +20,13 @@ export function assertKeepsakesManager(user){assertKeepsakes();if(!user?.roles?.
 const audit=(user,action,id,after)=>writeAudit({req:{user},action,entity:'keepsakes',entityId:id,after});
 export async function keepsakesDashboard(user){
  assertKeepsakesManager(user);
- const orders=(await query(`SELECT o.id,o.status,o.total_cents,o.paid_at,o.created_at,o.fulfilled_at,o.shipped_at,o.delivered_at,o.last_error,a.title album_title,(SELECT jsonb_agg(jsonb_build_object('title',i->'product'->>'title','quantity',i->'units')) FROM jsonb_array_elements(o.snapshot->'items') i) line_items,
+ const orders=(await query(`SELECT o.id,o.status,o.total_cents,o.paid_at,o.created_at,o.fulfilled_at,o.shipped_at,o.delivered_at,o.last_error,a.title album_title,(SELECT jsonb_agg(jsonb_build_object('title',i->'product'->>'title','provider',i->'product'->>'provider','quantity',GREATEST(0,(i->>'units')::int-COALESCE((i->>'cancelledUnits')::int,0)))) FROM jsonb_array_elements(o.snapshot->'items') i) line_items,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'provider',f.provider,'status',f.status,'provider_order_id',f.provider_order_id,'last_error',f.last_error,'tracking',f.tracking)) FROM keepsakes_fulfillments f WHERE f.order_id=o.id),'[]') fulfillments
  FROM keepsakes_orders o JOIN gallery_albums a ON a.id=o.album_id ORDER BY o.created_at DESC LIMIT 300`)).rows;
  const m=(await query(`SELECT COALESCE(sum(subtotal_cents+shipping_cents) FILTER(WHERE paid_at IS NOT NULL),0)::bigint gross,
  COALESCE(sum(CASE WHEN refunded_cents>=total_cents THEN 0 ELSE subtotal_cents+shipping_cents-refunded_cents END) FILTER(WHERE paid_at IS NOT NULL),0)::bigint net,
  count(*) FILTER(WHERE paid_at IS NOT NULL)::int orders,
- count(*) FILTER(WHERE paid_at IS NOT NULL AND refunded_cents=0 AND status IN('PAID','FULFILLING','FULFILLED','REQUIRES_REVIEW'))::int awaiting,
+ count(*) FILTER(WHERE paid_at IS NOT NULL AND (refunded_cents=0 OR (item_refunds_managed AND refunded_cents<total_cents)) AND status IN('PAID','FULFILLING','FULFILLED','REQUIRES_REVIEW'))::int awaiting,
  count(*) FILTER(WHERE status='REQUIRES_REVIEW' OR tax_refund_status='REQUIRES_REVIEW' OR EXISTS(SELECT 1 FROM keepsakes_fulfillments f WHERE f.order_id=keepsakes_orders.id AND f.status='REQUIRES_REVIEW'))::int intervention,
  sum(stripe_fee_cents) fees,count(*) FILTER(WHERE paid_at IS NOT NULL AND stripe_fee_cents IS NULL)::int missing_fees
  FROM keepsakes_orders`)).rows[0];
@@ -117,19 +119,18 @@ export async function keepsakesAdminOrder(id,user){
  order.snapshot=keepsakesSnapshot(order.snapshot);
  const emails=(await query("SELECT id,subject,status,failure_code,created_at FROM communications WHERE trigger_key='KEEPSAKES_TRANSACTIONAL' AND idempotency_key LIKE 'keepsakes:'||$1::text||':%' ORDER BY created_at",[id])).rows;
  const labels=(await query('SELECT id,parcel_index,status,rate,quoted_at,label_url,tracking FROM keepsakes_shippo_labels WHERE order_id=$1 ORDER BY parcel_index',[id])).rows;
- const packages=(order.snapshot.shipping?.parcels||[]).map((p,index)=>({index,itemIndices:p.itemIndices,itemQuantities:p.itemQuantities,checkoutRate:p.rate,address:order.snapshot.items[p.itemIndices[0]]?.shippingAddress||contact.shippingAddress,label:labels.find(l=>l.parcel_index===index)||null}));
- return {order,contact,emails,packages,notificationPolicy:{testOnly:true,emailAllowed:String(process.env.KEEPSAKES_TEST_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(v=>v.trim()).includes(contact.email?.toLowerCase())},fulfillments:(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[id])).rows,events:(await query('SELECT * FROM keepsakes_events WHERE order_id=$1 ORDER BY created_at DESC',[id])).rows};
+ const packages=(order.snapshot.shipping?.parcels||[]).map((p,index)=>({index,itemIndices:p.itemIndices.filter(i=>remainingItemUnits(order.snapshot.items[i])>0),itemQuantities:p.itemQuantities?Object.fromEntries(p.itemIndices.map(i=>[i,Math.min(p.itemQuantities[i]||0,remainingItemUnits(order.snapshot.items[i]))])):undefined,checkoutRate:p.rate,address:order.snapshot.items[p.itemIndices[0]]?.shippingAddress||contact.shippingAddress,label:labels.find(l=>l.parcel_index===index)||null})).filter(p=>p.itemIndices.length);
+ return {adjustments:(await query('SELECT id,action,scope,items,amount_cents,tax_cents,status,last_error,created_at FROM keepsakes_adjustments WHERE order_id=$1 ORDER BY created_at DESC',[id])).rows,order,contact,emails,packages,notificationPolicy:{testOnly:true,emailAllowed:String(process.env.KEEPSAKES_TEST_EMAIL_ALLOWLIST||'').toLowerCase().split(',').map(v=>v.trim()).includes(contact.email?.toLowerCase())},fulfillments:(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 ORDER BY item_index',[id])).rows,events:(await query('SELECT * FROM keepsakes_events WHERE order_id=$1 ORDER BY created_at DESC',[id])).rows};
 }
 export async function retryKeepsakesOrder(id,user){
  assertKeepsakesManager(user);
  await transaction(async()=>{
   await lockKeepsakesOrder(id);
-  const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!order?.paid_at||order.refunded_cents)throw new AppError('Only paid, non-refunded orders can be retried.',409,'KEEPSAKES_RETRY_BLOCKED');
-  // Reconcile an ambiguous create using the same stable idempotency key. Existing
-  // supplier IDs are always looked up before any further submission.
-  if((await query("SELECT 1 FROM keepsakes_fulfillments WHERE order_id=$1 AND provider='LOB' AND attempts>0 AND provider_order_id IS NULL AND created_at<now()-interval '23 hours' LIMIT 1",[id])).rowCount)throw new AppError('The Lob idempotency window expired. Reconcile the original request before retry.',409,'KEEPSAKES_LOB_OUTCOME_UNKNOWN');
-  await query("UPDATE keepsakes_fulfillments SET status='RETRY',next_attempt_at=now(),lease_until=NULL,updated_at=now() WHERE order_id=$1 AND status IN('FAILED','REQUIRES_REVIEW')",[id]);
-  await query("UPDATE keepsakes_orders SET status='PAID',last_error=NULL WHERE id=$1",[id]);await audit(user,'keepsakes_retry_requested',id,{});
+  const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!order?.paid_at||refundedOrderHold(order))throw new AppError('Only paid, non-refunded orders can be retried.',409,'KEEPSAKES_RETRY_BLOCKED');
+  const failed=(await query("SELECT id FROM keepsakes_fulfillments WHERE order_id=$1 AND status IN('FAILED','REQUIRES_REVIEW')",[id])).rows;
+  if(!failed.length)throw new AppError('Open the affected processing section to review this order.',409,'KEEPSAKES_RETRY_BLOCKED');
+  for(const item of failed)await retryKeepsakesItem(id,item.id,user);
+  await audit(user,'keepsakes_retry_requested',id,{items:failed.map(i=>i.id)});
  });return {requested:true};
 }
 export async function cancelKeepsakesOrder(id,user,{refund=false,reason='requested_by_customer'}={}){
@@ -179,3 +180,20 @@ export async function cancelKeepsakesOrder(id,user,{refund=false,reason='request
  return result;
 }
 export {prodigiStatus};
+
+export async function retryKeepsakesItem(orderId,jobId,user){
+ assertKeepsakesManager(user);
+ return transaction(async()=>{await lockKeepsakesOrder(orderId);const o=(await query('SELECT * FROM keepsakes_orders WHERE id=$1 FOR UPDATE',[orderId])).rows[0];const job=(await query('SELECT * FROM keepsakes_fulfillments WHERE order_id=$1 AND id=$2 FOR UPDATE',[orderId,jobId])).rows[0];
+ if(!o?.paid_at||refundedOrderHold(o)||['CANCELLED','REFUNDED','REFUND_PENDING'].includes(o.status)||!job||!['FAILED','REQUIRES_REVIEW'].includes(job.status))throw new AppError('This item cannot be retried in its current state.',409,'KEEPSAKES_RETRY_BLOCKED');
+ const allJobs=(await query('SELECT status FROM keepsakes_fulfillments WHERE order_id=$1',[orderId])).rows;if(orderHasGlobalHold(o,allJobs))throw new AppError('Resolve the payment or order-level hold before retrying fulfillment.',409,'KEEPSAKES_RETRY_BLOCKED');
+ if(job.provider==='LOB'&&!job.provider_order_id&&job.attempts>0&&Date.now()-new Date(job.created_at).getTime()>23*3600000&&!['KEEPSAKES_LOB_ARTWORK_SIZE','KEEPSAKES_LOB_FRONT_SPEC','KEEPSAKES_LOB_BACK_SPEC'].includes(job.last_error))throw new AppError('Review the original provider request before retrying this item.',409,'KEEPSAKES_LOB_OUTCOME_UNKNOWN');
+ if(job.last_error==='KEEPSAKES_STOCK_REVIEW'){
+ const item=o.snapshot.items[job.item_index];if(item.inventoryReserved===false){
+ const blocked=o.snapshot.items.filter(i=>i.product.id===item.product.id&&i.inventoryReserved===false),count=blocked.reduce((n,i)=>n+remainingItemUnits(i),0);
+ const product=(await query('SELECT * FROM keepsakes_products WHERE id=$1 FOR UPDATE',[item.product.id])).rows[0],config=product?.operational_config;
+ if(!product?.active||!product.verified||!config?.productionReady||(config.stockUnits==null?!config.stockConfirmed:config.stockUnits<count))throw new AppError('Confirm sufficient stock and production capacity in Products before retrying this item.',409,'KEEPSAKES_STOCK_REVIEW');
+ if(config.stockUnits!=null)await query("UPDATE keepsakes_products SET operational_config=jsonb_set(operational_config,'{stockUnits}',to_jsonb((operational_config->>'stockUnits')::integer-$2)) WHERE id=$1",[item.product.id,count]);
+ for(const i of blocked){i.inventoryReserved=true;i.stockReview=false;}await query('UPDATE keepsakes_orders SET snapshot=$2 WHERE id=$1',[orderId,JSON.stringify(o.snapshot)]);
+ }}
+ await query("UPDATE keepsakes_fulfillments SET status='RETRY',next_attempt_at=now(),lease_until=NULL,updated_at=now() WHERE id=$1",[jobId]);await audit(user,'keepsakes_item_retry_requested',orderId,{jobId});return {requested:true};});
+}

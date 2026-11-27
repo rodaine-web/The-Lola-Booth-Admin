@@ -151,3 +151,11 @@ test('standard postcard themes artwork only, preserves its working QR and mailin
  const changed=await image(1875,1275,'#dddddd');
  await assert.rejects(renderKeepsakesPostcardBack({bytes:changed,backTemplate:STANDARD_POSTCARD_TEMPLATE,message:'Hello'}),{code:'KEEPSAKES_TEMPLATE_INVALID'});
 });
+
+test('photographic postcard uploads use lossless adaptive PNG encoding without changing print pixels',async()=>{
+ const raw=Buffer.alloc(1875*1275*3);let seed=42;
+ for(let i=0;i<raw.length;i+=3){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const value=((seed>>>24)%16)+Math.floor(i/3)%200;raw[i]=value;raw[i+1]=value;raw[i+2]=value;}
+ const front=await sharp(raw,{raw:{width:1875,height:1275,channels:3}}).png().toBuffer();let uploads;
+ await sendKeepsakesLob({idempotencyKey:'keepsakes:photo-upload',front,back:await back(),to:address,from:address},async(url,options)=>{uploads=options.body;return {ok:true,json:async()=>({id:'psc_syntheticPhoto',status:'processed'})};},config);
+ const bytes=Buffer.from(await uploads.get('front').arrayBuffer());assert.ok(bytes.length+uploads.get('back').size<=4_800_000);assert.ok((await bytesOf(bytes)).equals(raw),'Lossless encoding preserves every approved print pixel');
+});

@@ -1,3 +1,4 @@
+import * as adjustments from '../services/keepsakes-adjustment-service.js';
 import * as shipping from '../services/keepsakes-shipping-service.js';
 import * as guestRetrieval from '../services/guest-photo-retrieval-service.js';
 import * as guestNotifications from '../services/gallery-notification-service.js';
@@ -105,6 +106,8 @@ keepsakesAdminRouter.get('/books',wrap(r=>books.bookAdmin(r.user)));
 keepsakesAdminRouter.get('/catalogue',wrap(()=>keepsakesCoreCatalogue({admin:true})));
 keepsakesAdminRouter.get('/',wrap(r=>admin.keepsakesDashboard(r.user)));
 keepsakesAdminRouter.post('/orders/:id/progress',requirePermission('write:operations'),wrap(r=>production.progressOrderProduction(id.parse(r.params.id),r.body,r.user)));
+keepsakesAdminRouter.post('/orders/:id/items/:jobId/retry',requirePermission('write:operations'),wrap(r=>admin.retryKeepsakesItem(id.parse(r.params.id),id.parse(r.params.jobId),r.user)));
+keepsakesAdminRouter.get('/fulfillments/:id/artwork/:index',asyncHandler(async(req,res)=>res.type('image/png').attachment('Lola-print-artwork.png').send(await production.fulfillmentArtwork(id.parse(req.params.id),z.coerce.number().int().min(0).max(30).parse(req.params.index),req.user))));
 keepsakesAdminRouter.get('/orders/:id',wrap(r=>admin.keepsakesAdminOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.get('/integrations/prodigi',wrap(()=>keepsakesProdigiIntegration()));
 keepsakesAdminRouter.use(requirePermission('write:integrations'));
@@ -115,6 +118,8 @@ keepsakesAdminRouter.put('/catalogue/:key/price',wrap(r=>saveCoreCataloguePrice(
 keepsakesAdminRouter.post('/products',wrap(()=>{throw new AppError('Use the approved 12-product catalogue.',409,'KEEPSAKES_CATALOGUE_REPLACED');}));
 keepsakesAdminRouter.put('/products/:id',wrap(()=>{throw new AppError('Use the approved 12-product catalogue.',409,'KEEPSAKES_CATALOGUE_REPLACED');}));
 keepsakesAdminRouter.post('/products/:id/verify',wrap(r=>admin.verifyKeepsakesProduct(id.parse(r.params.id),r.user)));
+keepsakesAdminRouter.post('/orders/:id/adjustments/preview',wrap(r=>adjustments.previewKeepsakesAdjustment(id.parse(r.params.id),r.body,r.user)));
+keepsakesAdminRouter.post('/orders/:id/adjustments/:adjustmentId/confirm',wrap(r=>adjustments.executeKeepsakesAdjustment(id.parse(r.params.id),id.parse(r.params.adjustmentId),r.body,r.user)));
 keepsakesAdminRouter.post('/orders/:id/retry',wrap(r=>admin.retryKeepsakesOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.post('/orders/:id/cancel',wrap(r=>admin.cancelKeepsakesOrder(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.post('/orders/:id/refund',wrap(r=>admin.cancelKeepsakesOrder(id.parse(r.params.id),r.user,{refund:true,reason:z.string().max(200).parse(r.body.reason||'requested_by_customer')})));

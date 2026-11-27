@@ -8,7 +8,8 @@ import {withKeepsakesOrderLock} from './keepsakes-order-lock.js';
 export async function processKeepsakesTaxRefunds({limit=5}={}){
  if(!keepsakesStaging()||process.env.KEEPSAKES_FULFILLMENT_ENABLED!=='true')return [];
  if(!(await query("SELECT to_regclass('keepsakes_orders') name")).rows[0].name)return [];
- const rows=(await query("SELECT id FROM keepsakes_orders WHERE tax_refund_status='PENDING' AND refunded_cents>=total_cents AND paid_at IS NOT NULL ORDER BY updated_at LIMIT $1",[Math.max(1,Math.min(limit,10))])).rows,results=[];
+ const {processItemRefundTax}=await import('./keepsakes-adjustment-service.js');await processItemRefundTax();
+ const rows=(await query("SELECT id FROM keepsakes_orders WHERE NOT item_refunds_managed AND tax_refund_status='PENDING' AND refunded_cents>=total_cents AND paid_at IS NOT NULL ORDER BY updated_at LIMIT $1",[Math.max(1,Math.min(limit,10))])).rows,results=[];
  for(const row of rows)await withKeepsakesOrderLock(row.id,async()=>{
   const order=(await query('SELECT * FROM keepsakes_orders WHERE id=$1',[row.id])).rows[0];
   if(order.tax_refund_status!=='PENDING'||order.refunded_cents<order.total_cents)return;
