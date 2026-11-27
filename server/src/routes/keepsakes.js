@@ -91,6 +91,7 @@ keepsakesAdminRouter.get('/shipping/orders',wrap(r=>shipping.shippingOrders(r.us
 keepsakesAdminRouter.put('/shipping',requirePermission('write:integrations'),wrap(r=>shipping.saveShipping(r.body,r.user)));
 keepsakesAdminRouter.post('/shipping/orders/:id/parcels/:index/rate',requirePermission('write:operations'),wrap(r=>shipping.quoteLabel(id.parse(r.params.id),z.coerce.number().int().min(0).max(24).parse(r.params.index),r.user)));
 keepsakesAdminRouter.post('/shipping/orders/:id/parcels/:index/label',requirePermission('write:operations'),wrap(r=>shipping.createLabel(id.parse(r.params.id),z.coerce.number().int().min(0).max(24).parse(r.params.index),r.body,r.user)));
+keepsakesAdminRouter.post('/shipping/labels/:id/simulate-tracking',requirePermission('write:operations'),wrap(r=>shipping.simulateLabelTracking(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.post('/shipping/labels/:id/refresh',requirePermission('write:operations'),wrap(r=>shipping.refreshLabel(id.parse(r.params.id),r.user)));
 keepsakesAdminRouter.post('/shipping/labels/:id/reconcile',requirePermission('write:operations'),wrap(r=>shipping.reconcileLabel(id.parse(r.params.id),r.body,r.user)));
 keepsakesAdminRouter.post('/shipping/labels/:id/verify-void',requirePermission('write:operations'),wrap(r=>shipping.verifyLabelVoid(id.parse(r.params.id),r.body,r.user)));

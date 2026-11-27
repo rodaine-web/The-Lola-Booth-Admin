@@ -71,7 +71,7 @@ test('Keepsakes notifications drain batches, deduplicate milestones and respect 
 
     const communications = (await query("SELECT recipient,provider,status,idempotency_key,rendered_body FROM communications WHERE trigger_key='KEEPSAKES_TRANSACTIONAL' ORDER BY idempotency_key")).rows;
     assert.ok(communications.every(row => row.recipient === 'notify@example.invalid' && row.provider === 'development' && row.status === 'SENT_TO_PROVIDER'));
-    assert.ok(communications.every(row => /^keepsakes:[a-f0-9-]{36}:COMPLETE$/.test(row.idempotency_key)));
+    assert.ok(communications.every(row => /^keepsakes:[a-f0-9-]{36}:CONFIRMATION$/.test(row.idempotency_key)));
     assert.ok(communications.every(row => row.rendered_body.includes('/keepsakes/orders/')));
     assert.equal((await one('SELECT count(*)::int AS count FROM email_messages WHERE provider=\'development\'')).count, 17);
     assert.equal((await one("SELECT count(*)::int AS count FROM communications WHERE idempotency_key LIKE $1", [`keepsakes:${blocked.id}:%`])).count, 0, 'Non-allowlisted orders must never queue email');
@@ -81,7 +81,25 @@ test('Keepsakes notifications drain batches, deduplicate milestones and respect 
     assert.equal(await sentCount(), 18);
     assert.equal((await processKeepsakesNotifications()).length, 0);
     const milestones = (await query("SELECT idempotency_key FROM communications WHERE idempotency_key LIKE $1 ORDER BY idempotency_key", [`keepsakes:${orders[0].id}:%`])).rows;
-    assert.deepEqual(milestones.map(row => row.idempotency_key), [`keepsakes:${orders[0].id}:COMPLETE`, `keepsakes:${orders[0].id}:REFUNDED`]);
+    assert.deepEqual(milestones.map(row => row.idempotency_key), [`keepsakes:${orders[0].id}:CONFIRMATION`, `keepsakes:${orders[0].id}:REFUNDED`]);
+    // Physical stages survive fast changes, never deliver early for split lines,
+    // and generate exactly three distinct customer messages.
+    const physical=await createOrder('notify@example.invalid',99);
+    await query("UPDATE keepsakes_orders SET status='PAID',snapshot=$2 WHERE id=$1",[physical.id,{items:[{product:{title:'Synthetic keychain'},units:1},{product:{title:'Synthetic magnet'},units:1}]}]);
+    for(const index of [0,1])await query("INSERT INTO keepsakes_fulfillments(order_id,item_index,provider,status) VALUES($1,$2,'IN_HOUSE','AWAITING_PRODUCTION')",[physical.id,index]);
+    const {syncKeepsakesOrder}=await import('../server/src/services/keepsakes-lifecycle-service.js');
+    await syncKeepsakesOrder(physical.id);await processKeepsakesNotifications();
+    await query("UPDATE keepsakes_fulfillments SET status='FULFILLED' WHERE order_id=$1",[physical.id]);await syncKeepsakesOrder(physical.id);
+    assert.equal((await processKeepsakesNotifications()).length,0,'Packing does not send a dispatched email');
+    await query("UPDATE keepsakes_fulfillments SET status='SHIPPED',tracking=$2 WHERE order_id=$1",[physical.id,JSON.stringify([{carrier:'USPS',trackingNumber:'SYNTHETIC',trackingUrl:'https://example.invalid/track'}])]);await syncKeepsakesOrder(physical.id);
+    await query("UPDATE keepsakes_fulfillments SET status='COMPLETE' WHERE order_id=$1 AND item_index=0",[physical.id]);await syncKeepsakesOrder(physical.id);
+    assert.equal((await one("SELECT count(*)::int n FROM keepsakes_order_milestones WHERE order_id=$1 AND kind='DELIVERED'",[physical.id])).n,0,'One delivered line cannot complete another shipment');
+    await query("UPDATE keepsakes_fulfillments SET status='COMPLETE' WHERE order_id=$1",[physical.id]);await syncKeepsakesOrder(physical.id);
+    await processKeepsakesNotifications();await syncKeepsakesOrder(physical.id);await processKeepsakesNotifications();
+    const physicalEmails=(await query("SELECT subject,rendered_body,status FROM communications WHERE idempotency_key LIKE $1 ORDER BY created_at",[`keepsakes:${physical.id}:%`])).rows;
+    assert.deepEqual(physicalEmails.map(e=>e.subject),['Your Lola Keepsakes order confirmation','Your Lola Keepsakes order has shipped','Your Lola Keepsakes order has been delivered']);
+    assert.ok(physicalEmails.every(e=>e.status==='SENT_TO_PROVIDER'));assert.ok(physicalEmails[1].rendered_body.includes('SYNTHETIC'));
+    assert.equal((await one("SELECT count(*)::int n FROM keepsakes_events WHERE order_id=$1 AND action='order_delivered'",[physical.id])).n,1);
     const marketingAfter = await one(`SELECT (SELECT count(*)::int FROM campaign_recipients) AS campaign_recipients,
       (SELECT count(*)::int FROM crm_contacts WHERE marketing_consent='OPTED_IN') AS opted_in_contacts,
       (SELECT count(*)::int FROM clients WHERE marketing_email_opt_in=true) AS opted_in_clients`);
