@@ -1,3 +1,4 @@
+import {keepsakesSalesReport} from '../services/keepsakes-sales-report-service.js';
 import {clientOpportunities,opportunityPreview,reopenOpportunity,closeOpportunity,bookingHandoffPreview,repairBookingHandoff} from '../services/opportunity-lifecycle-service.js';
 import {keepsakeStationProposalInput} from '../../../shared/keepsake-station-input.js';
 import {audioFulfillment,saveAudioFulfillment,transitionAudioFulfillment} from '../services/audio-fulfillment-service.js';
@@ -2800,6 +2801,7 @@ adminRouter.get("/analytics", requirePermission("read:analytics"), asyncHandler(
   const metrics=Object.fromEntries(dashboard.groups.flatMap(g=>g.metrics).map(m=>[m.key,m.value]));
   res.json({
     summary: {leads:metrics.new_leads,bookings:metrics.bookings_won,booked_revenue:metrics.booked_revenue,collected_revenue:metrics.collected_revenue,outstanding_balance:metrics.outstanding_balance,average_booking_value:metrics.average_booking_value},
+    commerce:await keepsakesSalesReport({user:req.user,range:dashboard.sqlRange,bookingCollected:metrics.collected_revenue}),
     range:dashboard.sqlRange,
     metricDefinitions:dashboard.metricDefinitions,
     revenueByMonth: dashboard.trends.map(row=>({month:row.bucket,revenue:row.booked_revenue})),
