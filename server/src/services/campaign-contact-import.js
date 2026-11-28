@@ -17,7 +17,8 @@ export function csvRows(text){
  }
  if(quoted)throw new Error('Unclosed CSV quote.');if(cell||row.length){row.push(cell);rows.push(row);}return rows;
 }
-export function excelRows(bytes,preferredSheet="Contacts"){
+export function excelRows(bytes,preferredSheet="Contacts",limits={}){
+ const rowLimit=limits.maxRows||maxRows,columnLimit=limits.maxColumns??30;
  let expanded=0,count=0;
  const files=unzipSync(bytes,{filter: entry=>{
   if(++count>200)throw new Error('Workbook has too many files.');
@@ -42,13 +43,13 @@ export function excelRows(bytes,preferredSheet="Contacts"){
   for(const c of array(row.c)){
    const ref=c['@_r'];if(!/^[A-Z]{1,2}\d+$/.test(ref||''))throw new Error('Unsupported cell address.');
    const letters=ref.match(/^[A-Z]+/)[0];let col=0;for(const x of letters)col=col*26+x.charCodeAt(0)-64;col--;
-   if(col>30)continue;
+   if(col>columnLimit)continue;
    if(c.f!=null)throw new Error('Remove formulas from contact cells before importing.');
    cells[col]=typedCell(c,c['@_t']==='s'?strings[Number(c.v)] || '':c['@_t']==='inlineStr'?text(c.is):text(c.v));
   }
   const rowNumber=Number(row['@_r']||out.length+1);
   if(!Number.isInteger(rowNumber)||rowNumber<1)throw new Error('Unsupported row address.');
-  out[rowNumber-1]=cells;if(out.length>maxRows+1)throw new Error('Import at most 1,000 contacts.');
+  out[rowNumber-1]=cells;if(out.length>rowLimit+1)throw new Error('Workbook exceeds the allowed row count.');
  }
  return out;
 }

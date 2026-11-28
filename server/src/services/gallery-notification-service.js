@@ -389,13 +389,14 @@ async function budget() {
     actual: Number(b.actual_micros),
   };
 }
-export async function reviewGallerySms(albumId, user) {
+export async function reviewGallerySms(albumId, user, {eventId=null}={}) {
   return transaction(async () => {
     const p = await publication(albumId),
       s = await settings(),
       b = await budget(),
-      recipients = await eligible(albumId),
+      recipients = eventId?await eligibleEventPhotoRecipients(eventId,user):await eligible(albumId),
       pending = [];
+    if(eventId&&eventId!==p.event_id)throw fail("Choose the Gallery for this event.");
     let already = 0;
     for (const g of recipients.all.filter((g) => g.channel === "SMS")) {
       if (
@@ -450,6 +451,7 @@ export async function reviewGallerySms(albumId, user) {
     )
       reasons.push("Monthly budget exceeded.");
     const snapshot = {
+      eventScope: eventId,
       eventName: p.title,
       eventId: p.event_id,
       totalGuests: recipients.total,
@@ -527,7 +529,8 @@ export async function decideGallerySms(albumId, reviewId, decision, user) {
         "This review has expired or settings changed. Review recipients and costs again.",
       );
     if (r.snapshot.reasons.length) throw fail(r.snapshot.reasons.join(" "));
-    const fresh = await eligible(albumId),
+    if(r.snapshot.eventScope&&r.snapshot.eventScope!==p.event_id)throw fail("Event selection changed. Review again.");
+    const fresh = r.snapshot.eventScope?await eligibleEventPhotoRecipients(r.snapshot.eventScope,user):await eligible(albumId),
       current = new Map(
         fresh.all.filter((g) => g.channel === "SMS").map((g) => [g.hash, g]),
       ),
@@ -1172,4 +1175,17 @@ export async function notificationReport(user) {
     rows.push({ ...p, ...counts, metrics });
   }
   return { rows, mode: "SIMULATED", phoneOwnershipAssociationsEnabled: false };
+}
+
+// Campaigns reuse the Gallery delivery ledger, permissions and idempotency keys.
+export {emailRequest as createEventPhotoEmail};
+export async function eligibleEventPhotoRecipients(eventId,user){
+ const {userCanAccessEvent}=await import('./event-operations-service.js');
+ if(!await userCanAccessEvent(user,eventId))throw new AppError('Event access denied.',403,'FORBIDDEN');
+ const albums=(await query("SELECT a.id,a.title,p.id publication_id FROM gallery_albums a JOIN events e ON e.id=a.event_id LEFT JOIN gallery_notification_publications p ON p.album_id=a.id WHERE a.event_id=$1 AND e.deleted_at IS NULL AND a.status IN('PUBLISHED','DELIVERED') AND (a.expires_at IS NULL OR a.expires_at>now()) ORDER BY a.created_at,a.id",[eventId])).rows;
+ const groups=new Map();let invalid=0,duplicates=0,validMobile=0,excluded=0,total=0;
+ for(const album of albums){const result=await eligible(album.id);invalid+=result.invalid;duplicates+=result.duplicates;validMobile+=result.validMobile;excluded+=result.excluded;total+=result.total;
+  for(const g of result.all){const current=groups.get(g.hash);if(current){duplicates++;for(const scope of g.scopes)if(!current.scopes.some(s=>s.albumId===scope.albumId&&s.personId===scope.personId&&s.keyId===scope.keyId))current.scopes.push(scope);}else groups.set(g.hash,{...g,scopes:[...g.scopes]});}
+ }
+ return {albums,all:[...groups.values()],invalid,duplicates,validMobile,excluded,total};
 }
