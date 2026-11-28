@@ -67,6 +67,11 @@ const navGroups = [{
     label: 'Payments',
     to: '/finance/payments',
     permission: 'read:finance'
+  }, {
+    label: 'Keepsakes & Orders',
+    to: '/sales/keepsakes',
+    permission: 'read:finance',
+    gallery: true
   }]
 }, {
   label: 'Communications',
@@ -115,11 +120,6 @@ const navGroups = [{
     label: 'Event Galleries',
     to: '/operations/galleries',
     permission: 'read:events',
-    gallery: true
-  }, {
-    label: 'Keepsakes & Orders',
-    to: '/operations/keepsakes',
-    permission: 'read:finance',
     gallery: true
   }]
 }, {

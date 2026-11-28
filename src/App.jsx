@@ -85,6 +85,8 @@ const Backdrops = lazy(() => import("./pages/Backdrops.jsx"));
 const PublicCreativeApproval = lazy(() => import("./pages/PublicCreativeApproval.jsx"));
 const PublicContract = lazy(() => import("./pages/PublicContract.jsx"));
 
+function LegacyKeepsakesRedirect(){const location=useLocation();return <Navigate to={`/sales/keepsakes${location.search}${location.hash}`} replace/>;}
+
 export default function App() {
   if(window.location.hostname==='staginggallery.thelolabooth.com'&&(window.location.pathname==='/'||window.location.pathname==='/find-photos'||window.location.pathname.startsWith('/photos/')||window.location.pathname==='/gallery'||window.location.pathname.startsWith('/gallery/')))return <Suspense fallback={<main className="boot-screen">Opening your gallery…</main>}><Routes>
    {['/','/find-photos','/photos/check-email','/photos/access','/photos/memories','/photos/transfer','/photos/phone-access','/photos/verify-email'].map(path=><Route key={path} path={path} element={<GalleryHome/>}/>)}
@@ -212,7 +214,8 @@ export default function App() {
         <Route path="content/experiences" element={<ResourcePage title="Experiences" endpoint="/experiences" columns={["name", "base_price", "default_duration", "active"]} fields={experienceFields} />} />
         <Route path="content/addons" element={<ResourcePage title="Add-ons" endpoint="/addons" columns={["name", "price", "pricing_type", "active"]} fields={addonFields} />} />
         <Route path="operations/live" element={<LiveOperations />} />
-        <Route path="operations/keepsakes" element={<KeepsakesAdmin />} />
+        <Route path="sales/keepsakes" element={<KeepsakesAdmin />} />
+        <Route path="operations/keepsakes" element={<LegacyKeepsakesRedirect />} />
         <Route path="operations/tasks" element={<ResourcePage title="Tasks" endpoint="/tasks" columns={["title", "owner_name", "event_name", "client_name", "due_date", "priority", "status"]} fields={taskFields} />} />
         <Route path="operations/files" element={<ResourcePage title="Files" endpoint="/files" phase="Metadata model ready" columns={["filename", "category", "storage_provider", "created_at"]} />} />
         {GALLERY_ENABLED && <><Route path="operations/galleries" element={<GalleryAdmin />} />

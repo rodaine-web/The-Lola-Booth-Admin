@@ -22,7 +22,7 @@ export default function KeepsakesAdmin() {
   const {can} = useAuth();
   const writable = can('write:integrations');
   const [data, setData] = useState(null), [error, setError] = useState(''), [loading, setLoading] = useState(true);
-  const [revision, setRevision] = useState(0), [tab, setTab] = useState(()=>({'orders':'Orders','fulfillment':'Orders','overview':'Overview','shipping':'Shipping','integrations':'Integrations'})[new URLSearchParams(window.location.search).get('tab')]||'Orders'), [search, setSearch] = useState(''), [status, setStatus] = useState('PENDING'), [lane,setLane]=useState('ALL');
+  const [revision, setRevision] = useState(0), [tab, setTab] = useState(()=>({'orders':'Orders','fulfillment':'Orders','overview':'Overview','products':'Products','shipping':'Shipping','integrations':'Integrations'})[new URLSearchParams(window.location.search).get('tab')]||'Orders'), [search, setSearch] = useState(''), [status, setStatus] = useState('PENDING'), [lane,setLane]=useState('ALL');
   const [editor, setEditor] = useState(null), [orderId, setOrderId] = useState(()=>new URLSearchParams(window.location.search).get('order')), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   useEffect(() => {
     let active = true;

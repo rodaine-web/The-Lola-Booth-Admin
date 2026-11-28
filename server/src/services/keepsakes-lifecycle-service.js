@@ -22,7 +22,7 @@ export async function syncKeepsakesOrder(orderId){
    const inserted=await query('INSERT INTO keepsakes_order_milestones(order_id,kind) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING kind',[orderId,kind]);
    if(!inserted.rowCount)continue;
    await query('INSERT INTO keepsakes_events(order_id,action,provider_event_id,details) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[orderId,'order_'+kind.toLowerCase(),`milestone:${orderId}:${kind}`,{message:kind==='DELIVERED'?'All in-house items have confirmed delivery.':kind==='SHIPPED'?'All in-house items have been dispatched.':'Payment received; order ready for fulfillment.'}]);
-   await createNotification({roleTarget:'OWNER_ADMIN',category:'EVENTS',title:kind==='CONFIRMATION'?'New Keepsakes order':kind==='SHIPPED'?'Keepsakes order shipped':'Keepsakes order delivered',body:`Order ${orderId.slice(0,8).toUpperCase()} · ${kind==='CONFIRMATION'?'Paid and awaiting fulfillment':kind==='SHIPPED'?'Shipment dispatched':'Delivery confirmed'}`,entityType:'keepsakes_order',entityId:orderId,actionUrl:`/operations/keepsakes?tab=orders&order=${orderId}`,metadata:{milestone:kind}});
+   await createNotification({roleTarget:'OWNER_ADMIN',category:'EVENTS',title:kind==='CONFIRMATION'?'New Keepsakes order':kind==='SHIPPED'?'Keepsakes order shipped':'Keepsakes order delivered',body:`Order ${orderId.slice(0,8).toUpperCase()} · ${kind==='CONFIRMATION'?'Paid and awaiting fulfillment':kind==='SHIPPED'?'Shipment dispatched':'Delivery confirmed'}`,entityType:'keepsakes_order',entityId:orderId,actionUrl:`/sales/keepsakes?tab=orders&order=${orderId}`,metadata:{milestone:kind}});
   }
   return {status};
  });
